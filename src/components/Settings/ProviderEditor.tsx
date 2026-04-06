@@ -10,11 +10,13 @@ export interface AiProvider {
   providerType: string;
   baseUrl: string;
   apiKey: string;
-  apps: { claude: boolean; codex: boolean; gemini: boolean };
+  apps: { claude: boolean; codex: boolean; gemini: boolean; opencode: boolean; openclaw: boolean };
   models: {
     claude?: { model?: string; haikuModel?: string; sonnetModel?: string; opusModel?: string };
     codex?: { model?: string; reasoningEffort?: string };
     gemini?: { model?: string };
+    opencode?: { model?: string };
+    openclaw?: { model?: string };
   };
   websiteUrl?: string;
   notes?: string;
@@ -71,7 +73,7 @@ function newProvider(): AiProvider {
     providerType: 'custom',
     baseUrl: '',
     apiKey: '',
-    apps: { claude: true, codex: true, gemini: true },
+    apps: { claude: true, codex: true, gemini: true, opencode: true, openclaw: true },
     models: {},
     enabled: false,
     createdAt: Date.now(),
@@ -84,7 +86,7 @@ interface Props {
 
 export const ProviderEditor: React.FC<Props> = ({ t }) => {
   const [providers, setProviders] = useState<AiProvider[]>([]);
-  const [activeIds, setActiveIds] = useState<{ claude?: string; codex?: string; gemini?: string }>({});
+  const [activeIds, setActiveIds] = useState<{ claude?: string; codex?: string; gemini?: string; opencode?: string; openclaw?: string }>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<AiProvider | null>(null);
   const [showPresets, setShowPresets] = useState(false);
@@ -94,10 +96,10 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
     try {
       const [list, ids] = await Promise.all([
         invoke<AiProvider[]>('list_ai_providers'),
-        invoke<[string | null, string | null, string | null]>('get_ai_active_ids'),
+        invoke<[string | null, string | null, string | null, string | null, string | null]>('get_ai_active_ids'),
       ]);
       setProviders(list);
-      setActiveIds({ claude: ids[0] ?? undefined, codex: ids[1] ?? undefined, gemini: ids[2] ?? undefined });
+      setActiveIds({ claude: ids[0] ?? undefined, codex: ids[1] ?? undefined, gemini: ids[2] ?? undefined, opencode: ids[3] ?? undefined, openclaw: ids[4] ?? undefined });
       if (list.length > 0 && !selectedId) {
         setSelectedId(list[0].id);
         setEditForm(list[0]);
@@ -128,6 +130,8 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
           claude: !!preset.models.claude,
           codex: !!preset.models.codex,
           gemini: !!preset.models.gemini,
+          opencode: !!preset.models.opencode,
+          openclaw: !!preset.models.openclaw,
         };
       }
     }
@@ -204,6 +208,8 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
     if (tool === 'claude') return activeIds.claude === id;
     if (tool === 'codex') return activeIds.codex === id;
     if (tool === 'gemini') return activeIds.gemini === id;
+    if (tool === 'opencode') return activeIds.opencode === id;
+    if (tool === 'openclaw') return activeIds.openclaw === id;
     return false;
   };
 
@@ -264,6 +270,16 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
                     onClick={e => { e.stopPropagation(); handleSwitch(p.id, 'gemini'); }}
                     title="Gemini">G</span>
                 )}
+                {p.apps.opencode && (
+                  <span className={`ai-badge ${isActive(p.id, 'opencode') ? 'active' : ''}`}
+                    onClick={e => { e.stopPropagation(); handleSwitch(p.id, 'opencode'); }}
+                    title="OpenCode">O</span>
+                )}
+                {p.apps.openclaw && (
+                  <span className={`ai-badge ${isActive(p.id, 'openclaw') ? 'active' : ''}`}
+                    onClick={e => { e.stopPropagation(); handleSwitch(p.id, 'openclaw'); }}
+                    title="OpenClaw">W</span>
+                )}
               </div>
             </div>
           ))}
@@ -314,6 +330,8 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
                       claude: !!preset.models.claude,
                       codex: !!preset.models.codex,
                       gemini: !!preset.models.gemini,
+                      opencode: !!preset.models.opencode,
+                      openclaw: !!preset.models.openclaw,
                     });
                   } else {
                     updateForm('providerType', e.target.value);
@@ -337,11 +355,11 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
               <div className="ai-form-section">
                 <label className="ai-form-label"><Server size={12} /> {t('ai_target_apps')}</label>
                 <div className="ai-app-toggles">
-                  {(['claude', 'codex', 'gemini'] as const).map(app => (
+                  {(['claude', 'codex', 'gemini', 'opencode', 'openclaw'] as const).map(app => (
                     <label key={app} className="ai-app-toggle">
                       <input type="checkbox" checked={editForm.apps[app]}
                         onChange={e => updateForm('apps', { ...editForm.apps, [app]: e.target.checked })} />
-                      <span>{app === 'claude' ? 'Claude Code' : app === 'codex' ? 'Codex' : 'Gemini CLI'}</span>
+                      <span>{app === 'claude' ? 'Claude Code' : app === 'codex' ? 'Codex' : app === 'gemini' ? 'Gemini CLI' : app === 'opencode' ? 'OpenCode' : 'OpenClaw'}</span>
                     </label>
                   ))}
                 </div>
@@ -418,6 +436,32 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
                 </div>
               )}
 
+              {editForm.apps.opencode && (
+                <div className="ai-form-group">
+                  <div className="ai-form-group-title">OpenCode {t('ai_models')}</div>
+                  <div className="ai-form-section">
+                    <label className="ai-form-label">{t('ai_model')}</label>
+                    <input className="settings-input ai-form-input"
+                      value={editForm.models.opencode?.model ?? ''}
+                      onChange={e => updateForm('models', { ...editForm.models, opencode: { model: e.target.value } })}
+                      placeholder="gpt-4o" />
+                  </div>
+                </div>
+              )}
+
+              {editForm.apps.openclaw && (
+                <div className="ai-form-group">
+                  <div className="ai-form-group-title">OpenClaw {t('ai_models')}</div>
+                  <div className="ai-form-section">
+                    <label className="ai-form-label">{t('ai_model')}</label>
+                    <input className="settings-input ai-form-input"
+                      value={editForm.models.openclaw?.model ?? ''}
+                      onChange={e => updateForm('models', { ...editForm.models, openclaw: { model: e.target.value } })}
+                      placeholder="gpt-4o" />
+                  </div>
+                </div>
+              )}
+
               {/* Notes */}
               <div className="ai-form-section">
                 <label className="ai-form-label">{t('ai_notes')}</label>
@@ -445,6 +489,18 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
                       <button className={`ai-switch-btn ${isActive(editForm.id, 'gemini') ? 'active' : ''}`}
                         onClick={() => handleSwitch(editForm.id, 'gemini')}>
                         Gemini {isActive(editForm.id, 'gemini') ? '✓' : ''}
+                      </button>
+                    )}
+                    {editForm.apps.opencode && (
+                      <button className={`ai-switch-btn ${isActive(editForm.id, 'opencode') ? 'active' : ''}`}
+                        onClick={() => handleSwitch(editForm.id, 'opencode')}>
+                        OpenCode {isActive(editForm.id, 'opencode') ? '✓' : ''}
+                      </button>
+                    )}
+                    {editForm.apps.openclaw && (
+                      <button className={`ai-switch-btn ${isActive(editForm.id, 'openclaw') ? 'active' : ''}`}
+                        onClick={() => handleSwitch(editForm.id, 'openclaw')}>
+                        OpenClaw {isActive(editForm.id, 'openclaw') ? '✓' : ''}
                       </button>
                     )}
                     <button className="ai-switch-btn all" onClick={() => handleSwitch(editForm.id, 'all')}>

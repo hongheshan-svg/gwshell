@@ -103,8 +103,26 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: --target ${{ matrix.target }}
+          tagName: v__VERSION__
+          releaseName: 'GWShell v__VERSION__'
+          releaseBody: 'See the assets to download this version and install.'
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+
+      # Create portable zip (Windows only)
+      - name: Create Portable ZIP (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem "src-tauri/target/${{ matrix.target }}/release/GWShell.exe" -ErrorAction SilentlyContinue
+          if ($exe) {
+            Compress-Archive -Path $exe.FullName -DestinationPath "src-tauri/target/${{ matrix.target }}/release/GWShell-portable-${{ matrix.label }}.zip"
+          }
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -113,27 +131,14 @@ jobs:
           path: |
             src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
             src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.nsis.zip
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.nsis.zip.sig
             src-tauri/target/${{ matrix.target }}/release/bundle/**/*.deb
             src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage.tar.gz
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage.tar.gz.sig
             src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app.tar.gz
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app.tar.gz.sig
+            src-tauri/target/${{ matrix.target }}/release/GWShell-portable-*.zip
           if-no-files-found: warn
-
-  # Create GitHub Release when a tag is pushed
-  release:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: true
-          generate_release_notes: true
-          files: artifacts/**/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

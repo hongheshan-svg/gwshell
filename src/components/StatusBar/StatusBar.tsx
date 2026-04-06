@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
-import { Wifi, Clock, Monitor, Cloud, LayoutGrid } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Wifi, Clock, Monitor, Cloud, LayoutGrid, Zap } from 'lucide-react';
+import { getVersion } from '@tauri-apps/api/app';
+import { invoke } from '@tauri-apps/api/core';
 import { useAppStore, type SplitCount } from '../../stores/appStore';
 
 const SPLIT_OPTIONS: { count: SplitCount; label: string }[] = [
@@ -14,12 +16,47 @@ export const StatusBar: React.FC = () => {
   const { tabs, activeTabId, sessions, t, locale, splitCount, setSplitCount } = useAppStore();
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const [showSplitMenu, setShowSplitMenu] = useState(false);
+  const [version, setVersion] = useState('0.1.0');
+  const [showAiMenu, setShowAiMenu] = useState(false);
+  const [activeProvider, setActiveProvider] = useState<string>('');
+  const [providers, setProviders] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    getVersion().then(setVersion).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const loadAi = async () => {
+      try {
+        const [list, ids] = await Promise.all([
+          invoke<{ id: string; name: string }[]>('list_ai_providers'),
+          invoke<[string | null, string | null, string | null, string | null, string | null]>('get_ai_active_ids'),
+        ]);
+        setProviders(list);
+        const activeId = ids[0] || ids[1] || ids[2] || ids[3] || ids[4];
+        const active = list.find(p => p.id === activeId);
+        setActiveProvider(active?.name || '');
+      } catch { /* empty */ }
+    };
+    loadAi();
+    const interval = setInterval(loadAi, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleSwitchProvider = async (providerId: string) => {
+    try {
+      await invoke('switch_ai_provider', { providerId, tool: 'all' });
+      const p = providers.find(pp => pp.id === providerId);
+      setActiveProvider(p?.name || '');
+      setShowAiMenu(false);
+    } catch { /* empty */ }
+  };
 
   return (
     <div className="status-bar">
       <div className="status-item">
         <Monitor size={11} />
-        <span>GWShell v0.1.0</span>
+        <span>GWShell v{version}</span>
       </div>
 
       {activeTab && activeTab.type !== 'asset-list' && (
@@ -59,6 +96,36 @@ export const StatusBar: React.FC = () => {
                 <span>{opt.label}</span>
               </button>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* AI Provider quick switch */}
+      <div className="status-item split-picker-wrap" style={{ position: 'relative' }}>
+        <button
+          className="split-picker-btn"
+          onClick={() => setShowAiMenu(!showAiMenu)}
+          title={t('ai_quick_switch')}
+        >
+          <Zap size={12} />
+          <span>{activeProvider || 'AI'}</span>
+        </button>
+        {showAiMenu && (
+          <div className="split-picker-menu" style={{ minWidth: 160 }}>
+            {providers.map(p => (
+              <button
+                key={p.id}
+                className={`split-picker-option ${p.name === activeProvider ? 'active' : ''}`}
+                onClick={() => handleSwitchProvider(p.id)}
+              >
+                <span>{p.name}</span>
+              </button>
+            ))}
+            {providers.length === 0 && (
+              <div style={{ padding: '6px 10px', color: 'var(--text-muted)', fontSize: 11 }}>
+                {t('ai_no_providers')}
+              </div>
+            )}
           </div>
         )}
       </div>

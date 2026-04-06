@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Search,
   Menu,
@@ -10,6 +10,7 @@ import {
   Play,
   Copy,
 } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../../stores/appStore';
 import type { SessionConfig } from '../../types';
 
@@ -27,6 +28,7 @@ export const AssetTable: React.FC = () => {
     setActiveTab,
     tabs,
     t,
+    updateSessionLatency,
   } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: SessionConfig } | null>(null);
@@ -109,6 +111,25 @@ export const AssetTable: React.FC = () => {
     return <span className={cls}>{latency}ms</span>;
   };
 
+  const pingAllSessions = useCallback(() => {
+    const targets = realSessions.filter((s) => s.host);
+    targets.forEach(async (session) => {
+      try {
+        const latency = await invoke<number>('ping_host', {
+          host: session.host!,
+          port: session.port || 22,
+        });
+        updateSessionLatency(session.id, latency);
+      } catch {
+        updateSessionLatency(session.id, null);
+      }
+    });
+  }, [realSessions, updateSessionLatency]);
+
+  useEffect(() => {
+    pingAllSessions();
+  }, [pingAllSessions]);
+
   return (
     <div className="asset-table-wrapper">
       {/* Toolbar */}
@@ -133,7 +154,7 @@ export const AssetTable: React.FC = () => {
           <button className="asset-toolbar-btn" onClick={() => setShowNewSession(true)} title={t('table_new')}>
             <Plus size={14} />
           </button>
-          <button className="asset-toolbar-btn" title={t('table_refresh')}>
+          <button className="asset-toolbar-btn" onClick={pingAllSessions} title={t('table_refresh')}>
             <RefreshCw size={14} />
           </button>
           {selectedSessionIds.length > 0 && (

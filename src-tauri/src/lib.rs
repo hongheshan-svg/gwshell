@@ -1,9 +1,12 @@
 mod ai_config;
 mod database;
+mod mcp_config;
+mod prompt_config;
 mod pty;
 mod serial;
 mod session;
 mod ssh;
+mod usage_tracker;
 
 use database::Database;
 use parking_lot::Mutex;
@@ -291,6 +294,51 @@ fn sftp_upload(
 }
 
 #[tauri::command]
+fn sftp_open_file(
+    session_id: String,
+    remote_path: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<String, String> {
+    let file_name = std::path::Path::new(&remote_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("file")
+        .to_string();
+    let temp_dir = std::env::temp_dir().join("gwshell_sftp");
+    std::fs::create_dir_all(&temp_dir)
+        .map_err(|e| format!("Create temp dir failed: {}", e))?;
+    let local_path = temp_dir.join(&file_name);
+    let local_str = local_path.to_string_lossy().to_string();
+    state
+        .ssh_manager
+        .sftp_download(&session_id, &remote_path, &local_str)?;
+    Ok(local_str)
+}
+
+#[tauri::command]
+fn sftp_read_text(
+    session_id: String,
+    remote_path: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<String, String> {
+    state
+        .ssh_manager
+        .sftp_read_text(&session_id, &remote_path)
+}
+
+#[tauri::command]
+fn sftp_write_text(
+    session_id: String,
+    remote_path: String,
+    content: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    state
+        .ssh_manager
+        .sftp_write_text(&session_id, &remote_path, &content)
+}
+
+#[tauri::command]
 fn sftp_chmod(
     session_id: String,
     path: String,
@@ -316,6 +364,26 @@ fn ssh_exec(
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
     state.ssh_manager.ssh_exec(&session_id, &command)
+}
+
+// ---- Ping Command ----
+
+#[tauri::command]
+async fn ping_host(host: String, port: u16) -> Result<f64, String> {
+    use std::time::Instant;
+    use tokio::net::TcpStream;
+    use tokio::time::{timeout, Duration};
+
+    let addr = format!("{}:{}", host, port);
+    let start = Instant::now();
+    match timeout(Duration::from_secs(5), TcpStream::connect(&addr)).await {
+        Ok(Ok(_)) => {
+            let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+            Ok((elapsed * 10.0).round() / 10.0) // round to 0.1ms
+        }
+        Ok(Err(e)) => Err(format!("Connect failed: {}", e)),
+        Err(_) => Err("Timeout".to_string()),
+    }
 }
 
 // ---- Serial Commands ----
@@ -425,6 +493,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_deep_link::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             create_local_shell,
@@ -446,9 +516,13 @@ pub fn run() {
             sftp_rename,
             sftp_download,
             sftp_upload,
+            sftp_open_file,
+            sftp_read_text,
+            sftp_write_text,
             sftp_chmod,
             sftp_create_file,
             ssh_exec,
+            ping_host,
             serial_open,
             write_to_serial,
             close_serial,
@@ -464,6 +538,21 @@ pub fn run() {
             ai_config::delete_ai_provider,
             ai_config::switch_ai_provider,
             ai_config::import_from_cc_switch,
+            mcp_config::list_mcp_servers,
+            mcp_config::save_mcp_server,
+            mcp_config::delete_mcp_server,
+            mcp_config::sync_mcp_servers,
+            mcp_config::get_mcp_templates,
+            prompt_config::list_prompt_files,
+            prompt_config::read_prompt_file,
+            prompt_config::write_prompt_file,
+            prompt_config::sync_prompt_files,
+            prompt_config::get_prompt_templates,
+            usage_tracker::add_usage_record,
+            usage_tracker::get_usage_summary,
+            usage_tracker::clear_usage_records,
+            usage_tracker::save_model_pricing,
+            usage_tracker::get_model_pricing,
         ])
         .setup(|app| {
             // ---- System Tray ----

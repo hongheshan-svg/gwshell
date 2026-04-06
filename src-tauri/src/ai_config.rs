@@ -60,6 +60,10 @@ pub struct ProviderApps {
     pub codex: bool,
     #[serde(default)]
     pub gemini: bool,
+    #[serde(default)]
+    pub opencode: bool,
+    #[serde(default)]
+    pub openclaw: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -70,6 +74,10 @@ pub struct ProviderModels {
     pub codex: Option<CodexModels>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gemini: Option<GeminiModels>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub opencode: Option<OpenCodeModels>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub openclaw: Option<OpenClawModels>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -98,6 +106,18 @@ pub struct GeminiModels {
     pub model: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct OpenCodeModels {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct OpenClawModels {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
 /// Stored state
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AiProviderStore {
@@ -109,6 +129,10 @@ pub struct AiProviderStore {
     pub active_codex: Option<String>,
     #[serde(rename = "activeGemini", skip_serializing_if = "Option::is_none")]
     pub active_gemini: Option<String>,
+    #[serde(rename = "activeOpencode", skip_serializing_if = "Option::is_none")]
+    pub active_opencode: Option<String>,
+    #[serde(rename = "activeOpenclaw", skip_serializing_if = "Option::is_none")]
+    pub active_openclaw: Option<String>,
 }
 
 // ============================================================================
@@ -278,6 +302,56 @@ fn apply_gemini_config(provider: &AiProvider) -> Result<(), String> {
     atomic_write_text(&settings_path, &json)
 }
 
+/// Write OpenCode config (~/.opencode/config.json)
+fn apply_opencode_config(provider: &AiProvider) -> Result<(), String> {
+    let models = provider.models.opencode.as_ref();
+    let model = models
+        .and_then(|m| m.model.clone())
+        .unwrap_or_else(|| "gpt-4o".to_string());
+
+    let opencode_dir = home_dir().join(".opencode");
+    fs::create_dir_all(&opencode_dir)
+        .map_err(|e| format!("Create .opencode dir failed: {}", e))?;
+
+    let config = serde_json::json!({
+        "provider": "openai-compatible",
+        "providers": {
+            "openai-compatible": {
+                "apiKey": provider.api_key,
+                "model": model,
+                "baseURL": provider.base_url
+            }
+        }
+    });
+
+    let json = serde_json::to_string_pretty(&config)
+        .map_err(|e| format!("Serialize failed: {}", e))?;
+    atomic_write_text(&opencode_dir.join("config.json"), &json)
+}
+
+/// Write OpenClaw config (~/.openclaw/config.json)
+fn apply_openclaw_config(provider: &AiProvider) -> Result<(), String> {
+    let models = provider.models.openclaw.as_ref();
+    let model = models
+        .and_then(|m| m.model.clone())
+        .unwrap_or_else(|| "gpt-4o".to_string());
+
+    let openclaw_dir = home_dir().join(".openclaw");
+    fs::create_dir_all(&openclaw_dir)
+        .map_err(|e| format!("Create .openclaw dir failed: {}", e))?;
+
+    let config = serde_json::json!({
+        "apiProvider": "custom",
+        "customApiUrl": provider.base_url,
+        "customApiKey": provider.api_key,
+        "customModel": model
+    });
+
+    let json = serde_json::to_string_pretty(&config)
+        .map_err(|e| format!("Serialize failed: {}", e))?;
+    atomic_write_text(&openclaw_dir.join("config.json"), &json)
+}
+
 /// Atomic write helper
 fn atomic_write_text(path: &Path, content: &str) -> Result<(), String> {
     let tmp = path.with_extension("tmp");
@@ -301,9 +375,9 @@ pub fn list_ai_providers() -> Result<Vec<AiProvider>, String> {
 }
 
 #[tauri::command]
-pub fn get_ai_active_ids() -> Result<(Option<String>, Option<String>, Option<String>), String> {
+pub fn get_ai_active_ids() -> Result<(Option<String>, Option<String>, Option<String>, Option<String>, Option<String>), String> {
     let store = load_store();
-    Ok((store.active_claude, store.active_codex, store.active_gemini))
+    Ok((store.active_claude, store.active_codex, store.active_gemini, store.active_opencode, store.active_openclaw))
 }
 
 #[tauri::command]
@@ -330,6 +404,12 @@ pub fn delete_ai_provider(provider_id: String) -> Result<(), String> {
     }
     if store.active_gemini.as_deref() == Some(&provider_id) {
         store.active_gemini = None;
+    }
+    if store.active_opencode.as_deref() == Some(&provider_id) {
+        store.active_opencode = None;
+    }
+    if store.active_openclaw.as_deref() == Some(&provider_id) {
+        store.active_openclaw = None;
     }
     save_store(&store)
 }
@@ -368,6 +448,20 @@ pub fn switch_ai_provider(provider_id: String, tool: String) -> Result<(), Strin
             apply_gemini_config(&provider)?;
             store.active_gemini = Some(provider_id);
         }
+        "opencode" => {
+            if !provider.apps.opencode {
+                return Err("Provider is not enabled for OpenCode".to_string());
+            }
+            apply_opencode_config(&provider)?;
+            store.active_opencode = Some(provider_id);
+        }
+        "openclaw" => {
+            if !provider.apps.openclaw {
+                return Err("Provider is not enabled for OpenClaw".to_string());
+            }
+            apply_openclaw_config(&provider)?;
+            store.active_openclaw = Some(provider_id);
+        }
         "all" => {
             if provider.apps.claude {
                 apply_claude_config(&provider)?;
@@ -380,6 +474,14 @@ pub fn switch_ai_provider(provider_id: String, tool: String) -> Result<(), Strin
             if provider.apps.gemini {
                 apply_gemini_config(&provider)?;
                 store.active_gemini = Some(provider.id.clone());
+            }
+            if provider.apps.opencode {
+                apply_opencode_config(&provider)?;
+                store.active_opencode = Some(provider.id.clone());
+            }
+            if provider.apps.openclaw {
+                apply_openclaw_config(&provider)?;
+                store.active_openclaw = Some(provider.id.clone());
             }
         }
         _ => return Err(format!("Unknown tool: {}", tool)),
@@ -461,6 +563,8 @@ fn parse_cc_switch_provider(id: &str, val: &serde_json::Value) -> Result<AiProvi
             claude: settings.pointer("/env/ANTHROPIC_BASE_URL").is_some(),
             codex: settings.pointer("/auth/OPENAI_API_KEY").is_some(),
             gemini: settings.pointer("/env/GEMINI_API_KEY").is_some(),
+            opencode: settings.pointer("/env/OPENCODE_API_KEY").is_some(),
+            openclaw: settings.pointer("/env/OPENCLAW_API_KEY").is_some(),
         },
         models: ProviderModels::default(),
         website_url: val.get("websiteUrl").and_then(|v| v.as_str()).map(String::from),
@@ -508,6 +612,14 @@ fn parse_cc_switch_universal(id: &str, val: &serde_json::Value) -> Result<AiProv
             .unwrap_or(false),
         gemini: apps_val
             .and_then(|a| a.get("gemini"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        opencode: apps_val
+            .and_then(|a| a.get("opencode"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        openclaw: apps_val
+            .and_then(|a| a.get("openclaw"))
             .and_then(|v| v.as_bool())
             .unwrap_or(false),
     };

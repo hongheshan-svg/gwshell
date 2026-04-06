@@ -41,6 +41,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
   const containerRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
   const sessions = useAppStore((s) => s.sessions);
+  const theme = useAppStore((s) => s.theme);
   const t = useAppStore((s) => s.t);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
@@ -367,6 +368,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
 
     return () => { cleanup?.(); };
   }, [tab.id, tab.sessionId, tab.type, getThemeColors]);
+
+  // Update terminal theme when app theme changes
+  useEffect(() => {
+    const inst = terminalInstances.get(tab.id);
+    if (inst) {
+      inst.terminal.options.theme = getThemeColors();
+    }
+  }, [theme, tab.id, getThemeColors]);
 
   useEffect(() => {
     if (isActive) {

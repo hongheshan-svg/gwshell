@@ -1,7 +1,12 @@
 {
-  "name": "tauri-app",
+  "name": "gwshell",
   "private": true,
   "version": "0.1.0",
+  "description": "A modern cross-platform SSH/Shell terminal manager",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hongheshan-svg/gwshell"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,8 +16,10 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-deep-link": "^2.4.8",
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/xterm": "^6.0.0",

@@ -1,12 +1,33 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { save, open } from '@tauri-apps/plugin-dialog';
+import { openPath } from '@tauri-apps/plugin-opener';
 import {
   Folder, File, Upload, Download, Trash2, FolderPlus,
   RefreshCw, ChevronUp, Home, Edit3, X, Copy,
-  Shield, FilePlus, FolderUp,
+  Shield, FilePlus, FolderUp, ExternalLink, FileEdit,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import { SftpEditor } from './SftpEditor';
+
+const TEXT_EXTENSIONS = new Set([
+  'txt', 'md', 'json', 'xml', 'yml', 'yaml', 'toml', 'ini', 'cfg', 'conf',
+  'sh', 'bash', 'zsh', 'fish', 'bat', 'cmd', 'ps1',
+  'js', 'ts', 'jsx', 'tsx', 'mjs', 'cjs',
+  'py', 'rb', 'pl', 'php', 'lua', 'go', 'rs', 'java', 'kt', 'scala', 'c', 'cpp', 'h', 'hpp', 'cs',
+  'css', 'scss', 'less', 'sass', 'html', 'htm', 'vue', 'svelte',
+  'sql', 'graphql', 'gql',
+  'env', 'gitignore', 'dockerignore', 'editorconfig', 'eslintrc', 'prettierrc',
+  'log', 'csv', 'tsv', 'properties', 'service', 'timer', 'socket', 'desktop',
+  'nginx', 'apache', 'Makefile', 'Dockerfile', 'Vagrantfile', 'Rakefile', 'Gemfile',
+]);
+
+function isTextFile(name: string): boolean {
+  // dotfiles like .bashrc, .profile
+  if (name.startsWith('.') && !name.includes('.', 1)) return true;
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  return TEXT_EXTENSIONS.has(ext);
+}
 
 interface SftpEntry {
   name: string;
@@ -45,6 +66,8 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username }) => 
   // chmod dialog
   const [chmodEntry, setChmodEntry] = useState<SftpEntry | null>(null);
   const [chmodValue, setChmodValue] = useState('');
+  // inline editor
+  const [editingFile, setEditingFile] = useState<SftpEntry | null>(null);
   const [width, setWidth] = useState(300);
   const resizingRef = useRef(false);
   const startXRef = useRef(0);
@@ -168,6 +191,22 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username }) => 
   const handleEntryDoubleClick = async (entry: SftpEntry) => {
     if (entry.is_dir) {
       navigateTo(entry.path);
+    } else if (isTextFile(entry.name)) {
+      setEditingFile(entry);
+    } else {
+      handleOpenLocal(entry);
+    }
+  };
+
+  const handleOpenLocal = async (entry: SftpEntry) => {
+    try {
+      const tempPath = await invoke<string>('sftp_open_file', {
+        sessionId,
+        remotePath: entry.path,
+      });
+      await openPath(tempPath);
+    } catch (err) {
+      setError(String(err));
     }
   };
 
@@ -535,13 +574,31 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username }) => 
               <>
                 {/* --- Entry-level right-click --- */}
                 {!contextMenu.entry.is_dir && (
-                  <div
-                    className="sftp-context-item"
-                    onClick={() => { handleDownload(contextMenu.entry!); setContextMenu(null); }}
-                  >
-                    <Download size={13} />
-                    <span>{t('sftp_download_to')}</span>
-                  </div>
+                  <>
+                    {isTextFile(contextMenu.entry.name) && (
+                      <div
+                        className="sftp-context-item"
+                        onClick={() => { setEditingFile(contextMenu.entry!); setContextMenu(null); }}
+                      >
+                        <FileEdit size={13} />
+                        <span>{t('sftp_edit_online')}</span>
+                      </div>
+                    )}
+                    <div
+                      className="sftp-context-item"
+                      onClick={() => { handleOpenLocal(contextMenu.entry!); setContextMenu(null); }}
+                    >
+                      <ExternalLink size={13} />
+                      <span>{t('sftp_open_local')}</span>
+                    </div>
+                    <div
+                      className="sftp-context-item"
+                      onClick={() => { handleDownload(contextMenu.entry!); setContextMenu(null); }}
+                    >
+                      <Download size={13} />
+                      <span>{t('sftp_download_to')}</span>
+                    </div>
+                  </>
                 )}
                 <div
                   className="sftp-context-item"
@@ -686,6 +743,16 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username }) => 
           </div>
         )}
       </div>
+
+      {/* Inline text editor */}
+      {editingFile && (
+        <SftpEditor
+          sessionId={sessionId}
+          remotePath={editingFile.path}
+          fileName={editingFile.name}
+          onClose={() => setEditingFile(null)}
+        />
+      )}
     </>
   );
 };

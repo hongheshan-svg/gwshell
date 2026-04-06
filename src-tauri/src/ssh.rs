@@ -664,6 +664,41 @@ impl SshManager {
         })
     }
 
+    pub fn sftp_read_text(
+        &self,
+        session_id: &str,
+        remote_path: &str,
+    ) -> Result<String, String> {
+        self.with_sftp(session_id, |sftp| {
+            let mut remote_file = sftp
+                .open(Path::new(remote_path))
+                .map_err(|e| format!("SFTP open failed: {}", e))?;
+            let mut buf = Vec::new();
+            remote_file
+                .read_to_end(&mut buf)
+                .map_err(|e| format!("SFTP read failed: {}", e))?;
+            String::from_utf8(buf)
+                .map_err(|_| "File is not valid UTF-8 text".to_string())
+        })
+    }
+
+    pub fn sftp_write_text(
+        &self,
+        session_id: &str,
+        remote_path: &str,
+        content: &str,
+    ) -> Result<(), String> {
+        self.with_sftp(session_id, |sftp| {
+            let mut remote_file = sftp
+                .create(Path::new(remote_path))
+                .map_err(|e| format!("SFTP create failed: {}", e))?;
+            remote_file
+                .write_all(content.as_bytes())
+                .map_err(|e| format!("SFTP write failed: {}", e))?;
+            Ok(())
+        })
+    }
+
     pub fn sftp_upload(
         &self,
         session_id: &str,

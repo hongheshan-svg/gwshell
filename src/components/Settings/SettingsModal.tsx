@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, FolderOpen } from 'lucide-react';
 import { ProviderEditor } from './ProviderEditor';
+import { McpManager } from './McpManager';
+import { PromptsManager } from './PromptsManager';
+import { UsageDashboard } from './UsageDashboard';
 import { useAppStore } from '../../stores/appStore';
 import { detectLocale, getT } from '../../i18n';
 import type { TranslationKeys } from '../../i18n';
@@ -17,7 +20,12 @@ const navCategories: { title?: TranslationKeys; items: { id: string; labelKey: T
   },
   {
     title: 'settings_cat_ai',
-    items: [{ id: 'ai', labelKey: 'settings_ai_account' }],
+    items: [
+      { id: 'ai', labelKey: 'settings_ai_account' },
+      { id: 'mcp', labelKey: 'settings_mcp' },
+      { id: 'prompts', labelKey: 'settings_prompts' },
+      { id: 'usage', labelKey: 'settings_usage' },
+    ],
   },
   {
     title: 'settings_cat_shortcuts',
@@ -501,6 +509,15 @@ export const SettingsModal: React.FC = () => {
 
             {/* ===== AI ===== */}
             {activeNav === 'ai' && <ProviderEditor t={t} />}
+
+            {/* ===== MCP ===== */}
+            {activeNav === 'mcp' && <McpManager t={t} />}
+
+            {/* ===== Prompts ===== */}
+            {activeNav === 'prompts' && <PromptsManager t={t} />}
+
+            {/* ===== Usage ===== */}
+            {activeNav === 'usage' && <UsageDashboard t={t} />}
 
             {/* ===== 账号 ===== */}
             {activeNav === 'ai-account' && null}

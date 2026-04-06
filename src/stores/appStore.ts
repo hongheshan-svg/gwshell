@@ -26,6 +26,7 @@ interface AppStore {
   setSessions: (sessions: SessionConfig[]) => void;
   addSession: (session: SessionConfig) => void;
   removeSession: (id: string) => void;
+  updateSessionLatency: (id: string, latency: number | null) => void;
   selectedSessionIds: string[];
   setSelectedSessionIds: (ids: string[]) => void;
   toggleSelectSession: (id: string) => void;
@@ -124,6 +125,13 @@ export const useAppStore = create<AppStore>((set, _get) => ({
     import('@tauri-apps/api/core').then(({ invoke }) => {
       invoke('delete_session', { sessionId: id }).catch(() => {});
     });
+  },
+  updateSessionLatency: (id, latency) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === id ? { ...s, latency } : s
+      ),
+    }));
   },
   selectedSessionIds: [],
   setSelectedSessionIds: (ids) => set({ selectedSessionIds: ids }),
