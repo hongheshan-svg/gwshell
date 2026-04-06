@@ -176,6 +176,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
             rows: instance!.terminal.rows,
             cols: instance!.terminal.cols,
             shellPath: null,
+            workingDir: session?.working_dir ?? null,
           });
         } else if (tab.type === "ssh") {
           if (!session?.host) {

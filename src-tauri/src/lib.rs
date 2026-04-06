@@ -27,12 +27,13 @@ fn create_local_shell(
     rows: u16,
     cols: u16,
     shell_path: Option<String>,
+    working_dir: Option<String>,
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     state
         .pty_manager
-        .create_shell(&session_id, app_handle, rows, cols, shell_path)
+        .create_shell(&session_id, app_handle, rows, cols, shell_path, working_dir)
 }
 
 #[tauri::command]
@@ -207,6 +208,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             create_local_shell,

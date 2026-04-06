@@ -28,6 +28,8 @@ export interface SessionConfig {
   serial_parity?: string;
   serial_encoding?: string;
   serial_init_commands?: string;
+  // Local shell
+  working_dir?: string;
 }
 
 export interface SessionGroup {

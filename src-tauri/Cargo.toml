@@ -24,4 +24,5 @@ portable-pty = "0.8"
 dirs = "6"
 parking_lot = "0.12"
 serialport = "4"
+tauri-plugin-dialog = "2"
 

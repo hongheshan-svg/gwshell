@@ -28,6 +28,7 @@ impl PtyManager {
         rows: u16,
         cols: u16,
         shell_path: Option<String>,
+        working_dir: Option<String>,
     ) -> Result<(), String> {
         let pty_system = native_pty_system();
         let pair = pty_system
@@ -54,7 +55,9 @@ impl PtyManager {
             }
         };
 
-        if let Some(home) = dirs::home_dir() {
+        if let Some(ref dir) = working_dir {
+            cmd.cwd(std::path::Path::new(dir));
+        } else if let Some(home) = dirs::home_dir() {
             cmd.cwd(home);
         }
 
