@@ -28,14 +28,19 @@ fn is_system_chinese() -> bool {
     }
     #[cfg(windows)]
     {
-        // Check Windows UI language
-        use std::process::Command;
-        if let Ok(output) = Command::new("powershell")
-            .args(["-NoProfile", "-Command", "(Get-Culture).Name"])
-            .output()
-        {
-            let locale = String::from_utf8_lossy(&output.stdout);
-            if locale.trim().starts_with("zh") { return true; }
+        // Use Windows API directly — instant, no subprocess
+        use std::ffi::OsString;
+        use std::os::windows::ffi::OsStringExt;
+        extern "system" {
+            fn GetUserDefaultLocaleName(lp_locale_name: *mut u16, cch_locale_name: i32) -> i32;
+        }
+        let mut buf = [0u16; 85]; // LOCALE_NAME_MAX_LENGTH
+        let len = unsafe { GetUserDefaultLocaleName(buf.as_mut_ptr(), buf.len() as i32) };
+        if len > 0 {
+            let name = OsString::from_wide(&buf[..((len - 1) as usize)]);
+            if let Some(s) = name.to_str() {
+                if s.starts_with("zh") { return true; }
+            }
         }
     }
     false
@@ -541,6 +546,14 @@ pub fn run() {
     });
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // When a second instance is launched, focus the existing window
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.show();
+                let _ = win.unminimize();
+                let _ = win.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
