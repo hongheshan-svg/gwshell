@@ -161,16 +161,22 @@ export const useAppStore = create<AppStore>((set, _get) => ({
   setSplitCount: (count) => set((state) => {
     const terminalTabs = state.tabs.filter(t => t.type !== 'asset-list');
     const panes: (string | null)[] = [];
+    const used = new Set<string>();
     for (let i = 0; i < count; i++) {
-      // Keep existing assignment if valid, otherwise auto-fill from terminal tabs
+      // Keep existing assignment if valid and not yet used
       const existing = state.splitPanes[i];
-      if (existing && terminalTabs.some(t => t.id === existing)) {
+      if (existing && !used.has(existing) && terminalTabs.some(t => t.id === existing)) {
         panes.push(existing);
+        used.add(existing);
       } else {
         // Auto-assign an unassigned terminal tab
-        const used = new Set(panes.filter(Boolean));
         const available = terminalTabs.find(t => !used.has(t.id));
-        panes.push(available ? available.id : null);
+        if (available) {
+          panes.push(available.id);
+          used.add(available.id);
+        } else {
+          panes.push(null);
+        }
       }
     }
     // If switching to split mode, also switch to terminal view

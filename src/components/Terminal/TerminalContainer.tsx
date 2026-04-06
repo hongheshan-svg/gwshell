@@ -168,7 +168,7 @@ const SplitPane: React.FC<SplitPaneProps> = ({ slotIndex, tab, allTabs, isFocuse
           ))}
         </select>
       </div>
-      <TerminalView tab={tab} isActive={isFocused} />
+      <TerminalView tab={tab} isActive={isFocused} forceVisible />
     </div>
   );
 };

@@ -9,6 +9,8 @@ import "@xterm/xterm/css/xterm.css";
 interface TerminalViewProps {
   tab: TabInfo;
   isActive: boolean;
+  /** When true, always display the terminal (split-pane mode) instead of toggling display:none */
+  forceVisible?: boolean;
 }
 
 interface FingerprintInfo {
@@ -30,7 +32,7 @@ export function destroyTerminal(tabId: string): void {
   }
 }
 
-export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => {
+export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, forceVisible }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
   const sessions = useAppStore((s) => s.sessions);
@@ -93,8 +95,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
   }, []);
 
   useEffect(() => {
-    if (!containerRef.current || initializedRef.current) return;
-    initializedRef.current = true;
+    if (!containerRef.current) return;
 
     let instance = terminalInstances.get(tab.id);
 
@@ -118,11 +119,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
       terminalInstances.set(tab.id, instance);
     }
 
-    instance.terminal.open(containerRef.current);
+    // Re-attach the terminal if its parent is a different container
+    const currentParent = instance.terminal.element?.parentElement;
+    if (currentParent !== containerRef.current) {
+      instance.terminal.open(containerRef.current);
+    }
 
     requestAnimationFrame(() => {
       try { instance!.fitAddon.fit(); } catch {}
     });
+
+    if (initializedRef.current) return;
+    initializedRef.current = true;
 
     const setupConnection = async () => {
       const { invoke } = await import("@tauri-apps/api/core");
@@ -363,7 +371,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
       <div
         ref={containerRef}
         className="terminal-pane"
-        style={{ display: isActive ? "block" : "none" }}
+        style={{ display: (forceVisible || isActive) ? "block" : "none" }}
       />
 
       {fingerprintInfo && isActive && (
