@@ -388,16 +388,28 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
     }
   }, [isActive, tab.id]);
 
+  // Use ResizeObserver on the container element so that ANY size change –
+  // sidebar collapse/expand, split-pane open/close, window resize, SFTP panel
+  // toggle – automatically re-fits the terminal.  This replaces the old
+  // window "resize" listener which only fired for the active terminal and
+  // only on window-level resize events.
   useEffect(() => {
-    const handleResize = () => {
-      if (isActive) {
+    const el = containerRef.current;
+    if (!el) return;
+
+    let rafId = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
         const inst = terminalInstances.get(tab.id);
-        if (inst) { try { inst.fitAddon.fit(); } catch {} }
-      }
-    };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [isActive, tab.id]);
+        if (inst) {
+          try { inst.fitAddon.fit(); } catch {}
+        }
+      });
+    });
+    observer.observe(el);
+    return () => { cancelAnimationFrame(rafId); observer.disconnect(); };
+  }, [tab.id]);
 
   return (
     <>

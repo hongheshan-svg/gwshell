@@ -573,6 +573,8 @@ input, select, textarea, button {
   background: var(--bg-primary);
   position: relative;
   overflow: hidden;
+  min-width: 0;
+  min-height: 0;
 }
 
 .terminal-container.terminal-split-grid {
@@ -584,10 +586,14 @@ input, select, textarea, button {
   flex: 1;
   padding: 2px;
   overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
 }
 
 .terminal-pane .xterm {
   height: 100%;
+  width: 100%;
 }
 
 /* ---- Split pane ---- */
@@ -1734,6 +1740,7 @@ input, select, textarea, button {
 .asset-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 12.5px;
 }
 
@@ -1762,7 +1769,6 @@ input, select, textarea, button {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
 }
 
 .asset-table tbody tr {
@@ -1778,7 +1784,7 @@ input, select, textarea, button {
 }
 
 .col-check {
-  width: 36px;
+  width: 4%;
   text-align: center !important;
 }
 
@@ -1788,7 +1794,7 @@ input, select, textarea, button {
 }
 
 .col-name {
-  min-width: 120px;
+  width: 14%;
   cursor: pointer;
 }
 
@@ -1801,29 +1807,29 @@ input, select, textarea, button {
 }
 
 .col-latency {
-  width: 70px;
+  width: 7%;
 }
 
 .col-host {
-  min-width: 130px;
+  width: 16%;
 }
 
 .col-user {
-  min-width: 80px;
+  width: 10%;
 }
 
 .col-created, .col-expired {
-  min-width: 120px;
+  width: 12%;
   color: var(--text-secondary);
 }
 
 .col-remark {
-  min-width: 100px;
+  width: 16%;
   color: var(--text-muted);
 }
 
 .col-actions {
-  width: 70px;
+  width: 9%;
 }
 
 .asset-action-btn {
