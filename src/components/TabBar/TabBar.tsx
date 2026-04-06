@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { X, Plus, Menu, ChevronDown, FolderOpen } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { destroyTerminal } from '../Terminal/TerminalView';
+import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
 
 export const TabBar: React.FC = () => {
-  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, t, sftpPanelOpen, toggleSftpPanel } = useAppStore();
+  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, setShowSerialModal, setShowDockerModal, setShowLocalTerminalModal, t, sftpPanelOpen, toggleSftpPanel } = useAppStore();
+  const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
+  const addBtnRef = useRef<HTMLButtonElement>(null);
 
   const handleCloseTab = (tabId: string) => {
     destroyTerminal(tabId);
@@ -15,6 +18,18 @@ export const TabBar: React.FC = () => {
     if (e.button === 1) {
       e.preventDefault();
       handleCloseTab(tabId);
+    }
+  };
+
+  const handleNewAssetSelect = (type: string) => {
+    if (type === 'ssh' || type === 'ssh-tunnel' || type === 'rdp' || type === 'telnet') {
+      setShowNewSession(true);
+    } else if (type === 'serial') {
+      setShowSerialModal(true);
+    } else if (type === 'docker') {
+      setShowDockerModal(true);
+    } else if (type === 'localshell') {
+      setShowLocalTerminalModal(true);
     }
   };
 
@@ -50,9 +65,16 @@ export const TabBar: React.FC = () => {
           )}
         </div>
       ))}
-      <button className="tab-add-btn" onClick={() => setShowNewSession(true)} title={t('tab_new')}>
+      <button ref={addBtnRef} className="tab-add-btn" onClick={() => setShowNewAssetMenu(true)} title={t('tab_new')}>
         <Plus size={14} />
       </button>
+      {showNewAssetMenu && (
+        <NewAssetMenu
+          anchorRef={addBtnRef}
+          onClose={() => setShowNewAssetMenu(false)}
+          onSelect={handleNewAssetSelect}
+        />
+      )}
       {/* SFTP toggle - only show when active tab is SSH */}
       {(() => {
         const activeTab = tabs.find((t) => t.id === activeTabId);

@@ -483,8 +483,10 @@ input, select, textarea, button {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 12px;
-  height: 30px;
+  padding: 0 16px;
+  height: 32px;
+  min-width: 120px;
+  max-width: 200px;
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
@@ -510,8 +512,8 @@ input, select, textarea, button {
   content: '';
   position: absolute;
   bottom: -4px;
-  left: 12px;
-  right: 12px;
+  left: 20px;
+  right: 20px;
   height: 2px;
   background: var(--accent-primary);
   border-radius: 1px;
@@ -529,8 +531,8 @@ input, select, textarea, button {
 .tab-dot.localshell { background: var(--accent-primary); }
 
 .tab-close {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -541,6 +543,8 @@ input, select, textarea, button {
   cursor: pointer;
   opacity: 0;
   transition: all 0.12s;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .tab-item:hover .tab-close {
