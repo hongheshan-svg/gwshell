@@ -161,14 +161,14 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username }) => 
     }
   };
 
-  const handleEntryClick = (entry: SftpEntry) => {
-    if (entry.is_dir) {
-      navigateTo(entry.path);
-    }
+  const handleEntryClick = (_entry: SftpEntry) => {
+    // Single click: select only, no navigation
   };
 
   const handleEntryDoubleClick = async (entry: SftpEntry) => {
-    if (!entry.is_dir) {
+    if (entry.is_dir) {
+      navigateTo(entry.path);
+    } else {
       await handleDownload(entry);
     }
   };
