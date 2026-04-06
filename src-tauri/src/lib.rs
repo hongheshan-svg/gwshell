@@ -21,6 +21,26 @@ use tauri::{
     Manager, State,
 };
 
+/// Detect system locale and return true if Chinese
+fn is_system_chinese() -> bool {
+    if let Ok(lang) = std::env::var("LANG") {
+        if lang.starts_with("zh") { return true; }
+    }
+    #[cfg(windows)]
+    {
+        // Check Windows UI language
+        use std::process::Command;
+        if let Ok(output) = Command::new("powershell")
+            .args(["-NoProfile", "-Command", "(Get-Culture).Name"])
+            .output()
+        {
+            let locale = String::from_utf8_lossy(&output.stdout);
+            if locale.trim().starts_with("zh") { return true; }
+        }
+    }
+    false
+}
+
 pub struct AppState {
     pub pty_manager: PtyManager,
     pub ssh_manager: SshManager,
@@ -28,6 +48,36 @@ pub struct AppState {
     pub sessions: Mutex<Vec<SessionConfig>>,
     pub groups: Mutex<Vec<SessionGroup>>,
     pub db: Database,
+}
+
+// ---- Platform Info ----
+
+#[tauri::command]
+fn get_os_info() -> serde_json::Value {
+    let os = std::env::consts::OS;
+    let mut info = serde_json::json!({ "os": os });
+
+    #[cfg(target_os = "windows")]
+    {
+        // Parse the Windows build number from `cmd /c ver`
+        // e.g. "Microsoft Windows [Version 10.0.22631.4780]"
+        let build: u32 = std::process::Command::new("cmd")
+            .args(["/c", "ver"])
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .and_then(|s| {
+                let start = s.find('[')?;
+                let end = s.find(']')?;
+                let ver = &s[start + 1..end]; // "Version 10.0.22631.4780"
+                let parts: Vec<&str> = ver.split('.').collect();
+                parts.get(2)?.parse().ok()
+            })
+            .unwrap_or(0);
+        info["windowsBuild"] = serde_json::json!(build);
+    }
+
+    info
 }
 
 // ---- PTY Commands ----
@@ -497,6 +547,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
+            get_os_info,
             create_local_shell,
             list_shells,
             write_to_pty,
@@ -556,8 +607,11 @@ pub fn run() {
         ])
         .setup(|app| {
             // ---- System Tray ----
-            let show_item = MenuItemBuilder::with_id("show", "Show GWShell").build(app)?;
-            let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+            let zh = is_system_chinese();
+            let show_label = if zh { "显示 GWShell" } else { "Show GWShell" };
+            let quit_label = if zh { "退出" } else { "Quit" };
+            let show_item = MenuItemBuilder::with_id("show", show_label).build(app)?;
+            let quit_item = MenuItemBuilder::with_id("quit", quit_label).build(app)?;
             let tray_menu = MenuBuilder::new(app)
                 .item(&show_item)
                 .separator()

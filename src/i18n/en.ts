@@ -605,6 +605,17 @@ const en: Record<TranslationKeys, string> = {
   usage_no_data: 'No usage data',
   usage_no_data_desc: 'Data will be recorded here after using AI CLI tools.',
   usage_clear: 'Clear Data',
+
+  // ---- Dynamic Island ----
+  island_no_provider: 'No AI provider',
+  island_no_provider_desc: 'Configure an AI provider in Settings.',
+  island_active_ai: 'Active AI',
+  island_today_usage: "Today's Usage",
+  island_cost: 'Cost',
+  island_requests: 'Requests',
+  island_no_usage: 'No usage today',
+  island_connections: 'Connections',
+  island_active_sessions: 'active sessions',
 };
 
 export default en;

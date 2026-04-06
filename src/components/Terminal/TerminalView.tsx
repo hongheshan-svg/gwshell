@@ -20,6 +20,21 @@ interface FingerprintInfo {
   port: number;
 }
 
+// Cached platform info (fetched once, shared by all terminals)
+let cachedOsInfo: { os: string; windowsBuild?: number } | null = null;
+let osInfoPromise: Promise<{ os: string; windowsBuild?: number }> | null = null;
+
+async function getOsInfo(): Promise<{ os: string; windowsBuild?: number }> {
+  if (cachedOsInfo) return cachedOsInfo;
+  if (!osInfoPromise) {
+    osInfoPromise = import("@tauri-apps/api/core")
+      .then(({ invoke }) => invoke<{ os: string; windowsBuild?: number }>("get_os_info"))
+      .then((info) => { cachedOsInfo = info; return info; })
+      .catch(() => { const fallback = { os: "unknown" }; cachedOsInfo = fallback; return fallback; });
+  }
+  return osInfoPromise;
+}
+
 // Global map to preserve terminal instances across re-renders
 export const terminalInstances = new Map<string, { terminal: Terminal; fitAddon: FitAddon }>();
 
@@ -52,9 +67,9 @@ export function destroyTerminal(tabId: string): void {
 
 /**
  * Safely fit a terminal to its container.
- * - Skips if the container is hidden or has zero dimensions.
- * - After fitting, forces a full row redraw + atlas rebuild so the
- *   renderer never shows stale/garbled content.
+ * Skips if the container is hidden or has zero dimensions.
+ * After fitting, forces a full row redraw so the renderer always
+ * shows content consistent with the new dimensions.
  */
 export function safeFit(tabId: string): void {
   const inst = terminalInstances.get(tabId);
@@ -63,10 +78,51 @@ export function safeFit(tabId: string): void {
   if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) return;
   try {
     inst.fitAddon.fit();
-    // Force a full redraw of every visible row so that row-offsets,
-    // glyph positions and the texture atlas are all consistent.
     inst.terminal.refresh(0, inst.terminal.rows - 1);
   } catch {}
+}
+
+/**
+ * Full renderer reset: fit, clear the glyph atlas, force a redraw, and
+ * notify the backend of the current terminal size — even if xterm thinks
+ * the size hasn't changed.
+ *
+ * Use this after the xterm element has been reparented to a new container
+ * or its parent toggled from display:none to visible (split-mode open/close,
+ * tab switch). These transitions leave three things out of sync:
+ *  1. the glyph texture atlas may hold stale cells from the previous
+ *     container/DPR — fixed by clearTextureAtlas + refresh
+ *  2. the xterm buffer's wrap state may not match the on-screen rendering
+ *     until a full refresh is forced
+ *  3. the backend PTY/SSH session has the right *size* but TUI apps like
+ *     Claude / vim / htop cache their UI and only redraw on SIGWINCH.
+ *     fitAddon.fit() only fires onResize on dimension changes, so we
+ *     re-issue resize_pty/resize_ssh unconditionally to trigger SIGWINCH
+ *     and force the TUI to repaint.
+ */
+export function forceTerminalRedraw(
+  tabId: string,
+  sessionId: string,
+  tabType: TabInfo['type']
+): void {
+  const inst = terminalInstances.get(tabId);
+  if (!inst) return;
+  const el = inst.terminal.element?.parentElement;
+  if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) return;
+  try { inst.fitAddon.fit(); } catch {}
+  try { inst.terminal.clearTextureAtlas(); } catch {}
+  try { inst.terminal.refresh(0, inst.terminal.rows - 1); } catch {}
+
+  if (tabType === 'serial' || tabType === 'asset-list') return;
+  const cols = inst.terminal.cols;
+  const rows = inst.terminal.rows;
+  import('@tauri-apps/api/core').then(({ invoke }) => {
+    if (tabType === 'ssh') {
+      invoke('resize_ssh', { sessionId, cols, rows }).catch(() => {});
+    } else {
+      invoke('resize_pty', { sessionId, rows, cols }).catch(() => {});
+    }
+  });
 }
 
 export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, forceVisible }) => {
@@ -134,58 +190,89 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
   useEffect(() => {
     if (!containerRef.current) return;
 
-    let instance = terminalInstances.get(tab.id);
-
-    if (!instance) {
-      const terminal = new Terminal({
-        fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace",
-        fontSize: 13,
-        lineHeight: 1.2,
-        cursorBlink: true,
-        cursorStyle: "bar",
-        theme: getThemeColors(),
-        allowProposedApi: true,
-        scrollback: 10000,
-      });
-
-      const fitAddon = new FitAddon();
-      terminal.loadAddon(fitAddon);
-      terminal.loadAddon(new WebLinksAddon());
-
-      instance = { terminal, fitAddon };
-      terminalInstances.set(tab.id, instance);
-    }
-
-    // Re-attach the terminal if its parent is a different container
-    const currentParent = instance.terminal.element?.parentElement;
-    if (currentParent !== containerRef.current) {
-      if (instance.terminal.element) {
-        // Move existing xterm DOM to the new container (open() cannot be called twice in xterm v5)
-        containerRef.current.appendChild(instance.terminal.element);
-      } else {
-        instance.terminal.open(containerRef.current);
-      }
-    }
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        safeFit(tab.id);
-      });
-    });
-
-    // ── Listener setup ─────────────────────────────────────
-    // Always clean up previous listeners for this tab BEFORE registering
-    // new ones.  This prevents duplicate handlers when:
-    //  • React StrictMode double-invokes effects (dev mode)
-    //  • Component remounts during single↔split layout transitions
-    //  • Same tab rendered in multiple split panes (edge case)
-    cleanupTabListeners(tab.id);
-
     let cancelled = false;
+    const container = containerRef.current;
 
-    const setupConnection = async () => {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const { listen } = await import("@tauri-apps/api/event");
+    const initTerminal = async () => {
+      const existingInstance = terminalInstances.get(tab.id);
+      let instance = existingInstance;
+
+      if (!instance) {
+        // Fetch platform info to configure windowsPty for ConPTY on Windows.
+        // This tells xterm.js how to interpret ConPTY escape sequences so that
+        // TUI apps (claude, vim, htop etc.) render correctly.
+        const osInfo = await getOsInfo();
+        if (cancelled) return;
+
+        const termOpts: Record<string, unknown> = {
+          fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace",
+          fontSize: 13,
+          lineHeight: 1.2,
+          cursorBlink: true,
+          cursorStyle: "bar",
+          theme: getThemeColors(),
+          allowProposedApi: true,
+          scrollback: 10000,
+        };
+
+        if (osInfo.os === "windows") {
+          termOpts.windowsPty = {
+            backend: "conpty",
+            buildNumber: osInfo.windowsBuild ?? 0,
+          };
+        }
+
+        const terminal = new Terminal(termOpts as ConstructorParameters<typeof Terminal>[0]);
+
+        const fitAddon = new FitAddon();
+        terminal.loadAddon(fitAddon);
+        terminal.loadAddon(new WebLinksAddon());
+
+        instance = { terminal, fitAddon };
+        terminalInstances.set(tab.id, instance);
+      }
+
+      if (cancelled) return;
+
+      // Re-attach the terminal if its parent is a different container.
+      // Track whether we actually moved the element to a new container —
+      // that's the case where we need a full renderer reset (clear glyph
+      // atlas + force SIGWINCH) so TUI apps like Claude redraw cleanly.
+      const currentParent = instance.terminal.element?.parentElement;
+      const wasReparented = !!existingInstance && currentParent !== container;
+      if (currentParent !== container) {
+        if (instance.terminal.element) {
+          container.appendChild(instance.terminal.element);
+        } else {
+          instance.terminal.open(container);
+        }
+      }
+
+      // Immediate fit attempt — reading offsetWidth triggers a synchronous
+      // reflow so dimensions are often already available after open().
+      safeFit(tab.id);
+
+      // Deferred fit as safety-net (covers edge-cases where layout isn't
+      // settled on the first synchronous reflow). When we just reparented
+      // the xterm element, do a full renderer reset instead of a plain fit
+      // — fitAddon.fit() alone won't fire onResize when dimensions are
+      // unchanged, leaving Claude's cached UI stale.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (wasReparented) {
+            forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
+          } else {
+            safeFit(tab.id);
+          }
+        });
+      });
+
+      // ── Listener setup ─────────────────────────────────────
+      cleanupTabListeners(tab.id);
+
+      const setupConnection = async () => {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const { listen } = await import("@tauri-apps/api/event");
 
       if (cancelled) return;
 
@@ -323,6 +410,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       try {
         if (!alreadyConnected) {
         if (tab.type === "localshell") {
+          // Wait for layout to settle so the PTY is created with the
+          // terminal's real dimensions instead of the default 80×24.
+          // Without this the shell outputs text formatted for 80 cols
+          // but xterm renders at the actual (larger) width → garbled.
+          await new Promise<void>((resolve) => {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                safeFit(tab.id);
+                resolve();
+              });
+            });
+          });
+          if (cancelled) return;
+
           instance?.terminal.write(`\r\n\x1b[90m${t('term_starting_shell')}\x1b[0m\r\n`);
           await invoke("create_local_shell", {
             sessionId: tab.sessionId,
@@ -342,6 +443,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           if (!session?.host) {
             instance?.terminal.write(`\r\n\x1b[31m${t('term_ssh_not_found')}\x1b[0m\r\n`);
           } else {
+            // Wait for layout to settle so request_pty is sized to the
+            // actual terminal dimensions instead of the default 80×24.
+            // Without this the remote shell formats output for 80 cols
+            // while xterm renders at the real (wider) width → garbled.
+            await new Promise<void>((resolve) => {
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  safeFit(tab.id);
+                  resolve();
+                });
+              });
+            });
+            if (cancelled) return;
+
             instance?.terminal.write(
               `\r\n\x1b[90m${t('term_connecting', { user: session.username || 'root', host: session.host, port: session.port || 22 })}` +
               `${session.jump_host ? ` ${t('term_via_jump', { jumpHost: session.jump_host })}` : ''}` +
@@ -405,7 +520,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       }
     };
 
-    setupConnection();
+      setupConnection();
+    }; // end initTerminal
+
+    initTerminal();
 
     return () => {
       cancelled = true;
@@ -435,23 +553,25 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
     if (isActive) {
       const inst = terminalInstances.get(tab.id);
       if (inst) {
-        // Double-RAF: wait for layout to settle (especially after display:none → block)
+        // Double-RAF: wait for layout to settle (especially after
+        // display:none → block). Going from hidden → visible may leave the
+        // glyph atlas stale and the cached TUI state out of sync, so do a
+        // full renderer reset instead of a plain fit.
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            safeFit(tab.id);
+            forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
             try { inst.terminal.focus(); } catch {}
           });
         });
       }
     }
-  }, [isActive, tab.id]);
+  }, [isActive, tab.id, tab.sessionId, tab.type]);
 
   // Use ResizeObserver on the container element so that ANY size change –
   // sidebar collapse/expand, split-pane open/close, window resize, SFTP panel
   // toggle – automatically re-fits the terminal.  A 150ms debounce avoids
   // thrashing during CSS transitions (sidebar 0.2s ease) and ensures we fit
-  // to the *final* size.  After fitting, clearTextureAtlas() forces the
-  // renderer to rebuild its glyph cache for the new dimensions.
+  // to the *final* size.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -472,7 +592,38 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       }, 150);
     });
     observer.observe(el);
-    return () => { if (timerId) clearTimeout(timerId); observer.disconnect(); };
+
+    // Detect browser zoom (Ctrl+/−) via devicePixelRatio changes.
+    // When DPR changes, character cell sizes change → must rebuild the
+    // glyph texture atlas, refit rows/cols and notify the PTY.
+    let currentDpr = window.devicePixelRatio;
+    let activeDprMedia: MediaQueryList | null = null;
+    const handleDprChange = () => {
+      if (window.devicePixelRatio !== currentDpr) {
+        currentDpr = window.devicePixelRatio;
+        setupDprListener();
+        if (timerId) clearTimeout(timerId);
+        timerId = setTimeout(() => {
+          const inst = terminalInstances.get(tab.id);
+          if (inst) {
+            try { inst.terminal.clearTextureAtlas(); } catch {}
+          }
+          safeFit(tab.id);
+        }, 100);
+      }
+    };
+    const setupDprListener = () => {
+      if (activeDprMedia) activeDprMedia.removeEventListener("change", handleDprChange);
+      activeDprMedia = window.matchMedia(`screen and (resolution: ${currentDpr}dppx)`);
+      activeDprMedia.addEventListener("change", handleDprChange);
+    };
+    setupDprListener();
+
+    return () => {
+      if (timerId) clearTimeout(timerId);
+      observer.disconnect();
+      if (activeDprMedia) activeDprMedia.removeEventListener("change", handleDprChange);
+    };
   }, [tab.id]);
 
   return (

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Minus, Square, X } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import { DynamicIsland } from './DynamicIsland';
 
 export const TitleBar: React.FC = () => {
   const t = useAppStore((s) => s.t);
@@ -30,6 +31,9 @@ export const TitleBar: React.FC = () => {
     <div className="titlebar" data-tauri-drag-region>
       <div className="titlebar-title" data-tauri-drag-region>
         GWShell
+      </div>
+      <div className="titlebar-center" data-tauri-drag-region>
+        <DynamicIsland />
       </div>
       <div className="titlebar-controls">
         <button className="titlebar-btn" onClick={handleMinimize} title={t('titlebar_minimize')}>

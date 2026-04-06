@@ -193,6 +193,9 @@ impl PtyManager {
 
         // Set charset-aware env vars
         let charset_str = charset.clone().unwrap_or_else(|| "UTF-8".to_string());
+        // Tell CLI/TUI apps the terminal capabilities (critical for apps like claude, vim, htop)
+        cmd.env("TERM", "xterm-256color");
+        cmd.env("COLORTERM", "truecolor");
         cmd.env("PYTHONIOENCODING", &charset_str);
         #[cfg(not(target_os = "windows"))]
         {

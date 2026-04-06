@@ -132,12 +132,21 @@ input, select, textarea, button {
 }
 
 .titlebar-title {
-  flex: 1;
   padding-left: 12px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
   pointer-events: none;
+  flex-shrink: 0;
+}
+
+.titlebar-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
+  -webkit-app-region: drag;
 }
 
 .titlebar-controls {

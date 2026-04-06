@@ -603,6 +603,17 @@ const zh = {
   usage_no_data: '暂无使用数据',
   usage_no_data_desc: '使用 AI CLI 工具后，数据将自动记录在此。',
   usage_clear: '清除数据',
+
+  // ---- 灵动岛 ----
+  island_no_provider: '未配置 AI',
+  island_no_provider_desc: '请在设置中配置 AI 供应商。',
+  island_active_ai: '当前 AI',
+  island_today_usage: '今日用量',
+  island_cost: '花费',
+  island_requests: '请求数',
+  island_no_usage: '今日暂无使用',
+  island_connections: '连接',
+  island_active_sessions: '个活跃会话',
 } as const;
 
 export type TranslationKeys = keyof typeof zh;
