@@ -92,9 +92,10 @@ export const LocalTerminalModal: React.FC = () => {
       // Load available shells from backend
       invoke<ShellOption[]>("list_shells")
         .then((list) => {
-          setShellOptions(list);
+          const mapped = list.map(s => s.id === 'custom' ? { ...s, label: t('local_shell_custom') } : s);
+          setShellOptions(mapped);
           // Default to first non-custom shell
-          const first = list.find((s) => s.id !== "custom");
+          const first = mapped.find((s) => s.id !== "custom");
           if (first) setForm((f) => ({ ...f, shell: first.id }));
         })
         .catch(() => {/* keep default */});

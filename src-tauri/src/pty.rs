@@ -157,7 +157,7 @@ pub fn list_available_shells() -> Vec<ShellEntry> {
     }
 
     // Always last: custom
-    shells.push(ShellEntry { id: "custom".into(), label: "自定义".into() });
+    shells.push(ShellEntry { id: "custom".into(), label: "Custom".into() });
 
     shells
 }

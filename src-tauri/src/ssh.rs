@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
-// 鈹€鈹€鈹€ Known-hosts storage 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// === Known-hosts storage ===
 
 #[derive(Debug, Serialize, Deserialize)]
 struct KnownHostEntry {
@@ -82,7 +82,7 @@ fn check_fingerprint(session: &Session, host: &str, port: u16) -> Result<(), Str
     }
 }
 
-// 鈹€鈹€鈹€ Keyboard-interactive auth callback 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// === Keyboard-interactive auth callback ===
 
 struct KbInteractiveAuth {
     password: Option<String>,
@@ -115,7 +115,7 @@ impl KeyboardInteractivePrompt for KbInteractiveAuth {
     }
 }
 
-// 鈹€鈹€鈹€ TCP connection helpers 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// === TCP connection helpers ===
 
 fn tcp_direct(host: &str, port: u16, timeout_secs: u32) -> Result<TcpStream, String> {
     let addr = format!("{}:{}", host, port);
@@ -304,7 +304,7 @@ fn tcp_via_jump(
         .map_err(|e| format!("Connect to jump proxy failed: {}", e))
 }
 
-// 鈹€鈹€鈹€ SshInstance / SshManager 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// === SshInstance / SshManager ===
 
 pub struct SshInstance {
     session: Session,
@@ -348,7 +348,7 @@ impl SshManager {
         rows: u32,
         cols: u32,
     ) -> Result<(), String> {
-        // 鈹€鈹€ Step 1: establish raw TCP stream 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+        // == Step 1: establish raw TCP stream ==
         let tcp = if let Some(jh) = jump_host.filter(|h| !h.is_empty()) {
             tcp_via_jump(
                 jh,
@@ -381,7 +381,7 @@ impl SshManager {
             }
         };
 
-        // 鈹€鈹€ Step 2: SSH handshake 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+        // == Step 2: SSH handshake ==
         let mut session =
             Session::new().map_err(|e| format!("Session creation failed: {}", e))?;
         session.set_tcp_stream(tcp);
@@ -389,10 +389,10 @@ impl SshManager {
             .handshake()
             .map_err(|e| format!("Handshake failed: {}", e))?;
 
-        // 鈹€鈹€ Step 3: fingerprint verification 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+        // == Step 3: fingerprint verification ==
         check_fingerprint(&session, host, port)?;
 
-        // 鈹€鈹€ Step 4: authenticate 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+        // == Step 4: authenticate ==
         match auth_method {
             "publickey" => {
                 let key_path = private_key_path.ok_or("Private key path is required")?;
@@ -432,7 +432,7 @@ impl SshManager {
             return Err("Authentication failed".to_string());
         }
 
-        // 鈹€鈹€ Step 5: open PTY + shell channel 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+        // == Step 5: open PTY + shell channel ==
         let mut channel = session
             .channel_session()
             .map_err(|e| format!("Channel open failed: {}", e))?;
@@ -454,7 +454,7 @@ impl SshManager {
             .lock()
             .insert(session_id.to_string(), instance);
 
-        // 鈹€鈹€ Step 6: reader thread 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+        // == Step 6: reader thread ==
         let sid = session_id.to_string();
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
