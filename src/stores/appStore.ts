@@ -210,17 +210,30 @@ export const useAppStore = create<AppStore>((set, _get) => ({
     let currentSessions = [...state.sessions];
     let terminalTabs = currentTabs.filter(t => t.type !== 'asset-list');
 
-    // Find the "source" session to clone from:
-    // 1) Active tab's session  2) First terminal tab's session  3) First session in list
     const activeTab = currentTabs.find(t => t.id === state.activeTabId && t.type !== 'asset-list');
+    const isOnAssetList = !activeTab;
+
+    // --- Determine source sessions for split ---
+    // Priority:
+    // 1) If on asset list with selected assets → use those selected assets (each gets a pane)
+    // 2) If in a terminal tab → clone that terminal's session
+    // 3) Fallback to first session
+    let selectedSources: SessionConfig[] = [];
+    if (isOnAssetList && state.selectedSessionIds.length > 0 && count > 1) {
+      // Use selected assets from the asset table (real sessions, not temporary)
+      selectedSources = state.selectedSessionIds
+        .map(id => currentSessions.find(s => s.id === id))
+        .filter((s): s is SessionConfig => !!s && !s._temporary);
+    }
+
     const sourceSession: SessionConfig | undefined =
       (activeTab && currentSessions.find(s => s.id === activeTab.sessionId)) ||
       (terminalTabs[0] && currentSessions.find(s => s.id === terminalTabs[0].sessionId)) ||
-      currentSessions[0];
+      selectedSources[0] ||
+      currentSessions.find(s => !s._temporary);
 
     // --- Shrinking: remove excess temporary tabs/sessions ---
     if (count < state.splitCount) {
-      // Collect tab IDs to destroy (temporary ones beyond the needed count)
       const tabsToRemove: string[] = [];
       const sessionIdsToRemove = new Set<string>();
 
@@ -246,7 +259,6 @@ export const useAppStore = create<AppStore>((set, _get) => ({
         }
       }
 
-      // Destroy terminal instances for removed tabs
       if (tabsToRemove.length > 0) {
         import('../components/Terminal/TerminalView').then(({ destroyTerminal }) => {
           tabsToRemove.forEach(id => destroyTerminal(id));
@@ -258,33 +270,54 @@ export const useAppStore = create<AppStore>((set, _get) => ({
       terminalTabs = currentTabs.filter(t => t.type !== 'asset-list');
     }
 
-    // --- Growing: open source tab if needed ---
-    if (count > 1 && sourceSession && !terminalTabs.some(t => t.sessionId === sourceSession.id)) {
-      const tabId = crypto.randomUUID();
-      const tab: TabInfo = {
-        id: tabId,
-        sessionId: sourceSession.id,
-        title: sourceSession.name,
-        type: sourceSession.session_type as TabInfo['type'],
-        connected: false,
-      };
-      currentTabs = [...currentTabs, tab];
-      terminalTabs = currentTabs.filter(t => t.type !== 'asset-list');
+    // --- Growing: open tabs for selected assets or clone source ---
+    if (count > 1) {
+      if (selectedSources.length > 0) {
+        // Open a tab for each selected asset that doesn't already have one
+        for (const sess of selectedSources) {
+          if (!terminalTabs.some(t => t.sessionId === sess.id)) {
+            const tabId = crypto.randomUUID();
+            const tab: TabInfo = {
+              id: tabId,
+              sessionId: sess.id,
+              title: sess.name,
+              type: sess.session_type as TabInfo['type'],
+              connected: false,
+            };
+            currentTabs = [...currentTabs, tab];
+            terminalTabs = currentTabs.filter(t => t.type !== 'asset-list');
+          }
+        }
+      } else if (sourceSession && !terminalTabs.some(t => t.sessionId === sourceSession.id)) {
+        const tabId = crypto.randomUUID();
+        const tab: TabInfo = {
+          id: tabId,
+          sessionId: sourceSession.id,
+          title: sourceSession.name,
+          type: sourceSession.session_type as TabInfo['type'],
+          connected: false,
+        };
+        currentTabs = [...currentTabs, tab];
+        terminalTabs = currentTabs.filter(t => t.type !== 'asset-list');
+      }
     }
 
-    // Auto-create cloned sessions to fill remaining panes
+    // Auto-create temporary clones to fill remaining panes
     const needed = count > 1 ? count - terminalTabs.length : 0;
     for (let i = 0; i < needed; i++) {
       const sessionId = crypto.randomUUID();
       const tabId = crypto.randomUUID();
       const num = terminalTabs.length + i + 1;
+      // Pick a source for the clone: cycle through selected sources, or use single source
+      const cloneFrom = selectedSources.length > 0
+        ? selectedSources[(terminalTabs.length + i) % selectedSources.length]
+        : sourceSession;
 
-      if (sourceSession) {
-        // Clone the source session with a new ID and incremented name (temporary)
+      if (cloneFrom) {
         const cloned: SessionConfig = {
-          ...sourceSession,
+          ...cloneFrom,
           id: sessionId,
-          name: `${sourceSession.name} ${num}`,
+          name: `${cloneFrom.name} ${num}`,
           created_at: new Date().toISOString().slice(0, 10),
           _temporary: true,
         };
@@ -299,7 +332,6 @@ export const useAppStore = create<AppStore>((set, _get) => ({
         currentTabs = [...currentTabs, tab];
         terminalTabs.push(tab);
       } else {
-        // Fallback: create a blank local shell (temporary)
         const session: SessionConfig = {
           id: sessionId,
           name: `Terminal ${num}`,
