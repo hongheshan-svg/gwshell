@@ -6,15 +6,39 @@ export interface SessionConfig {
   host?: string;
   port?: number;
   username?: string;
-  auth_method: 'password' | 'publickey' | 'keyboardinteractive';
+  auth_method: 'password' | 'publickey' | 'keyboardinteractive' | 'agent' | 'none';
   password?: string;
   private_key_path?: string;
+  totp_code?: string;
   latency?: number | null;
   created_at?: string;
   expired_at?: string;
   remark?: string;
   color_label?: string;
   environment?: string;
+  // Jump host (ProxyJump -J)
+  jump_host?: string;
+  jump_port?: number;
+  jump_username?: string;
+  jump_password?: string;
+  jump_private_key_path?: string;
+  // Proxy
+  proxy_type?: 'none' | 'socks5' | 'http';
+  proxy_host?: string;
+  proxy_port?: number;
+  proxy_username?: string;
+  proxy_password?: string;
+  // Tunnel (local/remote port forwarding)
+  tunnel_enabled?: boolean;
+  tunnel_type?: 'local' | 'remote';
+  tunnel_local_port?: number;
+  tunnel_remote_host?: string;
+  tunnel_remote_port?: number;
+  // Advanced
+  keepalive_interval?: number;
+  connection_timeout?: number;
+  server_alive_count_max?: number;
+  compression?: boolean;
   // Docker-specific
   docker_protocol?: 'unix' | 'tcp' | 'http' | 'https';
   docker_unix_path?: string;
@@ -33,6 +57,8 @@ export interface SessionConfig {
   shell_name?: string;
   charset?: string;
   init_command?: string;
+  // Environment variables (key=value lines)
+  env_vars?: string;
 }
 
 export interface SessionGroup {

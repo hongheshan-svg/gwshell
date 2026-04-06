@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -11,16 +11,34 @@ interface TerminalViewProps {
   isActive: boolean;
 }
 
+interface FingerprintInfo {
+  fingerprint: string;
+  keyType: string;
+  host: string;
+  port: number;
+}
+
 // Global map to preserve terminal instances across re-renders
 const terminalInstances = new Map<string, { terminal: Terminal; fitAddon: FitAddon }>();
+
+/** Destroy a terminal instance associated with a tab (called when the tab closes). */
+export function destroyTerminal(tabId: string): void {
+  const inst = terminalInstances.get(tabId);
+  if (inst) {
+    inst.terminal.dispose();
+    terminalInstances.delete(tabId);
+  }
+}
 
 export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
-  // Read session list once on mount — the session was added before addTab was called
   const sessions = useAppStore((s) => s.sessions);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
+
+  const [fingerprintInfo, setFingerprintInfo] = useState<FingerprintInfo | null>(null);
+  const fingerprintResolveRef = useRef<(accepted: boolean) => void>(() => {});
 
   const getThemeColors = useCallback(() => {
     const isDark = document.documentElement.getAttribute("data-theme") !== "light";
@@ -105,14 +123,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
       try { instance!.fitAddon.fit(); } catch {}
     });
 
-    // ----------------------------------------------------------------
-    // Connection setup
-    // ----------------------------------------------------------------
     const setupConnection = async () => {
       const { invoke } = await import("@tauri-apps/api/core");
       const { listen } = await import("@tauri-apps/api/event");
 
-      // Determine event/command names per session type
       let eventPrefix: string;
       let writeCmd: string;
       let resizeCmd: string | null;
@@ -129,14 +143,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         resizeCmd = null;
         closeCmd = "close_serial";
       } else {
-        // localshell / default PTY
         eventPrefix = "pty";
         writeCmd = "write_to_pty";
         resizeCmd = "resize_pty";
         closeCmd = "close_pty";
       }
 
-      // Subscribe to backend data/exit events
       const unlistenData = await listen<string>(
         `${eventPrefix}-data-${tab.sessionId}`,
         (event) => { instance?.terminal.write(event.payload); }
@@ -147,12 +159,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         () => { instance?.terminal.write("\r\n\x1b[33m[Session ended]\x1b[0m\r\n"); }
       );
 
-      // Forward terminal input → backend
       const dataDispose = instance!.terminal.onData((data) => {
         invoke(writeCmd, { sessionId: tab.sessionId, data }).catch(() => {});
       });
 
-      // Forward resize → backend
       let resizeDispose: { dispose(): void } | null = null;
       if (resizeCmd) {
         const cmd = resizeCmd;
@@ -165,8 +175,68 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         });
       }
 
-      // Initiate the actual backend connection
       const session = sessionsRef.current.find((s) => s.id === tab.sessionId);
+
+      const buildSshParams = (sess: typeof session) => ({
+        sessionId: tab.sessionId,
+        host: sess?.host ?? "",
+        port: sess?.port ?? 22,
+        username: sess?.username ?? "root",
+        password: sess?.password ?? null,
+        privateKeyPath: sess?.private_key_path ?? null,
+        authMethod: sess?.auth_method ?? "password",
+        totpCode: sess?.totp_code ?? null,
+        jumpHost: sess?.jump_host ?? null,
+        jumpPort: sess?.jump_port ?? 22,
+        jumpUsername: sess?.jump_username ?? null,
+        jumpPassword: sess?.jump_password ?? null,
+        jumpPrivateKeyPath: sess?.jump_private_key_path ?? null,
+        proxyType: sess?.proxy_type ?? null,
+        proxyHost: sess?.proxy_host ?? null,
+        proxyPort: sess?.proxy_port ?? 1080,
+        proxyUsername: sess?.proxy_username ?? null,
+        proxyPassword: sess?.proxy_password ?? null,
+        connectionTimeout: sess?.connection_timeout ?? 30,
+        rows: instance!.terminal.rows,
+        cols: instance!.terminal.cols,
+      });
+
+      const doSshConnect = async (sess: typeof session): Promise<void> => {
+        try {
+          await invoke("ssh_connect", buildSshParams(sess));
+        } catch (rawErr) {
+          const errStr = String(rawErr);
+          if (errStr.startsWith("FINGERPRINT_UNKNOWN:") || errStr.startsWith("FINGERPRINT_MISMATCH:")) {
+            const parts = errStr.split(":");
+            const isMismatch = parts[0] === "FINGERPRINT_MISMATCH";
+            const fingerprint = `${parts[1]}:${parts[2]}`;
+            const keyType = parts.slice(3).join(":") || "unknown";
+            const host = sess?.host ?? "";
+            const port = sess?.port ?? 22;
+
+            const accepted = await new Promise<boolean>((resolve) => {
+              fingerprintResolveRef.current = resolve;
+              setFingerprintInfo({ fingerprint, keyType, host, port });
+            });
+            setFingerprintInfo(null);
+
+            if (accepted && !isMismatch) {
+              await invoke("ssh_trust_host", { host, port, fingerprint, keyType });
+              await invoke("ssh_connect", buildSshParams(sess));
+            } else if (isMismatch) {
+              instance?.terminal.write(
+                `\r\n\x1b[31m[SECURITY] 主机指纹已变更！可能存在中间人攻击风险。\x1b[0m\r\n` +
+                `\r\n\x1b[31m当前指纹: ${fingerprint}\x1b[0m\r\n` +
+                `\r\n\x1b[33m如确认服务器已重装，请手动删除 known_hosts.json 中对应条目后重试。\x1b[0m\r\n`
+              );
+            } else {
+              instance?.terminal.write("\r\n\x1b[33m[连接已取消：用户拒绝信任主机指纹]\x1b[0m\r\n");
+            }
+            return;
+          }
+          throw rawErr;
+        }
+      };
 
       try {
         if (tab.type === "localshell") {
@@ -179,7 +249,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
             workingDir: session?.working_dir ?? null,
             charset: session?.charset ?? null,
           });
-          // Send init command after shell starts
           if (session?.init_command) {
             const cmd = session.init_command;
             setTimeout(() => {
@@ -191,24 +260,48 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
             instance?.terminal.write("\r\n\x1b[31mError: SSH session config not found\x1b[0m\r\n");
           } else {
             instance?.terminal.write(
-              `\r\n\x1b[90mConnecting to ${session.username || "root"}@${session.host}:${session.port || 22}...\x1b[0m\r\n`
+              `\r\n\x1b[90mConnecting to ${session.username || "root"}@${session.host}:${session.port || 22}` +
+              `${session.jump_host ? ` (via ${session.jump_host})` : ""}` +
+              `${session.proxy_type && session.proxy_type !== "none" ? ` [${session.proxy_type} proxy]` : ""}` +
+              `...\x1b[0m\r\n`
             );
-            await invoke("ssh_connect", {
-              sessionId: tab.sessionId,
-              host: session.host,
-              port: session.port || 22,
-              username: session.username || "root",
-              password: session.password ?? null,
-              privateKeyPath: session.private_key_path ?? null,
-              rows: instance!.terminal.rows,
-              cols: instance!.terminal.cols,
-            });
+            await doSshConnect(session);
+
+            if (session.tunnel_enabled && session.tunnel_local_port && session.tunnel_remote_host && session.tunnel_remote_port) {
+              try {
+                const actualPort = await invoke<number>("start_tunnel", {
+                  sessionId: tab.sessionId,
+                  host: session.host,
+                  port: session.port ?? 22,
+                  username: session.username ?? "root",
+                  password: session.password ?? null,
+                  privateKeyPath: session.private_key_path ?? null,
+                  authMethod: session.auth_method ?? "password",
+                  jumpHost: session.jump_host ?? null,
+                  jumpPort: session.jump_port ?? 22,
+                  jumpUsername: session.jump_username ?? null,
+                  jumpPassword: session.jump_password ?? null,
+                  jumpPrivateKeyPath: session.jump_private_key_path ?? null,
+                  proxyType: session.proxy_type ?? null,
+                  proxyHost: session.proxy_host ?? null,
+                  proxyPort: session.proxy_port ?? 1080,
+                  proxyUsername: session.proxy_username ?? null,
+                  proxyPassword: session.proxy_password ?? null,
+                  localPort: session.tunnel_local_port,
+                  remoteHost: session.tunnel_remote_host,
+                  remotePort: session.tunnel_remote_port,
+                });
+                instance?.terminal.write(
+                  `\r\n\x1b[90m[Tunnel] 127.0.0.1:${actualPort} → ${session.tunnel_remote_host}:${session.tunnel_remote_port}\x1b[0m\r\n`
+                );
+              } catch (tunnelErr) {
+                instance?.terminal.write(`\r\n\x1b[33m[Tunnel] 启动失败: ${tunnelErr}\x1b[0m\r\n`);
+              }
+            }
           }
         } else if (tab.type === "serial") {
           if (!session?.serial_port) {
-            instance?.terminal.write(
-              "\r\n\x1b[31mError: Serial port not configured. Please edit the session.\x1b[0m\r\n"
-            );
+            instance?.terminal.write("\r\n\x1b[31mError: Serial port not configured.\x1b[0m\r\n");
           } else {
             instance?.terminal.write(
               `\r\n\x1b[90mOpening ${session.serial_port} @ ${session.serial_baud_rate || "115200"} baud...\x1b[0m\r\n`
@@ -232,7 +325,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         unlistenExit();
         dataDispose.dispose();
         resizeDispose?.dispose();
-        // Close the backend session
         invoke(closeCmd, { sessionId: tab.sessionId }).catch(() => {});
       };
     };
@@ -243,29 +335,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
     return () => { cleanup?.(); };
   }, [tab.id, tab.sessionId, tab.type, getThemeColors]);
 
-  // Fit + focus when tab becomes active
   useEffect(() => {
     if (isActive) {
       const inst = terminalInstances.get(tab.id);
       if (inst) {
         requestAnimationFrame(() => {
-          try {
-            inst.fitAddon.fit();
-            inst.terminal.focus();
-          } catch {}
+          try { inst.fitAddon.fit(); inst.terminal.focus(); } catch {}
         });
       }
     }
   }, [isActive, tab.id]);
 
-  // Refit on window resize
   useEffect(() => {
     const handleResize = () => {
       if (isActive) {
         const inst = terminalInstances.get(tab.id);
-        if (inst) {
-          try { inst.fitAddon.fit(); } catch {}
-        }
+        if (inst) { try { inst.fitAddon.fit(); } catch {} }
       }
     };
     window.addEventListener("resize", handleResize);
@@ -273,19 +358,45 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
   }, [isActive, tab.id]);
 
   return (
-    <div
-      ref={containerRef}
-      className="terminal-pane"
-      style={{ display: isActive ? "block" : "none" }}
-    />
-  );
-};
+    <>
+      <div
+        ref={containerRef}
+        className="terminal-pane"
+        style={{ display: isActive ? "block" : "none" }}
+      />
 
-/** Call this when a tab is removed to dispose the xterm instance. */
-export const destroyTerminal = (tabId: string) => {
-  const inst = terminalInstances.get(tabId);
-  if (inst) {
-    inst.terminal.dispose();
-    terminalInstances.delete(tabId);
-  }
+      {fingerprintInfo && isActive && (
+        <div className="fingerprint-overlay">
+          <div className="fingerprint-dialog">
+            <div className="fingerprint-dialog-title">🔒 SSH 主机指纹验证</div>
+            <div className="fingerprint-dialog-body">
+              <p>首次连接到以下主机，请验证其指纹是否可信：</p>
+              <div className="fingerprint-host">{fingerprintInfo.host}:{fingerprintInfo.port}</div>
+              <div className="fingerprint-hash">
+                <span className="fingerprint-label">{fingerprintInfo.keyType}</span>
+                <code>{fingerprintInfo.fingerprint}</code>
+              </div>
+              <p className="fingerprint-warning">
+                请向服务器管理员确认上述指纹后再接受，未知指纹可能代表安全风险。
+              </p>
+            </div>
+            <div className="fingerprint-dialog-footer">
+              <button
+                className="fingerprint-btn fingerprint-btn-reject"
+                onClick={() => fingerprintResolveRef.current(false)}
+              >
+                拒绝连接
+              </button>
+              <button
+                className="fingerprint-btn fingerprint-btn-accept"
+                onClick={() => fingerprintResolveRef.current(true)}
+              >
+                信任并继续
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 };

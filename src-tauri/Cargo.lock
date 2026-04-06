@@ -1457,6 +1457,7 @@ dependencies = [
 name = "gwshell"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "dirs",
  "encoding_rs",
  "parking_lot",
@@ -1464,6 +1465,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serialport",
+ "socks",
  "ssh2",
  "tauri",
  "tauri-build",
@@ -3675,6 +3677,17 @@ checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "socks"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0c3dbbd9ae980613c6dd8e28a9407b50509d3803b57624d5dfe8315218cd58b"
+dependencies = [
+ "byteorder",
+ "libc",
+ "winapi",
 ]
 
 [[package]]
