@@ -22,7 +22,7 @@
   --warning: #f5a623;
   --danger: #ef4444;
 
-  --sidebar-width: 220px;
+  --sidebar-width: 240px;
   --sidebar-collapsed-width: 48px;
   --navbar-width: 48px;
   --tabbar-height: 38px;
@@ -187,11 +187,16 @@ input, select, textarea, button {
 
 .sidebar-header {
   display: flex;
-  align-items: center;
-  padding: 8px 8px 8px 12px;
+  flex-direction: column;
   border-bottom: 1px solid var(--border-color);
-  min-height: var(--tabbar-height);
-  gap: 4px;
+  padding: 0;
+}
+
+.sidebar-header-row {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px 4px 12px;
+  gap: 6px;
 }
 
 .sidebar-header h3 {
@@ -199,7 +204,13 @@ input, select, textarea, button {
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
-  margin-right: 2px;
+}
+
+.sidebar-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 0 8px 6px 12px;
+  gap: 2px;
 }
 
 .sidebar-actions {
@@ -210,8 +221,8 @@ input, select, textarea, button {
 }
 
 .sidebar-action-btn {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -221,11 +232,20 @@ input, select, textarea, button {
   cursor: pointer;
   border-radius: var(--radius-sm);
   transition: all 0.15s;
+  flex-shrink: 0;
 }
 
 .sidebar-action-btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.sidebar-toolbar-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border-color);
+  margin: 0 3px;
+  flex-shrink: 0;
 }
 
 .sidebar-content {
