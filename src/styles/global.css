@@ -2217,7 +2217,7 @@ input, select, textarea, button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 12px;
+  padding: 10px 12px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
@@ -2227,48 +2227,247 @@ input, select, textarea, button {
 }
 
 .ai-provider-card:hover { border-color: var(--accent-primary); background: var(--bg-hover); }
-.ai-provider-card.selected { border-color: var(--accent-primary); }
+.ai-provider-card.selected { border-color: var(--accent-primary); background: var(--bg-hover); }
+
+.ai-provider-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
 
 .ai-provider-name {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-primary);
-  font-family: var(--font-mono, 'JetBrainsMono', monospace);
-  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.ai-provider-actions {
+.ai-provider-type {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ai-provider-badges {
   display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ai-provider-add {
-  color: var(--accent-primary);
+  gap: 4px;
   flex-shrink: 0;
 }
 
-.ai-provider-count {
+.ai-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
-  height: 24px;
-  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-muted);
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  padding: 0 5px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.ai-badge:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+.ai-badge.active { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); }
+
+/* ---- AI Toolbar ---- */
+.ai-provider-toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 0 8px 8px;
 }
 
-.ai-provider-desc {
-  margin-top: 6px;
-  font-size: 11px;
+.ai-provider-add-wrap {
+  position: relative;
+}
+
+.ai-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  transition: all 0.12s;
+}
+.ai-toolbar-btn:hover { background: var(--bg-hover); border-color: var(--accent-primary); }
+.ai-toolbar-btn.primary { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); }
+.ai-toolbar-btn.primary:hover { opacity: 0.9; }
+.ai-toolbar-btn.danger { color: #e54d42; border-color: #e54d42; }
+.ai-toolbar-btn.danger:hover { background: rgba(229,77,66,0.12); }
+
+.ai-preset-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 160px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  z-index: 1000;
+}
+
+.ai-preset-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.ai-preset-item:hover { background: var(--bg-hover); }
+
+/* ---- AI Editor column ---- */
+.ai-editor-col {
+  flex: 1;
+  padding: 0 20px !important;
+  overflow-y: auto;
+}
+
+.ai-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+.ai-editor-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.ai-editor-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.ai-status-bar {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(var(--accent-primary-rgb, 59, 130, 246), 0.1);
+  color: var(--accent-primary);
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+/* ---- AI Form ---- */
+.ai-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-form-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.ai-form-input {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.ai-form-textarea {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 60px;
+  padding: 8px !important;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 12px;
   line-height: 1.5;
-  color: var(--text-muted);
-  white-space: pre-line;
+}
+
+.ai-form-group {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-form-group-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.ai-app-toggles {
+  display: flex;
+  gap: 12px;
+}
+
+.ai-app-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.ai-app-toggle input[type="checkbox"] {
+  accent-color: var(--accent-primary);
+}
+
+/* ---- Quick Switch buttons ---- */
+.ai-switch-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ai-switch-btn {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  transition: all 0.12s;
+}
+.ai-switch-btn:hover { border-color: var(--accent-primary); }
+.ai-switch-btn.active {
+  background: var(--accent-primary);
+  color: #fff;
+  border-color: var(--accent-primary);
+}
+.ai-switch-btn.all {
+  border-style: dashed;
 }
 .ai-config-empty {
   display: flex;

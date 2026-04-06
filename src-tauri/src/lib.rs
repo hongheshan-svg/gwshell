@@ -1,3 +1,4 @@
+mod ai_config;
 mod pty;
 mod serial;
 mod session;
@@ -318,6 +319,12 @@ pub fn run() {
             delete_session,
             save_group,
             get_groups,
+            ai_config::list_ai_providers,
+            ai_config::get_ai_active_ids,
+            ai_config::save_ai_provider,
+            ai_config::delete_ai_provider,
+            ai_config::switch_ai_provider,
+            ai_config::import_from_cc_switch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running GWShell");

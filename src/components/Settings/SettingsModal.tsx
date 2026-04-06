@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Plus, FolderOpen } from 'lucide-react';
+import { X, FolderOpen } from 'lucide-react';
+import { ProviderEditor } from './ProviderEditor';
 import { useAppStore } from '../../stores/appStore';
 import { detectLocale, getT } from '../../i18n';
 import type { TranslationKeys } from '../../i18n';
@@ -259,24 +260,7 @@ const shortcutsDockerRight: ShortcutItem[] = [
   { labelKey: 'settings_sc_restart_container', keys: 'Ctrl Shift R' },
   { labelKey: 'settings_sc_pause_container', keys: 'Ctrl Shift E' },
 ];
-const aiProviders = [
-  { id: 'custom', name: 'Custom API', count: 0 },
-  { id: 'openai', name: 'OpenAI', count: 0 },
-  { id: 'openrouter', name: 'OpenRouter', count: 0 },
-  { id: 'claude', name: 'Claude', count: 0 },
-  { id: 'gemini', name: 'Gemini', count: 0 },
-  { id: 'kimi', name: 'Kimi', count: 0 },
-  { id: 'deepseek', name: 'DeepSeek', count: 0 },
-  { id: 'glm', name: 'GLM', count: 0 },
-  { id: 'qwen', name: 'Qwen', count: 0 },
-  { id: 'doubao', name: 'Doubao', count: 0 },
-  { id: 'ernie', name: 'ERNIE', count: 0 },
-  { id: 'ollama', name: 'Ollama', count: 0 },
-  { id: 'azure', name: 'Azure OpenAI', count: 0 },
-  { id: 'groq', name: 'Groq', count: 0 },
-  { id: 'perplexity', name: 'Perplexity', count: 0 },
-  { id: 'mistral', name: 'Mistral', count: 0 },
-];
+
 
 /* ---- Sub-components ---- */
 const Toggle: React.FC<{ value: boolean; onChange: (v: boolean) => void }> = ({ value, onChange }) => (
@@ -516,35 +500,7 @@ export const SettingsModal: React.FC = () => {
             )}
 
             {/* ===== AI ===== */}
-            {activeNav === 'ai' && (
-              <div className="settings-columns" style={{ gap: 0 }}>
-                <div className="ai-provider-panel">
-                  <div className="ai-provider-panel-header">
-                    <h3>{t('settings_ai_provider')}</h3>
-                    <p>{t('settings_ai_provider_desc')}</p>
-                  </div>
-                  <div className="ai-provider-list">
-                    {aiProviders.map((p) => (
-                      <div key={p.id} className="ai-provider-card">
-                        <span className="ai-provider-name">{p.name}</span>
-                        <div className="ai-provider-actions">
-                          <Plus size={14} className="ai-provider-add" />
-                          <span className="ai-provider-count">{p.count}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="settings-col" style={{ flex: 1 }}>
-                  <SectionTitle>{t('settings_ai_config_list')}</SectionTitle>
-                  <p className="settings-desc" style={{ marginBottom: 10 }}>{t('settings_ai_config_desc')}</p>
-                  <div className="ai-config-empty">
-                    <h3>{t('settings_ai_no_config')}</h3>
-                    <p>{t('settings_ai_no_config_desc')}</p>
-                  </div>
-                </div>
-              </div>
-            )}
+            {activeNav === 'ai' && <ProviderEditor t={t} />}
 
             {/* ===== 账号 ===== */}
             {activeNav === 'ai-account' && null}
