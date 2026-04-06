@@ -1567,6 +1567,30 @@ input, select, textarea, button {
   background: var(--accent-bg);
 }
 
+/* Serial port advanced toggles */
+.serial-adv-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.serial-adv-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.serial-adv-toggle-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
 /* Docker notice badge */
 .docker-notice-badge {
   display: inline-flex;

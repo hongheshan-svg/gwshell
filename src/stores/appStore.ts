@@ -41,6 +41,8 @@ interface AppStore {
   setShowDockerModal: (show: boolean) => void;
   showLocalTerminalModal: boolean;
   setShowLocalTerminalModal: (show: boolean) => void;
+  showSerialModal: boolean;
+  setShowSerialModal: (show: boolean) => void;
 
   // Menu
   showAppMenu: boolean;
@@ -114,6 +116,8 @@ export const useAppStore = create<AppStore>((set) => ({
   setShowDockerModal: (show) => set({ showDockerModal: show }),
   showLocalTerminalModal: false,
   setShowLocalTerminalModal: (show) => set({ showLocalTerminalModal: show }),
+  showSerialModal: false,
+  setShowSerialModal: (show) => set({ showSerialModal: show }),
 
   showAppMenu: false,
   setShowAppMenu: (show) => set({ showAppMenu: show }),

@@ -1,7 +1,7 @@
 export interface SessionConfig {
   id: string;
   name: string;
-  session_type: 'ssh' | 'sftp' | 'localshell' | 'docker';
+  session_type: 'ssh' | 'sftp' | 'localshell' | 'docker' | 'serial';
   group?: string;
   host?: string;
   port?: number;
@@ -20,6 +20,14 @@ export interface SessionConfig {
   docker_unix_path?: string;
   docker_connect_method?: string;
   docker_ssh_tunnel?: string;
+  // Serial-specific
+  serial_port?: string;
+  serial_baud_rate?: string;
+  serial_data_bits?: string;
+  serial_stop_bits?: string;
+  serial_parity?: string;
+  serial_encoding?: string;
+  serial_init_commands?: string;
 }
 
 export interface SessionGroup {
@@ -31,7 +39,7 @@ export interface TabInfo {
   id: string;
   sessionId: string;
   title: string;
-  type: 'ssh' | 'sftp' | 'localshell' | 'docker' | 'asset-list';
+  type: 'ssh' | 'sftp' | 'localshell' | 'docker' | 'serial' | 'asset-list';
   connected: boolean;
 }
 
