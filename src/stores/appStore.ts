@@ -120,7 +120,11 @@ export const useAppStore = create<AppStore>((set, _get) => ({
   tabs: [{ id: 'asset-list', sessionId: '', title: initialT('tab_list'), type: 'asset-list', connected: false }],
   activeTabId: 'asset-list',
   addTab: (tab) =>
-    set((state) => ({ tabs: [...state.tabs, tab], activeTabId: tab.id })),
+    set((state) => ({
+      tabs: [...state.tabs, tab],
+      activeTabId: tab.id,
+      mainView: tab.type === 'asset-list' ? 'asset-list' : 'terminal',
+    })),
   removeTab: (id) =>
     set((state) => {
       if (id === 'asset-list') return state;
