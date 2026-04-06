@@ -12,7 +12,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "postversion": "node -e \"const fs=require('fs');const v=require('./package.json').version;const c=fs.readFileSync('src-tauri/Cargo.toml','utf8').replace(/^version = \\\"[^\\\"]+\\\"/m,'version = \\\"'+v+'\\\"');fs.writeFileSync('src-tauri/Cargo.toml',c);console.log('Cargo.toml version synced to '+v);\""
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
