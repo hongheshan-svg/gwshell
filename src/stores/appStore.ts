@@ -98,13 +98,29 @@ export const useAppStore = create<AppStore>((set, _get) => ({
 
   sessions: [],
   setSessions: (sessions) => set({ sessions }),
-  addSession: (session) =>
-    set((state) => ({ sessions: [...state.sessions, session] })),
-  removeSession: (id) =>
+  addSession: (session) => {
+    set((state) => {
+      // Update or insert
+      const exists = state.sessions.some((s) => s.id === session.id);
+      const sessions = exists
+        ? state.sessions.map((s) => (s.id === session.id ? session : s))
+        : [...state.sessions, session];
+      return { sessions };
+    });
+    // Persist to backend (fire-and-forget)
+    import('@tauri-apps/api/core').then(({ invoke }) => {
+      invoke('save_session', { config: session }).catch(() => {});
+    });
+  },
+  removeSession: (id) => {
     set((state) => ({
       sessions: state.sessions.filter((s) => s.id !== id),
       selectedSessionIds: state.selectedSessionIds.filter((sid) => sid !== id),
-    })),
+    }));
+    import('@tauri-apps/api/core').then(({ invoke }) => {
+      invoke('delete_session', { sessionId: id }).catch(() => {});
+    });
+  },
   selectedSessionIds: [],
   setSelectedSessionIds: (ids) => set({ selectedSessionIds: ids }),
   toggleSelectSession: (id) =>

@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { TitleBar } from './components/TitleBar/TitleBar';
 import { Sidebar } from './components/Sidebar/IconNav';
 import { SessionPanel } from './components/Sidebar/SessionPanel';
@@ -12,14 +13,22 @@ import { SerialPortModal } from './components/Modals/SerialPortModal';
 import { SettingsModal } from './components/Settings/SettingsModal';
 import { AppMenu } from './components/AppMenu/AppMenu';
 import { useAppStore } from './stores/appStore';
+import type { SessionConfig } from './types';
 import './styles/global.css';
 
 function App() {
-  const { theme } = useAppStore();
+  const { theme, setSessions } = useAppStore();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
+
+  // Load persisted sessions from backend on startup
+  useEffect(() => {
+    invoke<SessionConfig[]>('get_sessions')
+      .then((sessions) => { if (sessions.length > 0) setSessions(sessions); })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="app-root">

@@ -171,7 +171,7 @@ export const AssetTable: React.FC = () => {
                     </button>
                     <button
                       className="asset-action-btn"
-                      onClick={() => setEditingSession(session)}
+                      onClick={() => { setEditingSession(session); setShowNewSession(true); }}
                       title={t('table_edit')}
                     >
                       <Edit size={12} />

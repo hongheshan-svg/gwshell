@@ -1,9 +1,11 @@
 mod ai_config;
+mod database;
 mod pty;
 mod serial;
 mod session;
 mod ssh;
 
+use database::Database;
 use parking_lot::Mutex;
 use pty::PtyManager;
 use serial::SerialManager;
@@ -22,6 +24,7 @@ pub struct AppState {
     pub serial_manager: SerialManager,
     pub sessions: Mutex<Vec<SessionConfig>>,
     pub groups: Mutex<Vec<SessionGroup>>,
+    pub db: Database,
 }
 
 // ---- PTY Commands ----
@@ -253,6 +256,9 @@ fn list_serial_ports() -> Vec<String> {
 
 #[tauri::command]
 fn save_session(config: SessionConfig, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    // Persist to SQLite
+    state.db.save_session(&config)?;
+    // Update in-memory cache
     let mut sessions = state.sessions.lock();
     if let Some(existing) = sessions.iter_mut().find(|s| s.id == config.id) {
         *existing = config;
@@ -269,11 +275,13 @@ fn get_sessions(state: State<'_, Arc<AppState>>) -> Vec<SessionConfig> {
 
 #[tauri::command]
 fn delete_session(session_id: String, state: State<'_, Arc<AppState>>) {
+    let _ = state.db.delete_session(&session_id);
     state.sessions.lock().retain(|s| s.id != session_id);
 }
 
 #[tauri::command]
 fn save_group(group: SessionGroup, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    state.db.save_group(&group)?;
     let mut groups = state.groups.lock();
     if let Some(existing) = groups.iter_mut().find(|g| g.name == group.name) {
         *existing = group;
@@ -290,12 +298,17 @@ fn get_groups(state: State<'_, Arc<AppState>>) -> Vec<SessionGroup> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let db = Database::new().expect("Failed to initialize database");
+    let initial_sessions = db.get_sessions().unwrap_or_default();
+    let initial_groups = db.get_groups().unwrap_or_default();
+
     let app_state = Arc::new(AppState {
         pty_manager: PtyManager::new(),
         ssh_manager: SshManager::new(),
         serial_manager: SerialManager::new(),
-        sessions: Mutex::new(Vec::new()),
-        groups: Mutex::new(Vec::new()),
+        sessions: Mutex::new(initial_sessions),
+        groups: Mutex::new(initial_groups),
+        db,
     });
 
     tauri::Builder::default()
