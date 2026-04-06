@@ -80,13 +80,14 @@ export const LocalTerminalModal: React.FC = () => {
     color_label: "",
     shell: "powershell",
     charset: "UTF-8",
+    init_command: "",
     working_dir: "",
     remark: "",
   });
 
   useEffect(() => {
     if (showLocalTerminalModal) {
-      setForm({ name: "", color_label: "", shell: "powershell", charset: "UTF-8", working_dir: "", remark: "" });
+      setForm({ name: "", color_label: "", shell: "powershell", charset: "UTF-8", init_command: "", working_dir: "", remark: "" });
       setTouched({});
       // Load available shells from backend
       invoke<ShellOption[]>("list_shells")
@@ -122,6 +123,7 @@ export const LocalTerminalModal: React.FC = () => {
     color_label: form.color_label || undefined,
     shell_name: form.shell,
     charset: form.charset,
+    init_command: form.init_command || undefined,
     working_dir: form.working_dir || undefined,
     remark: form.remark || undefined,
     created_at: new Date().toISOString().slice(0, 10),
@@ -200,17 +202,22 @@ export const LocalTerminalModal: React.FC = () => {
             <select
               value={form.charset}
               onChange={(e) => setForm({ ...form, charset: e.target.value })}
-              style={{
-                width: "100%", height: 32, borderRadius: 6,
-                border: "1px solid var(--border)",
-                background: "var(--bg-secondary)", color: "var(--text)",
-                padding: "0 8px", fontSize: 13, cursor: "pointer",
-              }}
             >
               {CHARSETS.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
+          </div>
+
+          {/* Init command */}
+          <div className="ssh-form-group">
+            <label>初始执行命令</label>
+            <input
+              type="text"
+              value={form.init_command}
+              onChange={(e) => setForm({ ...form, init_command: e.target.value })}
+              placeholder="连接后自动执行的命令，如 htop 或 source ~/.bashrc"
+            />
           </div>
 
           {/* Working directory */}

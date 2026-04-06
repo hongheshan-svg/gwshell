@@ -2294,15 +2294,15 @@ input, select, textarea, button {
 /* ---- Shell Picker ---- */
 .shell-picker { width: 100%; }
 .shell-picker-btn {
-  width: 100%; height: 32px;
+  width: 100%; height: 34px;
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 10px;
-  background: var(--bg-secondary); border: 1px solid var(--border);
-  border-radius: 6px; color: var(--text-primary);
-  font-size: 13px; font-family: "JetBrains Mono", "Consolas", monospace;
+  background: var(--bg-primary); border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm); color: var(--text-primary);
+  font-size: 13px;
   cursor: pointer; transition: border-color .15s;
 }
-.shell-picker-btn:hover { border-color: var(--accent); }
+.shell-picker-btn:hover { border-color: var(--accent-primary); }
 .shell-picker-list {
   position: absolute; left: 0; right: 0; top: calc(100% + 4px);
   background: var(--bg-secondary); border: 1px solid var(--border);

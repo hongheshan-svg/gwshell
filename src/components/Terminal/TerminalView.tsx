@@ -179,6 +179,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
             workingDir: session?.working_dir ?? null,
             charset: session?.charset ?? null,
           });
+          // Send init command after shell starts
+          if (session?.init_command) {
+            const cmd = session.init_command;
+            setTimeout(() => {
+              invoke("write_to_pty", { sessionId: tab.sessionId, data: cmd + "\n" }).catch(() => {});
+            }, 300);
+          }
         } else if (tab.type === "ssh") {
           if (!session?.host) {
             instance?.terminal.write("\r\n\x1b[31mError: SSH session config not found\x1b[0m\r\n");
