@@ -19,7 +19,7 @@ import type { SessionConfig } from './types';
 import './styles/global.css';
 
 function App() {
-  const { theme, setSessions, sidebarCollapsed, toggleSidebar, tabs, activeTabId, sftpPanelOpen } = useAppStore();
+  const { theme, setSessions, sidebarCollapsed, toggleSidebar, tabs, activeTabId, sftpPanelOpen, sessions } = useAppStore();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -51,7 +51,9 @@ function App() {
             <TerminalContainer />
             {sftpPanelOpen && (() => {
               const activeTab = tabs.find(t => t.id === activeTabId);
-              return activeTab?.type === 'ssh' ? <SftpPanel sessionId={activeTab.sessionId} /> : null;
+              if (activeTab?.type !== 'ssh') return null;
+              const sess = sessions.find(s => s.id === activeTab.sessionId);
+              return <SftpPanel sessionId={activeTab.sessionId} username={sess?.username} />;
             })()}
           </div>
           <StatusBar />

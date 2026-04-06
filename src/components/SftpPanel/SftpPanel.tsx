@@ -19,9 +19,10 @@ interface SftpEntry {
 
 interface SftpPanelProps {
   sessionId: string;
+  username?: string;
 }
 
-export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId }) => {
+export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username }) => {
   const t = useAppStore((s) => s.t);
   const toggleSftpPanel = useAppStore((s) => s.toggleSftpPanel);
 
@@ -49,35 +50,65 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId }) => {
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
   const initializedRef = useRef(false);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Detect initial directory: use `pwd` to get the shell working directory
+  // Detect initial directory with retry: SSH may not be connected yet when SFTP panel mounts
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
-    // Try pwd via exec first (gives actual user home/current dir)
-    invoke<string>('ssh_exec', { sessionId, command: 'pwd' })
-      .then((cwd) => {
-        const dir = cwd.trim();
-        if (dir && dir.startsWith('/')) {
-          setCurrentPath(dir);
-          setPathInput(dir);
-        } else {
-          throw new Error('invalid pwd');
-        }
-      })
-      .catch(() => {
-        // Fallback to SFTP realpath
+
+    const tryInit = (retriesLeft: number) => {
+      const homeDir = username ? `/home/${username}` : null;
+      const initWithPath = (dir: string) => {
+        setCurrentPath(dir);
+        setPathInput(dir);
+      };
+      const doFallback = () => {
         invoke<string>('sftp_realpath', { sessionId, path: '.' })
-          .then((homePath) => {
-            setCurrentPath(homePath);
-            setPathInput(homePath);
-          })
-          .catch(() => {
-            setCurrentPath('/');
-            setPathInput('/');
+          .then((p) => initWithPath(p))
+          .catch(() => initWithPath('/'));
+      };
+      const retryOrFallback = () => {
+        if (retriesLeft > 0) {
+          retryTimerRef.current = setTimeout(() => tryInit(retriesLeft - 1), 1000);
+        } else {
+          initWithPath('/');
+        }
+      };
+
+      if (homeDir) {
+        invoke<unknown[]>('sftp_list', { sessionId, path: homeDir })
+          .then(() => initWithPath(homeDir))
+          .catch((err) => {
+            const errStr = String(err);
+            if (errStr.includes('Session not found') || errStr.includes('not found')) {
+              // SSH not connected yet, retry
+              retryOrFallback();
+            } else {
+              // Home dir doesn't exist, try realpath
+              doFallback();
+            }
           });
-      });
-  }, [sessionId]);
+      } else {
+        invoke<string>('sftp_realpath', { sessionId, path: '.' })
+          .then((p) => initWithPath(p))
+          .catch((err) => {
+            const errStr = String(err);
+            if (errStr.includes('Session not found') || errStr.includes('not found')) {
+              retryOrFallback();
+            } else {
+              initWithPath('/');
+            }
+          });
+      }
+    };
+
+    tryInit(10); // retry up to 10 times (10 seconds)
+
+    return () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
+  }, [sessionId, username]);
 
   const loadDir = useCallback(
     async (path: string) => {
@@ -114,17 +145,13 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId }) => {
   };
 
   const goHome = () => {
-    invoke<string>('ssh_exec', { sessionId, command: 'echo $HOME' })
-      .then((home) => {
-        const dir = home.trim();
-        if (dir && dir.startsWith('/')) navigateTo(dir);
-        else throw new Error('invalid');
-      })
-      .catch(() => {
-        invoke<string>('sftp_realpath', { sessionId, path: '.' })
-          .then((p) => navigateTo(p))
-          .catch(() => navigateTo('/'));
-      });
+    if (username) {
+      navigateTo(`/home/${username}`);
+    } else {
+      invoke<string>('sftp_realpath', { sessionId, path: '.' })
+        .then((p) => navigateTo(p))
+        .catch(() => navigateTo('/'));
+    }
   };
 
   const handlePathSubmit = () => {
