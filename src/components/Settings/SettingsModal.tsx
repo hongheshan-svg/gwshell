@@ -256,10 +256,22 @@ const shortcutsDockerRight: ShortcutItem[] = [
   { label: '暂停容器', keys: 'Ctrl Shift E' },
 ];
 const aiProviders = [
-  { id: 'custom', name: '自定义 API', count: 0, desc: '自定义模型服务，\n支持 OpenAI /\nResponses /\nClaude /\nGemini / Azure\nGPT / Ollama。' },
+  { id: 'custom', name: '自定义 API', count: 0 },
   { id: 'openai', name: 'OpenAI', count: 0 },
   { id: 'openrouter', name: 'OpenRouter', count: 0 },
   { id: 'claude', name: 'Claude', count: 0 },
+  { id: 'gemini', name: 'Gemini', count: 0 },
+  { id: 'kimi', name: 'Kimi', count: 0 },
+  { id: 'deepseek', name: 'DeepSeek', count: 0 },
+  { id: 'glm', name: 'GLM', count: 0 },
+  { id: 'qwen', name: 'Qwen', count: 0 },
+  { id: 'doubao', name: '豆包', count: 0 },
+  { id: 'ernie', name: 'ERNIE', count: 0 },
+  { id: 'ollama', name: 'Ollama', count: 0 },
+  { id: 'azure', name: 'Azure OpenAI', count: 0 },
+  { id: 'groq', name: 'Groq', count: 0 },
+  { id: 'perplexity', name: 'Perplexity', count: 0 },
+  { id: 'mistral', name: 'Mistral', count: 0 },
 ];
 
 /* ---- Sub-components ---- */
@@ -501,24 +513,20 @@ export const SettingsModal: React.FC = () => {
 
             {/* ===== AI ===== */}
             {activeNav === 'ai' && (
-              <div className="settings-columns" style={{ gap: 24 }}>
-                <div className="settings-col" style={{ maxWidth: 260 }}>
-                  <SectionTitle>供应商</SectionTitle>
-                  <p className="settings-desc" style={{ marginBottom: 10 }}>固定模板列表，能供应商维护多个配置实例。</p>
-                  <div className="ai-search-box">
-                    <input placeholder="筛选供应商 ..." />
+              <div className="settings-columns" style={{ gap: 0 }}>
+                <div className="ai-provider-panel">
+                  <div className="ai-provider-panel-header">
+                    <h3>供应商</h3>
+                    <p>固定模板列表，按供应商维护多个配置实例。</p>
                   </div>
                   <div className="ai-provider-list">
                     {aiProviders.map((p) => (
                       <div key={p.id} className="ai-provider-card">
-                        <div className="ai-provider-name">
-                          <span>{p.name}</span>
-                          <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                            <Plus size={14} />
-                            <span className="ai-provider-count">{p.count}</span>
-                          </span>
+                        <span className="ai-provider-name">{p.name}</span>
+                        <div className="ai-provider-actions">
+                          <Plus size={14} className="ai-provider-add" />
+                          <span className="ai-provider-count">{p.count}</span>
                         </div>
-                        {p.desc && <p className="ai-provider-desc">{p.desc}</p>}
                       </div>
                     ))}
                   </div>
