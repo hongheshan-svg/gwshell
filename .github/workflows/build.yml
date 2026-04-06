@@ -21,20 +21,12 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             label: windows-x64
-          # Windows ARM64
-          - os: windows-latest
-            target: aarch64-pc-windows-msvc
-            label: windows-arm64
           # Linux x86_64
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             label: linux-x64
-          # Linux ARM64
-          - os: ubuntu-22.04
-            target: aarch64-unknown-linux-gnu
-            label: linux-arm64
           # macOS x86_64 (Intel)
-          - os: macos-13
+          - os: macos-latest
             target: x86_64-apple-darwin
             label: macos-x64
           # macOS ARM64 (Apple Silicon)
@@ -75,23 +67,6 @@ jobs:
             pkg-config \
             libssh2-1-dev \
             libudev-dev
-
-      # Cross-compilation toolchain for Linux ARM64
-      - name: Install ARM64 cross-compilation tools
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo dpkg --add-architecture arm64
-          sudo apt-get update
-          sudo apt-get install -y \
-            gcc-aarch64-linux-gnu \
-            g++-aarch64-linux-gnu \
-            libwebkit2gtk-4.1-dev:arm64 \
-            libssl-dev:arm64 \
-            libssh2-1-dev:arm64 \
-            libudev-dev:arm64
-          echo "PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig" >> $GITHUB_ENV
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
 
       # macOS: install OpenSSL and libssh2 via Homebrew
       - name: Install macOS dependencies
@@ -142,3 +117,13 @@ jobs:
             src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app.tar.gz.sig
             src-tauri/target/${{ matrix.target }}/release/GWShell-portable-*.zip
           if-no-files-found: warn
+
+      # Upload portable ZIP to the GitHub Release (Windows only)
+      - name: Upload Portable ZIP to Release
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: src-tauri/target/${{ matrix.target }}/release/GWShell-portable-${{ matrix.label }}.zip
+          tag_name: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
