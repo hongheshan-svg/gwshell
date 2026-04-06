@@ -2,18 +2,22 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import type { SessionConfig } from '../../types';
+import type { TranslationKeys } from '../../i18n';
 
 const colorLabels = [
   '#ef4444', '#f97316', '#eab308', '#22c55e', '#10b981',
   '#06b6d4', '#3b82f6', '#6366f1', '#a855f7', '#9ca3af', '#374151',
 ];
 
-const dockerTabs = ['标准', '代理'];
+const dockerTabKeys: { id: string; labelKey: TranslationKeys }[] = [
+  { id: 'standard', labelKey: 'docker_tab_standard' },
+  { id: 'proxy', labelKey: 'docker_tab_proxy' },
+];
 
 export const DockerModal: React.FC = () => {
-  const { showDockerModal, setShowDockerModal, addSession, sessions } = useAppStore();
+  const { showDockerModal, setShowDockerModal, addSession, sessions, t } = useAppStore();
 
-  const [activeTab, setActiveTab] = useState('标准');
+  const [activeTab, setActiveTab] = useState('standard');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [form, setForm] = useState({
     name: '',
@@ -39,7 +43,7 @@ export const DockerModal: React.FC = () => {
         remark: '',
       });
       setTouched({});
-      setActiveTab('标准');
+      setActiveTab('standard');
     }
   }, [showDockerModal]);
 
@@ -93,8 +97,8 @@ export const DockerModal: React.FC = () => {
         {/* Header */}
         <div className="ssh-modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h2>Docker配置编辑</h2>
-            <span className="docker-notice-badge">使用须知！！！</span>
+            <h2>{t('docker_config_title')}</h2>
+            <span className="docker-notice-badge">{t('docker_notice')}</span>
           </div>
           <button className="modal-close" onClick={handleClose}>
             <X size={16} />
@@ -103,25 +107,25 @@ export const DockerModal: React.FC = () => {
 
         {/* Tabs — centered pill style */}
         <div className="ssh-modal-tabs" style={{ justifyContent: 'center' }}>
-          {dockerTabs.map((tab) => (
+          {dockerTabKeys.map((tab) => (
             <button
-              key={tab}
-              className={`ssh-tab ${activeTab === tab ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab)}
+              key={tab.id}
+              className={`ssh-tab ${activeTab === tab.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
             >
-              {tab}
+              {t(tab.labelKey)}
             </button>
           ))}
         </div>
 
         {/* Body */}
         <div className="ssh-modal-body">
-          {activeTab === '标准' && (
+          {activeTab === 'standard' && (
             <>
               {/* Color label + Environment */}
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
-                  <label>颜色标签</label>
+                  <label>{t('ssh_color_label')}</label>
                   <div className="color-label-row">
                     {colorLabels.map((color) => (
                       <button
@@ -140,15 +144,15 @@ export const DockerModal: React.FC = () => {
                   </div>
                 </div>
                 <div className="ssh-form-group">
-                  <label>环境</label>
+                  <label>{t('ssh_environment')}</label>
                   <select
                     value={form.environment}
                     onChange={(e) => setForm({ ...form, environment: e.target.value })}
                   >
-                    <option value="">无</option>
-                    <option value="dev">开发</option>
-                    <option value="staging">测试</option>
-                    <option value="production">生产</option>
+                    <option value="">{t('ssh_env_none')}</option>
+                    <option value="dev">{t('ssh_env_dev')}</option>
+                    <option value="staging">{t('ssh_env_staging')}</option>
+                    <option value="production">{t('ssh_env_production')}</option>
                   </select>
                 </div>
               </div>
@@ -156,7 +160,7 @@ export const DockerModal: React.FC = () => {
               {/* Name + Protocol */}
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
-                  <label className={nameError ? 'label-error' : ''}>名称</label>
+                  <label className={nameError ? 'label-error' : ''}>{t('ssh_name')}</label>
                   <input
                     type="text"
                     value={form.name}
@@ -167,7 +171,7 @@ export const DockerModal: React.FC = () => {
                   {nameError && <span className="field-error">name is a required field</span>}
                 </div>
                 <div className="ssh-form-group">
-                  <label>协议</label>
+                  <label>{t('docker_protocol')}</label>
                   <select
                     value={form.docker_protocol}
                     onChange={(e) => setForm({ ...form, docker_protocol: e.target.value as any })}
@@ -183,7 +187,7 @@ export const DockerModal: React.FC = () => {
               {/* Unix Path */}
               {form.docker_protocol === 'unix' && (
                 <div className="ssh-form-group">
-                  <label>Unix路径</label>
+                  <label>{t('docker_unix_path')}</label>
                   <input
                     type="text"
                     value={form.docker_unix_path}
@@ -195,22 +199,22 @@ export const DockerModal: React.FC = () => {
               {/* Connect method + SSH Tunnel */}
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
-                  <label>连接方式</label>
+                  <label>{t('docker_connect_method')}</label>
                   <select
                     value={form.docker_connect_method}
                     onChange={(e) => setForm({ ...form, docker_connect_method: e.target.value })}
                   >
                     <option value="SSH">SSH</option>
-                    <option value="Local">本地</option>
+                    <option value="Local">{t('common_local')}</option>
                   </select>
                 </div>
                 <div className="ssh-form-group">
-                  <label>SSH隧道</label>
+                  <label>{t('docker_ssh_tunnel')}</label>
                   <select
                     value={form.docker_ssh_tunnel}
                     onChange={(e) => setForm({ ...form, docker_ssh_tunnel: e.target.value })}
                   >
-                    <option value="">请选择</option>
+                    <option value="">{t('docker_select')}</option>
                     {sshSessions.map((s) => (
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
@@ -220,7 +224,7 @@ export const DockerModal: React.FC = () => {
 
               {/* Remark */}
               <div className="ssh-form-group">
-                <label>备注</label>
+                <label>{t('ssh_remark')}</label>
                 <textarea
                   className="ssh-remark"
                   rows={3}
@@ -231,19 +235,19 @@ export const DockerModal: React.FC = () => {
             </>
           )}
 
-          {activeTab === '代理' && (
+          {activeTab === 'proxy' && (
             <div className="ssh-tab-placeholder">
-              <p>代理配置（开发中）</p>
+              <p>{t('docker_proxy_dev')}</p>
             </div>
           )}
         </div>
 
         {/* Footer */}
         <div className="ssh-modal-footer">
-          <button className="ssh-footer-link" style={{ fontSize: 12 }}>连接失败？自动配置！！！</button>
+          <button className="ssh-footer-link" style={{ fontSize: 12 }}>{t('docker_auto_config')}</button>
           <div style={{ display: 'flex', gap: 12 }}>
-            <button className="ssh-footer-link" onClick={handleTest}>测试</button>
-            <button className="ssh-footer-link" onClick={handleSave}>保存</button>
+            <button className="ssh-footer-link" onClick={handleTest}>{t('docker_test')}</button>
+            <button className="ssh-footer-link" onClick={handleSave}>{t('ssh_save')}</button>
           </div>
         </div>
       </div>

@@ -8,7 +8,7 @@ const colorLabels = [
   "#06b6d4", "#3b82f6", "#a855f7", "#9ca3af",
 ];
 
-const serialTabs = ["标准", "高级"];
+const serialTabKeys = ['standard', 'advanced'] as const;
 
 const BAUD_RATES = ["300","600","1200","2400","4800","9600","14400","19200","38400","57600","115200","230400","460800","921600"];
 const DATA_BITS = ["5","6","7","8"];
@@ -72,8 +72,8 @@ const defaultForm: SerialForm = {
 };
 
 export const SerialPortModal: React.FC = () => {
-  const { showSerialModal, setShowSerialModal, addSession, addTab } = useAppStore();
-  const [activeTab, setActiveTab] = useState("标准");
+  const { showSerialModal, setShowSerialModal, addSession, addTab, t } = useAppStore();
+  const [activeTab, setActiveTab] = useState<string>("standard");
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [form, setForm] = useState<SerialForm>({ ...defaultForm, autofill_rows: defaultAutofillRows.map((r) => ({ ...r })) });
   const [availablePorts, setAvailablePorts] = useState<string[]>([]);
@@ -83,7 +83,7 @@ export const SerialPortModal: React.FC = () => {
     if (!showSerialModal) return;
     setForm({ ...defaultForm, autofill_rows: defaultAutofillRows.map((r) => ({ ...r })) });
     setTouched({});
-    setActiveTab("标准");
+    setActiveTab("standard");
     import("@tauri-apps/api/core").then(({ invoke }) => {
       invoke<string[]>("list_serial_ports")
         .then((ports) => setAvailablePorts(ports))
@@ -156,23 +156,23 @@ export const SerialPortModal: React.FC = () => {
     <div className="modal-overlay" onClick={handleClose}>
       <div className="ssh-modal" style={{ width: 580 }} onClick={(e) => e.stopPropagation()}>
         <div className="ssh-modal-header">
-          <h2>串口配置编辑</h2>
+          <h2>{t('serial_config_title')}</h2>
           <button className="modal-close" onClick={handleClose}><X size={16} /></button>
         </div>
 
         <div className="ssh-modal-tabs" style={{ justifyContent: "center" }}>
-          {serialTabs.map((tab) => (
+          {serialTabKeys.map((tab) => (
             <button key={tab} className={`ssh-tab ${activeTab === tab ? "active" : ""}`}
-              onClick={() => setActiveTab(tab)}>{tab}</button>
+              onClick={() => setActiveTab(tab)}>{tab === 'standard' ? t('serial_tab_standard') : t('serial_tab_advanced')}</button>
           ))}
         </div>
 
         <div className="ssh-modal-body">
-          {activeTab === "标准" && (
+          {activeTab === "standard" && (
             <>
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
-                  <label>颜色标签</label>
+                  <label>{t('ssh_color_label')}</label>
                   <div className="color-label-row">
                     {colorLabels.map((color) => (
                       <button key={color} className={`color-dot ${form.color_label === color ? "selected" : ""}`}
@@ -184,20 +184,20 @@ export const SerialPortModal: React.FC = () => {
                   </div>
                 </div>
                 <div className="ssh-form-group">
-                  <label className={nameError ? "label-error" : ""}>名称</label>
+                  <label className={nameError ? "label-error" : ""}>{t('ssh_name')}</label>
                   <input type="text" value={form.name}
                     onChange={(e) => setField("name", e.target.value)}
                     onBlur={() => handleBlur("name")}
-                    className={nameError ? "input-error" : ""} placeholder="请输入名称" />
+                    className={nameError ? "input-error" : ""} placeholder={t('serial_name_placeholder')} />
                   {nameError && <span className="field-error">name is a required field</span>}
                 </div>
               </div>
 
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
-                  <label>串口</label>
+                  <label>{t('serial_port')}</label>
                   <select value={form.serial_port} onChange={(e) => setField("serial_port", e.target.value)}>
-                    <option value="">-- 选择串口 --</option>
+                    <option value="">{t('serial_select_port')}</option>
                     {availablePorts.map((p) => <option key={p} value={p}>{p}</option>)}
                     {availablePorts.length === 0 && [
                       "COM1","COM2","COM3","COM4","/dev/ttyUSB0","/dev/ttyUSB1"
@@ -205,7 +205,7 @@ export const SerialPortModal: React.FC = () => {
                   </select>
                 </div>
                 <div className="ssh-form-group">
-                  <label>波特率</label>
+                  <label>{t('serial_baud_rate')}</label>
                   <select value={form.serial_baud_rate} onChange={(e) => setField("serial_baud_rate", e.target.value)}>
                     {BAUD_RATES.map((b) => <option key={b} value={b}>{b}</option>)}
                   </select>
@@ -214,13 +214,13 @@ export const SerialPortModal: React.FC = () => {
 
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
-                  <label>数据位</label>
+                  <label>{t('serial_data_bits')}</label>
                   <select value={form.serial_data_bits} onChange={(e) => setField("serial_data_bits", e.target.value)}>
                     {DATA_BITS.map((b) => <option key={b} value={b}>{b}</option>)}
                   </select>
                 </div>
                 <div className="ssh-form-group">
-                  <label>停止位</label>
+                  <label>{t('serial_stop_bits')}</label>
                   <select value={form.serial_stop_bits} onChange={(e) => setField("serial_stop_bits", e.target.value)}>
                     {STOP_BITS.map((b) => <option key={b} value={b}>{b}</option>)}
                   </select>
@@ -229,13 +229,13 @@ export const SerialPortModal: React.FC = () => {
 
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
-                  <label>校验位</label>
+                  <label>{t('serial_parity')}</label>
                   <select value={form.serial_parity} onChange={(e) => setField("serial_parity", e.target.value)}>
                     {PARITY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
                 <div className="ssh-form-group">
-                  <label>字符编码</label>
+                  <label>{t('serial_encoding')}</label>
                   <select value={form.serial_encoding} onChange={(e) => setField("serial_encoding", e.target.value)}>
                     {ENCODINGS.map((enc) => <option key={enc} value={enc}>{enc}</option>)}
                   </select>
@@ -243,34 +243,34 @@ export const SerialPortModal: React.FC = () => {
               </div>
 
               <div className="ssh-form-group">
-                <label>初始执行命令</label>
+                <label>{t('serial_init_commands')}</label>
                 <textarea rows={4} value={form.serial_init_commands}
                   onChange={(e) => setField("serial_init_commands", e.target.value)}
-                  placeholder="连接成功后自动执行的命令，每行一条" />
+                  placeholder={t('serial_init_placeholder')} />
               </div>
             </>
           )}
 
-          {activeTab === "高级" && (
+          {activeTab === "advanced" && (
             <>
               <div className="autofill-section">
                 <div className="autofill-header">
                   <div className="autofill-header-left">
-                    <span className="autofill-title">自动填写配置</span>
-                    <span className="autofill-subtitle">用于自动登录</span>
+                    <span className="autofill-title">{t('serial_autofill_title')}</span>
+                    <span className="autofill-subtitle">{t('serial_autofill_subtitle')}</span>
                   </div>
                   <div className="autofill-header-right">
                     <label className="autofill-check-label">
                       <input type="checkbox" checked={form.backspace_remap}
                         onChange={(e) => setField("backspace_remap", e.target.checked)} />
-                      <span>退格映射^H</span>
+                      <span>{t('serial_backspace_remap')}</span>
                     </label>
                     <label className="autofill-check-label">
                       <input type="checkbox" checked={form.record_log}
                         onChange={(e) => setField("record_log", e.target.checked)} />
-                      <span>录制日志</span>
+                      <span>{t('serial_record_log')}</span>
                     </label>
-                    <button className="autofill-add-btn" onClick={addRow} title="添加行">
+                    <button className="autofill-add-btn" onClick={addRow} title={t('panel_add_asset')}>
                       <Plus size={14} />
                     </button>
                   </div>
@@ -283,7 +283,7 @@ export const SerialPortModal: React.FC = () => {
                         <Eye size={13} className="autofill-icon" />
                         <input className="autofill-input" value={row.pattern}
                           onChange={(e) => updateRow(row.id, { pattern: e.target.value })}
-                          placeholder="匹配内容" />
+                          placeholder={t('serial_match_content')} />
                       </div>
 
                       <span className="autofill-arrow">&#8594;</span>
@@ -292,7 +292,7 @@ export const SerialPortModal: React.FC = () => {
                         <Monitor size={13} className="autofill-icon" />
                         <input className="autofill-input" value={row.content}
                           onChange={(e) => updateRow(row.id, { content: e.target.value })}
-                          placeholder="自动发送内容" />
+                          placeholder={t('serial_auto_send')} />
                       </div>
 
                       <div className="autofill-controls">

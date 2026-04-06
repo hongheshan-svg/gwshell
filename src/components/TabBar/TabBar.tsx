@@ -4,7 +4,7 @@ import { useAppStore } from '../../stores/appStore';
 import { destroyTerminal } from '../Terminal/TerminalView';
 
 export const TabBar: React.FC = () => {
-  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession } = useAppStore();
+  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, t } = useAppStore();
 
   const handleCloseTab = (tabId: string) => {
     destroyTerminal(tabId);
@@ -30,7 +30,7 @@ export const TabBar: React.FC = () => {
           {tab.type === 'asset-list' ? (
             <>
               <Menu size={13} />
-              <span>{tab.title}</span>
+              <span>{t('tab_list')}</span>
               <ChevronDown size={11} />
             </>
           ) : (
@@ -50,7 +50,7 @@ export const TabBar: React.FC = () => {
           )}
         </div>
       ))}
-      <button className="tab-add-btn" onClick={() => setShowNewSession(true)} title="新建标签">
+      <button className="tab-add-btn" onClick={() => setShowNewSession(true)} title={t('tab_new')}>
         <Plus size={14} />
       </button>
     </div>

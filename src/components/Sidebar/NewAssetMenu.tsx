@@ -10,6 +10,8 @@ import {
   Cable,
   Usb,
 } from 'lucide-react';
+import { useAppStore } from '../../stores/appStore';
+import type { TranslationKeys } from '../../i18n';
 
 interface NewAssetMenuProps {
   anchorRef: React.RefObject<HTMLButtonElement | null>;
@@ -17,23 +19,24 @@ interface NewAssetMenuProps {
   onSelect: (type: string) => void;
 }
 
-const remoteItems = [
-  { id: 'ssh', icon: TerminalSquare, label: 'SSH' },
-  { id: 'ssh-tunnel', icon: Network, label: 'SSH 隧道' },
-  { id: 'rdp', icon: Monitor, label: 'RDP' },
-  { id: 'telnet', icon: Cable, label: 'Telnet' },
-  { id: 'serial', icon: Usb, label: '串口' },
+const remoteItems: { id: string; icon: typeof TerminalSquare; labelKey: TranslationKeys }[] = [
+  { id: 'ssh', icon: TerminalSquare, labelKey: 'newasset_ssh' },
+  { id: 'ssh-tunnel', icon: Network, labelKey: 'newasset_ssh_tunnel' },
+  { id: 'rdp', icon: Monitor, labelKey: 'newasset_rdp' },
+  { id: 'telnet', icon: Cable, labelKey: 'newasset_telnet' },
+  { id: 'serial', icon: Usb, labelKey: 'newasset_serial' },
 ];
 
-const menuItems = [
-  { id: 'directory', icon: FolderPlus, label: '目录' },
-  { id: 'localshell', icon: TerminalSquare, label: '本地终端' },
-  { id: 'docker', icon: Box, label: 'Docker' },
-  { id: 'remote', icon: Monitor, label: '远程连接', hasSubmenu: true },
-  { id: 'database', icon: Database, label: '数据库' },
+const menuItems: { id: string; icon: typeof FolderPlus; labelKey: TranslationKeys; hasSubmenu?: boolean }[] = [
+  { id: 'directory', icon: FolderPlus, labelKey: 'newasset_directory' },
+  { id: 'localshell', icon: TerminalSquare, labelKey: 'newasset_localshell' },
+  { id: 'docker', icon: Box, labelKey: 'newasset_docker' },
+  { id: 'remote', icon: Monitor, labelKey: 'newasset_remote', hasSubmenu: true },
+  { id: 'database', icon: Database, labelKey: 'newasset_database' },
 ];
 
 export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, onSelect }) => {
+  const t = useAppStore((s) => s.t);
   const menuRef = useRef<HTMLDivElement>(null);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [submenuPos, setSubmenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -92,32 +95,25 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
             onMouseLeave={handleItemMouseLeave}
           >
             <span className="new-asset-menu-icon"><item.icon size={15} /></span>
-            <span>{item.label}</span>
-            {item.hasSubmenu && (
-              <span className="new-asset-menu-arrow"><ChevronRight size={13} /></span>
-            )}
+            <span>{t(item.labelKey)}</span>
+            {item.hasSubmenu && <span className="new-asset-menu-arrow"><ChevronRight size={14} /></span>}
           </div>
         ))}
 
-        {/* Remote submenu */}
+        {/* Submenu for remote */}
         {hoveredItem === 'remote' && submenuPos && (
           <div
             className="new-asset-submenu"
             style={{ top: submenuPos.top, left: submenuPos.left }}
-            onMouseEnter={() => setHoveredItem('remote')}
-            onMouseLeave={() => setHoveredItem(null)}
           >
             {remoteItems.map((item) => (
               <div
                 key={item.id}
                 className="new-asset-menu-item"
-                onClick={() => {
-                  onSelect(item.id);
-                  onClose();
-                }}
+                onClick={() => { onSelect(item.id); onClose(); }}
               >
                 <span className="new-asset-menu-icon"><item.icon size={15} /></span>
-                <span>{item.label}</span>
+                <span>{t(item.labelKey)}</span>
               </div>
             ))}
           </div>

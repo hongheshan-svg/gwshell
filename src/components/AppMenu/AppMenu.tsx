@@ -14,7 +14,7 @@ import {
 import { useAppStore } from '../../stores/appStore';
 
 export const AppMenu: React.FC = () => {
-  const { showAppMenu, setShowAppMenu, setShowSettings } = useAppStore();
+  const { showAppMenu, setShowAppMenu, setShowSettings, t, locale, setLocale } = useAppStore();
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,47 +36,47 @@ export const AppMenu: React.FC = () => {
       <div className="app-menu" ref={menuRef}>
         <div className="app-menu-item">
           <ExternalLink size={14} />
-          <span>新窗口</span>
+          <span>{t('menu_new_window')}</span>
           <ChevronRight size={12} className="app-menu-arrow" />
         </div>
         <div className="app-menu-item">
           <Clock size={14} />
-          <span>最近项目</span>
+          <span>{t('menu_recent')}</span>
           <span className="app-menu-shortcut">Ctrl+E</span>
           <ChevronRight size={12} className="app-menu-arrow" />
         </div>
-        <div className="app-menu-item">
+        <div className="app-menu-item" onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')}>
           <Globe size={14} />
-          <span>语言</span>
-          <ChevronRight size={12} className="app-menu-arrow" />
+          <span>{t('menu_language')}</span>
+          <span className="app-menu-shortcut">{locale === 'zh' ? 'EN' : '中文'}</span>
         </div>
         <div className="app-menu-item">
           <HelpCircle size={14} />
-          <span>帮助</span>
+          <span>{t('menu_help')}</span>
           <ChevronRight size={12} className="app-menu-arrow" />
         </div>
         <div className="app-menu-divider" />
         <div className="app-menu-item">
           <Star size={14} />
-          <span>升级专业版</span>
+          <span>{t('menu_upgrade')}</span>
         </div>
         <div className="app-menu-item" onClick={() => { setShowAppMenu(false); setShowSettings(true); }}>
           <Settings size={14} />
-          <span>设置</span>
+          <span>{t('menu_settings')}</span>
         </div>
         <div className="app-menu-item">
           <Search size={14} />
-          <span>快速搜索</span>
+          <span>{t('menu_quick_search')}</span>
           <span className="app-menu-shortcut">Ctrl+Shift+F</span>
         </div>
         <div className="app-menu-divider" />
         <div className="app-menu-item">
           <RotateCcw size={14} />
-          <span>重载页面</span>
+          <span>{t('menu_reload')}</span>
         </div>
         <div className="app-menu-item danger">
           <LogOut size={14} />
-          <span>退出</span>
+          <span>{t('menu_quit')}</span>
           <span className="app-menu-shortcut">Alt+F4</span>
         </div>
       </div>

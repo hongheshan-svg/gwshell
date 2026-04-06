@@ -1,7 +1,10 @@
 import React from 'react';
 import { Minus, Square, X } from 'lucide-react';
+import { useAppStore } from '../../stores/appStore';
 
 export const TitleBar: React.FC = () => {
+  const t = useAppStore((s) => s.t);
+
   const handleMinimize = async () => {
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
     getCurrentWindow().minimize();
@@ -29,13 +32,13 @@ export const TitleBar: React.FC = () => {
         GWShell
       </div>
       <div className="titlebar-controls">
-        <button className="titlebar-btn" onClick={handleMinimize} title="最小化">
+        <button className="titlebar-btn" onClick={handleMinimize} title={t('titlebar_minimize')}>
           <Minus size={14} />
         </button>
-        <button className="titlebar-btn" onClick={handleMaximize} title="最大化">
+        <button className="titlebar-btn" onClick={handleMaximize} title={t('titlebar_maximize')}>
           <Square size={10} />
         </button>
-        <button className="titlebar-btn titlebar-close" onClick={handleClose} title="关闭">
+        <button className="titlebar-btn titlebar-close" onClick={handleClose} title={t('titlebar_close')}>
           <X size={14} />
         </button>
       </div>

@@ -70,7 +70,7 @@ const ShellPicker: React.FC<{
 
 // ---- Modal ----
 export const LocalTerminalModal: React.FC = () => {
-  const { showLocalTerminalModal, setShowLocalTerminalModal, addSession, addTab } = useAppStore();
+  const { showLocalTerminalModal, setShowLocalTerminalModal, addSession, addTab, t } = useAppStore();
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [shellOptions, setShellOptions] = useState<ShellOption[]>([
     { id: "powershell", label: "powershell" },
@@ -108,7 +108,7 @@ export const LocalTerminalModal: React.FC = () => {
   const handlePickDir = async () => {
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
-      const selected = await open({ directory: true, multiple: false, title: "选择工作目录" });
+      const selected = await open({ directory: true, multiple: false, title: t('local_select_dir') });
       if (typeof selected === "string" && selected) {
         setForm((prev) => ({ ...prev, working_dir: selected }));
       }
@@ -152,7 +152,7 @@ export const LocalTerminalModal: React.FC = () => {
       <div className="ssh-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="ssh-modal-header">
-          <h2>终端配置编辑</h2>
+          <h2>{t('local_config_title')}</h2>
           <button className="modal-close" onClick={handleClose}><X size={16} /></button>
         </div>
 
@@ -161,7 +161,7 @@ export const LocalTerminalModal: React.FC = () => {
           {/* Row: color + name */}
           <div className="ssh-form-row">
             <div className="ssh-form-group">
-              <label>颜色标签</label>
+              <label>{t('ssh_color_label')}</label>
               <div className="color-label-row">
                 {colorLabels.map((color) => (
                   <button
@@ -177,7 +177,7 @@ export const LocalTerminalModal: React.FC = () => {
               </div>
             </div>
             <div className="ssh-form-group">
-              <label className={nameError ? "label-error" : ""}>名称</label>
+              <label className={nameError ? "label-error" : ""}>{t('ssh_name')}</label>
               <input
                 type="text"
                 value={form.name}
@@ -198,7 +198,7 @@ export const LocalTerminalModal: React.FC = () => {
 
           {/* Charset */}
           <div className="ssh-form-group">
-            <label>字符集</label>
+            <label>{t('local_charset')}</label>
             <select
               value={form.charset}
               onChange={(e) => setForm({ ...form, charset: e.target.value })}
@@ -211,31 +211,31 @@ export const LocalTerminalModal: React.FC = () => {
 
           {/* Init command */}
           <div className="ssh-form-group">
-            <label>初始执行命令</label>
+            <label>{t('local_init_command')}</label>
             <input
               type="text"
               value={form.init_command}
               onChange={(e) => setForm({ ...form, init_command: e.target.value })}
-              placeholder="连接后自动执行的命令，如 htop 或 source ~/.bashrc"
+              placeholder={t('local_init_placeholder')}
             />
           </div>
 
           {/* Working directory */}
           <div className="ssh-form-group">
-            <label>工作目录</label>
+            <label>{t('local_working_dir')}</label>
             <div style={{ display: "flex", gap: 6 }}>
               <input
                 type="text"
                 value={form.working_dir}
                 onChange={(e) => setForm({ ...form, working_dir: e.target.value })}
                 onDoubleClick={handlePickDir}
-                placeholder="留空则使用主目录，双击选择目录"
+                placeholder={t('local_working_dir_placeholder')}
                 style={{ flex: 1 }}
               />
               <button
                 type="button"
                 onClick={handlePickDir}
-                title="选择目录"
+                title={t('local_select_dir')}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
                   height: 32, width: 32, borderRadius: 6,
@@ -251,7 +251,7 @@ export const LocalTerminalModal: React.FC = () => {
 
           {/* Remark */}
           <div className="ssh-form-group">
-            <label>备注</label>
+            <label>{t('ssh_remark')}</label>
             <textarea
               className="ssh-remark"
               rows={3}
@@ -263,8 +263,8 @@ export const LocalTerminalModal: React.FC = () => {
 
         {/* Footer */}
         <div className="ssh-modal-footer">
-          <button className="ssh-footer-link" onClick={handleTestConnect}>测试连接</button>
-          <button className="btn btn-primary" onClick={handleSave}>保存</button>
+          <button className="ssh-footer-link" onClick={handleTestConnect}>{t('ssh_test_connect')}</button>
+          <button className="btn btn-primary" onClick={handleSave}>{t('ssh_save')}</button>
         </div>
       </div>
     </div>

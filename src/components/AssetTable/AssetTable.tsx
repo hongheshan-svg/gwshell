@@ -24,6 +24,7 @@ export const AssetTable: React.FC = () => {
     addTab,
     setActiveTab,
     tabs,
+    t,
   } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -79,29 +80,29 @@ export const AssetTable: React.FC = () => {
       <div className="asset-toolbar">
         <div className="asset-toolbar-left">
           <span className="asset-toolbar-icon"><Menu size={14} /></span>
-          <span className="asset-toolbar-title">资产列表</span>
+          <span className="asset-toolbar-title">{t('table_title')}</span>
         </div>
         <div className="asset-toolbar-center">
-          <span className="asset-toolbar-info">已选择 {selectedSessionIds.length} 个连接</span>
+          <span className="asset-toolbar-info">{t('table_selected', { count: selectedSessionIds.length })}</span>
         </div>
         <div className="asset-toolbar-right">
           <div className="asset-search-box">
             <Search size={12} />
             <input
               type="text"
-              placeholder="名称,IP,User (Ctrl+F)"
+              placeholder={t('table_search_placeholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <button className="asset-toolbar-btn" onClick={() => setShowNewSession(true)} title="新建">
+          <button className="asset-toolbar-btn" onClick={() => setShowNewSession(true)} title={t('table_new')}>
             <Plus size={14} />
           </button>
-          <button className="asset-toolbar-btn" title="刷新">
+          <button className="asset-toolbar-btn" title={t('table_refresh')}>
             <RefreshCw size={14} />
           </button>
           {selectedSessionIds.length > 0 && (
-            <button className="asset-toolbar-btn danger" onClick={handleDeleteSelected} title="删除选中">
+            <button className="asset-toolbar-btn danger" onClick={handleDeleteSelected} title={t('table_delete_selected')}>
               <Trash2 size={14} />
             </button>
           )}
@@ -116,14 +117,14 @@ export const AssetTable: React.FC = () => {
               <th className="col-check">
                 <input type="checkbox" checked={allSelected} onChange={handleSelectAll} />
               </th>
-              <th className="col-name">名称</th>
-              <th className="col-latency">延迟</th>
-              <th className="col-host">Host</th>
-              <th className="col-user">User</th>
-              <th className="col-created">创建时间</th>
-              <th className="col-expired">到期时间</th>
-              <th className="col-remark">备注</th>
-              <th className="col-actions">操作</th>
+              <th className="col-name">{t('table_col_name')}</th>
+              <th className="col-latency">{t('table_col_latency')}</th>
+              <th className="col-host">{t('table_col_host')}</th>
+              <th className="col-user">{t('table_col_user')}</th>
+              <th className="col-created">{t('table_col_created')}</th>
+              <th className="col-expired">{t('table_col_expired')}</th>
+              <th className="col-remark">{t('table_col_remark')}</th>
+              <th className="col-actions">{t('table_col_actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -132,7 +133,7 @@ export const AssetTable: React.FC = () => {
                 <td colSpan={9} className="asset-empty">
                   <div className="asset-empty-content">
                     <Server size={32} />
-                    <p>暂无资产，点击上方 + 按钮添加</p>
+                    <p>{t('table_empty')}</p>
                   </div>
                 </td>
               </tr>
@@ -164,14 +165,14 @@ export const AssetTable: React.FC = () => {
                     <button
                       className="asset-action-btn"
                       onClick={() => handleConnect(session)}
-                      title="连接"
+                      title={t('table_connect')}
                     >
                       <Play size={12} />
                     </button>
                     <button
                       className="asset-action-btn"
                       onClick={() => setEditingSession(session)}
-                      title="编辑"
+                      title={t('table_edit')}
                     >
                       <Edit size={12} />
                     </button>

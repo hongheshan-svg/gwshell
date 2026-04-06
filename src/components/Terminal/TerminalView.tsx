@@ -34,6 +34,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
   const containerRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
   const sessions = useAppStore((s) => s.sessions);
+  const t = useAppStore((s) => s.t);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
 
@@ -156,7 +157,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
 
       const unlistenExit = await listen(
         `${eventPrefix}-exit-${tab.sessionId}`,
-        () => { instance?.terminal.write("\r\n\x1b[33m[Session ended]\x1b[0m\r\n"); }
+        () => { instance?.terminal.write(`\r\n\x1b[33m${t('term_session_ended')}\x1b[0m\r\n`); }
       );
 
       const dataDispose = instance!.terminal.onData((data) => {
@@ -225,12 +226,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
               await invoke("ssh_connect", buildSshParams(sess));
             } else if (isMismatch) {
               instance?.terminal.write(
-                `\r\n\x1b[31m[SECURITY] 主机指纹已变更！可能存在中间人攻击风险。\x1b[0m\r\n` +
-                `\r\n\x1b[31m当前指纹: ${fingerprint}\x1b[0m\r\n` +
-                `\r\n\x1b[33m如确认服务器已重装，请手动删除 known_hosts.json 中对应条目后重试。\x1b[0m\r\n`
+                `\r\n\x1b[31m[SECURITY] ${t('fp_mismatch_warning')}\x1b[0m\r\n` +
+                `\r\n\x1b[31m${t('fp_current_fingerprint', { fingerprint })}\x1b[0m\r\n` +
+                `\r\n\x1b[33m${t('fp_mismatch_hint')}\x1b[0m\r\n`
               );
             } else {
-              instance?.terminal.write("\r\n\x1b[33m[连接已取消：用户拒绝信任主机指纹]\x1b[0m\r\n");
+              instance?.terminal.write(`\r\n\x1b[33m[${t('fp_cancelled')}]\x1b[0m\r\n`);
             }
             return;
           }
@@ -240,7 +241,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
 
       try {
         if (tab.type === "localshell") {
-          instance?.terminal.write("\r\n\x1b[90mStarting local shell...\x1b[0m\r\n");
+          instance?.terminal.write(`\r\n\x1b[90m${t('term_starting_shell')}\x1b[0m\r\n`);
           await invoke("create_local_shell", {
             sessionId: tab.sessionId,
             rows: instance!.terminal.rows,
@@ -257,12 +258,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
           }
         } else if (tab.type === "ssh") {
           if (!session?.host) {
-            instance?.terminal.write("\r\n\x1b[31mError: SSH session config not found\x1b[0m\r\n");
+            instance?.terminal.write(`\r\n\x1b[31m${t('term_ssh_not_found')}\x1b[0m\r\n`);
           } else {
             instance?.terminal.write(
-              `\r\n\x1b[90mConnecting to ${session.username || "root"}@${session.host}:${session.port || 22}` +
-              `${session.jump_host ? ` (via ${session.jump_host})` : ""}` +
-              `${session.proxy_type && session.proxy_type !== "none" ? ` [${session.proxy_type} proxy]` : ""}` +
+              `\r\n\x1b[90m${t('term_connecting', { user: session.username || 'root', host: session.host, port: session.port || 22 })}` +
+              `${session.jump_host ? ` ${t('term_via_jump', { jumpHost: session.jump_host })}` : ''}` +
+              `${session.proxy_type && session.proxy_type !== 'none' ? ` ${t('term_via_proxy', { proxyType: session.proxy_type })}` : ''}` +
               `...\x1b[0m\r\n`
             );
             await doSshConnect(session);
@@ -292,19 +293,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
                   remotePort: session.tunnel_remote_port,
                 });
                 instance?.terminal.write(
-                  `\r\n\x1b[90m[Tunnel] 127.0.0.1:${actualPort} → ${session.tunnel_remote_host}:${session.tunnel_remote_port}\x1b[0m\r\n`
+                  `\r\n\x1b[90m${t('term_tunnel_ok', { localPort: actualPort, remoteHost: session.tunnel_remote_host!, remotePort: session.tunnel_remote_port! })}\x1b[0m\r\n`
                 );
               } catch (tunnelErr) {
-                instance?.terminal.write(`\r\n\x1b[33m[Tunnel] 启动失败: ${tunnelErr}\x1b[0m\r\n`);
+                instance?.terminal.write(`\r\n\x1b[33m${t('term_tunnel_fail', { error: String(tunnelErr) })}\x1b[0m\r\n`);
               }
             }
           }
         } else if (tab.type === "serial") {
           if (!session?.serial_port) {
-            instance?.terminal.write("\r\n\x1b[31mError: Serial port not configured.\x1b[0m\r\n");
+            instance?.terminal.write(`\r\n\x1b[31m${t('term_serial_not_configured')}\x1b[0m\r\n`);
           } else {
             instance?.terminal.write(
-              `\r\n\x1b[90mOpening ${session.serial_port} @ ${session.serial_baud_rate || "115200"} baud...\x1b[0m\r\n`
+              `\r\n\x1b[90m${t('term_opening_serial', { port: session.serial_port, baud: session.serial_baud_rate || '115200' })}\x1b[0m\r\n`
             );
             await invoke("serial_open", {
               sessionId: tab.sessionId,
@@ -317,7 +318,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
           }
         }
       } catch (err) {
-        instance?.terminal.write(`\r\n\x1b[31mConnection error: ${err}\x1b[0m\r\n`);
+        instance?.terminal.write(`\r\n\x1b[31m${t('term_conn_error', { error: String(err) })}\x1b[0m\r\n`);
       }
 
       return () => {
@@ -368,16 +369,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
       {fingerprintInfo && isActive && (
         <div className="fingerprint-overlay">
           <div className="fingerprint-dialog">
-            <div className="fingerprint-dialog-title">🔒 SSH 主机指纹验证</div>
+            <div className="fingerprint-dialog-title">🔒 {t('fp_title')}</div>
             <div className="fingerprint-dialog-body">
-              <p>首次连接到以下主机，请验证其指纹是否可信：</p>
+              <p>{t('fp_desc')}</p>
               <div className="fingerprint-host">{fingerprintInfo.host}:{fingerprintInfo.port}</div>
               <div className="fingerprint-hash">
                 <span className="fingerprint-label">{fingerprintInfo.keyType}</span>
                 <code>{fingerprintInfo.fingerprint}</code>
               </div>
               <p className="fingerprint-warning">
-                请向服务器管理员确认上述指纹后再接受，未知指纹可能代表安全风险。
+                {t('fp_warning')}
               </p>
             </div>
             <div className="fingerprint-dialog-footer">
@@ -385,13 +386,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
                 className="fingerprint-btn fingerprint-btn-reject"
                 onClick={() => fingerprintResolveRef.current(false)}
               >
-                拒绝连接
+                {t('fp_reject')}
               </button>
               <button
                 className="fingerprint-btn fingerprint-btn-accept"
                 onClick={() => fingerprintResolveRef.current(true)}
               >
-                信任并继续
+                {t('fp_accept')}
               </button>
             </div>
           </div>

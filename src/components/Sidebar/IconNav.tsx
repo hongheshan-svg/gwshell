@@ -15,16 +15,17 @@ import {
   MoreVertical,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import type { TranslationKeys } from '../../i18n';
 
-const navItems = [
-  { id: 'quickconnect', icon: Zap, label: '快速连接' },
-  { id: 'sessions', icon: FolderTree, label: '会话管理' },
-  { id: 'assetlist', icon: List, label: '资产列表' },
-  { id: 'files', icon: FileText, label: '文件传输' },
-  { id: 'keys', icon: Key, label: '密钥/身份' },
-  { id: 'docker', icon: Box, label: 'Docker' },
-  { id: 'services', icon: Globe, label: '网络服务' },
-  { id: 'terminal', icon: TerminalSquare, label: '本地终端' },
+const navItems: { id: string; icon: typeof Zap; labelKey: TranslationKeys }[] = [
+  { id: 'quickconnect', icon: Zap, labelKey: 'nav_quickconnect' },
+  { id: 'sessions', icon: FolderTree, labelKey: 'nav_sessions' },
+  { id: 'assetlist', icon: List, labelKey: 'nav_assetlist' },
+  { id: 'files', icon: FileText, labelKey: 'nav_files' },
+  { id: 'keys', icon: Key, labelKey: 'nav_keys' },
+  { id: 'docker', icon: Box, labelKey: 'nav_docker' },
+  { id: 'services', icon: Globe, labelKey: 'nav_services' },
+  { id: 'terminal', icon: TerminalSquare, labelKey: 'nav_terminal' },
 ];
 
 export const Sidebar: React.FC = () => {
@@ -37,22 +38,21 @@ export const Sidebar: React.FC = () => {
     setActiveNavItem,
     showAppMenu,
     setShowAppMenu,
+    t,
   } = useAppStore();
 
   return (
     <div className="icon-navbar">
-      {/* App logo */}
       <button className="nav-icon-btn nav-logo" title="GWShell">
         <Zap size={20} />
       </button>
 
-      {/* Nav items */}
       {navItems.map((item) => (
         <button
           key={item.id}
           className={`nav-icon-btn ${activeNavItem === item.id ? 'active' : ''}`}
           onClick={() => setActiveNavItem(item.id)}
-          title={item.label}
+          title={t(item.labelKey)}
         >
           <item.icon size={18} />
         </button>
@@ -60,21 +60,18 @@ export const Sidebar: React.FC = () => {
 
       <div className="nav-spacer" />
 
-      {/* Collapse sidebar */}
-      <button className="nav-icon-btn" onClick={toggleSidebar} title="切换侧边栏">
+      <button className="nav-icon-btn" onClick={toggleSidebar} title={t('nav_toggle_sidebar')}>
         {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
       </button>
 
-      {/* Theme toggle */}
-      <button className="nav-icon-btn" onClick={toggleTheme} title="切换主题">
+      <button className="nav-icon-btn" onClick={toggleTheme} title={t('nav_toggle_theme')}>
         {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
       </button>
 
-      {/* Settings / Menu */}
       <button
         className={`nav-icon-btn ${showAppMenu ? 'active' : ''}`}
         onClick={() => setShowAppMenu(!showAppMenu)}
-        title="菜单"
+        title={t('nav_menu')}
       >
         <MoreVertical size={18} />
       </button>

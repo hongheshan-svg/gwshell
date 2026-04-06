@@ -3,7 +3,7 @@ import { Wifi, Clock, Monitor, Cloud } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 
 export const StatusBar: React.FC = () => {
-  const { tabs, activeTabId, sessions } = useAppStore();
+  const { tabs, activeTabId, sessions, t, locale } = useAppStore();
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
   return (
@@ -17,7 +17,7 @@ export const StatusBar: React.FC = () => {
         <>
           <div className="status-item">
             <span className={`status-dot ${activeTab.connected ? 'connected' : 'disconnected'}`} />
-            <span>{activeTab.connected ? '已连接' : '连接中'}</span>
+            <span>{activeTab.connected ? t('status_connected') : t('status_connecting')}</span>
           </div>
           <div className="status-item">
             <Wifi size={11} />
@@ -30,14 +30,14 @@ export const StatusBar: React.FC = () => {
 
       <div className="status-item">
         <Cloud size={11} />
-        <span>25°C 阴</span>
+        <span>25°C</span>
       </div>
       <div className="status-item">
-        <span>资产: {sessions.length}</span>
+        <span>{t('status_assets')}: {sessions.length}</span>
       </div>
       <div className="status-item">
         <Clock size={11} />
-        <span>{new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
+        <span>{new Date().toLocaleTimeString(locale === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' })}</span>
       </div>
     </div>
   );

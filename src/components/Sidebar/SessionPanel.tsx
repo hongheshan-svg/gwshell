@@ -18,13 +18,8 @@ import { NewAssetMenu } from './NewAssetMenu';
 import type { SessionConfig } from '../../types';
 
 export const SessionPanel: React.FC = () => {
-  const { sessions, sidebarCollapsed, setShowNewSession, setShowDockerModal, setShowLocalTerminalModal, setShowSerialModal, tabs, addTab, setActiveTab } = useAppStore();
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-    '开发服务器': true,
-    '云服务器': true,
-    '生产环境': true,
-    '默认分组': true,
-  });
+  const { sessions, sidebarCollapsed, setShowNewSession, setShowDockerModal, setShowLocalTerminalModal, setShowSerialModal, tabs, addTab, setActiveTab, t } = useAppStore();
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
@@ -36,7 +31,7 @@ export const SessionPanel: React.FC = () => {
   const allSessions = sessions;
   const groups: Record<string, SessionConfig[]> = {};
   allSessions.forEach((s) => {
-    const g = s.group || '默认分组';
+    const g = s.group || t('panel_default_group');
     if (!groups[g]) groups[g] = [];
     groups[g].push(s);
   });
@@ -86,21 +81,21 @@ export const SessionPanel: React.FC = () => {
       {/* Header row 1: title + search */}
       <div className="sidebar-header">
         <div className="sidebar-header-row">
-          <h3>资产列表</h3>
-          <button className="sidebar-action-btn" onClick={() => setShowSearch(!showSearch)} title="搜索">
+          <h3>{t('panel_asset_list')}</h3>
+          <button className="sidebar-action-btn" onClick={() => setShowSearch(!showSearch)} title={t('panel_search')}>
             <Search size={13} />
           </button>
           <div className="sidebar-actions">
-            <button className="sidebar-action-btn" title="设置">
+            <button className="sidebar-action-btn" title={t('panel_settings')}>
               <Settings size={13} />
             </button>
-            <button className="sidebar-action-btn" title="新建文件夹">
+            <button className="sidebar-action-btn" title={t('panel_new_folder')}>
               <FolderPlus size={13} />
             </button>
-            <button className="sidebar-action-btn" title="复制">
+            <button className="sidebar-action-btn" title={t('panel_copy')}>
               <Copy size={13} />
             </button>
-            <button className="sidebar-action-btn" title="链接">
+            <button className="sidebar-action-btn" title={t('panel_link')}>
               <Link size={13} />
             </button>
           </div>
@@ -111,7 +106,7 @@ export const SessionPanel: React.FC = () => {
             ref={plusBtnRef}
             className="sidebar-action-btn sidebar-add-btn"
             onClick={() => setShowNewAssetMenu(!showNewAssetMenu)}
-            title="新建资产"
+            title={t('panel_new_asset')}
           >
             <Plus size={15} />
           </button>
@@ -125,7 +120,7 @@ export const SessionPanel: React.FC = () => {
             <Search size={12} />
             <input
               type="text"
-              placeholder="搜索资产..."
+              placeholder={t('panel_search_placeholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               autoFocus
@@ -142,13 +137,13 @@ export const SessionPanel: React.FC = () => {
         ) : allSessions.length === 0 ? (
           <div className="sidebar-empty">
             <Monitor size={32} />
-            <p>暂无资产</p>
+            <p>{t('panel_no_assets')}</p>
             <button
               className="btn btn-primary"
               style={{ fontSize: 11, height: 28 }}
               onClick={() => setShowNewAssetMenu(true)}
             >
-              <Plus size={12} /> 新建资产
+              <Plus size={12} /> {t('panel_new_asset')}
             </button>
           </div>
         ) : (

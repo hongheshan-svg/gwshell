@@ -2,31 +2,33 @@ import React, { useState } from 'react';
 import { X, Eye, EyeOff } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import type { SessionConfig } from '../../types';
+import type { TranslationKeys } from '../../i18n';
 
-const colorLabels = [
-  '#ef4444', '#f97316', '#eab308', '#22c55e', '#10b981',
-  '#06b6d4', '#3b82f6', '#6366f1', '#a855f7', '#9ca3af', '#374151',
+const configTabKeys: { id: string; labelKey: TranslationKeys }[] = [
+  { id: 'standard', labelKey: 'ssh_tab_standard' },
+  { id: 'tunnel', labelKey: 'ssh_tab_tunnel' },
+  { id: 'proxy', labelKey: 'ssh_tab_proxy' },
+  { id: 'env', labelKey: 'ssh_tab_env' },
+  { id: 'advanced', labelKey: 'ssh_tab_advanced' },
 ];
-
-const configTabs = ['标准', '隧道', '代理', '环境变量', '高级'];
 
 type AuthType = 'password' | 'publickey' | 'keyboardinteractive' | 'agent' | 'none';
 
-const authPrimary: { id: AuthType; label: string }[] = [
-  { id: 'password', label: '密码' },
-  { id: 'publickey', label: '私钥' },
-  { id: 'keyboardinteractive', label: 'MFA/2FA' },
+const authPrimary: { id: AuthType; labelKey: TranslationKeys }[] = [
+  { id: 'password', labelKey: 'ssh_auth_password' },
+  { id: 'publickey', labelKey: 'ssh_auth_publickey' },
+  { id: 'keyboardinteractive', labelKey: 'ssh_auth_mfa' },
 ];
 
-const authSecondary: { id: AuthType; label: string }[] = [
-  { id: 'agent', label: 'SSH Agent' },
-  { id: 'none', label: '不验证' },
+const authSecondary: { id: AuthType; labelKey: TranslationKeys }[] = [
+  { id: 'agent', labelKey: 'ssh_auth_agent' },
+  { id: 'none', labelKey: 'ssh_auth_none' },
 ];
 
 export const NewSessionModal: React.FC = () => {
-  const { showNewSession, setShowNewSession, addSession, addTab, editingSession, setEditingSession } = useAppStore();
+  const { showNewSession, setShowNewSession, addSession, addTab, editingSession, setEditingSession, t } = useAppStore();
 
-  const [activeTab, setActiveTab] = useState('标准');
+  const [activeTab, setActiveTab] = useState('standard');
   const [showPassword, setShowPassword] = useState(false);
   const [showJumpPassword, setShowJumpPassword] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -69,7 +71,7 @@ export const NewSessionModal: React.FC = () => {
         tunnel_type: 'local',
       });
       setTouched({});
-      setActiveTab('标准');
+      setActiveTab('standard');
       setShowPassword(false);
       setShowJumpPassword(false);
     }
@@ -167,7 +169,7 @@ export const NewSessionModal: React.FC = () => {
       <div className="ssh-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="ssh-modal-header">
-          <h2>SSH 配置编辑</h2>
+          <h2>{t('ssh_config_title')}</h2>
           <button className="modal-close" onClick={handleClose}>
             <X size={16} />
           </button>
@@ -175,13 +177,13 @@ export const NewSessionModal: React.FC = () => {
 
         {/* Config Tabs */}
         <div className="ssh-modal-tabs">
-          {configTabs.map((tab) => (
+          {configTabKeys.map((tab) => (
             <button
-              key={tab}
-              className={`ssh-tab ${activeTab === tab ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab)}
+              key={tab.id}
+              className={`ssh-tab ${activeTab === tab.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
             >
-              {tab}
+              {t(tab.labelKey)}
             </button>
           ))}
         </div>
@@ -190,39 +192,20 @@ export const NewSessionModal: React.FC = () => {
         <div className="ssh-modal-body">
 
           {/* ══════════════ 标准 Tab ══════════════ */}
-          {activeTab === '标准' && (
+          {activeTab === 'standard' && (
             <>
               {/* Color label + Environment */}
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
-                  <label>颜色标签</label>
-                  <div className="color-label-row">
-                    {colorLabels.map((color) => (
-                      <button
-                        key={color}
-                        className={`color-dot ${form.color_label === color ? 'selected' : ''}`}
-                        style={{ background: color }}
-                        onClick={() => setForm({ ...form, color_label: color })}
-                      />
-                    ))}
-                    <button
-                      className="color-dot-clear"
-                      onClick={() => setForm({ ...form, color_label: '' })}
-                    >
-                      <X size={11} />
-                    </button>
-                  </div>
-                </div>
-                <div className="ssh-form-group">
-                  <label>环境</label>
+                  <label>{t('ssh_color_label')}</label>
                   <select
                     value={form.environment || ''}
                     onChange={(e) => setForm({ ...form, environment: e.target.value })}
                   >
-                    <option value="">无</option>
-                    <option value="dev">开发</option>
-                    <option value="staging">测试</option>
-                    <option value="production">生产</option>
+                    <option value="">{t('ssh_env_none')}</option>
+                    <option value="dev">{t('ssh_env_dev')}</option>
+                    <option value="staging">{t('ssh_env_staging')}</option>
+                    <option value="production">{t('ssh_env_production')}</option>
                   </select>
                 </div>
               </div>
@@ -230,7 +213,7 @@ export const NewSessionModal: React.FC = () => {
               {/* Name + Host */}
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
-                  <label className={nameError ? 'label-error' : ''}>名称</label>
+                  <label className={nameError ? 'label-error' : ''}>{t('ssh_name')}</label>
                   <input
                     type="text"
                     value={form.name || ''}
@@ -264,18 +247,20 @@ export const NewSessionModal: React.FC = () => {
                   />
                 </div>
                 <div className="ssh-form-group">
-                  <label>端口</label>
+                  <label>{t('ssh_port')}</label>
                   <input
                     type="number"
+                    min={1}
+                    max={65535}
                     value={form.port || 22}
                     onChange={(e) => setForm({ ...form, port: parseInt(e.target.value) || 22 })}
                   />
                 </div>
               </div>
 
-              {/* Auth method toggle buttons */}
+              {/* Auth method */}
               <div className="ssh-form-group">
-                <label>认证方式</label>
+                <label>{t('ssh_auth_method')}</label>
                 <div className="ssh-auth-row">
                   {authPrimary.map((btn) => (
                     <button
@@ -283,7 +268,7 @@ export const NewSessionModal: React.FC = () => {
                       className={`ssh-auth-btn ${form.auth_method === btn.id ? 'active' : ''}`}
                       onClick={() => setForm({ ...form, auth_method: btn.id })}
                     >
-                      {btn.label}
+                      {t(btn.labelKey)}
                     </button>
                   ))}
                 </div>
@@ -294,7 +279,7 @@ export const NewSessionModal: React.FC = () => {
                       className={`ssh-auth-btn ${form.auth_method === btn.id ? 'active' : ''}`}
                       onClick={() => setForm({ ...form, auth_method: btn.id })}
                     >
-                      {btn.label}
+                      {t(btn.labelKey)}
                     </button>
                   ))}
                 </div>
@@ -303,7 +288,7 @@ export const NewSessionModal: React.FC = () => {
               {/* Password */}
               {form.auth_method === 'password' && (
                 <div className="ssh-form-group">
-                  <label>密码</label>
+                  <label>{t('ssh_password')}</label>
                   <div className="ssh-password-wrap">
                     <input
                       type={showPassword ? 'text' : 'password'}
@@ -324,7 +309,7 @@ export const NewSessionModal: React.FC = () => {
               {/* Private key */}
               {form.auth_method === 'publickey' && (
                 <div className="ssh-form-group">
-                  <label>私钥路径</label>
+                  <label>{t('ssh_private_key_path')}</label>
                   <input
                     type="text"
                     placeholder="~/.ssh/id_rsa"
@@ -338,11 +323,11 @@ export const NewSessionModal: React.FC = () => {
               {form.auth_method === 'keyboardinteractive' && (
                 <>
                   <div className="ssh-form-group">
-                    <label>密码（第一个提示）</label>
+                    <label>{t('ssh_mfa_password_hint')}</label>
                     <div className="ssh-password-wrap">
                       <input
                         type={showPassword ? 'text' : 'password'}
-                        placeholder="登录密码"
+                        placeholder={t('ssh_mfa_password_placeholder')}
                         value={form.password || ''}
                         onChange={(e) => setForm({ ...form, password: e.target.value })}
                       />
@@ -356,17 +341,16 @@ export const NewSessionModal: React.FC = () => {
                     </div>
                   </div>
                   <div className="ssh-form-group">
-                    <label>验证码 / TOTP（第二个提示）</label>
+                    <label>{t('ssh_mfa_totp_label')}</label>
                     <input
                       type="text"
-                      placeholder="6 位动态码（可选，连接时也可留空后在终端输入）"
+                      placeholder={t('ssh_mfa_totp_placeholder')}
                       value={form.totp_code || ''}
                       onChange={(e) => setForm({ ...form, totp_code: e.target.value })}
                     />
                   </div>
                   <div className="ssh-tab-desc">
-                    Keyboard-interactive：密码作为第一个 prompt 的回答，验证码作为第二个。
-                    多轮 challenge 时后续均使用验证码字段。
+                    {t('ssh_mfa_desc')}
                   </div>
                 </>
               )}
@@ -374,24 +358,22 @@ export const NewSessionModal: React.FC = () => {
               {/* SSH Agent info */}
               {form.auth_method === 'agent' && (
                 <div className="ssh-tab-desc">
-                  使用系统 SSH Agent（openssh-agent / Pageant）中已加载的密钥进行认证。
-                  确保 SSH_AUTH_SOCK（Unix）或 OpenSSH Agent 服务（Windows）已运行。
+                  {t('ssh_agent_desc')}
                 </div>
               )}
 
               {/* No-auth info */}
               {form.auth_method === 'none' && (
                 <div className="ssh-tab-desc">
-                  不进行认证（适用于允许免密登录的特殊服务器）。
+                  {t('ssh_noauth_desc')}
                 </div>
               )}
 
               {/* Remark */}
               <div className="ssh-form-group">
-                <label>备注</label>
+                <label>{t('ssh_remark')}</label>
                 <textarea
-                  className="ssh-remark"
-                  rows={3}
+                  rows={2}
                   value={form.remark || ''}
                   onChange={(e) => setForm({ ...form, remark: e.target.value })}
                 />
@@ -400,41 +382,41 @@ export const NewSessionModal: React.FC = () => {
           )}
 
           {/* ══════════════ 隧道 Tab ══════════════ */}
-          {activeTab === '隧道' && (
+          {activeTab === 'tunnel' && (
             <>
               <div className="ssh-form-group">
-                <label>本地端口转发</label>
+                <label>{t('ssh_tunnel_label')}</label>
                 <label className="ssh-toggle-label">
                   <input
                     type="checkbox"
                     checked={form.tunnel_enabled || false}
                     onChange={(e) => setForm({ ...form, tunnel_enabled: e.target.checked })}
                   />
-                  <span>连接时自动建立隧道</span>
+                  <span>{t('ssh_tunnel_auto')}</span>
                 </label>
               </div>
 
               {form.tunnel_enabled && (
                 <>
                   <div className="ssh-form-group">
-                    <label>转发类型</label>
+                    <label>{t('ssh_tunnel_type')}</label>
                     <select
                       value={form.tunnel_type || 'local'}
                       onChange={(e) => setForm({ ...form, tunnel_type: e.target.value as 'local' | 'remote' })}
                     >
-                      <option value="local">本地转发 Local (-L)：本地端口 → 远端目标</option>
-                      <option value="remote">远程转发 Remote (-R)：远端端口 → 本地目标（暂不支持）</option>
+                      <option value="local">{t('ssh_tunnel_local')}</option>
+                      <option value="remote">{t('ssh_tunnel_remote')}</option>
                     </select>
                   </div>
 
                   <div className="ssh-form-row">
                     <div className="ssh-form-group">
-                      <label>本地监听端口</label>
+                      <label>{t('ssh_tunnel_local_port')}</label>
                       <input
                         type="number"
                         min={1}
                         max={65535}
-                        placeholder="例：13306"
+                        placeholder="e.g. 13306"
                         value={form.tunnel_local_port || ''}
                         onChange={(e) => setForm({ ...form, tunnel_local_port: parseInt(e.target.value) || undefined })}
                       />
@@ -444,7 +426,7 @@ export const NewSessionModal: React.FC = () => {
 
                   <div className="ssh-form-row">
                     <div className="ssh-form-group">
-                      <label>远端目标主机</label>
+                      <label>{t('ssh_tunnel_remote_host')}</label>
                       <input
                         type="text"
                         placeholder="localhost"
@@ -453,12 +435,12 @@ export const NewSessionModal: React.FC = () => {
                       />
                     </div>
                     <div className="ssh-form-group">
-                      <label>远端目标端口</label>
+                      <label>{t('ssh_tunnel_remote_port')}</label>
                       <input
                         type="number"
                         min={1}
                         max={65535}
-                        placeholder="例：3306"
+                        placeholder="e.g. 3306"
                         value={form.tunnel_remote_port || ''}
                         onChange={(e) => setForm({ ...form, tunnel_remote_port: parseInt(e.target.value) || undefined })}
                       />
@@ -467,8 +449,7 @@ export const NewSessionModal: React.FC = () => {
 
                   {form.tunnel_local_port && form.tunnel_remote_host && form.tunnel_remote_port && (
                     <div className="ssh-tab-desc">
-                      连接成功后，访问 <code>127.0.0.1:{form.tunnel_local_port}</code> 将通过
-                      SSH 隧道转发至远端的 <code>{form.tunnel_remote_host}:{form.tunnel_remote_port}</code>。
+                      {t('ssh_tunnel_desc', { localPort: form.tunnel_local_port!, remoteHost: form.tunnel_remote_host!, remotePort: form.tunnel_remote_port! })}
                     </div>
                   )}
                 </>
@@ -476,22 +457,22 @@ export const NewSessionModal: React.FC = () => {
 
               {!form.tunnel_enabled && (
                 <div className="ssh-tab-placeholder">
-                  <p>启用隧道后配置本地端口转发规则</p>
+                  <p>{t('ssh_tunnel_enable_hint')}</p>
                 </div>
               )}
             </>
           )}
 
           {/* ══════════════ 代理 Tab ══════════════ */}
-          {activeTab === '代理' && (
+          {activeTab === 'proxy' && (
             <>
               <div className="ssh-form-group">
-                <label>代理类型</label>
+                <label>{t('ssh_proxy_type')}</label>
                 <select
                   value={form.proxy_type || 'none'}
                   onChange={(e) => setForm({ ...form, proxy_type: e.target.value as SessionConfig['proxy_type'] })}
                 >
-                  <option value="none">不使用代理</option>
+                  <option value="none">{t('ssh_proxy_none')}</option>
                   <option value="socks5">SOCKS5</option>
                   <option value="http">HTTP CONNECT</option>
                 </select>
@@ -501,7 +482,7 @@ export const NewSessionModal: React.FC = () => {
                 <>
                   <div className="ssh-form-row">
                     <div className="ssh-form-group">
-                      <label>代理服务器地址</label>
+                      <label>{t('ssh_proxy_server')}</label>
                       <input
                         type="text"
                         placeholder="127.0.0.1"
@@ -510,7 +491,7 @@ export const NewSessionModal: React.FC = () => {
                       />
                     </div>
                     <div className="ssh-form-group">
-                      <label>代理端口</label>
+                      <label>{t('ssh_proxy_port')}</label>
                       <input
                         type="number"
                         placeholder={form.proxy_type === 'socks5' ? '1080' : '8080'}
@@ -522,7 +503,7 @@ export const NewSessionModal: React.FC = () => {
 
                   <div className="ssh-form-row">
                     <div className="ssh-form-group">
-                      <label>代理用户名（可选）</label>
+                      <label>{t('ssh_proxy_username')}</label>
                       <input
                         type="text"
                         value={form.proxy_username || ''}
@@ -530,7 +511,7 @@ export const NewSessionModal: React.FC = () => {
                       />
                     </div>
                     <div className="ssh-form-group">
-                      <label>代理密码（可选）</label>
+                      <label>{t('ssh_proxy_password')}</label>
                       <input
                         type="password"
                         value={form.proxy_password || ''}
@@ -540,25 +521,24 @@ export const NewSessionModal: React.FC = () => {
                   </div>
 
                   <div className="ssh-tab-desc">
-                    SSH 连接将通过 {form.proxy_type === 'socks5' ? 'SOCKS5' : 'HTTP CONNECT'} 代理
-                    {form.proxy_host ? ` ${form.proxy_host}:${form.proxy_port || (form.proxy_type === 'socks5' ? 1080 : 8080)}` : ''} 建立。
+                    {t('ssh_proxy_desc', { proxyType: form.proxy_type === 'socks5' ? 'SOCKS5' : 'HTTP CONNECT', proxyAddr: form.proxy_host ? ` ${form.proxy_host}:${form.proxy_port || (form.proxy_type === 'socks5' ? 1080 : 8080)}` : '' })}
                   </div>
                 </>
               )}
 
               {(!form.proxy_type || form.proxy_type === 'none') && (
                 <div className="ssh-tab-placeholder">
-                  <p>选择代理类型后进行配置</p>
+                  <p>{t('ssh_proxy_hint')}</p>
                 </div>
               )}
             </>
           )}
 
           {/* ══════════════ 环境变量 Tab ══════════════ */}
-          {activeTab === '环境变量' && (
+          {activeTab === 'env' && (
             <>
               <div className="ssh-form-group">
-                <label>自定义环境变量</label>
+                <label>{t('ssh_env_custom')}</label>
                 <textarea
                   className="ssh-remark"
                   rows={10}
@@ -568,19 +548,18 @@ export const NewSessionModal: React.FC = () => {
                 />
               </div>
               <div className="ssh-tab-desc">
-                每行一个，格式为 <code>KEY=VALUE</code>。
-                仅在服务器 sshd_config 中 <code>AcceptEnv</code> 允许的变量才会生效。
+                {t('ssh_env_desc')}
               </div>
             </>
           )}
 
           {/* ══════════════ 高级 Tab ══════════════ */}
-          {activeTab === '高级' && (
+          {activeTab === 'advanced' && (
             <>
               {/* Connection settings */}
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
-                  <label>连接超时（秒）</label>
+                  <label>{t('ssh_conn_timeout')}</label>
                   <input
                     type="number"
                     min={0}
@@ -590,7 +569,7 @@ export const NewSessionModal: React.FC = () => {
                   />
                 </div>
                 <div className="ssh-form-group">
-                  <label>Keepalive 间隔（秒）</label>
+                  <label>{t('ssh_keepalive')}</label>
                   <input
                     type="number"
                     min={0}
@@ -613,26 +592,26 @@ export const NewSessionModal: React.FC = () => {
                   />
                 </div>
                 <div className="ssh-form-group">
-                  <label style={{ visibility: 'hidden' }}>占位</label>
+                  <label style={{ visibility: 'hidden' }}>{t('common_placeholder')}</label>
                   <label className="ssh-toggle-label">
                     <input
                       type="checkbox"
                       checked={form.compression || false}
                       onChange={(e) => setForm({ ...form, compression: e.target.checked })}
                     />
-                    <span>启用数据压缩</span>
+                    <span>{t('ssh_compression')}</span>
                   </label>
                 </div>
               </div>
 
               {/* Jump host section */}
               <div className="ssh-section-divider">
-                <span>跳板机（Jump Host / -J）</span>
+                <span>{t('ssh_jump_title')}</span>
               </div>
 
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
-                  <label>跳板机地址</label>
+                  <label>{t('ssh_jump_host')}</label>
                   <input
                     type="text"
                     placeholder="jump.example.com"
@@ -641,7 +620,7 @@ export const NewSessionModal: React.FC = () => {
                   />
                 </div>
                 <div className="ssh-form-group">
-                  <label>端口</label>
+                  <label>{t('ssh_jump_port')}</label>
                   <input
                     type="number"
                     placeholder="22"
@@ -655,7 +634,7 @@ export const NewSessionModal: React.FC = () => {
                 <>
                   <div className="ssh-form-row">
                     <div className="ssh-form-group">
-                      <label>跳板机用户名</label>
+                      <label>{t('ssh_jump_username')}</label>
                       <input
                         type="text"
                         placeholder="root"
@@ -664,7 +643,7 @@ export const NewSessionModal: React.FC = () => {
                       />
                     </div>
                     <div className="ssh-form-group">
-                      <label>跳板机密码</label>
+                      <label>{t('ssh_jump_password')}</label>
                       <div className="ssh-password-wrap">
                         <input
                           type={showJumpPassword ? 'text' : 'password'}
@@ -682,7 +661,7 @@ export const NewSessionModal: React.FC = () => {
                     </div>
                   </div>
                   <div className="ssh-form-group">
-                    <label>跳板机私钥路径（可选，优先于密码）</label>
+                    <label>{t('ssh_jump_key_path')}</label>
                     <input
                       type="text"
                       placeholder="~/.ssh/id_rsa"
@@ -691,8 +670,7 @@ export const NewSessionModal: React.FC = () => {
                     />
                   </div>
                   <div className="ssh-tab-desc">
-                    连接流程：本机 → 跳板机 ({form.jump_host}:{form.jump_port || 22}) →
-                    目标主机 ({form.host || '目标'}:{form.port || 22})
+                    {t('ssh_jump_desc', { jumpHost: form.jump_host!, jumpPort: form.jump_port || 22, host: form.host || 'target', port: form.port || 22 })}
                   </div>
                 </>
               )}
@@ -703,8 +681,8 @@ export const NewSessionModal: React.FC = () => {
 
         {/* Footer */}
         <div className="ssh-modal-footer">
-          <button className="ssh-footer-link" onClick={handleTestConnect}>测试连接</button>
-          <button className="ssh-footer-link" onClick={handleSave}>保存</button>
+          <button className="ssh-footer-link" onClick={handleTestConnect}>{t('ssh_test_connect')}</button>
+          <button className="ssh-footer-link" onClick={handleSave}>{t('ssh_save')}</button>
         </div>
       </div>
     </div>

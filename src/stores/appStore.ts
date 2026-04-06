@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import type { SessionConfig, TabInfo, ThemeMode, MainView } from '../types';
+import { detectLocale, getT, type Locale, type TranslationKeys } from '../i18n';
 
 interface AppStore {
+  // Locale
+  locale: Locale;
+  setLocale: (locale: Locale) => void;
+  t: (key: TranslationKeys, params?: Record<string, string | number>) => string;
+
   // Theme
   theme: ThemeMode;
   toggleTheme: () => void;
@@ -57,7 +63,14 @@ interface AppStore {
   setSplitDirection: (dir: 'horizontal' | 'vertical' | null) => void;
 }
 
-export const useAppStore = create<AppStore>((set) => ({
+const initialLocale = detectLocale();
+const initialT = getT(initialLocale);
+
+export const useAppStore = create<AppStore>((set, _get) => ({
+  locale: initialLocale,
+  setLocale: (locale: Locale) => set({ locale, t: getT(locale) }),
+  t: initialT,
+
   theme: 'dark',
   toggleTheme: () =>
     set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
@@ -89,7 +102,7 @@ export const useAppStore = create<AppStore>((set) => ({
   mainView: 'asset-list',
   setMainView: (view) => set({ mainView: view }),
 
-  tabs: [{ id: 'asset-list', sessionId: '', title: '列表', type: 'asset-list', connected: false }],
+  tabs: [{ id: 'asset-list', sessionId: '', title: initialT('tab_list'), type: 'asset-list', connected: false }],
   activeTabId: 'asset-list',
   addTab: (tab) =>
     set((state) => ({ tabs: [...state.tabs, tab], activeTabId: tab.id })),
