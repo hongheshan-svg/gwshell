@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useCallback, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { WebglAddon } from "@xterm/addon-webgl";
 import type { TabInfo } from "../../types";
 import { useAppStore } from "../../stores/appStore";
 import "@xterm/xterm/css/xterm.css";
@@ -49,6 +48,25 @@ export function destroyTerminal(tabId: string): void {
     inst.terminal.dispose();
     terminalInstances.delete(tabId);
   }
+}
+
+/**
+ * Safely fit a terminal to its container.
+ * - Skips if the container is hidden or has zero dimensions.
+ * - After fitting, forces a full row redraw + atlas rebuild so the
+ *   renderer never shows stale/garbled content.
+ */
+export function safeFit(tabId: string): void {
+  const inst = terminalInstances.get(tabId);
+  if (!inst) return;
+  const el = inst.terminal.element?.parentElement;
+  if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) return;
+  try {
+    inst.fitAddon.fit();
+    // Force a full redraw of every visible row so that row-offsets,
+    // glyph positions and the texture atlas are all consistent.
+    inst.terminal.refresh(0, inst.terminal.rows - 1);
+  } catch {}
 }
 
 export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, forceVisible }) => {
@@ -146,21 +164,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         containerRef.current.appendChild(instance.terminal.element);
       } else {
         instance.terminal.open(containerRef.current);
-        // Load WebGL renderer for GPU-accelerated rendering (fallback to canvas on failure)
-        try {
-          instance.terminal.loadAddon(new WebglAddon());
-        } catch {
-          // WebGL not supported, canvas renderer is fine
-        }
       }
     }
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        try {
-          instance!.fitAddon.fit();
-          instance!.terminal.clearTextureAtlas();
-        } catch {}
+        safeFit(tab.id);
       });
     });
 
@@ -429,11 +438,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         // Double-RAF: wait for layout to settle (especially after display:none → block)
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            try {
-              inst.fitAddon.fit();
-              inst.terminal.clearTextureAtlas();
-              inst.terminal.focus();
-            } catch {}
+            safeFit(tab.id);
+            try { inst.terminal.focus(); } catch {}
           });
         });
       }
@@ -462,13 +468,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       lastH = h;
       if (timerId) clearTimeout(timerId);
       timerId = setTimeout(() => {
-        const inst = terminalInstances.get(tab.id);
-        if (inst && w > 0 && h > 0) {
-          try {
-            inst.fitAddon.fit();
-            inst.terminal.clearTextureAtlas();
-          } catch {}
-        }
+        safeFit(tab.id);
       }, 150);
     });
     observer.observe(el);

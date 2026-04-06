@@ -1,6 +1,6 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect } from 'react';
 import { useAppStore, type SplitCount } from '../../stores/appStore';
-import { TerminalView, terminalInstances } from './TerminalView';
+import { TerminalView, safeFit } from './TerminalView';
 import { AssetTable } from '../AssetTable/AssetTable';
 
 /** CSS grid template for each split count */
@@ -101,29 +101,11 @@ const SplitPane: React.FC<SplitPaneProps> = ({ slotIndex, tab, allTabs, isFocuse
   // When a pane becomes focused, re-fit the terminal
   useEffect(() => {
     if (isFocused && tab) {
-      const inst = terminalInstances.get(tab.id);
-      if (inst) {
-        requestAnimationFrame(() => {
-          try { inst.fitAddon.fit(); inst.terminal.clearTextureAtlas(); inst.terminal.focus(); } catch {}
-        });
-      }
+      requestAnimationFrame(() => {
+        safeFit(tab.id);
+      });
     }
   }, [isFocused, tab?.id]);
-
-  // Also re-fit when the pane's tab changes
-  const refitOnResize = useCallback(() => {
-    if (tab) {
-      const inst = terminalInstances.get(tab.id);
-      if (inst) { try { inst.fitAddon.fit(); inst.terminal.clearTextureAtlas(); } catch {} }
-    }
-  }, [tab?.id]);
-
-  useEffect(() => {
-    const observer = new ResizeObserver(refitOnResize);
-    const el = document.getElementById(`split-pane-${slotIndex}`);
-    if (el) observer.observe(el);
-    return () => observer.disconnect();
-  }, [slotIndex, refitOnResize]);
 
   if (!tab) {
     return (
