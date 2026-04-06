@@ -182,9 +182,11 @@ export const useAppStore = create<AppStore>((set, _get) => ({
     // If switching to split mode, also switch to terminal view
     const firstPane = panes.find(p => p !== null);
     const extra: Partial<{ activeTabId: string | null; mainView: MainView }> = {};
-    if (count > 1 && firstPane) {
-      extra.activeTabId = firstPane;
+    if (count > 1) {
       extra.mainView = 'terminal';
+      if (firstPane) {
+        extra.activeTabId = firstPane;
+      }
     }
     return { splitCount: count, splitPanes: panes, ...extra };
   }),

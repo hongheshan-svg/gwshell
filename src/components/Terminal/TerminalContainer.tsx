@@ -18,8 +18,8 @@ export const TerminalContainer: React.FC = () => {
     splitCount, splitPanes, assignPane, focusedPane, setFocusedPane, setActiveTab,
   } = useAppStore();
 
-  // Show asset table when the active tab is the asset-list tab
-  if (activeTabId === 'asset-list' || mainView === 'asset-list') {
+  // Show asset table when the active tab is the asset-list tab (but not in split mode)
+  if (splitCount <= 1 && (activeTabId === 'asset-list' || mainView === 'asset-list')) {
     return (
       <div className="terminal-container">
         <AssetTable />
@@ -29,7 +29,7 @@ export const TerminalContainer: React.FC = () => {
 
   const terminalTabs = tabs.filter((t) => t.type !== 'asset-list');
 
-  if (terminalTabs.length === 0) {
+  if (splitCount <= 1 && terminalTabs.length === 0) {
     return (
       <div className="terminal-container">
         <AssetTable />
