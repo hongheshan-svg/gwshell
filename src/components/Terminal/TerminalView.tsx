@@ -23,8 +23,13 @@ interface FingerprintInfo {
 // Global map to preserve terminal instances across re-renders
 export const terminalInstances = new Map<string, { terminal: Terminal; fitAddon: FitAddon }>();
 
+// Track which tab IDs have active backend connections (SSH/PTY/serial)
+// so we can avoid closing them during split-mode transitions.
+const connectedTabs = new Set<string>();
+
 /** Destroy a terminal instance associated with a tab (called when the tab closes). */
 export function destroyTerminal(tabId: string): void {
+  connectedTabs.delete(tabId);
   const inst = terminalInstances.get(tabId);
   if (inst) {
     inst.terminal.dispose();
@@ -122,7 +127,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
     // Re-attach the terminal if its parent is a different container
     const currentParent = instance.terminal.element?.parentElement;
     if (currentParent !== containerRef.current) {
-      instance.terminal.open(containerRef.current);
+      if (instance.terminal.element) {
+        // Move existing xterm DOM to the new container (open() cannot be called twice in xterm v5)
+        containerRef.current.appendChild(instance.terminal.element);
+      } else {
+        instance.terminal.open(containerRef.current);
+      }
     }
 
     requestAnimationFrame(() => {
@@ -247,7 +257,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         }
       };
 
+      // Only establish backend connection if not already connected (avoids race on split-mode transitions)
+      const alreadyConnected = connectedTabs.has(tab.id);
+      if (!alreadyConnected) {
+        connectedTabs.add(tab.id);
+      }
+
       try {
+        if (!alreadyConnected) {
         if (tab.type === "localshell") {
           instance?.terminal.write(`\r\n\x1b[90m${t('term_starting_shell')}\x1b[0m\r\n`);
           await invoke("create_local_shell", {
@@ -325,6 +342,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
             });
           }
         }
+        } // end if (!alreadyConnected)
       } catch (err) {
         instance?.terminal.write(`\r\n\x1b[31m${t('term_conn_error', { error: String(err) })}\x1b[0m\r\n`);
       }
@@ -332,9 +350,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       return () => {
         unlistenData();
         unlistenExit();
-        dataDispose.dispose();
-        resizeDispose?.dispose();
-        invoke(closeCmd, { sessionId: tab.sessionId }).catch(() => {});
+        try { dataDispose.dispose(); } catch {}
+        try { resizeDispose?.dispose(); } catch {}
+        // Only close backend connection if tab is being removed (not just relocated to split pane)
+        const store = useAppStore.getState();
+        const tabStillExists = store.tabs.some(t2 => t2.id === tab.id);
+        if (!tabStillExists) {
+          connectedTabs.delete(tab.id);
+          invoke(closeCmd, { sessionId: tab.sessionId }).catch(() => {});
+        }
       };
     };
 

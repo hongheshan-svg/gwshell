@@ -161,43 +161,85 @@ export const useAppStore = create<AppStore>((set, _get) => ({
   setSplitCount: (count) => set((state) => {
     let currentTabs = [...state.tabs];
     let currentSessions = [...state.sessions];
-    const terminalTabs = currentTabs.filter(t => t.type !== 'asset-list');
+    let terminalTabs = currentTabs.filter(t => t.type !== 'asset-list');
 
-    // Auto-create local shell terminals to fill panes if needed
+    // Find the "source" session to clone from:
+    // 1) Active tab's session  2) First terminal tab's session  3) First session in list
+    const activeTab = currentTabs.find(t => t.id === state.activeTabId && t.type !== 'asset-list');
+    const sourceSession: SessionConfig | undefined =
+      (activeTab && currentSessions.find(s => s.id === activeTab.sessionId)) ||
+      (terminalTabs[0] && currentSessions.find(s => s.id === terminalTabs[0].sessionId)) ||
+      currentSessions[0];
+
+    // If source session has no open tab yet, open one first
+    if (count > 1 && sourceSession && !terminalTabs.some(t => t.sessionId === sourceSession.id)) {
+      const tabId = crypto.randomUUID();
+      const tab: TabInfo = {
+        id: tabId,
+        sessionId: sourceSession.id,
+        title: sourceSession.name,
+        type: sourceSession.session_type as TabInfo['type'],
+        connected: false,
+      };
+      currentTabs = [...currentTabs, tab];
+      terminalTabs = currentTabs.filter(t => t.type !== 'asset-list');
+    }
+
+    // Auto-create cloned sessions to fill remaining panes
     const needed = count > 1 ? count - terminalTabs.length : 0;
     for (let i = 0; i < needed; i++) {
       const sessionId = crypto.randomUUID();
       const tabId = crypto.randomUUID();
       const num = terminalTabs.length + i + 1;
-      const session: SessionConfig = {
-        id: sessionId,
-        name: `Terminal ${num}`,
-        session_type: 'localshell',
-        auth_method: 'password',
-        created_at: new Date().toISOString().slice(0, 10),
-      };
-      const tab: TabInfo = {
-        id: tabId,
-        sessionId,
-        title: `Terminal ${num}`,
-        type: 'localshell',
-        connected: false,
-      };
-      currentSessions = [...currentSessions, session];
-      currentTabs = [...currentTabs, tab];
-      terminalTabs.push(tab);
+
+      if (sourceSession) {
+        // Clone the source session with a new ID and incremented name
+        const cloned: SessionConfig = {
+          ...sourceSession,
+          id: sessionId,
+          name: `${sourceSession.name} ${num}`,
+          created_at: new Date().toISOString().slice(0, 10),
+        };
+        const tab: TabInfo = {
+          id: tabId,
+          sessionId,
+          title: cloned.name,
+          type: cloned.session_type as TabInfo['type'],
+          connected: false,
+        };
+        currentSessions = [...currentSessions, cloned];
+        currentTabs = [...currentTabs, tab];
+        terminalTabs.push(tab);
+      } else {
+        // Fallback: create a blank local shell
+        const session: SessionConfig = {
+          id: sessionId,
+          name: `Terminal ${num}`,
+          session_type: 'localshell',
+          auth_method: 'password',
+          created_at: new Date().toISOString().slice(0, 10),
+        };
+        const tab: TabInfo = {
+          id: tabId,
+          sessionId,
+          title: session.name,
+          type: 'localshell',
+          connected: false,
+        };
+        currentSessions = [...currentSessions, session];
+        currentTabs = [...currentTabs, tab];
+        terminalTabs.push(tab);
+      }
     }
 
     const panes: (string | null)[] = [];
     const used = new Set<string>();
     for (let i = 0; i < count; i++) {
-      // Keep existing assignment if valid and not yet used
       const existing = state.splitPanes[i];
       if (existing && !used.has(existing) && terminalTabs.some(t => t.id === existing)) {
         panes.push(existing);
         used.add(existing);
       } else {
-        // Auto-assign an unassigned terminal tab
         const available = terminalTabs.find(t => !used.has(t.id));
         if (available) {
           panes.push(available.id);
@@ -207,7 +249,7 @@ export const useAppStore = create<AppStore>((set, _get) => ({
         }
       }
     }
-    // If switching to split mode, also switch to terminal view
+
     const firstPane = panes.find(p => p !== null);
     const result: Partial<AppStore> = {
       splitCount: count,
