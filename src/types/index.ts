@@ -31,6 +31,7 @@ export interface SessionConfig {
   // Local shell
   working_dir?: string;
   shell_name?: string;
+  charset?: string;
 }
 
 export interface SessionGroup {

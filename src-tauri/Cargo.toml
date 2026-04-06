@@ -25,4 +25,5 @@ dirs = "6"
 parking_lot = "0.12"
 serialport = "4"
 tauri-plugin-dialog = "2"
+encoding_rs = "0.8"
 

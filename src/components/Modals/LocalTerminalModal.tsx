@@ -1,5 +1,6 @@
 ﻿import React, { useState, useRef, useEffect } from "react";
 import { X, FolderOpen, ChevronDown } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../../stores/appStore";
 import type { SessionConfig } from "../../types";
 
@@ -8,21 +9,23 @@ const colorLabels = [
   "#06b6d4", "#3b82f6", "#6366f1", "#a855f7", "#9ca3af", "#374151",
 ];
 
-const SHELL_OPTIONS = [
-  { value: "cmd",         label: "cmd" },
-  { value: "bash",        label: "bash" },
-  { value: "powershell",  label: "powershell" },
-  { value: "powershell7", label: "powershell7" },
-  { value: "wsl",         label: "wsl" },
-  { value: "zsh",         label: "zsh" },
-  { value: "fish",        label: "fish" },
+const CHARSETS = [
+  "UTF-8", "GBK", "GB2312", "GB18030", "Big5",
+  "Shift-JIS", "EUC-JP", "EUC-KR", "KOI8-R",
+  "Windows-1252", "ISO-8859-1", "ASCII",
 ];
+
+interface ShellOption {
+  id: string;
+  label: string;
+}
 
 // ---- Custom shell picker dropdown ----
 const ShellPicker: React.FC<{
   value: string;
+  options: ShellOption[];
   onChange: (v: string) => void;
-}> = ({ value, onChange }) => {
+}> = ({ value, options, onChange }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -35,6 +38,8 @@ const ShellPicker: React.FC<{
     return () => document.removeEventListener("mousedown", handle);
   }, [open]);
 
+  const currentLabel = options.find((o) => o.id === value)?.label ?? value;
+
   return (
     <div ref={ref} className="shell-picker" style={{ position: "relative" }}>
       <button
@@ -42,17 +47,17 @@ const ShellPicker: React.FC<{
         className="shell-picker-btn"
         onClick={() => setOpen((o) => !o)}
       >
-        <span>{value || "powershell"}</span>
+        <span>{currentLabel || "powershell"}</span>
         <ChevronDown size={14} style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform .15s" }} />
       </button>
       {open && (
         <div className="shell-picker-list">
-          {SHELL_OPTIONS.map((opt) => (
+          {options.map((opt) => (
             <button
-              key={opt.value}
+              key={opt.id}
               type="button"
-              className={`shell-picker-item ${value === opt.value ? "active" : ""}`}
-              onClick={() => { onChange(opt.value); setOpen(false); }}
+              className={`shell-picker-item ${value === opt.id ? "active" : ""}`}
+              onClick={() => { onChange(opt.id); setOpen(false); }}
             >
               {opt.label}
             </button>
@@ -67,18 +72,31 @@ const ShellPicker: React.FC<{
 export const LocalTerminalModal: React.FC = () => {
   const { showLocalTerminalModal, setShowLocalTerminalModal, addSession, addTab } = useAppStore();
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [shellOptions, setShellOptions] = useState<ShellOption[]>([
+    { id: "powershell", label: "powershell" },
+  ]);
   const [form, setForm] = useState({
     name: "",
     color_label: "",
     shell: "powershell",
+    charset: "UTF-8",
     working_dir: "",
     remark: "",
   });
 
   useEffect(() => {
     if (showLocalTerminalModal) {
-      setForm({ name: "", color_label: "", shell: "powershell", working_dir: "", remark: "" });
+      setForm({ name: "", color_label: "", shell: "powershell", charset: "UTF-8", working_dir: "", remark: "" });
       setTouched({});
+      // Load available shells from backend
+      invoke<ShellOption[]>("list_shells")
+        .then((list) => {
+          setShellOptions(list);
+          // Default to first non-custom shell
+          const first = list.find((s) => s.id !== "custom");
+          if (first) setForm((f) => ({ ...f, shell: first.id }));
+        })
+        .catch(() => {/* keep default */});
     }
   }, [showLocalTerminalModal]);
 
@@ -103,6 +121,7 @@ export const LocalTerminalModal: React.FC = () => {
     auth_method: "password",
     color_label: form.color_label || undefined,
     shell_name: form.shell,
+    charset: form.charset,
     working_dir: form.working_dir || undefined,
     remark: form.remark || undefined,
     created_at: new Date().toISOString().slice(0, 10),
@@ -172,7 +191,26 @@ export const LocalTerminalModal: React.FC = () => {
           {/* Shell picker */}
           <div className="ssh-form-group">
             <label>Shell</label>
-            <ShellPicker value={form.shell} onChange={(v) => setForm({ ...form, shell: v })} />
+            <ShellPicker value={form.shell} options={shellOptions} onChange={(v) => setForm({ ...form, shell: v })} />
+          </div>
+
+          {/* Charset */}
+          <div className="ssh-form-group">
+            <label>字符集</label>
+            <select
+              value={form.charset}
+              onChange={(e) => setForm({ ...form, charset: e.target.value })}
+              style={{
+                width: "100%", height: 32, borderRadius: 6,
+                border: "1px solid var(--border)",
+                background: "var(--bg-secondary)", color: "var(--text)",
+                padding: "0 8px", fontSize: 13, cursor: "pointer",
+              }}
+            >
+              {CHARSETS.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
           </div>
 
           {/* Working directory */}

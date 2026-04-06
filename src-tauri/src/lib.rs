@@ -28,12 +28,18 @@ fn create_local_shell(
     cols: u16,
     shell_name: Option<String>,
     working_dir: Option<String>,
+    charset: Option<String>,
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     state
         .pty_manager
-        .create_shell(&session_id, app_handle, rows, cols, shell_name, working_dir)
+        .create_shell(&session_id, app_handle, rows, cols, shell_name, working_dir, charset)
+}
+
+#[tauri::command]
+fn list_shells() -> Vec<pty::ShellEntry> {
+    pty::list_available_shells()
 }
 
 #[tauri::command]
@@ -212,6 +218,7 @@ pub fn run() {
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             create_local_shell,
+            list_shells,
             write_to_pty,
             resize_pty,
             close_pty,
