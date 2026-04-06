@@ -413,6 +413,16 @@ export const useAppStore = create<AppStore>((set, _get) => ({
   assignPane: (slotIndex, tabId) => set((state) => {
     const panes = [...state.splitPanes];
     if (slotIndex >= 0 && slotIndex < panes.length) {
+      // Remove the tab from any other pane first to prevent the same
+      // terminal appearing in multiple panes (which causes duplicate
+      // event listeners and double keystrokes).
+      if (tabId) {
+        for (let i = 0; i < panes.length; i++) {
+          if (i !== slotIndex && panes[i] === tabId) {
+            panes[i] = null;
+          }
+        }
+      }
       panes[slotIndex] = tabId;
     }
     return { splitPanes: panes };

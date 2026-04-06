@@ -28,8 +28,21 @@ export const terminalInstances = new Map<string, { terminal: Terminal; fitAddon:
 // so we can avoid closing them during split-mode transitions.
 const connectedTabs = new Set<string>();
 
+// Global map of event-listener cleanup functions keyed by tab ID.
+// Ensures only ONE set of listeners exists per tab at any time, even
+// when React StrictMode double-invokes effects or when components
+// remount during single↔split transitions.
+const tabListenerCleanups = new Map<string, () => void>();
+
+/** Remove event listeners for a tab (idempotent). */
+function cleanupTabListeners(tabId: string): void {
+  const fn = tabListenerCleanups.get(tabId);
+  if (fn) { fn(); tabListenerCleanups.delete(tabId); }
+}
+
 /** Destroy a terminal instance associated with a tab (called when the tab closes). */
 export function destroyTerminal(tabId: string): void {
+  cleanupTabListeners(tabId);
   connectedTabs.delete(tabId);
   const inst = terminalInstances.get(tabId);
   if (inst) {
@@ -40,7 +53,6 @@ export function destroyTerminal(tabId: string): void {
 
 export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, forceVisible }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const initializedRef = useRef(false);
   const sessions = useAppStore((s) => s.sessions);
   const theme = useAppStore((s) => s.theme);
   const t = useAppStore((s) => s.t);
@@ -152,44 +164,51 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       });
     });
 
-    if (initializedRef.current) return;
-    initializedRef.current = true;
+    // ── Listener setup ─────────────────────────────────────
+    // Always clean up previous listeners for this tab BEFORE registering
+    // new ones.  This prevents duplicate handlers when:
+    //  • React StrictMode double-invokes effects (dev mode)
+    //  • Component remounts during single↔split layout transitions
+    //  • Same tab rendered in multiple split panes (edge case)
+    cleanupTabListeners(tab.id);
+
+    let cancelled = false;
 
     const setupConnection = async () => {
       const { invoke } = await import("@tauri-apps/api/core");
       const { listen } = await import("@tauri-apps/api/event");
 
+      if (cancelled) return;
+
       let eventPrefix: string;
       let writeCmd: string;
       let resizeCmd: string | null;
-      let closeCmd: string;
 
       if (tab.type === "ssh") {
         eventPrefix = "ssh";
         writeCmd = "write_to_ssh";
         resizeCmd = "resize_ssh";
-        closeCmd = "close_ssh";
       } else if (tab.type === "serial") {
         eventPrefix = "serial";
         writeCmd = "write_to_serial";
         resizeCmd = null;
-        closeCmd = "close_serial";
       } else {
         eventPrefix = "pty";
         writeCmd = "write_to_pty";
         resizeCmd = "resize_pty";
-        closeCmd = "close_pty";
       }
 
       const unlistenData = await listen<string>(
         `${eventPrefix}-data-${tab.sessionId}`,
         (event) => { instance?.terminal.write(event.payload); }
       );
+      if (cancelled) { unlistenData(); return; }
 
       const unlistenExit = await listen(
         `${eventPrefix}-exit-${tab.sessionId}`,
         () => { instance?.terminal.write(`\r\n\x1b[33m${t('term_session_ended')}\x1b[0m\r\n`); }
       );
+      if (cancelled) { unlistenData(); unlistenExit(); return; }
 
       const dataDispose = instance!.terminal.onData((data) => {
         invoke(writeCmd, { sessionId: tab.sessionId, data }).catch(() => {});
@@ -206,6 +225,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           }
         });
       }
+
+      if (cancelled) {
+        unlistenData(); unlistenExit();
+        try { dataDispose.dispose(); } catch {}
+        try { resizeDispose?.dispose(); } catch {}
+        return;
+      }
+
+      // Store listener cleanup in the global map so it can be called from
+      // anywhere (next effect run, unmount, or destroyTerminal).
+      tabListenerCleanups.set(tab.id, () => {
+        unlistenData();
+        unlistenExit();
+        try { dataDispose.dispose(); } catch {}
+        try { resizeDispose?.dispose(); } catch {}
+      });
 
       const session = sessionsRef.current.find((s) => s.id === tab.sessionId);
 
@@ -359,26 +394,24 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       } catch (err) {
         instance?.terminal.write(`\r\n\x1b[31m${t('term_conn_error', { error: String(err) })}\x1b[0m\r\n`);
       }
-
-      return () => {
-        unlistenData();
-        unlistenExit();
-        try { dataDispose.dispose(); } catch {}
-        try { resizeDispose?.dispose(); } catch {}
-        // Only close backend connection if tab is being removed (not just relocated to split pane)
-        const store = useAppStore.getState();
-        const tabStillExists = store.tabs.some(t2 => t2.id === tab.id);
-        if (!tabStillExists) {
-          connectedTabs.delete(tab.id);
-          invoke(closeCmd, { sessionId: tab.sessionId }).catch(() => {});
-        }
-      };
     };
 
-    let cleanup: (() => void) | undefined;
-    setupConnection().then((fn) => { cleanup = fn; });
+    setupConnection();
 
-    return () => { cleanup?.(); };
+    return () => {
+      cancelled = true;
+      cleanupTabListeners(tab.id);
+      // Only close backend connection if tab is being removed (not just relocated to split pane)
+      const store = useAppStore.getState();
+      const tabStillExists = store.tabs.some(t2 => t2.id === tab.id);
+      if (!tabStillExists) {
+        connectedTabs.delete(tab.id);
+        const closeCmd = tab.type === "ssh" ? "close_ssh" : tab.type === "serial" ? "close_serial" : "close_pty";
+        import("@tauri-apps/api/core").then(({ invoke }) => {
+          invoke(closeCmd, { sessionId: tab.sessionId }).catch(() => {});
+        });
+      }
+    };
   }, [tab.id, tab.sessionId, tab.type, getThemeColors]);
 
   // Update terminal theme when app theme changes
