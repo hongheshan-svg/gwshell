@@ -168,8 +168,6 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username }) => 
   const handleEntryDoubleClick = async (entry: SftpEntry) => {
     if (entry.is_dir) {
       navigateTo(entry.path);
-    } else {
-      await handleDownload(entry);
     }
   };
 
