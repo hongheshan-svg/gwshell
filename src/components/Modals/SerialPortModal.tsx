@@ -153,7 +153,7 @@ export const SerialPortModal: React.FC = () => {
   const nameError = touched.name && !form.name;
 
   return (
-    <div className="modal-overlay" onClick={handleClose}>
+    <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
       <div className="ssh-modal" style={{ width: 580 }} onClick={(e) => e.stopPropagation()}>
         <div className="ssh-modal-header">
           <h2>{t('serial_config_title')}</h2>

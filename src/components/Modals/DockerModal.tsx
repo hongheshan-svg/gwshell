@@ -92,7 +92,7 @@ export const DockerModal: React.FC = () => {
   const sshSessions = sessions.filter((s) => s.session_type === 'ssh');
 
   return (
-    <div className="modal-overlay" onClick={handleClose}>
+    <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
       <div className="ssh-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="ssh-modal-header">
