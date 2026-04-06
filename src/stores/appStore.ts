@@ -218,7 +218,47 @@ export const useAppStore = create<AppStore>((set, _get) => ({
       (terminalTabs[0] && currentSessions.find(s => s.id === terminalTabs[0].sessionId)) ||
       currentSessions[0];
 
-    // If source session has no open tab yet, open one first
+    // --- Shrinking: remove excess temporary tabs/sessions ---
+    if (count < state.splitCount) {
+      // Collect tab IDs to destroy (temporary ones beyond the needed count)
+      const tabsToRemove: string[] = [];
+      const sessionIdsToRemove = new Set<string>();
+
+      if (count <= 1) {
+        // Going back to single: remove ALL temporary tabs
+        for (const tab of terminalTabs) {
+          const sess = currentSessions.find(s => s.id === tab.sessionId);
+          if (sess?._temporary) {
+            tabsToRemove.push(tab.id);
+            sessionIdsToRemove.add(tab.sessionId);
+          }
+        }
+      } else {
+        // Shrinking to fewer panes: keep panes[0..count-1], remove excess temporary
+        const keepPaneTabIds = new Set(state.splitPanes.slice(0, count).filter(Boolean) as string[]);
+        for (const tab of terminalTabs) {
+          if (keepPaneTabIds.has(tab.id)) continue;
+          const sess = currentSessions.find(s => s.id === tab.sessionId);
+          if (sess?._temporary) {
+            tabsToRemove.push(tab.id);
+            sessionIdsToRemove.add(tab.sessionId);
+          }
+        }
+      }
+
+      // Destroy terminal instances for removed tabs
+      if (tabsToRemove.length > 0) {
+        import('../components/Terminal/TerminalView').then(({ destroyTerminal }) => {
+          tabsToRemove.forEach(id => destroyTerminal(id));
+        });
+      }
+
+      currentTabs = currentTabs.filter(t => !tabsToRemove.includes(t.id));
+      currentSessions = currentSessions.filter(s => !sessionIdsToRemove.has(s.id));
+      terminalTabs = currentTabs.filter(t => t.type !== 'asset-list');
+    }
+
+    // --- Growing: open source tab if needed ---
     if (count > 1 && sourceSession && !terminalTabs.some(t => t.sessionId === sourceSession.id)) {
       const tabId = crypto.randomUUID();
       const tab: TabInfo = {
@@ -300,6 +340,7 @@ export const useAppStore = create<AppStore>((set, _get) => ({
     }
 
     const firstPane = panes.find(p => p !== null);
+    const realTerminalTabs = currentTabs.filter(t => t.type !== 'asset-list');
     const result: Partial<AppStore> = {
       splitCount: count,
       splitPanes: panes,
@@ -310,6 +351,15 @@ export const useAppStore = create<AppStore>((set, _get) => ({
       result.mainView = 'terminal';
       if (firstPane) {
         result.activeTabId = firstPane;
+      }
+    } else if (count === 1) {
+      // Single pane: activate the first remaining terminal tab, or show asset list
+      if (realTerminalTabs.length > 0) {
+        result.activeTabId = realTerminalTabs[0].id;
+        result.mainView = 'terminal';
+      } else {
+        result.activeTabId = 'asset-list';
+        result.mainView = 'asset-list';
       }
     }
     return result;
