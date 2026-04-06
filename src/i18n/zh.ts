@@ -498,6 +498,15 @@ const zh = {
   common_name_required: 'name is a required field',
   common_host_required: 'host is a required field',
   common_placeholder: '占位',
+
+  // ---- Split Screen ----
+  split_title: '分屏布局',
+  split_single: '单屏',
+  split_select_tab: '— 选择终端 —',
+
+  // ---- Tray ----
+  tray_show: '显示 GWShell',
+  tray_quit: '退出',
 } as const;
 
 export type TranslationKeys = keyof typeof zh;

@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import type { SessionConfig, TabInfo, ThemeMode, MainView } from '../types';
 import { detectLocale, getT, type Locale, type TranslationKeys } from '../i18n';
 
+/** Split layout: how many terminal panes to show simultaneously */
+export type SplitCount = 1 | 2 | 4 | 6 | 8;
+
 interface AppStore {
   // Locale
   locale: Locale;
@@ -59,6 +62,18 @@ interface AppStore {
   setShowSettings: (show: boolean) => void;
 
   // Split panes
+  splitCount: SplitCount;
+  setSplitCount: (count: SplitCount) => void;
+  /** Tab IDs pinned to each split pane slot (index 0..splitCount-1). null = show nothing in that slot */
+  splitPanes: (string | null)[];
+  setSplitPanes: (panes: (string | null)[]) => void;
+  /** Assign a tab to a specific pane slot */
+  assignPane: (slotIndex: number, tabId: string | null) => void;
+  /** The pane slot that's currently focused (for keyboard/click focus) */
+  focusedPane: number;
+  setFocusedPane: (index: number) => void;
+
+  // Legacy (kept for compat)
   splitDirection: 'horizontal' | 'vertical' | null;
   setSplitDirection: (dir: 'horizontal' | 'vertical' | null) => void;
 }
@@ -137,6 +152,26 @@ export const useAppStore = create<AppStore>((set, _get) => ({
 
   showSettings: false,
   setShowSettings: (show) => set({ showSettings: show }),
+
+  splitCount: 1,
+  setSplitCount: (count) => set((state) => {
+    const panes = [...state.splitPanes];
+    // Grow or shrink pane array
+    while (panes.length < count) panes.push(null);
+    if (panes.length > count) panes.length = count;
+    return { splitCount: count, splitPanes: panes };
+  }),
+  splitPanes: [null],
+  setSplitPanes: (panes) => set({ splitPanes: panes }),
+  assignPane: (slotIndex, tabId) => set((state) => {
+    const panes = [...state.splitPanes];
+    if (slotIndex >= 0 && slotIndex < panes.length) {
+      panes[slotIndex] = tabId;
+    }
+    return { splitPanes: panes };
+  }),
+  focusedPane: 0,
+  setFocusedPane: (index) => set({ focusedPane: index }),
 
   splitDirection: null,
   setSplitDirection: (dir) => set({ splitDirection: dir }),

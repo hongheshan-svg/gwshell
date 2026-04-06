@@ -500,6 +500,15 @@ const en: Record<TranslationKeys, string> = {
   common_name_required: 'Name is required',
   common_host_required: 'Host is required',
   common_placeholder: ' ',
+
+  // ---- Split Screen ----
+  split_title: 'Split Layout',
+  split_single: 'Single',
+  split_select_tab: '\u2014 Select Terminal \u2014',
+
+  // ---- Tray ----
+  tray_show: 'Show GWShell',
+  tray_quit: 'Quit',
 };
 
 export default en;

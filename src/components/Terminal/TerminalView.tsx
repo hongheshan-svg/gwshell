@@ -19,7 +19,7 @@ interface FingerprintInfo {
 }
 
 // Global map to preserve terminal instances across re-renders
-const terminalInstances = new Map<string, { terminal: Terminal; fitAddon: FitAddon }>();
+export const terminalInstances = new Map<string, { terminal: Terminal; fitAddon: FitAddon }>();
 
 /** Destroy a terminal instance associated with a tab (called when the tab closes). */
 export function destroyTerminal(tabId: string): void {

@@ -10,7 +10,11 @@ use serial::SerialManager;
 use session::{SessionConfig, SessionGroup};
 use ssh::SshManager;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{
+    menu::{MenuBuilder, MenuItemBuilder},
+    tray::TrayIconBuilder,
+    Manager, State,
+};
 
 pub struct AppState {
     pub pty_manager: PtyManager,
@@ -326,6 +330,58 @@ pub fn run() {
             ai_config::switch_ai_provider,
             ai_config::import_from_cc_switch,
         ])
+        .setup(|app| {
+            // ---- System Tray ----
+            let show_item = MenuItemBuilder::with_id("show", "Show GWShell").build(app)?;
+            let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+            let tray_menu = MenuBuilder::new(app)
+                .item(&show_item)
+                .separator()
+                .item(&quit_item)
+                .build()?;
+
+            let tray_icon = app.default_window_icon().cloned()
+                .unwrap_or_else(|| tauri::image::Image::new_owned(vec![0; 4 * 32 * 32], 32, 32));
+
+            TrayIconBuilder::new()
+                .icon(tray_icon)
+                .tooltip("GWShell")
+                .menu(&tray_menu)
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "show" => {
+                        if let Some(win) = app.get_webview_window("main") {
+                            let _ = win.show();
+                            let _ = win.unminimize();
+                            let _ = win.set_focus();
+                        }
+                    }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::DoubleClick { .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(win) = app.get_webview_window("main") {
+                            let _ = win.show();
+                            let _ = win.unminimize();
+                            let _ = win.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
+            // ---- Intercept window close handled by .on_window_event() below ----
+
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running GWShell");
 }

@@ -553,6 +553,11 @@ input, select, textarea, button {
   overflow: hidden;
 }
 
+.terminal-container.terminal-split-grid {
+  display: grid;
+  background: var(--border-color);
+}
+
 .terminal-pane {
   flex: 1;
   padding: 2px;
@@ -561,6 +566,138 @@ input, select, textarea, button {
 
 .terminal-pane .xterm {
   height: 100%;
+}
+
+/* ---- Split pane ---- */
+.split-pane {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split-pane-focused {
+  box-shadow: inset 0 0 0 1px var(--accent-primary);
+}
+
+.split-pane-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+}
+
+.split-pane-select {
+  padding: 6px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  min-width: 160px;
+}
+
+.split-pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 6px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  height: 24px;
+}
+
+.split-pane-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.split-pane-switch {
+  height: 20px;
+  padding: 0 4px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+  max-width: 120px;
+}
+
+.split-pane .terminal-pane {
+  display: block !important;
+}
+
+/* ---- Split picker (StatusBar) ---- */
+.split-picker-wrap {
+  position: relative;
+}
+
+.split-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.12s;
+}
+.split-picker-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.split-picker-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.3);
+  z-index: 1000;
+}
+
+.split-picker-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.12s;
+}
+.split-picker-option:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.split-picker-option.active {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: rgba(var(--accent-primary-rgb, 59, 130, 246), 0.1);
 }
 
 .terminal-placeholder {

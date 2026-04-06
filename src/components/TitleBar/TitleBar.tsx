@@ -23,7 +23,7 @@ export const TitleBar: React.FC = () => {
 
   const handleClose = async () => {
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
-    getCurrentWindow().close();
+    getCurrentWindow().hide();
   };
 
   return (
