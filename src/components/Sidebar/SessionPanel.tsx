@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   ChevronRight,
   ChevronDown,
@@ -17,17 +17,8 @@ import { useAppStore } from '../../stores/appStore';
 import { NewAssetMenu } from './NewAssetMenu';
 import type { SessionConfig } from '../../types';
 
-// Demo sessions to show the UI like HexHub screenshots
-const demoSessions: SessionConfig[] = [
-  { id: 'demo-1', name: 'toolsource', session_type: 'ssh', group: '开发服务器', host: '192.168.1.10', port: 22, username: 'root', auth_method: 'password', latency: 12, created_at: '2025-12-01', remark: '开发环境' },
-  { id: 'demo-2', name: 'wsl-source', session_type: 'ssh', group: '开发服务器', host: '172.20.0.1', port: 22, username: 'dev', auth_method: 'password', latency: 3, created_at: '2025-12-05', remark: 'WSL开发' },
-  { id: 'demo-3', name: 'DMIT', session_type: 'ssh', group: '云服务器', host: '103.152.x.x', port: 22, username: 'root', auth_method: 'publickey', latency: 45, created_at: '2025-11-20', expired_at: '2026-11-20', remark: 'DMIT VPS' },
-  { id: 'demo-4', name: 'openclaw', session_type: 'ssh', group: '云服务器', host: '45.76.x.x', port: 22, username: 'admin', auth_method: 'password', latency: 88, created_at: '2026-01-10', expired_at: '2027-01-10' },
-  { id: 'demo-5', name: '公司服务器', session_type: 'ssh', group: '生产环境', host: '10.0.1.100', port: 22, username: 'deploy', auth_method: 'publickey', latency: 5, created_at: '2025-10-15' },
-];
-
 export const SessionPanel: React.FC = () => {
-  const { sessions, setSessions, sidebarCollapsed, setShowNewSession, setShowDockerModal, setShowLocalTerminalModal, setShowSerialModal, tabs, addTab, setActiveTab } = useAppStore();
+  const { sessions, sidebarCollapsed, setShowNewSession, setShowDockerModal, setShowLocalTerminalModal, setShowSerialModal, tabs, addTab, setActiveTab } = useAppStore();
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     '开发服务器': true,
     '云服务器': true,
@@ -38,13 +29,6 @@ export const SessionPanel: React.FC = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
   const plusBtnRef = useRef<HTMLButtonElement>(null);
-
-  // Load demo sessions on first mount if empty
-  useEffect(() => {
-    if (sessions.length === 0) {
-      setSessions(demoSessions);
-    }
-  }, []);
 
   if (sidebarCollapsed) return null;
 
