@@ -509,6 +509,22 @@ const zh = {
   // ---- Tray ----
   tray_show: '显示 GWShell',
   tray_quit: '退出',
+
+  // ---- SFTP Panel ----
+  sftp_title: 'SFTP',
+  sftp_close: '关闭',
+  sftp_home: '主目录',
+  sftp_parent: '上级目录',
+  sftp_refresh: '刷新',
+  sftp_new_folder: '新建文件夹',
+  sftp_upload: '上传',
+  sftp_download: '下载',
+  sftp_rename: '重命名',
+  sftp_delete: '删除',
+  sftp_loading: '加载中...',
+  sftp_empty: '空目录',
+  sftp_folder_name: '文件夹名称',
+  sftp_item_count: '共 {count} 项',
 } as const;
 
 export type TranslationKeys = keyof typeof zh;

@@ -6,6 +6,7 @@ import { Sidebar } from './components/Sidebar/IconNav';
 import { SessionPanel } from './components/Sidebar/SessionPanel';
 import { TabBar } from './components/TabBar/TabBar';
 import { TerminalContainer } from './components/Terminal/TerminalContainer';
+import { SftpPanel } from './components/SftpPanel/SftpPanel';
 import { StatusBar } from './components/StatusBar/StatusBar';
 import { NewSessionModal } from './components/Modals/NewSessionModal';
 import { DockerModal } from './components/Modals/DockerModal';
@@ -18,7 +19,7 @@ import type { SessionConfig } from './types';
 import './styles/global.css';
 
 function App() {
-  const { theme, setSessions, sidebarCollapsed, toggleSidebar } = useAppStore();
+  const { theme, setSessions, sidebarCollapsed, toggleSidebar, tabs, activeTabId, sftpPanelOpen } = useAppStore();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -46,7 +47,13 @@ function App() {
         </button>
         <div className="main-content">
           <TabBar />
-          <TerminalContainer />
+          <div className="terminal-sftp-wrapper">
+            <TerminalContainer />
+            {sftpPanelOpen && (() => {
+              const activeTab = tabs.find(t => t.id === activeTabId);
+              return activeTab?.type === 'ssh' ? <SftpPanel sessionId={activeTab.sessionId} /> : null;
+            })()}
+          </div>
           <StatusBar />
         </div>
       </div>

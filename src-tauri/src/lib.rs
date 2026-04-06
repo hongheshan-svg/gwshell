@@ -207,6 +207,89 @@ fn close_ssh(session_id: String, state: State<'_, Arc<AppState>>) {
     state.ssh_manager.close_ssh(&session_id);
 }
 
+// ---- SFTP Commands ----
+
+#[tauri::command]
+fn sftp_list(
+    session_id: String,
+    path: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<ssh::SftpEntry>, String> {
+    state.ssh_manager.sftp_list_dir(&session_id, &path)
+}
+
+#[tauri::command]
+fn sftp_realpath(
+    session_id: String,
+    path: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<String, String> {
+    state.ssh_manager.sftp_realpath(&session_id, &path)
+}
+
+#[tauri::command]
+fn sftp_mkdir(
+    session_id: String,
+    path: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    state.ssh_manager.sftp_mkdir(&session_id, &path)
+}
+
+#[tauri::command]
+fn sftp_rmdir(
+    session_id: String,
+    path: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    state.ssh_manager.sftp_rmdir(&session_id, &path)
+}
+
+#[tauri::command]
+fn sftp_delete_file(
+    session_id: String,
+    path: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    state.ssh_manager.sftp_delete_file(&session_id, &path)
+}
+
+#[tauri::command]
+fn sftp_rename(
+    session_id: String,
+    old_path: String,
+    new_path: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    state
+        .ssh_manager
+        .sftp_rename(&session_id, &old_path, &new_path)
+}
+
+#[tauri::command]
+fn sftp_download(
+    session_id: String,
+    remote_path: String,
+    local_path: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    state
+        .ssh_manager
+        .sftp_download(&session_id, &remote_path, &local_path)
+}
+
+#[tauri::command]
+fn sftp_upload(
+    session_id: String,
+    remote_path: String,
+    local_path: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    state
+        .ssh_manager
+        .sftp_upload(&session_id, &remote_path, &local_path)
+}
+
 // ---- Serial Commands ----
 
 #[tauri::command]
@@ -327,6 +410,14 @@ pub fn run() {
             write_to_ssh,
             resize_ssh,
             close_ssh,
+            sftp_list,
+            sftp_realpath,
+            sftp_mkdir,
+            sftp_rmdir,
+            sftp_delete_file,
+            sftp_rename,
+            sftp_download,
+            sftp_upload,
             serial_open,
             write_to_serial,
             close_serial,

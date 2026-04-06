@@ -1,10 +1,10 @@
 import React from 'react';
-import { X, Plus, Menu, ChevronDown } from 'lucide-react';
+import { X, Plus, Menu, ChevronDown, FolderOpen } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { destroyTerminal } from '../Terminal/TerminalView';
 
 export const TabBar: React.FC = () => {
-  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, t } = useAppStore();
+  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, t, sftpPanelOpen, toggleSftpPanel } = useAppStore();
 
   const handleCloseTab = (tabId: string) => {
     destroyTerminal(tabId);
@@ -53,6 +53,20 @@ export const TabBar: React.FC = () => {
       <button className="tab-add-btn" onClick={() => setShowNewSession(true)} title={t('tab_new')}>
         <Plus size={14} />
       </button>
+      {/* SFTP toggle - only show when active tab is SSH */}
+      {(() => {
+        const activeTab = tabs.find((t) => t.id === activeTabId);
+        return activeTab?.type === 'ssh' ? (
+          <button
+            className={`tab-add-btn ${sftpPanelOpen ? 'tab-btn-active' : ''}`}
+            onClick={toggleSftpPanel}
+            title={t('sftp_title')}
+            style={{ marginLeft: 'auto' }}
+          >
+            <FolderOpen size={14} />
+          </button>
+        ) : null;
+      })()}
     </div>
   );
 };

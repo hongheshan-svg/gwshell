@@ -309,6 +309,17 @@ fn tcp_via_jump(
 pub struct SshInstance {
     session: Session,
     channel: ssh2::Channel,
+    sftp: Option<ssh2::Sftp>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct SftpEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub size: u64,
+    pub modified: Option<u64>,
+    pub permissions: Option<u32>,
 }
 
 pub struct SshManager {
@@ -447,7 +458,7 @@ impl SshManager {
 
         session.set_blocking(false);
 
-        let instance = Arc::new(Mutex::new(SshInstance { session, channel }));
+        let instance = Arc::new(Mutex::new(SshInstance { session, channel, sftp: None }));
         let reader_instance = instance.clone();
 
         self.instances
@@ -526,6 +537,150 @@ impl SshManager {
             let _ = inst.channel.close();
             let _ = inst.channel.wait_close();
         }
+    }
+
+    // ---- SFTP operations ----
+
+    /// Helper: acquire instance, set blocking, ensure SFTP subsystem, run closure, set non-blocking.
+    fn with_sftp<T, F>(&self, session_id: &str, f: F) -> Result<T, String>
+    where
+        F: FnOnce(&ssh2::Sftp) -> Result<T, String>,
+    {
+        let instance = {
+            let instances = self.instances.lock();
+            instances
+                .get(session_id)
+                .ok_or_else(|| "Session not found".to_string())?
+                .clone()
+        };
+        let mut inst = instance.lock();
+        inst.session.set_blocking(true);
+        if inst.sftp.is_none() {
+            inst.sftp = Some(
+                inst.session
+                    .sftp()
+                    .map_err(|e| format!("SFTP init failed: {}", e))?,
+            );
+        }
+        let result = f(inst.sftp.as_ref().unwrap());
+        inst.session.set_blocking(false);
+        result
+    }
+
+    pub fn sftp_list_dir(&self, session_id: &str, path: &str) -> Result<Vec<SftpEntry>, String> {
+        self.with_sftp(session_id, |sftp| {
+            let entries = sftp
+                .readdir(Path::new(path))
+                .map_err(|e| format!("SFTP readdir failed: {}", e))?;
+
+            let mut result: Vec<SftpEntry> = entries
+                .into_iter()
+                .map(|(pathbuf, stat)| {
+                    let name = pathbuf
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    let full_path = pathbuf.to_string_lossy().to_string();
+                    SftpEntry {
+                        name,
+                        path: full_path,
+                        is_dir: stat.is_dir(),
+                        size: stat.size.unwrap_or(0),
+                        modified: stat.mtime,
+                        permissions: stat.perm,
+                    }
+                })
+                .collect();
+
+            // Sort: directories first, then alphabetically
+            result.sort_by(|a, b| {
+                b.is_dir
+                    .cmp(&a.is_dir)
+                    .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+            });
+
+            Ok(result)
+        })
+    }
+
+    pub fn sftp_realpath(&self, session_id: &str, path: &str) -> Result<String, String> {
+        self.with_sftp(session_id, |sftp| {
+            sftp.realpath(Path::new(path))
+                .map(|p| p.to_string_lossy().to_string())
+                .map_err(|e| format!("SFTP realpath failed: {}", e))
+        })
+    }
+
+    pub fn sftp_mkdir(&self, session_id: &str, path: &str) -> Result<(), String> {
+        self.with_sftp(session_id, |sftp| {
+            sftp.mkdir(Path::new(path), 0o755)
+                .map_err(|e| format!("SFTP mkdir failed: {}", e))
+        })
+    }
+
+    pub fn sftp_rmdir(&self, session_id: &str, path: &str) -> Result<(), String> {
+        self.with_sftp(session_id, |sftp| {
+            sftp.rmdir(Path::new(path))
+                .map_err(|e| format!("SFTP rmdir failed: {}", e))
+        })
+    }
+
+    pub fn sftp_delete_file(&self, session_id: &str, path: &str) -> Result<(), String> {
+        self.with_sftp(session_id, |sftp| {
+            sftp.unlink(Path::new(path))
+                .map_err(|e| format!("SFTP delete failed: {}", e))
+        })
+    }
+
+    pub fn sftp_rename(
+        &self,
+        session_id: &str,
+        old_path: &str,
+        new_path: &str,
+    ) -> Result<(), String> {
+        self.with_sftp(session_id, |sftp| {
+            sftp.rename(Path::new(old_path), Path::new(new_path), None)
+                .map_err(|e| format!("SFTP rename failed: {}", e))
+        })
+    }
+
+    pub fn sftp_download(
+        &self,
+        session_id: &str,
+        remote_path: &str,
+        local_path: &str,
+    ) -> Result<(), String> {
+        self.with_sftp(session_id, |sftp| {
+            let mut remote_file = sftp
+                .open(Path::new(remote_path))
+                .map_err(|e| format!("SFTP open failed: {}", e))?;
+            let mut buf = Vec::new();
+            remote_file
+                .read_to_end(&mut buf)
+                .map_err(|e| format!("SFTP read failed: {}", e))?;
+            fs::write(local_path, &buf)
+                .map_err(|e| format!("Local write failed: {}", e))?;
+            Ok(())
+        })
+    }
+
+    pub fn sftp_upload(
+        &self,
+        session_id: &str,
+        remote_path: &str,
+        local_path: &str,
+    ) -> Result<(), String> {
+        self.with_sftp(session_id, |sftp| {
+            let data =
+                fs::read(local_path).map_err(|e| format!("Local read failed: {}", e))?;
+            let mut remote_file = sftp
+                .create(Path::new(remote_path))
+                .map_err(|e| format!("SFTP create failed: {}", e))?;
+            remote_file
+                .write_all(&data)
+                .map_err(|e| format!("SFTP write failed: {}", e))?;
+            Ok(())
+        })
     }
 
     /// Start a local-forward tunnel: each connection to 127.0.0.1:local_port is

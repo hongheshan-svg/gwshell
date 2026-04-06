@@ -76,6 +76,10 @@ interface AppStore {
   // Legacy (kept for compat)
   splitDirection: 'horizontal' | 'vertical' | null;
   setSplitDirection: (dir: 'horizontal' | 'vertical' | null) => void;
+
+  // SFTP Panel
+  sftpPanelOpen: boolean;
+  toggleSftpPanel: () => void;
 }
 
 const initialLocale = detectLocale();
@@ -410,4 +414,7 @@ export const useAppStore = create<AppStore>((set, _get) => ({
 
   splitDirection: null,
   setSplitDirection: (dir) => set({ splitDirection: dir }),
+
+  sftpPanelOpen: false,
+  toggleSftpPanel: () => set((state) => ({ sftpPanelOpen: !state.sftpPanelOpen })),
 }));

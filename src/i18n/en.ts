@@ -511,6 +511,22 @@ const en: Record<TranslationKeys, string> = {
   // ---- Tray ----
   tray_show: 'Show GWShell',
   tray_quit: 'Quit',
+
+  // ---- SFTP Panel ----
+  sftp_title: 'SFTP',
+  sftp_close: 'Close',
+  sftp_home: 'Home',
+  sftp_parent: 'Go Up',
+  sftp_refresh: 'Refresh',
+  sftp_new_folder: 'New Folder',
+  sftp_upload: 'Upload',
+  sftp_download: 'Download',
+  sftp_rename: 'Rename',
+  sftp_delete: 'Delete',
+  sftp_loading: 'Loading...',
+  sftp_empty: 'Empty directory',
+  sftp_folder_name: 'Folder name',
+  sftp_item_count: '{count} items',
 };
 
 export default en;
