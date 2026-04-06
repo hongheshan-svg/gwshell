@@ -149,24 +149,7 @@ export const NewSessionModal: React.FC = () => {
       connected: false,
     });
 
-    if (sessionType === 'ssh' && form.host && form.username) {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('ssh_connect', {
-          sessionId,
-          host: form.host,
-          port: form.port || 22,
-          username: form.username,
-          password: form.password || null,
-          privateKeyPath: form.private_key_path || null,
-          rows: 24,
-          cols: 80,
-        });
-      } catch (err) {
-        console.error('SSH connect error:', err);
-      }
-    }
-
+    // Connection is initiated by TerminalView on mount
     handleClose();
   };
 

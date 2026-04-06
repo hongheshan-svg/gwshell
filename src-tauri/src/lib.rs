@@ -1,9 +1,11 @@
 mod pty;
+mod serial;
 mod session;
 mod ssh;
 
 use parking_lot::Mutex;
 use pty::PtyManager;
+use serial::SerialManager;
 use session::{SessionConfig, SessionGroup};
 use ssh::SshManager;
 use std::sync::Arc;
@@ -12,6 +14,7 @@ use tauri::State;
 pub struct AppState {
     pub pty_manager: PtyManager,
     pub ssh_manager: SshManager,
+    pub serial_manager: SerialManager,
     pub sessions: Mutex<Vec<SessionConfig>>,
     pub groups: Mutex<Vec<SessionGroup>>,
 }
@@ -108,6 +111,51 @@ fn close_ssh(session_id: String, state: State<'_, Arc<AppState>>) {
     state.ssh_manager.close_ssh(&session_id);
 }
 
+// ---- Serial Commands ----
+
+#[tauri::command]
+fn serial_open(
+    session_id: String,
+    port_name: String,
+    baud_rate: u32,
+    data_bits: String,
+    stop_bits: String,
+    parity: String,
+    state: State<'_, Arc<AppState>>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    state.serial_manager.open(
+        &session_id,
+        &port_name,
+        baud_rate,
+        &data_bits,
+        &stop_bits,
+        &parity,
+        app_handle,
+    )
+}
+
+#[tauri::command]
+fn write_to_serial(
+    session_id: String,
+    data: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    state
+        .serial_manager
+        .write_to_serial(&session_id, data.as_bytes())
+}
+
+#[tauri::command]
+fn close_serial(session_id: String, state: State<'_, Arc<AppState>>) {
+    state.serial_manager.close_serial(&session_id);
+}
+
+#[tauri::command]
+fn list_serial_ports() -> Vec<String> {
+    serial::list_serial_ports()
+}
+
 // ---- Session Management Commands ----
 
 #[tauri::command]
@@ -152,6 +200,7 @@ pub fn run() {
     let app_state = Arc::new(AppState {
         pty_manager: PtyManager::new(),
         ssh_manager: SshManager::new(),
+        serial_manager: SerialManager::new(),
         sessions: Mutex::new(Vec::new()),
         groups: Mutex::new(Vec::new()),
     });
@@ -168,6 +217,10 @@ pub fn run() {
             write_to_ssh,
             resize_ssh,
             close_ssh,
+            serial_open,
+            write_to_serial,
+            close_serial,
+            list_serial_ports,
             save_session,
             get_sessions,
             delete_session,

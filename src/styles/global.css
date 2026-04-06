@@ -1567,28 +1567,168 @@ input, select, textarea, button {
   background: var(--accent-bg);
 }
 
-/* Serial port advanced toggles */
-.serial-adv-toggles {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 4px;
+/* Serial port autofill (高级 tab) */
+.autofill-section {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
-.serial-adv-toggle-row {
+.autofill-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  gap: 10px;
+}
+
+.autofill-header-left {
   display: flex;
   align-items: center;
   gap: 10px;
-  cursor: pointer;
+}
+
+.autofill-title {
   font-size: 13px;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
-.serial-adv-toggle-row input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
+.autofill-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.autofill-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.autofill-check-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.autofill-check-label input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
   accent-color: var(--accent-primary);
   cursor: pointer;
+}
+
+.autofill-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.autofill-add-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.autofill-rows {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.autofill-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.autofill-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0 8px;
+  height: 34px;
+  flex: 1;
+}
+
+.autofill-pattern { flex: 0 0 150px; }
+.autofill-content { flex: 1; }
+
+.autofill-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.autofill-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  min-width: 0;
+}
+.autofill-input::placeholder { color: var(--text-muted); }
+
+.autofill-arrow {
+  font-size: 14px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.autofill-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.autofill-ctrl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.1s;
+  flex-shrink: 0;
+}
+.autofill-ctrl-btn:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+.autofill-ctrl-btn.ctrl-green { background: rgba(34,197,94,0.15); border-color: #22c55e; color: #22c55e; }
+.autofill-ctrl-btn.ctrl-blue { background: rgba(59,130,246,0.15); border-color: #3b82f6; color: #3b82f6; }
+.autofill-ctrl-btn.ctrl-red { color: #ef4444; }
+.autofill-ctrl-btn.ctrl-red:hover { background: rgba(239,68,68,0.12); border-color: #ef4444; }
+
+.autofill-seq {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 12px;
+  flex-shrink: 0;
 }
 
 /* Docker notice badge */

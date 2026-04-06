@@ -1,14 +1,20 @@
 import React from 'react';
 import { X, Plus, Menu, ChevronDown } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import { destroyTerminal } from '../Terminal/TerminalView';
 
 export const TabBar: React.FC = () => {
   const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession } = useAppStore();
 
+  const handleCloseTab = (tabId: string) => {
+    destroyTerminal(tabId);
+    removeTab(tabId);
+  };
+
   const handleMiddleClick = (e: React.MouseEvent, tabId: string) => {
     if (e.button === 1) {
       e.preventDefault();
-      removeTab(tabId);
+      handleCloseTab(tabId);
     }
   };
 
@@ -35,7 +41,7 @@ export const TabBar: React.FC = () => {
                 className="tab-close"
                 onClick={(e) => {
                   e.stopPropagation();
-                  removeTab(tab.id);
+                  handleCloseTab(tab.id);
                 }}
               >
                 <X size={10} />

@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { X, Plus, Eye, Monitor, CornerDownLeft } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import type { SessionConfig } from "../../types";
@@ -76,13 +76,19 @@ export const SerialPortModal: React.FC = () => {
   const [activeTab, setActiveTab] = useState("标准");
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [form, setForm] = useState<SerialForm>({ ...defaultForm, autofill_rows: defaultAutofillRows.map((r) => ({ ...r })) });
+  const [availablePorts, setAvailablePorts] = useState<string[]>([]);
 
-  React.useEffect(() => {
-    if (showSerialModal) {
-      setForm({ ...defaultForm, autofill_rows: defaultAutofillRows.map((r) => ({ ...r })) });
-      setTouched({});
-      setActiveTab("标准");
-    }
+  // Load available serial ports from the system
+  useEffect(() => {
+    if (!showSerialModal) return;
+    setForm({ ...defaultForm, autofill_rows: defaultAutofillRows.map((r) => ({ ...r })) });
+    setTouched({});
+    setActiveTab("标准");
+    import("@tauri-apps/api/core").then(({ invoke }) => {
+      invoke<string[]>("list_serial_ports")
+        .then((ports) => setAvailablePorts(ports))
+        .catch(() => setAvailablePorts([]));
+    });
   }, [showSerialModal]);
 
   if (!showSerialModal) return null;
@@ -191,10 +197,11 @@ export const SerialPortModal: React.FC = () => {
                 <div className="ssh-form-group">
                   <label>串口</label>
                   <select value={form.serial_port} onChange={(e) => setField("serial_port", e.target.value)}>
-                    <option value=""></option>
-                    {["COM1","COM2","COM3","COM4","COM5","COM6","COM7","COM8",
-                      "/dev/ttyS0","/dev/ttyS1","/dev/ttyUSB0","/dev/ttyUSB1"].map((p) =>
-                      <option key={p} value={p}>{p}</option>)}
+                    <option value="">-- 选择串口 --</option>
+                    {availablePorts.map((p) => <option key={p} value={p}>{p}</option>)}
+                    {availablePorts.length === 0 && [
+                      "COM1","COM2","COM3","COM4","/dev/ttyUSB0","/dev/ttyUSB1"
+                    ].map((p) => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
                 <div className="ssh-form-group">
