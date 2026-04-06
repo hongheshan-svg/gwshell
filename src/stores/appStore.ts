@@ -159,7 +159,35 @@ export const useAppStore = create<AppStore>((set, _get) => ({
 
   splitCount: 1,
   setSplitCount: (count) => set((state) => {
-    const terminalTabs = state.tabs.filter(t => t.type !== 'asset-list');
+    let currentTabs = [...state.tabs];
+    let currentSessions = [...state.sessions];
+    const terminalTabs = currentTabs.filter(t => t.type !== 'asset-list');
+
+    // Auto-create local shell terminals to fill panes if needed
+    const needed = count > 1 ? count - terminalTabs.length : 0;
+    for (let i = 0; i < needed; i++) {
+      const sessionId = crypto.randomUUID();
+      const tabId = crypto.randomUUID();
+      const num = terminalTabs.length + i + 1;
+      const session: SessionConfig = {
+        id: sessionId,
+        name: `Terminal ${num}`,
+        session_type: 'localshell',
+        auth_method: 'password',
+        created_at: new Date().toISOString().slice(0, 10),
+      };
+      const tab: TabInfo = {
+        id: tabId,
+        sessionId,
+        title: `Terminal ${num}`,
+        type: 'localshell',
+        connected: false,
+      };
+      currentSessions = [...currentSessions, session];
+      currentTabs = [...currentTabs, tab];
+      terminalTabs.push(tab);
+    }
+
     const panes: (string | null)[] = [];
     const used = new Set<string>();
     for (let i = 0; i < count; i++) {
@@ -181,14 +209,19 @@ export const useAppStore = create<AppStore>((set, _get) => ({
     }
     // If switching to split mode, also switch to terminal view
     const firstPane = panes.find(p => p !== null);
-    const extra: Partial<{ activeTabId: string | null; mainView: MainView }> = {};
+    const result: Partial<AppStore> = {
+      splitCount: count,
+      splitPanes: panes,
+      tabs: currentTabs,
+      sessions: currentSessions,
+    };
     if (count > 1) {
-      extra.mainView = 'terminal';
+      result.mainView = 'terminal';
       if (firstPane) {
-        extra.activeTabId = firstPane;
+        result.activeTabId = firstPane;
       }
     }
-    return { splitCount: count, splitPanes: panes, ...extra };
+    return result;
   }),
   splitPanes: [null],
   setSplitPanes: (panes) => set({ splitPanes: panes }),
