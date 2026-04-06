@@ -159,11 +159,28 @@ export const useAppStore = create<AppStore>((set, _get) => ({
 
   splitCount: 1,
   setSplitCount: (count) => set((state) => {
-    const panes = [...state.splitPanes];
-    // Grow or shrink pane array
-    while (panes.length < count) panes.push(null);
-    if (panes.length > count) panes.length = count;
-    return { splitCount: count, splitPanes: panes };
+    const terminalTabs = state.tabs.filter(t => t.type !== 'asset-list');
+    const panes: (string | null)[] = [];
+    for (let i = 0; i < count; i++) {
+      // Keep existing assignment if valid, otherwise auto-fill from terminal tabs
+      const existing = state.splitPanes[i];
+      if (existing && terminalTabs.some(t => t.id === existing)) {
+        panes.push(existing);
+      } else {
+        // Auto-assign an unassigned terminal tab
+        const used = new Set(panes.filter(Boolean));
+        const available = terminalTabs.find(t => !used.has(t.id));
+        panes.push(available ? available.id : null);
+      }
+    }
+    // If switching to split mode, also switch to terminal view
+    const firstPane = panes.find(p => p !== null);
+    const extra: Partial<{ activeTabId: string | null; mainView: MainView }> = {};
+    if (count > 1 && firstPane) {
+      extra.activeTabId = firstPane;
+      extra.mainView = 'terminal';
+    }
+    return { splitCount: count, splitPanes: panes, ...extra };
   }),
   splitPanes: [null],
   setSplitPanes: (panes) => set({ splitPanes: panes }),

@@ -1175,6 +1175,7 @@ input, select, textarea, button {
 
 .col-name {
   min-width: 120px;
+  cursor: pointer;
 }
 
 .col-name .asset-name-icon {
