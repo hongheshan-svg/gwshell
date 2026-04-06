@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Search,
   Menu,
@@ -111,8 +111,13 @@ export const AssetTable: React.FC = () => {
     return <span className={cls}>{latency}ms</span>;
   };
 
-  const pingAllSessions = useCallback(() => {
-    const targets = realSessions.filter((s) => s.host);
+  // Ping latency: run once on mount, then every 60 seconds
+  const sessionsRef = useRef(realSessions);
+  sessionsRef.current = realSessions;
+
+  const doPingRef = useRef(() => {});
+  doPingRef.current = () => {
+    const targets = sessionsRef.current.filter((s) => s.host);
     targets.forEach(async (session) => {
       try {
         const latency = await invoke<number>('ping_host', {
@@ -124,11 +129,13 @@ export const AssetTable: React.FC = () => {
         updateSessionLatency(session.id, null);
       }
     });
-  }, [realSessions, updateSessionLatency]);
+  };
 
   useEffect(() => {
-    pingAllSessions();
-  }, [pingAllSessions]);
+    doPingRef.current();
+    const timer = setInterval(() => doPingRef.current(), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <div className="asset-table-wrapper">
@@ -154,7 +161,7 @@ export const AssetTable: React.FC = () => {
           <button className="asset-toolbar-btn" onClick={() => setShowNewSession(true)} title={t('table_new')}>
             <Plus size={14} />
           </button>
-          <button className="asset-toolbar-btn" onClick={pingAllSessions} title={t('table_refresh')}>
+          <button className="asset-toolbar-btn" onClick={() => doPingRef.current()} title={t('table_refresh')}>
             <RefreshCw size={14} />
           </button>
           {selectedSessionIds.length > 0 && (
