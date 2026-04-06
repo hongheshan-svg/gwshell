@@ -14,7 +14,7 @@ import {
 import { useAppStore } from '../../stores/appStore';
 
 export const AppMenu: React.FC = () => {
-  const { showAppMenu, setShowAppMenu } = useAppStore();
+  const { showAppMenu, setShowAppMenu, setShowSettings } = useAppStore();
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -60,7 +60,7 @@ export const AppMenu: React.FC = () => {
           <Star size={14} />
           <span>升级专业版</span>
         </div>
-        <div className="app-menu-item" onClick={() => { setShowAppMenu(false); }}>
+        <div className="app-menu-item" onClick={() => { setShowAppMenu(false); setShowSettings(true); }}>
           <Settings size={14} />
           <span>设置</span>
         </div>

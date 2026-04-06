@@ -46,6 +46,10 @@ interface AppStore {
   showAppMenu: boolean;
   setShowAppMenu: (show: boolean) => void;
 
+  // Settings
+  showSettings: boolean;
+  setShowSettings: (show: boolean) => void;
+
   // Split panes
   splitDirection: 'horizontal' | 'vertical' | null;
   setSplitDirection: (dir: 'horizontal' | 'vertical' | null) => void;
@@ -113,6 +117,9 @@ export const useAppStore = create<AppStore>((set) => ({
 
   showAppMenu: false,
   setShowAppMenu: (show) => set({ showAppMenu: show }),
+
+  showSettings: false,
+  setShowSettings: (show) => set({ showSettings: show }),
 
   splitDirection: null,
   setSplitDirection: (dir) => set({ splitDirection: dir }),
