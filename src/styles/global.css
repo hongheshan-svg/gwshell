@@ -1086,6 +1086,109 @@ input, select, textarea, button {
   margin: 4px 0;
 }
 
+/* SFTP info bar */
+.sftp-infobar {
+  padding: 2px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+/* Chmod dialog overlay */
+.sftp-chmod-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.sftp-chmod-dialog {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px;
+  min-width: 260px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+
+.sftp-chmod-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.sftp-chmod-filename {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  word-break: break-all;
+}
+
+.sftp-chmod-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.sftp-chmod-row label {
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.sftp-chmod-input {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-family: 'Fira Code', monospace;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.sftp-chmod-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.sftp-chmod-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sftp-chmod-btn {
+  padding: 4px 14px;
+  font-size: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.sftp-chmod-btn:hover {
+  background: var(--bg-tertiary);
+}
+
+.sftp-chmod-ok {
+  background: var(--accent-primary);
+  color: #fff;
+  border-color: var(--accent-primary);
+}
+
+.sftp-chmod-ok:hover {
+  opacity: 0.85;
+}
+
 /* Tab bar SFTP active button */
 .tab-btn-active {
   border-color: var(--accent-primary) !important;

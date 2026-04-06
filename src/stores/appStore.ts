@@ -415,6 +415,6 @@ export const useAppStore = create<AppStore>((set, _get) => ({
   splitDirection: null,
   setSplitDirection: (dir) => set({ splitDirection: dir }),
 
-  sftpPanelOpen: false,
+  sftpPanelOpen: true,
   toggleSftpPanel: () => set((state) => ({ sftpPanelOpen: !state.sftpPanelOpen })),
 }));

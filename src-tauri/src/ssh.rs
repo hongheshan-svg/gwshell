@@ -683,6 +683,57 @@ impl SshManager {
         })
     }
 
+    pub fn sftp_chmod(
+        &self,
+        session_id: &str,
+        path: &str,
+        mode: u32,
+    ) -> Result<(), String> {
+        self.with_sftp(session_id, |sftp| {
+            let mut stat = sftp
+                .stat(Path::new(path))
+                .map_err(|e| format!("SFTP stat failed: {}", e))?;
+            stat.perm = Some(mode);
+            sftp.setstat(Path::new(path), stat)
+                .map_err(|e| format!("SFTP chmod failed: {}", e))
+        })
+    }
+
+    pub fn sftp_create_file(&self, session_id: &str, path: &str) -> Result<(), String> {
+        self.with_sftp(session_id, |sftp| {
+            let _file = sftp
+                .create(Path::new(path))
+                .map_err(|e| format!("SFTP create file failed: {}", e))?;
+            Ok(())
+        })
+    }
+
+    /// Execute a command via a new SSH channel and return stdout.
+    pub fn ssh_exec(&self, session_id: &str, command: &str) -> Result<String, String> {
+        let instance = {
+            let instances = self.instances.lock();
+            instances
+                .get(session_id)
+                .ok_or_else(|| "Session not found".to_string())?
+                .clone()
+        };
+        let inst = instance.lock();
+        inst.session.set_blocking(true);
+        let mut ch = inst
+            .session
+            .channel_session()
+            .map_err(|e| format!("Exec channel failed: {}", e))?;
+        ch.exec(command)
+            .map_err(|e| format!("Exec failed: {}", e))?;
+        let mut output = String::new();
+        ch.read_to_string(&mut output)
+            .map_err(|e| format!("Exec read failed: {}", e))?;
+        ch.wait_close()
+            .map_err(|e| format!("Exec close failed: {}", e))?;
+        inst.session.set_blocking(false);
+        Ok(output.trim().to_string())
+    }
+
     /// Start a local-forward tunnel: each connection to 127.0.0.1:local_port is
     /// forwarded to remote_host:remote_port through a *new* dedicated SSH session.
     /// Returns the actual bound local port (useful when local_port == 0).

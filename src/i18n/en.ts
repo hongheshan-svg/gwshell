@@ -527,6 +527,19 @@ const en: Record<TranslationKeys, string> = {
   sftp_empty: 'Empty directory',
   sftp_folder_name: 'Folder name',
   sftp_item_count: '{count} items',
+  sftp_new_file: 'New File',
+  sftp_file_name: 'File name',
+  sftp_copy_path: 'Copy Path',
+  sftp_download_to: 'Download to',
+  sftp_upload_file: 'Upload File',
+  sftp_upload_folder: 'Upload Folder',
+  sftp_folder_upload_hint: 'Folder upload not supported yet, please compress first',
+  sftp_chmod: 'Change Permissions',
+  sftp_chmod_label: 'Permissions (octal)',
+  sftp_chmod_invalid: 'Invalid permission value',
+  sftp_cancel: 'Cancel',
+  sftp_confirm: 'OK',
+  sftp_info: '{folders} folders, {files} files',
 };
 
 export default en;

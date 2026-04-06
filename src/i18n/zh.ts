@@ -525,6 +525,19 @@ const zh = {
   sftp_empty: '空目录',
   sftp_folder_name: '文件夹名称',
   sftp_item_count: '共 {count} 项',
+  sftp_new_file: '新建文件',
+  sftp_file_name: '文件名称',
+  sftp_copy_path: '复制路径',
+  sftp_download_to: '下载至',
+  sftp_upload_file: '选择文件上传',
+  sftp_upload_folder: '选择文件夹上传',
+  sftp_folder_upload_hint: '文件夹上传暂不支持，请先压缩后上传',
+  sftp_chmod: '修改权限',
+  sftp_chmod_label: '权限 (八进制)',
+  sftp_chmod_invalid: '无效的权限值',
+  sftp_cancel: '取消',
+  sftp_confirm: '确定',
+  sftp_info: '{folders} 个文件夹, {files} 个文件',
 } as const;
 
 export type TranslationKeys = keyof typeof zh;

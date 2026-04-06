@@ -290,6 +290,34 @@ fn sftp_upload(
         .sftp_upload(&session_id, &remote_path, &local_path)
 }
 
+#[tauri::command]
+fn sftp_chmod(
+    session_id: String,
+    path: String,
+    mode: u32,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    state.ssh_manager.sftp_chmod(&session_id, &path, mode)
+}
+
+#[tauri::command]
+fn sftp_create_file(
+    session_id: String,
+    path: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    state.ssh_manager.sftp_create_file(&session_id, &path)
+}
+
+#[tauri::command]
+fn ssh_exec(
+    session_id: String,
+    command: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<String, String> {
+    state.ssh_manager.ssh_exec(&session_id, &command)
+}
+
 // ---- Serial Commands ----
 
 #[tauri::command]
@@ -418,6 +446,9 @@ pub fn run() {
             sftp_rename,
             sftp_download,
             sftp_upload,
+            sftp_chmod,
+            sftp_create_file,
+            ssh_exec,
             serial_open,
             write_to_serial,
             close_serial,
