@@ -37,6 +37,10 @@ interface AppStore {
   setShowNewSession: (show: boolean) => void;
   editingSession: SessionConfig | null;
   setEditingSession: (session: SessionConfig | null) => void;
+  showDockerModal: boolean;
+  setShowDockerModal: (show: boolean) => void;
+  showLocalTerminalModal: boolean;
+  setShowLocalTerminalModal: (show: boolean) => void;
 
   // Menu
   showAppMenu: boolean;
@@ -102,6 +106,10 @@ export const useAppStore = create<AppStore>((set) => ({
   setShowNewSession: (show) => set({ showNewSession: show }),
   editingSession: null,
   setEditingSession: (session) => set({ editingSession: session }),
+  showDockerModal: false,
+  setShowDockerModal: (show) => set({ showDockerModal: show }),
+  showLocalTerminalModal: false,
+  setShowLocalTerminalModal: (show) => set({ showLocalTerminalModal: show }),
 
   showAppMenu: false,
   setShowAppMenu: (show) => set({ showAppMenu: show }),

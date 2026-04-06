@@ -6,6 +6,8 @@ import { TabBar } from './components/TabBar/TabBar';
 import { TerminalContainer } from './components/Terminal/TerminalContainer';
 import { StatusBar } from './components/StatusBar/StatusBar';
 import { NewSessionModal } from './components/Modals/NewSessionModal';
+import { DockerModal } from './components/Modals/DockerModal';
+import { LocalTerminalModal } from './components/Modals/LocalTerminalModal';
 import { AppMenu } from './components/AppMenu/AppMenu';
 import { useAppStore } from './stores/appStore';
 import './styles/global.css';
@@ -30,6 +32,8 @@ function App() {
         </div>
       </div>
       <NewSessionModal />
+      <DockerModal />
+      <LocalTerminalModal />
       <AppMenu />
     </div>
   );

@@ -27,7 +27,7 @@ const demoSessions: SessionConfig[] = [
 ];
 
 export const SessionPanel: React.FC = () => {
-  const { sessions, setSessions, sidebarCollapsed, setShowNewSession, tabs, addTab, setActiveTab } = useAppStore();
+  const { sessions, setSessions, sidebarCollapsed, setShowNewSession, setShowDockerModal, setShowLocalTerminalModal, tabs, addTab, setActiveTab } = useAppStore();
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     '开发服务器': true,
     '云服务器': true,
@@ -78,8 +78,12 @@ export const SessionPanel: React.FC = () => {
   };
 
   const handleNewAssetSelect = (type: string) => {
-    if (type === 'ssh' || type === 'localshell') {
+    if (type === 'ssh' || type === 'ssh-tunnel' || type === 'rdp' || type === 'telnet' || type === 'serial') {
       setShowNewSession(true);
+    } else if (type === 'docker') {
+      setShowDockerModal(true);
+    } else if (type === 'localshell') {
+      setShowLocalTerminalModal(true);
     }
   };
 
