@@ -59,6 +59,8 @@ export interface SessionConfig {
   init_command?: string;
   // Environment variables (key=value lines)
   env_vars?: string;
+  // Internal: temporary sessions created by split-screen cloning (not persisted)
+  _temporary?: boolean;
 }
 
 export interface SessionGroup {

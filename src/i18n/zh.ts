@@ -71,6 +71,8 @@ const zh = {
   table_empty: '暂无资产，点击上方 + 按钮添加',
   table_connect: '连接',
   table_edit: '编辑',
+  table_copy: '复制',
+  table_delete: '删除',
 
   // ---- TabBar ----
   tab_list: '列表',

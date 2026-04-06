@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Search,
   Menu,
@@ -8,6 +8,7 @@ import {
   Trash2,
   Edit,
   Play,
+  Copy,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import type { SessionConfig } from '../../types';
@@ -21,21 +22,27 @@ export const AssetTable: React.FC = () => {
     setShowNewSession,
     setEditingSession,
     removeSession,
+    addSession,
     addTab,
     setActiveTab,
     tabs,
     t,
   } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: SessionConfig } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Filter out temporary sessions created by split-screen
+  const realSessions = sessions.filter((s) => !s._temporary);
 
   const filteredSessions = searchQuery
-    ? sessions.filter(
+    ? realSessions.filter(
         (s) =>
           s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           (s.host && s.host.toLowerCase().includes(searchQuery.toLowerCase())) ||
           (s.username && s.username.toLowerCase().includes(searchQuery.toLowerCase()))
       )
-    : sessions;
+    : realSessions;
 
   const allSelected = filteredSessions.length > 0 && filteredSessions.every((s) => selectedSessionIds.includes(s.id));
 
@@ -67,6 +74,34 @@ export const AssetTable: React.FC = () => {
     selectedSessionIds.forEach((id) => removeSession(id));
     setSelectedSessionIds([]);
   };
+
+  const handleCopySession = (session: SessionConfig) => {
+    const copied: SessionConfig = {
+      ...session,
+      id: crypto.randomUUID(),
+      name: `${session.name} - 副本`,
+      created_at: new Date().toISOString().slice(0, 10),
+      _temporary: undefined,
+    };
+    addSession(copied);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, session: SessionConfig) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, session });
+  };
+
+  // Close context menu on click outside
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [contextMenu]);
 
   const formatLatency = (latency?: number | null) => {
     if (latency == null) return <span className="latency-na">-</span>;
@@ -143,6 +178,7 @@ export const AssetTable: React.FC = () => {
                   key={session.id}
                   className={selectedSessionIds.includes(session.id) ? 'selected' : ''}
                   onDoubleClick={() => handleConnect(session)}
+                  onContextMenu={(e) => handleContextMenu(e, session)}
                 >
                   <td className="col-check">
                     <input
@@ -176,6 +212,20 @@ export const AssetTable: React.FC = () => {
                     >
                       <Edit size={12} />
                     </button>
+                    <button
+                      className="asset-action-btn"
+                      onClick={() => handleCopySession(session)}
+                      title={t('table_copy')}
+                    >
+                      <Copy size={12} />
+                    </button>
+                    <button
+                      className="asset-action-btn danger"
+                      onClick={() => removeSession(session.id)}
+                      title={t('table_delete')}
+                    >
+                      <Trash2 size={12} />
+                    </button>
                   </td>
                 </tr>
               ))
@@ -183,6 +233,29 @@ export const AssetTable: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Right-click context menu */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="asset-context-menu"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          <button onClick={() => { handleConnect(contextMenu.session); setContextMenu(null); }}>
+            <Play size={12} /> {t('table_connect')}
+          </button>
+          <button onClick={() => { setEditingSession(contextMenu.session); setShowNewSession(true); setContextMenu(null); }}>
+            <Edit size={12} /> {t('table_edit')}
+          </button>
+          <button onClick={() => { handleCopySession(contextMenu.session); setContextMenu(null); }}>
+            <Copy size={12} /> {t('table_copy')}
+          </button>
+          <div className="context-menu-divider" />
+          <button className="danger" onClick={() => { removeSession(contextMenu.session.id); setContextMenu(null); }}>
+            <Trash2 size={12} /> {t('table_delete')}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

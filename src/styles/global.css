@@ -1253,6 +1253,55 @@ input, select, textarea, button {
   color: var(--accent-primary);
 }
 
+.asset-action-btn.danger:hover {
+  background: rgba(232, 17, 35, 0.12);
+  color: var(--danger);
+}
+
+/* Right-click context menu */
+.asset-context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 160px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  padding: 4px 0;
+}
+
+.asset-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.asset-context-menu button:hover {
+  background: var(--bg-hover);
+}
+
+.asset-context-menu button.danger {
+  color: var(--danger);
+}
+
+.asset-context-menu button.danger:hover {
+  background: rgba(232, 17, 35, 0.12);
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
 .latency-good {
   color: var(--success);
   font-weight: 500;

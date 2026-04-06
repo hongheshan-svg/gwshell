@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   ChevronRight,
   ChevronDown,
@@ -12,23 +12,40 @@ import {
   FolderPlus,
   Copy,
   Link,
+  Play,
+  Edit,
+  Trash2,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { NewAssetMenu } from './NewAssetMenu';
 import type { SessionConfig } from '../../types';
 
 export const SessionPanel: React.FC = () => {
-  const { sessions, sidebarCollapsed, setShowNewSession, setShowDockerModal, setShowLocalTerminalModal, setShowSerialModal, tabs, addTab, setActiveTab, t } = useAppStore();
+  const { sessions, sidebarCollapsed, setShowNewSession, setShowDockerModal, setShowLocalTerminalModal, setShowSerialModal, setEditingSession, addSession, removeSession, tabs, addTab, setActiveTab, t } = useAppStore();
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
   const plusBtnRef = useRef<HTMLButtonElement>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: SessionConfig } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close context menu on click outside
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [contextMenu]);
 
   if (sidebarCollapsed) return null;
 
-  // Group sessions
-  const allSessions = sessions;
+  // Filter out temporary sessions created by split-screen
+  const allSessions = sessions.filter((s) => !s._temporary);
   const groups: Record<string, SessionConfig[]> = {};
   allSessions.forEach((s) => {
     const g = s.group || t('panel_default_group');
@@ -54,6 +71,22 @@ export const SessionPanel: React.FC = () => {
       type: session.session_type,
       connected: false,
     });
+  };
+
+  const handleCopySession = (session: SessionConfig) => {
+    const copied: SessionConfig = {
+      ...session,
+      id: crypto.randomUUID(),
+      name: `${session.name} - 副本`,
+      created_at: new Date().toISOString().slice(0, 10),
+      _temporary: undefined,
+    };
+    addSession(copied);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, session: SessionConfig) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, session });
   };
 
   const handleNewAssetSelect = (type: string) => {
@@ -132,7 +165,7 @@ export const SessionPanel: React.FC = () => {
       <div className="sidebar-content">
         {filteredSessions ? (
           filteredSessions.map((session) => (
-            <SessionItem key={session.id} session={session} onConnect={handleConnect} />
+            <SessionItem key={session.id} session={session} onConnect={handleConnect} onContextMenu={handleContextMenu} />
           ))
         ) : allSessions.length === 0 ? (
           <div className="sidebar-empty">
@@ -165,7 +198,7 @@ export const SessionPanel: React.FC = () => {
               </div>
               {expandedGroups[groupName] !== false &&
                 groupSessions.map((session) => (
-                  <SessionItem key={session.id} session={session} onConnect={handleConnect} />
+                  <SessionItem key={session.id} session={session} onConnect={handleConnect} onContextMenu={handleContextMenu} />
                 ))}
             </div>
           ))
@@ -180,6 +213,29 @@ export const SessionPanel: React.FC = () => {
           onSelect={handleNewAssetSelect}
         />
       )}
+
+      {/* Right-click context menu */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="asset-context-menu"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          <button onClick={() => { handleConnect(contextMenu.session); setContextMenu(null); }}>
+            <Play size={12} /> {t('table_connect')}
+          </button>
+          <button onClick={() => { setEditingSession(contextMenu.session); setShowNewSession(true); setContextMenu(null); }}>
+            <Edit size={12} /> {t('table_edit')}
+          </button>
+          <button onClick={() => { handleCopySession(contextMenu.session); setContextMenu(null); }}>
+            <Copy size={12} /> {t('table_copy')}
+          </button>
+          <div className="context-menu-divider" />
+          <button className="danger" onClick={() => { removeSession(contextMenu.session.id); setContextMenu(null); }}>
+            <Trash2 size={12} /> {t('table_delete')}
+          </button>
+        </div>
+      )}
     </div>
   );
 };
@@ -187,7 +243,8 @@ export const SessionPanel: React.FC = () => {
 const SessionItem: React.FC<{
   session: SessionConfig;
   onConnect: (session: SessionConfig) => void;
-}> = ({ session, onConnect }) => {
+  onContextMenu: (e: React.MouseEvent, session: SessionConfig) => void;
+}> = ({ session, onConnect, onContextMenu }) => {
   const { activeTabId, tabs } = useAppStore();
   const isActive = tabs.some((t) => t.sessionId === session.id && t.id === activeTabId);
 
@@ -195,6 +252,7 @@ const SessionItem: React.FC<{
     <div
       className={`session-item ${isActive ? 'active' : ''}`}
       onDoubleClick={() => onConnect(session)}
+      onContextMenu={(e) => onContextMenu(e, session)}
     >
       <span className="session-item-icon"><Server size={14} /></span>
       <span className="session-item-name">{session.name}</span>

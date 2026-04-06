@@ -73,6 +73,8 @@ const en: Record<TranslationKeys, string> = {
   table_empty: 'No assets yet. Click the + button above to add one.',
   table_connect: 'Connect',
   table_edit: 'Edit',
+  table_copy: 'Duplicate',
+  table_delete: 'Delete',
 
   // ---- TabBar ----
   tab_list: 'List',

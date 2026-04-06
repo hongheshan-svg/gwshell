@@ -144,13 +144,28 @@ export const useAppStore = create<AppStore>((set, _get) => ({
   removeTab: (id) =>
     set((state) => {
       if (id === 'asset-list') return state;
+      const closedTab = state.tabs.find((t) => t.id === id);
       const newTabs = state.tabs.filter((t) => t.id !== id);
       const terminalTabs = newTabs.filter((t) => t.type !== 'asset-list');
+
+      // Clean up temporary sessions created by split-screen cloning
+      let newSessions = state.sessions;
+      if (closedTab) {
+        const session = state.sessions.find((s) => s.id === closedTab.sessionId);
+        if (session?._temporary) {
+          // Only remove if no other tab uses this session
+          const otherTabUsing = newTabs.some((t) => t.sessionId === closedTab.sessionId);
+          if (!otherTabUsing) {
+            newSessions = state.sessions.filter((s) => s.id !== closedTab.sessionId);
+          }
+        }
+      }
 
       // If no more terminal tabs, reset split mode and show asset list
       if (terminalTabs.length === 0) {
         return {
           tabs: newTabs,
+          sessions: newSessions,
           activeTabId: 'asset-list',
           mainView: 'asset-list' as MainView,
           splitCount: 1 as SplitCount,
@@ -167,7 +182,7 @@ export const useAppStore = create<AppStore>((set, _get) => ({
       // Also clean up splitPanes: remove references to the closed tab
       const cleanedPanes = state.splitPanes.map((p) => (p === id ? null : p));
 
-      return { tabs: newTabs, activeTabId: newActiveId, mainView: newMainView as MainView, splitPanes: cleanedPanes };
+      return { tabs: newTabs, sessions: newSessions, activeTabId: newActiveId, mainView: newMainView as MainView, splitPanes: cleanedPanes };
     }),
   setActiveTab: (id) =>
     set({ activeTabId: id, mainView: id === 'asset-list' ? 'asset-list' : 'terminal' }),
@@ -225,12 +240,13 @@ export const useAppStore = create<AppStore>((set, _get) => ({
       const num = terminalTabs.length + i + 1;
 
       if (sourceSession) {
-        // Clone the source session with a new ID and incremented name
+        // Clone the source session with a new ID and incremented name (temporary)
         const cloned: SessionConfig = {
           ...sourceSession,
           id: sessionId,
           name: `${sourceSession.name} ${num}`,
           created_at: new Date().toISOString().slice(0, 10),
+          _temporary: true,
         };
         const tab: TabInfo = {
           id: tabId,
@@ -243,13 +259,14 @@ export const useAppStore = create<AppStore>((set, _get) => ({
         currentTabs = [...currentTabs, tab];
         terminalTabs.push(tab);
       } else {
-        // Fallback: create a blank local shell
+        // Fallback: create a blank local shell (temporary)
         const session: SessionConfig = {
           id: sessionId,
           name: `Terminal ${num}`,
           session_type: 'localshell',
           auth_method: 'password',
           created_at: new Date().toISOString().slice(0, 10),
+          _temporary: true,
         };
         const tab: TabInfo = {
           id: tabId,
