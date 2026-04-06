@@ -145,13 +145,29 @@ export const useAppStore = create<AppStore>((set, _get) => ({
     set((state) => {
       if (id === 'asset-list') return state;
       const newTabs = state.tabs.filter((t) => t.id !== id);
+      const terminalTabs = newTabs.filter((t) => t.type !== 'asset-list');
+
+      // If no more terminal tabs, reset split mode and show asset list
+      if (terminalTabs.length === 0) {
+        return {
+          tabs: newTabs,
+          activeTabId: 'asset-list',
+          mainView: 'asset-list' as MainView,
+          splitCount: 1 as SplitCount,
+          splitPanes: [null],
+        };
+      }
+
       const newActiveId =
         state.activeTabId === id
-          ? newTabs.length > 0
-            ? newTabs[newTabs.length - 1].id
-            : null
+          ? newTabs[newTabs.length - 1].id
           : state.activeTabId;
-      return { tabs: newTabs, activeTabId: newActiveId };
+      const newMainView = newActiveId === 'asset-list' ? 'asset-list' : 'terminal';
+
+      // Also clean up splitPanes: remove references to the closed tab
+      const cleanedPanes = state.splitPanes.map((p) => (p === id ? null : p));
+
+      return { tabs: newTabs, activeTabId: newActiveId, mainView: newMainView as MainView, splitPanes: cleanedPanes };
     }),
   setActiveTab: (id) =>
     set({ activeTabId: id, mainView: id === 'asset-list' ? 'asset-list' : 'terminal' }),

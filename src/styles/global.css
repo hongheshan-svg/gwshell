@@ -243,6 +243,28 @@ input, select, textarea, button {
   border-right: none;
 }
 
+/* Sidebar collapse/expand toggle button */
+.sidebar-collapse-toggle {
+  width: 16px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: none;
+  border-right: 1px solid var(--border-color);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s, background 0.15s;
+  z-index: 5;
+}
+
+.sidebar-collapse-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+}
+
 .sidebar-header {
   display: flex;
   flex-direction: column;

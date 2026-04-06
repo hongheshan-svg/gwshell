@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { TitleBar } from './components/TitleBar/TitleBar';
 import { Sidebar } from './components/Sidebar/IconNav';
 import { SessionPanel } from './components/Sidebar/SessionPanel';
@@ -17,7 +18,7 @@ import type { SessionConfig } from './types';
 import './styles/global.css';
 
 function App() {
-  const { theme, setSessions } = useAppStore();
+  const { theme, setSessions, sidebarCollapsed, toggleSidebar } = useAppStore();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -36,6 +37,13 @@ function App() {
       <div className="app-layout">
         <Sidebar />
         <SessionPanel />
+        <button
+          className="sidebar-collapse-toggle"
+          onClick={toggleSidebar}
+          title={sidebarCollapsed ? '展开面板' : '折叠面板'}
+        >
+          {sidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+        </button>
         <div className="main-content">
           <TabBar />
           <TerminalContainer />
