@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useCallback, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { WebglAddon } from "@xterm/addon-webgl";
 import type { TabInfo } from "../../types";
 import { useAppStore } from "../../stores/appStore";
 import "@xterm/xterm/css/xterm.css";
@@ -133,11 +134,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         containerRef.current.appendChild(instance.terminal.element);
       } else {
         instance.terminal.open(containerRef.current);
+        // Load WebGL renderer for GPU-accelerated rendering (fallback to canvas on failure)
+        try {
+          instance.terminal.loadAddon(new WebglAddon());
+        } catch {
+          // WebGL not supported, canvas renderer is fine
+        }
       }
     }
 
     requestAnimationFrame(() => {
-      try { instance!.fitAddon.fit(); } catch {}
+      requestAnimationFrame(() => {
+        try {
+          instance!.fitAddon.fit();
+          instance!.terminal.clearTextureAtlas();
+        } catch {}
+      });
     });
 
     if (initializedRef.current) return;
@@ -381,8 +393,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
     if (isActive) {
       const inst = terminalInstances.get(tab.id);
       if (inst) {
+        // Double-RAF: wait for layout to settle (especially after display:none → block)
         requestAnimationFrame(() => {
-          try { inst.fitAddon.fit(); inst.terminal.focus(); } catch {}
+          requestAnimationFrame(() => {
+            try {
+              inst.fitAddon.fit();
+              inst.terminal.clearTextureAtlas();
+              inst.terminal.focus();
+            } catch {}
+          });
         });
       }
     }
@@ -390,25 +409,37 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
 
   // Use ResizeObserver on the container element so that ANY size change –
   // sidebar collapse/expand, split-pane open/close, window resize, SFTP panel
-  // toggle – automatically re-fits the terminal.  This replaces the old
-  // window "resize" listener which only fired for the active terminal and
-  // only on window-level resize events.
+  // toggle – automatically re-fits the terminal.  A 150ms debounce avoids
+  // thrashing during CSS transitions (sidebar 0.2s ease) and ensures we fit
+  // to the *final* size.  After fitting, clearTextureAtlas() forces the
+  // renderer to rebuild its glyph cache for the new dimensions.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
-    let rafId = 0;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let lastW = el.offsetWidth;
+    let lastH = el.offsetHeight;
     const observer = new ResizeObserver(() => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      // Only react to actual dimension changes (ignore sub-pixel jitter)
+      if (w === lastW && h === lastH) return;
+      lastW = w;
+      lastH = h;
+      if (timerId) clearTimeout(timerId);
+      timerId = setTimeout(() => {
         const inst = terminalInstances.get(tab.id);
-        if (inst) {
-          try { inst.fitAddon.fit(); } catch {}
+        if (inst && w > 0 && h > 0) {
+          try {
+            inst.fitAddon.fit();
+            inst.terminal.clearTextureAtlas();
+          } catch {}
         }
-      });
+      }, 150);
     });
     observer.observe(el);
-    return () => { cancelAnimationFrame(rafId); observer.disconnect(); };
+    return () => { if (timerId) clearTimeout(timerId); observer.disconnect(); };
   }, [tab.id]);
 
   return (

@@ -104,7 +104,7 @@ const SplitPane: React.FC<SplitPaneProps> = ({ slotIndex, tab, allTabs, isFocuse
       const inst = terminalInstances.get(tab.id);
       if (inst) {
         requestAnimationFrame(() => {
-          try { inst.fitAddon.fit(); inst.terminal.focus(); } catch {}
+          try { inst.fitAddon.fit(); inst.terminal.clearTextureAtlas(); inst.terminal.focus(); } catch {}
         });
       }
     }
@@ -114,7 +114,7 @@ const SplitPane: React.FC<SplitPaneProps> = ({ slotIndex, tab, allTabs, isFocuse
   const refitOnResize = useCallback(() => {
     if (tab) {
       const inst = terminalInstances.get(tab.id);
-      if (inst) { try { inst.fitAddon.fit(); } catch {} }
+      if (inst) { try { inst.fitAddon.fit(); inst.terminal.clearTextureAtlas(); } catch {} }
     }
   }, [tab?.id]);
 
