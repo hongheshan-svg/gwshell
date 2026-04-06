@@ -30,6 +30,7 @@ export interface SessionConfig {
   serial_init_commands?: string;
   // Local shell
   working_dir?: string;
+  shell_name?: string;
 }
 
 export interface SessionGroup {

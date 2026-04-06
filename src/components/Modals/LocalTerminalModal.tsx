@@ -1,5 +1,5 @@
-﻿import React, { useState } from "react";
-import { X, FolderOpen } from "lucide-react";
+﻿import React, { useState, useRef, useEffect } from "react";
+import { X, FolderOpen, ChevronDown } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import type { SessionConfig } from "../../types";
 
@@ -8,36 +8,76 @@ const colorLabels = [
   "#06b6d4", "#3b82f6", "#6366f1", "#a855f7", "#9ca3af", "#374151",
 ];
 
-const shellOptions = [
-  { value: "powershell", label: "PowerShell" },
-  { value: "cmd", label: "CMD" },
-  { value: "wsl", label: "WSL (Bash)" },
-  { value: "gitbash", label: "Git Bash" },
+const SHELL_OPTIONS = [
+  { value: "cmd",         label: "cmd" },
+  { value: "bash",        label: "bash" },
+  { value: "powershell",  label: "powershell" },
+  { value: "powershell7", label: "powershell7" },
+  { value: "wsl",         label: "wsl" },
+  { value: "zsh",         label: "zsh" },
+  { value: "fish",        label: "fish" },
 ];
 
+// ---- Custom shell picker dropdown ----
+const ShellPicker: React.FC<{
+  value: string;
+  onChange: (v: string) => void;
+}> = ({ value, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handle = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="shell-picker" style={{ position: "relative" }}>
+      <button
+        type="button"
+        className="shell-picker-btn"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span>{value || "powershell"}</span>
+        <ChevronDown size={14} style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform .15s" }} />
+      </button>
+      {open && (
+        <div className="shell-picker-list">
+          {SHELL_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              className={`shell-picker-item ${value === opt.value ? "active" : ""}`}
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ---- Modal ----
 export const LocalTerminalModal: React.FC = () => {
   const { showLocalTerminalModal, setShowLocalTerminalModal, addSession, addTab } = useAppStore();
-
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [form, setForm] = useState({
     name: "",
     color_label: "",
-    environment: "",
     shell: "powershell",
     working_dir: "",
     remark: "",
   });
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (showLocalTerminalModal) {
-      setForm({
-        name: "",
-        color_label: "",
-        environment: "",
-        shell: "powershell",
-        working_dir: "",
-        remark: "",
-      });
+      setForm({ name: "", color_label: "", shell: "powershell", working_dir: "", remark: "" });
       setTouched({});
     }
   }, [showLocalTerminalModal]);
@@ -46,10 +86,6 @@ export const LocalTerminalModal: React.FC = () => {
 
   const handleClose = () => setShowLocalTerminalModal(false);
 
-  const handleBlur = (field: string) => {
-    setTouched((prev) => ({ ...prev, [field]: true }));
-  };
-
   const handlePickDir = async () => {
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
@@ -57,25 +93,20 @@ export const LocalTerminalModal: React.FC = () => {
       if (typeof selected === "string" && selected) {
         setForm((prev) => ({ ...prev, working_dir: selected }));
       }
-    } catch {
-      // dialog canceled or unavailable
-    }
+    } catch { /* canceled */ }
   };
 
-  const buildConfig = (sessionId: string): SessionConfig => {
-    const now = new Date().toISOString().slice(0, 10);
-    return {
-      id: sessionId,
-      name: form.name,
-      session_type: "localshell",
-      auth_method: "password",
-      color_label: form.color_label || undefined,
-      environment: form.environment || undefined,
-      working_dir: form.working_dir || undefined,
-      remark: form.remark || undefined,
-      created_at: now,
-    };
-  };
+  const buildConfig = (sessionId: string): SessionConfig => ({
+    id: sessionId,
+    name: form.name,
+    session_type: "localshell",
+    auth_method: "password",
+    color_label: form.color_label || undefined,
+    shell_name: form.shell,
+    working_dir: form.working_dir || undefined,
+    remark: form.remark || undefined,
+    created_at: new Date().toISOString().slice(0, 10),
+  });
 
   const handleSave = () => {
     setTouched({ name: true });
@@ -84,18 +115,12 @@ export const LocalTerminalModal: React.FC = () => {
     handleClose();
   };
 
-  const handleOpen = () => {
+  const handleTestConnect = () => {
     setTouched({ name: true });
     if (!form.name) return;
     const sessionId = crypto.randomUUID();
     addSession(buildConfig(sessionId));
-    addTab({
-      id: crypto.randomUUID(),
-      sessionId,
-      title: form.name,
-      type: "localshell",
-      connected: false,
-    });
+    addTab({ id: crypto.randomUUID(), sessionId, title: form.name, type: "localshell", connected: false });
     handleClose();
   };
 
@@ -104,12 +129,15 @@ export const LocalTerminalModal: React.FC = () => {
   return (
     <div className="modal-overlay" onClick={handleClose}>
       <div className="ssh-modal" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
         <div className="ssh-modal-header">
-          <h2>本地终端配置</h2>
+          <h2>终端配置编辑</h2>
           <button className="modal-close" onClick={handleClose}><X size={16} /></button>
         </div>
 
+        {/* Body */}
         <div className="ssh-modal-body">
+          {/* Row: color + name */}
           <div className="ssh-form-row">
             <div className="ssh-form-group">
               <label>颜色标签</label>
@@ -128,42 +156,29 @@ export const LocalTerminalModal: React.FC = () => {
               </div>
             </div>
             <div className="ssh-form-group">
-              <label>环境</label>
-              <select value={form.environment} onChange={(e) => setForm({ ...form, environment: e.target.value })}>
-                <option value="">无</option>
-                <option value="dev">开发</option>
-                <option value="staging">测试</option>
-                <option value="production">生产</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="ssh-form-row">
-            <div className="ssh-form-group">
               <label className={nameError ? "label-error" : ""}>名称</label>
               <input
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                onBlur={() => handleBlur("name")}
+                onBlur={() => setTouched((p) => ({ ...p, name: true }))}
                 className={nameError ? "input-error" : ""}
                 placeholder="My Terminal"
               />
               {nameError && <span className="field-error">name is a required field</span>}
             </div>
-            <div className="ssh-form-group">
-              <label>Shell</label>
-              <select value={form.shell} onChange={(e) => setForm({ ...form, shell: e.target.value })}>
-                {shellOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
           </div>
 
+          {/* Shell picker */}
+          <div className="ssh-form-group">
+            <label>Shell</label>
+            <ShellPicker value={form.shell} onChange={(v) => setForm({ ...form, shell: v })} />
+          </div>
+
+          {/* Working directory */}
           <div className="ssh-form-group">
             <label>工作目录</label>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 6 }}>
               <input
                 type="text"
                 value={form.working_dir}
@@ -178,7 +193,8 @@ export const LocalTerminalModal: React.FC = () => {
                 title="选择目录"
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  height: 32, width: 32, borderRadius: 6, border: "1px solid var(--border)",
+                  height: 32, width: 32, borderRadius: 6,
+                  border: "1px solid var(--border)",
                   background: "var(--bg-secondary)", color: "var(--text-secondary)",
                   cursor: "pointer", flexShrink: 0,
                 }}
@@ -188,6 +204,7 @@ export const LocalTerminalModal: React.FC = () => {
             </div>
           </div>
 
+          {/* Remark */}
           <div className="ssh-form-group">
             <label>备注</label>
             <textarea
@@ -199,9 +216,10 @@ export const LocalTerminalModal: React.FC = () => {
           </div>
         </div>
 
+        {/* Footer */}
         <div className="ssh-modal-footer">
-          <button className="ssh-footer-link" onClick={handleOpen}>打开终端</button>
-          <button className="ssh-footer-link" onClick={handleSave}>保存</button>
+          <button className="ssh-footer-link" onClick={handleTestConnect}>测试连接</button>
+          <button className="btn btn-primary" onClick={handleSave}>保存</button>
         </div>
       </div>
     </div>

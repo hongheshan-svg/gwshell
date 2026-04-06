@@ -26,14 +26,14 @@ fn create_local_shell(
     session_id: String,
     rows: u16,
     cols: u16,
-    shell_path: Option<String>,
+    shell_name: Option<String>,
     working_dir: Option<String>,
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     state
         .pty_manager
-        .create_shell(&session_id, app_handle, rows, cols, shell_path, working_dir)
+        .create_shell(&session_id, app_handle, rows, cols, shell_name, working_dir)
 }
 
 #[tauri::command]

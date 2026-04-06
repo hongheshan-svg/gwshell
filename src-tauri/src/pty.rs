@@ -14,6 +14,43 @@ pub struct PtyManager {
     instances: Mutex<HashMap<String, Arc<Mutex<PtyInstance>>>>,
 }
 
+#[cfg(target_os = "windows")]
+fn resolve_shell(name: Option<&str>) -> CommandBuilder {
+    match name {
+        Some("cmd") => CommandBuilder::new("cmd.exe"),
+        Some("bash") => CommandBuilder::new("bash.exe"),
+        Some("powershell7") => {
+            let mut c = CommandBuilder::new("pwsh.exe");
+            c.arg("-NoLogo");
+            c
+        }
+        Some("wsl") => CommandBuilder::new("wsl.exe"),
+        Some("zsh") => CommandBuilder::new("zsh"),
+        Some("fish") => CommandBuilder::new("fish"),
+        _ => {
+            // powershell or default
+            let mut c = CommandBuilder::new("powershell.exe");
+            c.arg("-NoLogo");
+            c
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn resolve_shell(name: Option<&str>) -> CommandBuilder {
+    match name {
+        Some("powershell7") | Some("powershell") => {
+            let mut c = CommandBuilder::new("pwsh");
+            c.arg("-NoLogo");
+            c
+        }
+        Some("zsh") => CommandBuilder::new("zsh"),
+        Some("fish") => CommandBuilder::new("fish"),
+        Some("cmd") => CommandBuilder::new("sh"), // fallback on unix
+        _ => CommandBuilder::new("bash"),
+    }
+}
+
 impl PtyManager {
     pub fn new() -> Self {
         Self {
@@ -27,7 +64,7 @@ impl PtyManager {
         app_handle: AppHandle,
         rows: u16,
         cols: u16,
-        shell_path: Option<String>,
+        shell_name: Option<String>,
         working_dir: Option<String>,
     ) -> Result<(), String> {
         let pty_system = native_pty_system();
@@ -40,20 +77,7 @@ impl PtyManager {
             })
             .map_err(|e| format!("Failed to open PTY: {}", e))?;
 
-        let mut cmd = if let Some(ref path) = shell_path {
-            CommandBuilder::new(path)
-        } else {
-            #[cfg(target_os = "windows")]
-            {
-                let mut cmd = CommandBuilder::new("powershell.exe");
-                cmd.arg("-NoLogo");
-                cmd
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                CommandBuilder::new("bash")
-            }
-        };
+        let mut cmd = resolve_shell(shell_name.as_deref());
 
         if let Some(ref dir) = working_dir {
             cmd.cwd(std::path::Path::new(dir));

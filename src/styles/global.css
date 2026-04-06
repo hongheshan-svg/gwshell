@@ -2290,3 +2290,32 @@ input, select, textarea, button {
   max-width: 260px;
   line-height: 1.5;
 }
+
+/* ---- Shell Picker ---- */
+.shell-picker { width: 100%; }
+.shell-picker-btn {
+  width: 100%; height: 32px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 10px;
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text-primary);
+  font-size: 13px; font-family: "JetBrains Mono", "Consolas", monospace;
+  cursor: pointer; transition: border-color .15s;
+}
+.shell-picker-btn:hover { border-color: var(--accent); }
+.shell-picker-list {
+  position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  border-radius: 8px; padding: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  z-index: 200;
+}
+.shell-picker-item {
+  display: block; width: 100%; padding: 8px 12px;
+  text-align: left; background: transparent; border: none;
+  border-radius: 5px; color: var(--text-secondary);
+  font-size: 13px; font-family: "JetBrains Mono", "Consolas", monospace;
+  cursor: pointer; transition: background .1s, color .1s;
+}
+.shell-picker-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.shell-picker-item.active { background: rgba(76,141,255,.15); color: #4c8dff; }
