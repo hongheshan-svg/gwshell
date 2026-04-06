@@ -13,6 +13,8 @@ export interface SessionConfig {
   created_at?: string;
   expired_at?: string;
   remark?: string;
+  color_label?: string;
+  environment?: string;
 }
 
 export interface SessionGroup {

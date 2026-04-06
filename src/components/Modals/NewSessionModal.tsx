@@ -1,38 +1,76 @@
 import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Eye, EyeOff } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import type { SessionConfig } from '../../types';
+
+const colorLabels = [
+  '#ef4444', '#f97316', '#eab308', '#22c55e', '#10b981',
+  '#06b6d4', '#3b82f6', '#6366f1', '#a855f7', '#9ca3af', '#374151',
+];
+
+const configTabs = ['标准', '隧道', '代理', '环境变量', '高级'];
+
+type AuthType = 'password' | 'publickey' | 'keyboardinteractive';
+
+const authButtons: { id: AuthType | string; label: string }[] = [
+  { id: 'password', label: '密码' },
+  { id: 'publickey', label: '私钥' },
+  { id: 'keyboardinteractive', label: 'MFA/2FA' },
+];
+
+const authExtras = [
+  { id: 'preset-password', label: '预设账号密码' },
+  { id: 'jump-key', label: '跳板机私钥' },
+];
+
+const authMore = [
+  { id: 'ssh-agent', label: 'SSH Agent' },
+  { id: 'no-auth', label: '不验证' },
+];
 
 export const NewSessionModal: React.FC = () => {
   const { showNewSession, setShowNewSession, addSession, addTab, editingSession, setEditingSession } = useAppStore();
 
+  const [activeTab, setActiveTab] = useState('标准');
+  const [showPassword, setShowPassword] = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [form, setForm] = useState<Partial<SessionConfig>>({
     name: '',
     session_type: 'ssh',
     host: '',
     port: 22,
-    username: '',
+    username: 'root',
     auth_method: 'password',
     password: '',
     private_key_path: '',
     group: '',
+    remark: '',
+    color_label: '',
+    environment: '',
   });
 
   React.useEffect(() => {
     if (editingSession) {
       setForm(editingSession);
+      setTouched({});
     } else {
       setForm({
         name: '',
         session_type: 'ssh',
         host: '',
         port: 22,
-        username: '',
+        username: 'root',
         auth_method: 'password',
         password: '',
         private_key_path: '',
         group: '',
+        remark: '',
+        color_label: '',
+        environment: '',
       });
+      setTouched({});
+      setActiveTab('标准');
+      setShowPassword(false);
     }
   }, [editingSession, showNewSession]);
 
@@ -43,11 +81,19 @@ export const NewSessionModal: React.FC = () => {
     setEditingSession(null);
   };
 
+  const handleBlur = (field: string) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+  };
+
   const handleSave = () => {
+    setTouched({ name: true, host: true });
+    if (!form.name || !form.host) return;
+
     const sessionId = editingSession?.id || crypto.randomUUID();
+    const now = new Date().toISOString().slice(0, 10);
     const config: SessionConfig = {
       id: sessionId,
-      name: form.name || `${form.host || 'Local Shell'}`,
+      name: form.name,
       session_type: form.session_type || 'ssh',
       group: form.group || undefined,
       host: form.host || undefined,
@@ -56,16 +102,24 @@ export const NewSessionModal: React.FC = () => {
       auth_method: form.auth_method || 'password',
       password: form.password || undefined,
       private_key_path: form.private_key_path || undefined,
+      remark: form.remark || undefined,
+      color_label: form.color_label || undefined,
+      environment: form.environment || undefined,
+      created_at: editingSession?.created_at || now,
     };
 
     addSession(config);
     handleClose();
   };
 
-  const handleConnect = async () => {
+  const handleTestConnect = async () => {
+    setTouched({ name: true, host: true });
+    if (!form.name || !form.host) return;
+
     const sessionId = editingSession?.id || crypto.randomUUID();
     const name = form.name || form.host || 'Local Shell';
     const sessionType = form.session_type || 'ssh';
+    const now = new Date().toISOString().slice(0, 10);
 
     const config: SessionConfig = {
       id: sessionId,
@@ -78,6 +132,10 @@ export const NewSessionModal: React.FC = () => {
       auth_method: form.auth_method || 'password',
       password: form.password || undefined,
       private_key_path: form.private_key_path || undefined,
+      remark: form.remark || undefined,
+      color_label: form.color_label || undefined,
+      environment: form.environment || undefined,
+      created_at: editingSession?.created_at || now,
     };
 
     addSession(config);
@@ -91,7 +149,6 @@ export const NewSessionModal: React.FC = () => {
       connected: false,
     });
 
-    // For SSH connections, initiate from here
     if (sessionType === 'ssh' && form.host && form.username) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
@@ -113,72 +170,109 @@ export const NewSessionModal: React.FC = () => {
     handleClose();
   };
 
-  const isLocalShell = form.session_type === 'localshell';
+  const nameError = touched.name && !form.name;
+  const hostError = touched.host && !form.host;
 
   return (
     <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>{editingSession ? '编辑会话' : '新建会话'}</h2>
+      <div className="ssh-modal" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="ssh-modal-header">
+          <h2>SSH配置编辑</h2>
           <button className="modal-close" onClick={handleClose}>
             <X size={16} />
           </button>
         </div>
 
-        <div className="modal-body">
-          {/* Session Type */}
-          <div className="form-group">
-            <label>连接类型</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {(['ssh', 'sftp', 'localshell'] as const).map((type) => (
-                <button
-                  key={type}
-                  className={`btn ${form.session_type === type ? 'btn-primary' : ''}`}
-                  style={{ flex: 1, textTransform: 'uppercase', fontSize: 11 }}
-                  onClick={() => setForm({ ...form, session_type: type })}
-                >
-                  {type === 'localshell' ? 'Shell' : type}
-                </button>
-              ))}
-            </div>
-          </div>
+        {/* Config Tabs */}
+        <div className="ssh-modal-tabs">
+          {configTabs.map((tab) => (
+            <button
+              key={tab}
+              className={`ssh-tab ${activeTab === tab ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
 
-          {/* Name + Group */}
-          <div className="form-row">
-            <div className="form-group">
-              <label>名称</label>
-              <input
-                type="text"
-                placeholder="My Server"
-                value={form.name || ''}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label>分组</label>
-              <input
-                type="text"
-                placeholder="默认分组"
-                value={form.group || ''}
-                onChange={(e) => setForm({ ...form, group: e.target.value })}
-              />
-            </div>
-          </div>
-
-          {!isLocalShell && (
+        {/* Body */}
+        <div className="ssh-modal-body">
+          {activeTab === '标准' && (
             <>
-              {/* Host + Port */}
-              <div className="form-row">
-                <div className="form-group" style={{ flex: 3 }}>
-                  <label>主机地址</label>
+              {/* Color label + Environment */}
+              <div className="ssh-form-row">
+                <div className="ssh-form-group">
+                  <label>颜色标签</label>
+                  <div className="color-label-row">
+                    {colorLabels.map((color) => (
+                      <button
+                        key={color}
+                        className={`color-dot ${form.color_label === color ? 'selected' : ''}`}
+                        style={{ background: color }}
+                        onClick={() => setForm({ ...form, color_label: color })}
+                      />
+                    ))}
+                    <button
+                      className="color-dot-clear"
+                      onClick={() => setForm({ ...form, color_label: '' })}
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                </div>
+                <div className="ssh-form-group">
+                  <label>环境</label>
+                  <select
+                    value={form.environment || ''}
+                    onChange={(e) => setForm({ ...form, environment: e.target.value })}
+                  >
+                    <option value="">无</option>
+                    <option value="dev">开发</option>
+                    <option value="staging">测试</option>
+                    <option value="production">生产</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Name + Host */}
+              <div className="ssh-form-row">
+                <div className="ssh-form-group">
+                  <label className={nameError ? 'label-error' : ''}>名称</label>
                   <input
                     type="text"
-                    placeholder="192.168.1.1 或 example.com"
+                    value={form.name || ''}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    onBlur={() => handleBlur('name')}
+                    className={nameError ? 'input-error' : ''}
+                  />
+                  {nameError && <span className="field-error">name is a required field</span>}
+                </div>
+                <div className="ssh-form-group">
+                  <label className={hostError ? 'label-error' : ''}>Host</label>
+                  <input
+                    type="text"
                     value={form.host || ''}
                     onChange={(e) => setForm({ ...form, host: e.target.value })}
+                    onBlur={() => handleBlur('host')}
+                    className={hostError ? 'input-error' : ''}
+                  />
+                  {hostError && <span className="field-error">host is a required field</span>}
+                </div>
+              </div>
+
+              {/* User + Port */}
+              <div className="ssh-form-row">
+                <div className="ssh-form-group">
+                  <label>User</label>
+                  <input
+                    type="text"
+                    value={form.username || ''}
+                    onChange={(e) => setForm({ ...form, username: e.target.value })}
                   />
                 </div>
-                <div className="form-group" style={{ flex: 1 }}>
+                <div className="ssh-form-group">
                   <label>端口</label>
                   <input
                     type="number"
@@ -188,45 +282,59 @@ export const NewSessionModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Username */}
-              <div className="form-group">
-                <label>用户名</label>
-                <input
-                  type="text"
-                  placeholder="root"
-                  value={form.username || ''}
-                  onChange={(e) => setForm({ ...form, username: e.target.value })}
-                />
+              {/* Auth method toggle buttons */}
+              <div className="ssh-form-group">
+                <div className="ssh-auth-row">
+                  {authButtons.map((btn) => (
+                    <button
+                      key={btn.id}
+                      className={`ssh-auth-btn ${form.auth_method === btn.id ? 'active' : ''}`}
+                      onClick={() => setForm({ ...form, auth_method: btn.id as AuthType })}
+                    >
+                      {btn.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="ssh-auth-row" style={{ marginTop: 6 }}>
+                  {authExtras.map((btn) => (
+                    <button key={btn.id} className="ssh-auth-btn">
+                      {btn.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="ssh-auth-row" style={{ marginTop: 6 }}>
+                  {authMore.map((btn) => (
+                    <button key={btn.id} className="ssh-auth-btn">
+                      {btn.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Auth Method */}
-              <div className="form-group">
-                <label>认证方式</label>
-                <select
-                  value={form.auth_method || 'password'}
-                  onChange={(e) => setForm({ ...form, auth_method: e.target.value as any })}
-                >
-                  <option value="password">密码</option>
-                  <option value="publickey">密钥</option>
-                  <option value="keyboardinteractive">交互式</option>
-                </select>
-              </div>
-
-              {/* Password / Key */}
+              {/* Password with eye toggle */}
               {form.auth_method === 'password' && (
-                <div className="form-group">
+                <div className="ssh-form-group">
                   <label>密码</label>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    value={form.password || ''}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  />
+                  <div className="ssh-password-wrap">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={form.password || ''}
+                      onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    />
+                    <button
+                      className="ssh-password-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                      type="button"
+                    >
+                      {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
                 </div>
               )}
 
+              {/* Private key path */}
               {form.auth_method === 'publickey' && (
-                <div className="form-group">
+                <div className="ssh-form-group">
                   <label>私钥路径</label>
                   <input
                     type="text"
@@ -236,16 +344,31 @@ export const NewSessionModal: React.FC = () => {
                   />
                 </div>
               )}
+
+              {/* Remark */}
+              <div className="ssh-form-group">
+                <label>备注</label>
+                <textarea
+                  className="ssh-remark"
+                  rows={3}
+                  value={form.remark || ''}
+                  onChange={(e) => setForm({ ...form, remark: e.target.value })}
+                />
+              </div>
             </>
+          )}
+
+          {activeTab !== '标准' && (
+            <div className="ssh-tab-placeholder">
+              <p>{activeTab} 配置（开发中）</p>
+            </div>
           )}
         </div>
 
-        <div className="modal-footer">
-          <button className="btn" onClick={handleClose}>取消</button>
-          <button className="btn" onClick={handleSave}>保存</button>
-          <button className="btn btn-primary" onClick={handleConnect}>
-            {isLocalShell ? '打开' : '连接'}
-          </button>
+        {/* Footer */}
+        <div className="ssh-modal-footer">
+          <button className="ssh-footer-link" onClick={handleTestConnect}>测试连接</button>
+          <button className="ssh-footer-link" onClick={handleSave}>保存</button>
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { TitleBar } from './components/TitleBar/TitleBar';
 import { Sidebar } from './components/Sidebar/IconNav';
 import { SessionPanel } from './components/Sidebar/SessionPanel';
 import { TabBar } from './components/TabBar/TabBar';
@@ -17,13 +18,16 @@ function App() {
   }, [theme]);
 
   return (
-    <div className="app-layout">
-      <Sidebar />
-      <SessionPanel />
-      <div className="main-content">
-        <TabBar />
-        <TerminalContainer />
-        <StatusBar />
+    <div className="app-root">
+      <TitleBar />
+      <div className="app-layout">
+        <Sidebar />
+        <SessionPanel />
+        <div className="main-content">
+          <TabBar />
+          <TerminalContainer />
+          <StatusBar />
+        </div>
       </div>
       <NewSessionModal />
       <AppMenu />
