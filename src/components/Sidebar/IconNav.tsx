@@ -38,8 +38,53 @@ export const Sidebar: React.FC = () => {
     setActiveNavItem,
     showAppMenu,
     setShowAppMenu,
+    setShowNewSession,
+    setShowDockerModal,
+    setShowLocalTerminalModal,
+    setShowSettings,
+    setActiveTab,
+    toggleSftpPanel,
+    tabs,
+    activeTabId,
     t,
   } = useAppStore();
+
+  const handleNavClick = (id: string) => {
+    setActiveNavItem(id);
+    switch (id) {
+      case 'quickconnect':
+        setShowNewSession(true);
+        break;
+      case 'sessions':
+        // Expand sidebar to show session panel
+        if (sidebarCollapsed) toggleSidebar();
+        break;
+      case 'assetlist':
+        // Switch to asset-list tab
+        setActiveTab('asset-list');
+        break;
+      case 'files': {
+        // Toggle SFTP panel (only useful when on SSH tab)
+        const activeTab = tabs.find(tab => tab.id === activeTabId);
+        if (activeTab?.type === 'ssh') {
+          toggleSftpPanel();
+        }
+        break;
+      }
+      case 'keys':
+        setShowSettings(true);
+        break;
+      case 'docker':
+        setShowDockerModal(true);
+        break;
+      case 'services':
+        setShowSettings(true);
+        break;
+      case 'terminal':
+        setShowLocalTerminalModal(true);
+        break;
+    }
+  };
 
   return (
     <div className="icon-navbar">
@@ -51,7 +96,7 @@ export const Sidebar: React.FC = () => {
         <button
           key={item.id}
           className={`nav-icon-btn ${activeNavItem === item.id ? 'active' : ''}`}
-          onClick={() => setActiveNavItem(item.id)}
+          onClick={() => handleNavClick(item.id)}
           title={t(item.labelKey)}
         >
           <item.icon size={18} />

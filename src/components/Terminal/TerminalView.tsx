@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useCallback, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { TabInfo } from "../../types";
 import { useAppStore } from "../../stores/appStore";
 import "@xterm/xterm/css/xterm.css";
@@ -27,13 +29,16 @@ let osInfoPromise: Promise<{ os: string; windowsBuild?: number }> | null = null;
 async function getOsInfo(): Promise<{ os: string; windowsBuild?: number }> {
   if (cachedOsInfo) return cachedOsInfo;
   if (!osInfoPromise) {
-    osInfoPromise = import("@tauri-apps/api/core")
-      .then(({ invoke }) => invoke<{ os: string; windowsBuild?: number }>("get_os_info"))
+    osInfoPromise = invoke<{ os: string; windowsBuild?: number }>("get_os_info")
       .then((info) => { cachedOsInfo = info; return info; })
       .catch(() => { const fallback = { os: "unknown" }; cachedOsInfo = fallback; return fallback; });
   }
   return osInfoPromise;
 }
+
+// Pre-warm: start fetching OS info immediately at module load time
+// so it's ready before the first terminal is created.
+getOsInfo();
 
 // Global map to preserve terminal instances across re-renders
 export const terminalInstances = new Map<string, { terminal: Terminal; fitAddon: FitAddon }>();
@@ -116,13 +121,11 @@ export function forceTerminalRedraw(
   if (tabType === 'serial' || tabType === 'asset-list') return;
   const cols = inst.terminal.cols;
   const rows = inst.terminal.rows;
-  import('@tauri-apps/api/core').then(({ invoke }) => {
-    if (tabType === 'ssh') {
-      invoke('resize_ssh', { sessionId, cols, rows }).catch(() => {});
-    } else {
-      invoke('resize_pty', { sessionId, rows, cols }).catch(() => {});
-    }
-  });
+  if (tabType === 'ssh') {
+    invoke('resize_ssh', { sessionId, cols, rows }).catch(() => {});
+  } else {
+    invoke('resize_pty', { sessionId, rows, cols }).catch(() => {});
+  }
 }
 
 export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, forceVisible }) => {
@@ -271,8 +274,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       cleanupTabListeners(tab.id);
 
       const setupConnection = async () => {
-        const { invoke } = await import("@tauri-apps/api/core");
-        const { listen } = await import("@tauri-apps/api/event");
 
       if (cancelled) return;
 
@@ -534,9 +535,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       if (!tabStillExists) {
         connectedTabs.delete(tab.id);
         const closeCmd = tab.type === "ssh" ? "close_ssh" : tab.type === "serial" ? "close_serial" : "close_pty";
-        import("@tauri-apps/api/core").then(({ invoke }) => {
-          invoke(closeCmd, { sessionId: tab.sessionId }).catch(() => {});
-        });
+        invoke(closeCmd, { sessionId: tab.sessionId }).catch(() => {});
       }
     };
   }, [tab.id, tab.sessionId, tab.type, getThemeColors]);

@@ -57,8 +57,11 @@ pub struct AppState {
 
 // ---- Platform Info ----
 
-#[tauri::command]
-fn get_os_info() -> serde_json::Value {
+use std::sync::OnceLock;
+
+static OS_INFO: OnceLock<serde_json::Value> = OnceLock::new();
+
+fn compute_os_info() -> serde_json::Value {
     let os = std::env::consts::OS;
     let mut info = serde_json::json!({ "os": os });
 
@@ -83,6 +86,11 @@ fn get_os_info() -> serde_json::Value {
     }
 
     info
+}
+
+#[tauri::command]
+fn get_os_info() -> serde_json::Value {
+    OS_INFO.get_or_init(compute_os_info).clone()
 }
 
 // ---- PTY Commands ----
@@ -619,6 +627,10 @@ pub fn run() {
             usage_tracker::get_model_pricing,
         ])
         .setup(|app| {
+            // Pre-warm OS info cache in a background thread so the first
+            // frontend call to get_os_info returns instantly.
+            std::thread::spawn(|| { OS_INFO.get_or_init(compute_os_info); });
+
             // ---- System Tray ----
             let zh = is_system_chinese();
             let show_label = if zh { "显示 GWShell" } else { "Show GWShell" };

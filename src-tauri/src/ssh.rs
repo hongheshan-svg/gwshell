@@ -456,6 +456,9 @@ impl SshManager {
             .shell()
             .map_err(|e| format!("Shell request failed: {}", e))?;
 
+        // Enable SSH keepalive: send a keepalive packet every 30 seconds
+        session.set_keepalive(true, 30);
+
         session.set_blocking(false);
 
         let instance = Arc::new(Mutex::new(SshInstance { session, channel, sftp: None }));
@@ -469,15 +472,31 @@ impl SshManager {
         let sid = session_id.to_string();
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
+            let mut last_keepalive = std::time::Instant::now();
             loop {
                 let result = {
                     let mut inst = reader_instance.lock();
+
+                    // Send keepalive periodically
+                    if last_keepalive.elapsed() >= Duration::from_secs(30) {
+                        let _ = inst.session.keepalive_send();
+                        last_keepalive = std::time::Instant::now();
+                    }
+
                     inst.channel.read(&mut buf)
                 };
                 match result {
                     Ok(0) => {
-                        let _ = app_handle.emit(&format!("ssh-exit-{}", sid), ());
-                        break;
+                        // Check if channel truly closed (EOF)
+                        let eof = {
+                            let inst = reader_instance.lock();
+                            inst.channel.eof()
+                        };
+                        if eof {
+                            let _ = app_handle.emit(&format!("ssh-exit-{}", sid), ());
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(10));
                     }
                     Ok(n) => {
                         let data = String::from_utf8_lossy(&buf[..n]).to_string();
@@ -486,9 +505,20 @@ impl SshManager {
                     Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                         std::thread::sleep(Duration::from_millis(10));
                     }
-                    Err(_) => {
-                        let _ = app_handle.emit(&format!("ssh-exit-{}", sid), ());
-                        break;
+                    Err(e) => {
+                        // For connection-reset type errors, exit; for others, retry briefly
+                        let fatal = matches!(
+                            e.kind(),
+                            io::ErrorKind::ConnectionReset
+                                | io::ErrorKind::ConnectionAborted
+                                | io::ErrorKind::BrokenPipe
+                                | io::ErrorKind::UnexpectedEof
+                        );
+                        if fatal {
+                            let _ = app_handle.emit(&format!("ssh-exit-{}", sid), ());
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(50));
                     }
                 }
             }
