@@ -69,8 +69,12 @@ fn compute_os_info() -> serde_json::Value {
     {
         // Parse the Windows build number from `cmd /c ver`
         // e.g. "Microsoft Windows [Version 10.0.22631.4780]"
+        #[allow(unused_imports)]
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         let build: u32 = std::process::Command::new("cmd")
             .args(["/c", "ver"])
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
             .ok()
             .and_then(|o| String::from_utf8(o.stdout).ok())
@@ -93,10 +97,20 @@ fn get_os_info() -> serde_json::Value {
     OS_INFO.get_or_init(compute_os_info).clone()
 }
 
+/// Called by the frontend once React has mounted and painted.
+/// Shows the main window only when there is real content to display,
+/// eliminating the white-flash that occurs when show() is called before
+/// the webview finishes parsing HTML/CSS.
+#[tauri::command]
+async fn app_ready(window: tauri::WebviewWindow) {
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
 // ---- PTY Commands ----
 
 #[tauri::command]
-fn create_local_shell(
+async fn create_local_shell(
     session_id: String,
     rows: u16,
     cols: u16,
@@ -106,14 +120,27 @@ fn create_local_shell(
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    state
-        .pty_manager
-        .create_shell(&session_id, app_handle, rows, cols, shell_name, working_dir, charset)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        state.pty_manager.create_shell(
+            &session_id,
+            app_handle,
+            rows,
+            cols,
+            shell_name,
+            working_dir,
+            charset,
+        )
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn list_shells() -> Vec<pty::ShellEntry> {
-    pty::list_available_shells()
+async fn list_shells() -> Vec<pty::ShellEntry> {
+    tokio::task::spawn_blocking(pty::list_available_shells)
+        .await
+        .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -144,7 +171,7 @@ fn close_pty(session_id: String, state: State<'_, Arc<AppState>>) {
 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-fn ssh_connect(
+async fn ssh_connect(
     session_id: String,
     host: String,
     port: u16,
@@ -169,40 +196,48 @@ fn ssh_connect(
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    state.ssh_manager.connect(
-        &session_id,
-        &host,
-        port,
-        &username,
-        password.as_deref(),
-        private_key_path.as_deref(),
-        auth_method.as_deref().unwrap_or("password"),
-        totp_code.as_deref(),
-        jump_host.as_deref(),
-        jump_port.unwrap_or(22),
-        jump_username.as_deref(),
-        jump_password.as_deref(),
-        jump_private_key_path.as_deref(),
-        proxy_type.as_deref(),
-        proxy_host.as_deref(),
-        proxy_port.unwrap_or(1080),
-        proxy_username.as_deref(),
-        proxy_password.as_deref(),
-        connection_timeout.unwrap_or(30),
-        app_handle,
-        rows,
-        cols,
-    )
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        state.ssh_manager.connect(
+            &session_id,
+            &host,
+            port,
+            &username,
+            password.as_deref(),
+            private_key_path.as_deref(),
+            auth_method.as_deref().unwrap_or("password"),
+            totp_code.as_deref(),
+            jump_host.as_deref(),
+            jump_port.unwrap_or(22),
+            jump_username.as_deref(),
+            jump_password.as_deref(),
+            jump_private_key_path.as_deref(),
+            proxy_type.as_deref(),
+            proxy_host.as_deref(),
+            proxy_port.unwrap_or(1080),
+            proxy_username.as_deref(),
+            proxy_password.as_deref(),
+            connection_timeout.unwrap_or(30),
+            app_handle,
+            rows,
+            cols,
+        )
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn ssh_trust_host(host: String, port: u16, fingerprint: String, key_type: String) {
-    ssh::trust_host(&host, port, &fingerprint, &key_type);
+async fn ssh_trust_host(host: String, port: u16, fingerprint: String, key_type: String) {
+    let _ = tokio::task::spawn_blocking(move || {
+        ssh::trust_host(&host, port, &fingerprint, &key_type);
+    })
+    .await;
 }
 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-fn start_tunnel(
+async fn start_tunnel(
     _session_id: String,
     host: String,
     port: u16,
@@ -225,27 +260,32 @@ fn start_tunnel(
     remote_port: u16,
     state: State<'_, Arc<AppState>>,
 ) -> Result<u16, String> {
-    state.ssh_manager.start_local_forward(
-        &host,
-        port,
-        &username,
-        password.as_deref(),
-        private_key_path.as_deref(),
-        auth_method.as_deref().unwrap_or("password"),
-        jump_host.as_deref(),
-        jump_port.unwrap_or(22),
-        jump_username.as_deref(),
-        jump_password.as_deref(),
-        jump_private_key_path.as_deref(),
-        proxy_type.as_deref(),
-        proxy_host.as_deref(),
-        proxy_port.unwrap_or(1080),
-        proxy_username.as_deref(),
-        proxy_password.as_deref(),
-        local_port,
-        &remote_host,
-        remote_port,
-    )
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || -> Result<u16, String> {
+        state.ssh_manager.start_local_forward(
+            &host,
+            port,
+            &username,
+            password.as_deref(),
+            private_key_path.as_deref(),
+            auth_method.as_deref().unwrap_or("password"),
+            jump_host.as_deref(),
+            jump_port.unwrap_or(22),
+            jump_username.as_deref(),
+            jump_password.as_deref(),
+            jump_private_key_path.as_deref(),
+            proxy_type.as_deref(),
+            proxy_host.as_deref(),
+            proxy_port.unwrap_or(1080),
+            proxy_username.as_deref(),
+            proxy_password.as_deref(),
+            local_port,
+            &remote_host,
+            remote_port,
+        )
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 
@@ -274,159 +314,214 @@ fn close_ssh(session_id: String, state: State<'_, Arc<AppState>>) {
 }
 
 // ---- SFTP Commands ----
+//
+// All SFTP/SSH operations are network I/O. They MUST run off the main thread or
+// they will block the WebView's IPC and freeze the UI. Each command extracts an
+// owned `Arc<AppState>` and dispatches the synchronous libssh2 work onto a
+// `tokio::task::spawn_blocking` worker.
 
 #[tauri::command]
-fn sftp_list(
+async fn sftp_list(
     session_id: String,
     path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<ssh::SftpEntry>, String> {
-    state.ssh_manager.sftp_list_dir(&session_id, &path)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.ssh_manager.sftp_list_dir(&session_id, &path))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn sftp_realpath(
+async fn sftp_realpath(
     session_id: String,
     path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
-    state.ssh_manager.sftp_realpath(&session_id, &path)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.ssh_manager.sftp_realpath(&session_id, &path))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn sftp_mkdir(
+async fn sftp_mkdir(
     session_id: String,
     path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    state.ssh_manager.sftp_mkdir(&session_id, &path)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.ssh_manager.sftp_mkdir(&session_id, &path))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn sftp_rmdir(
+async fn sftp_rmdir(
     session_id: String,
     path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    state.ssh_manager.sftp_rmdir(&session_id, &path)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.ssh_manager.sftp_rmdir(&session_id, &path))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn sftp_delete_file(
+async fn sftp_delete_file(
     session_id: String,
     path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    state.ssh_manager.sftp_delete_file(&session_id, &path)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.ssh_manager.sftp_delete_file(&session_id, &path))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn sftp_rename(
+async fn sftp_rename(
     session_id: String,
     old_path: String,
     new_path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    state
-        .ssh_manager
-        .sftp_rename(&session_id, &old_path, &new_path)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        state
+            .ssh_manager
+            .sftp_rename(&session_id, &old_path, &new_path)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn sftp_download(
+async fn sftp_download(
     session_id: String,
     remote_path: String,
     local_path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    state
-        .ssh_manager
-        .sftp_download(&session_id, &remote_path, &local_path)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        state
+            .ssh_manager
+            .sftp_download(&session_id, &remote_path, &local_path)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn sftp_upload(
+async fn sftp_upload(
     session_id: String,
     remote_path: String,
     local_path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    state
-        .ssh_manager
-        .sftp_upload(&session_id, &remote_path, &local_path)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        state
+            .ssh_manager
+            .sftp_upload(&session_id, &remote_path, &local_path)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn sftp_open_file(
+async fn sftp_open_file(
     session_id: String,
     remote_path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
-    let file_name = std::path::Path::new(&remote_path)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("file")
-        .to_string();
-    let temp_dir = std::env::temp_dir().join("gwshell_sftp");
-    std::fs::create_dir_all(&temp_dir)
-        .map_err(|e| format!("Create temp dir failed: {}", e))?;
-    let local_path = temp_dir.join(&file_name);
-    let local_str = local_path.to_string_lossy().to_string();
-    state
-        .ssh_manager
-        .sftp_download(&session_id, &remote_path, &local_str)?;
-    Ok(local_str)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || -> Result<String, String> {
+        let file_name = std::path::Path::new(&remote_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file")
+            .to_string();
+        let temp_dir = std::env::temp_dir().join("gwshell_sftp");
+        std::fs::create_dir_all(&temp_dir)
+            .map_err(|e| format!("Create temp dir failed: {}", e))?;
+        let local_path = temp_dir.join(&file_name);
+        let local_str = local_path.to_string_lossy().to_string();
+        state
+            .ssh_manager
+            .sftp_download(&session_id, &remote_path, &local_str)?;
+        Ok(local_str)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn sftp_read_text(
+async fn sftp_read_text(
     session_id: String,
     remote_path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
-    state
-        .ssh_manager
-        .sftp_read_text(&session_id, &remote_path)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.ssh_manager.sftp_read_text(&session_id, &remote_path))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn sftp_write_text(
+async fn sftp_write_text(
     session_id: String,
     remote_path: String,
     content: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    state
-        .ssh_manager
-        .sftp_write_text(&session_id, &remote_path, &content)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        state
+            .ssh_manager
+            .sftp_write_text(&session_id, &remote_path, &content)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn sftp_chmod(
+async fn sftp_chmod(
     session_id: String,
     path: String,
     mode: u32,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    state.ssh_manager.sftp_chmod(&session_id, &path, mode)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.ssh_manager.sftp_chmod(&session_id, &path, mode))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn sftp_create_file(
+async fn sftp_create_file(
     session_id: String,
     path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    state.ssh_manager.sftp_create_file(&session_id, &path)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.ssh_manager.sftp_create_file(&session_id, &path))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn ssh_exec(
+async fn ssh_exec(
     session_id: String,
     command: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
-    state.ssh_manager.ssh_exec(&session_id, &command)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.ssh_manager.ssh_exec(&session_id, &command))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
 }
 
 // ---- Ping Command ----
@@ -439,7 +534,7 @@ async fn ping_host(host: String, port: u16) -> Result<f64, String> {
 
     let addr = format!("{}:{}", host, port);
     let start = Instant::now();
-    match timeout(Duration::from_secs(5), TcpStream::connect(&addr)).await {
+    match timeout(Duration::from_secs(3), TcpStream::connect(&addr)).await {
         Ok(Ok(_)) => {
             let elapsed = start.elapsed().as_secs_f64() * 1000.0;
             Ok((elapsed * 10.0).round() / 10.0) // round to 0.1ms
@@ -452,7 +547,7 @@ async fn ping_host(host: String, port: u16) -> Result<f64, String> {
 // ---- Serial Commands ----
 
 #[tauri::command]
-fn serial_open(
+async fn serial_open(
     session_id: String,
     port_name: String,
     baud_rate: u32,
@@ -462,15 +557,20 @@ fn serial_open(
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    state.serial_manager.open(
-        &session_id,
-        &port_name,
-        baud_rate,
-        &data_bits,
-        &stop_bits,
-        &parity,
-        app_handle,
-    )
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        state.serial_manager.open(
+            &session_id,
+            &port_name,
+            baud_rate,
+            &data_bits,
+            &stop_bits,
+            &parity,
+            app_handle,
+        )
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
@@ -490,47 +590,72 @@ fn close_serial(session_id: String, state: State<'_, Arc<AppState>>) {
 }
 
 #[tauri::command]
-fn list_serial_ports() -> Vec<String> {
-    serial::list_serial_ports()
+async fn list_serial_ports() -> Vec<String> {
+    tokio::task::spawn_blocking(serial::list_serial_ports)
+        .await
+        .unwrap_or_default()
 }
 
 // ---- Session Management Commands ----
+//
+// `get_sessions` reads only the in-memory cache (instant, no need to dispatch).
+// The mutating ones touch SQLite, so they go through `spawn_blocking`.
 
 #[tauri::command]
-fn save_session(config: SessionConfig, state: State<'_, Arc<AppState>>) -> Result<(), String> {
-    // Persist to SQLite
-    state.db.save_session(&config)?;
-    // Update in-memory cache
-    let mut sessions = state.sessions.lock();
-    if let Some(existing) = sessions.iter_mut().find(|s| s.id == config.id) {
-        *existing = config;
-    } else {
-        sessions.push(config);
-    }
-    Ok(())
+async fn save_session(
+    config: SessionConfig,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        state.db.save_session(&config)?;
+        let mut sessions = state.sessions.lock();
+        if let Some(existing) = sessions.iter_mut().find(|s| s.id == config.id) {
+            *existing = config;
+        } else {
+            sessions.push(config);
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
 fn get_sessions(state: State<'_, Arc<AppState>>) -> Vec<SessionConfig> {
+    // Pure in-memory clone — keep sync to avoid spawn_blocking overhead.
     state.sessions.lock().clone()
 }
 
 #[tauri::command]
-fn delete_session(session_id: String, state: State<'_, Arc<AppState>>) {
-    let _ = state.db.delete_session(&session_id);
-    state.sessions.lock().retain(|s| s.id != session_id);
+async fn delete_session(
+    session_id: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let _ = state.db.delete_session(&session_id);
+        state.sessions.lock().retain(|s| s.id != session_id);
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))
 }
 
 #[tauri::command]
-fn save_group(group: SessionGroup, state: State<'_, Arc<AppState>>) -> Result<(), String> {
-    state.db.save_group(&group)?;
-    let mut groups = state.groups.lock();
-    if let Some(existing) = groups.iter_mut().find(|g| g.name == group.name) {
-        *existing = group;
-    } else {
-        groups.push(group);
-    }
-    Ok(())
+async fn save_group(group: SessionGroup, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        state.db.save_group(&group)?;
+        let mut groups = state.groups.lock();
+        if let Some(existing) = groups.iter_mut().find(|g| g.name == group.name) {
+            *existing = group;
+        } else {
+            groups.push(group);
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
@@ -568,6 +693,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
+            app_ready,
             get_os_info,
             create_local_shell,
             list_shells,
@@ -631,7 +757,24 @@ pub fn run() {
             // frontend call to get_os_info returns instantly.
             std::thread::spawn(|| { OS_INFO.get_or_init(compute_os_info); });
 
-            // ---- System Tray ----
+            // Serialize initial sessions and inject them into the webview via an
+            // initialization script so the frontend Zustand store can populate
+            // synchronously on the very first render — no IPC round-trip needed.
+            let sessions_json = {
+                let state = app.state::<Arc<AppState>>();
+                let sessions = state.sessions.lock();
+                serde_json::to_string(&*sessions).unwrap_or_else(|_| "[]".to_string())
+            };
+            // Inject sessions AND fire a cheap IPC call to warm up the
+            // __TAURI_INTERNALS__ → Rust pipeline before the user clicks anything.
+            let init_script = format!(
+                "window.__GWSHELL_SESSIONS__={};try{{window.__TAURI_INTERNALS__.invoke('get_os_info')}}catch(e){{}}",
+                sessions_json
+            );
+
+            // ---- System Tray (created BEFORE the window so that setup()
+            //      finishes immediately after show(), letting the event loop
+            //      start processing IPC calls without delay) ----
             let zh = is_system_chinese();
             let show_label = if zh { "显示 GWShell" } else { "Show GWShell" };
             let quit_label = if zh { "退出" } else { "Quit" };
@@ -675,7 +818,29 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // ---- Intercept window close handled by .on_window_event() below ----
+            // Create the main window programmatically so we can attach the
+            // initialization script (not possible via tauri.conf.json).
+            // Built AFTER the tray so that show() is the very last thing
+            // in setup — the event loop starts immediately after.
+            let _main_window = tauri::WebviewWindowBuilder::new(
+                app,
+                "main",
+                tauri::WebviewUrl::App("index.html".into()),
+            )
+            .title("GWShell")
+            .inner_size(1280.0, 800.0)
+            .min_inner_size(900.0, 600.0)
+            .center()
+            .decorations(false)
+            .transparent(true)
+            .resizable(true)
+            .visible(false)
+            .initialization_script(&init_script)
+            .build()?;
+
+            // Window stays hidden until the frontend calls `app_ready`
+            // after React has mounted and painted the first frame.
+            // This eliminates the white flash on startup.
 
             Ok(())
         })

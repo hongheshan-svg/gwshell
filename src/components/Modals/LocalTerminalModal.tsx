@@ -1,6 +1,7 @@
 ﻿import React, { useState, useRef, useEffect } from "react";
 import { X, FolderOpen, ChevronDown } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "../../stores/appStore";
 import type { SessionConfig } from "../../types";
 
@@ -108,8 +109,7 @@ export const LocalTerminalModal: React.FC = () => {
 
   const handlePickDir = async () => {
     try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const selected = await open({ directory: true, multiple: false, title: t('local_select_dir') });
+      const selected = await dialogOpen({ directory: true, multiple: false, title: t('local_select_dir') });
       if (typeof selected === "string" && selected) {
         setForm((prev) => ({ ...prev, working_dir: selected }));
       }

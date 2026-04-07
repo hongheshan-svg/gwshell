@@ -56,9 +56,31 @@ export const UpdateChecker: React.FC = () => {
   };
 
   useEffect(() => {
-    // Check for updates 3 seconds after app launch
-    const timer = setTimeout(checkForUpdate, 3000);
-    return () => clearTimeout(timer);
+    let idleCallbackId: number | null = null;
+
+    // Updates are non-critical; don't let them compete with early window interactions.
+    const timer = window.setTimeout(() => {
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        idleCallbackId = window.requestIdleCallback(() => {
+          void checkForUpdate();
+        }, { timeout: 5000 });
+      } else {
+        idleCallbackId = setTimeout(() => {
+          void checkForUpdate();
+        }, 0);
+      }
+    }, 20000);
+
+    return () => {
+      clearTimeout(timer);
+      if (idleCallbackId != null) {
+        if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+          window.cancelIdleCallback(idleCallbackId);
+        } else {
+          clearTimeout(idleCallbackId);
+        }
+      }
+    };
   }, []);
 
   if (dismissed || state === 'idle' || state === 'checking') return null;

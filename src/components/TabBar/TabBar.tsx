@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { X, Plus, Menu, ChevronDown, FolderOpen } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
-import { destroyTerminal } from '../Terminal/TerminalView';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
 
 export const TabBar: React.FC = () => {
@@ -10,7 +9,9 @@ export const TabBar: React.FC = () => {
   const addBtnRef = useRef<HTMLButtonElement>(null);
 
   const handleCloseTab = (tabId: string) => {
-    destroyTerminal(tabId);
+    import('../Terminal/TerminalView').then(({ destroyTerminal }) => {
+      destroyTerminal(tabId);
+    });
     removeTab(tabId);
   };
 

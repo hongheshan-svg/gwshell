@@ -232,34 +232,50 @@ fn sync_all_mcp(servers: &[McpServer]) -> Result<(), String> {
 // ============================================================================
 
 #[tauri::command]
-pub fn list_mcp_servers() -> Result<Vec<McpServer>, String> {
-    Ok(load_mcp_store().servers)
+pub async fn list_mcp_servers() -> Result<Vec<McpServer>, String> {
+    tokio::task::spawn_blocking(|| -> Result<Vec<McpServer>, String> {
+        Ok(load_mcp_store().servers)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-pub fn save_mcp_server(server: McpServer) -> Result<(), String> {
-    let mut store = load_mcp_store();
-    if let Some(existing) = store.servers.iter_mut().find(|s| s.id == server.id) {
-        *existing = server;
-    } else {
-        store.servers.push(server);
-    }
-    save_mcp_store(&store)?;
-    sync_all_mcp(&store.servers)
+pub async fn save_mcp_server(server: McpServer) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let mut store = load_mcp_store();
+        if let Some(existing) = store.servers.iter_mut().find(|s| s.id == server.id) {
+            *existing = server;
+        } else {
+            store.servers.push(server);
+        }
+        save_mcp_store(&store)?;
+        sync_all_mcp(&store.servers)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-pub fn delete_mcp_server(server_id: String) -> Result<(), String> {
-    let mut store = load_mcp_store();
-    store.servers.retain(|s| s.id != server_id);
-    save_mcp_store(&store)?;
-    sync_all_mcp(&store.servers)
+pub async fn delete_mcp_server(server_id: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let mut store = load_mcp_store();
+        store.servers.retain(|s| s.id != server_id);
+        save_mcp_store(&store)?;
+        sync_all_mcp(&store.servers)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-pub fn sync_mcp_servers() -> Result<(), String> {
-    let store = load_mcp_store();
-    sync_all_mcp(&store.servers)
+pub async fn sync_mcp_servers() -> Result<(), String> {
+    tokio::task::spawn_blocking(|| -> Result<(), String> {
+        let store = load_mcp_store();
+        sync_all_mcp(&store.servers)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 /// Get MCP server templates

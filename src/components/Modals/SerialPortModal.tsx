@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect } from "react";
 import { X, Plus, Eye, Monitor, CornerDownLeft } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../../stores/appStore";
 import type { SessionConfig } from "../../types";
 
@@ -84,11 +85,9 @@ export const SerialPortModal: React.FC = () => {
     setForm({ ...defaultForm, autofill_rows: defaultAutofillRows.map((r) => ({ ...r })) });
     setTouched({});
     setActiveTab("standard");
-    import("@tauri-apps/api/core").then(({ invoke }) => {
-      invoke<string[]>("list_serial_ports")
+    invoke<string[]>("list_serial_ports")
         .then((ports) => setAvailablePorts(ports))
         .catch(() => setAvailablePorts([]));
-    });
   }, [showSerialModal]);
 
   if (!showSerialModal) return null;

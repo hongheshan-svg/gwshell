@@ -14,6 +14,9 @@ impl Database {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
+        // Enable WAL mode for faster reads and concurrent access
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| e.to_string())?;
         let db = Self {
             conn: Mutex::new(conn),
         };

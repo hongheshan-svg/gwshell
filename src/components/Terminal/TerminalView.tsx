@@ -164,6 +164,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           brightMagenta: "#d8b4fe",
           brightCyan: "#67e8f9",
           brightWhite: "#ffffff",
+          scrollbarSliderBackground: "rgba(255, 255, 255, 0.28)",
+          scrollbarSliderHoverBackground: "rgba(255, 255, 255, 0.42)",
+          scrollbarSliderActiveBackground: "rgba(255, 255, 255, 0.56)",
         }
       : {
           background: "#f5f6fa",
@@ -187,6 +190,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           brightMagenta: "#a855f7",
           brightCyan: "#06b6d4",
           brightWhite: "#ffffff",
+          scrollbarSliderBackground: "rgba(0, 0, 0, 0.22)",
+          scrollbarSliderHoverBackground: "rgba(0, 0, 0, 0.34)",
+          scrollbarSliderActiveBackground: "rgba(0, 0, 0, 0.46)",
         };
   }, []);
 

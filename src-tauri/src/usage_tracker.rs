@@ -114,14 +114,26 @@ fn save_usage_store(store: &UsageStore) -> Result<(), String> {
 // ============================================================================
 
 #[tauri::command]
-pub fn add_usage_record(record: UsageRecord) -> Result<(), String> {
-    let mut store = load_usage_store();
-    store.records.push(record);
-    save_usage_store(&store)
+pub async fn add_usage_record(record: UsageRecord) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let mut store = load_usage_store();
+        store.records.push(record);
+        save_usage_store(&store)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-pub fn get_usage_summary(days: Option<u32>) -> Result<UsageSummary, String> {
+pub async fn get_usage_summary(days: Option<u32>) -> Result<UsageSummary, String> {
+    tokio::task::spawn_blocking(move || -> Result<UsageSummary, String> {
+        get_usage_summary_blocking(days)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
+}
+
+fn get_usage_summary_blocking(days: Option<u32>) -> Result<UsageSummary, String> {
     let store = load_usage_store();
     let now = chrono_now_ms();
     let cutoff = days.map(|d| now - (d as i64) * 86400 * 1000).unwrap_or(0);
@@ -179,22 +191,34 @@ pub fn get_usage_summary(days: Option<u32>) -> Result<UsageSummary, String> {
 }
 
 #[tauri::command]
-pub fn clear_usage_records() -> Result<(), String> {
-    let mut store = load_usage_store();
-    store.records.clear();
-    save_usage_store(&store)
+pub async fn clear_usage_records() -> Result<(), String> {
+    tokio::task::spawn_blocking(|| -> Result<(), String> {
+        let mut store = load_usage_store();
+        store.records.clear();
+        save_usage_store(&store)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-pub fn save_model_pricing(pricing: Vec<ModelPricing>) -> Result<(), String> {
-    let mut store = load_usage_store();
-    store.custom_pricing = pricing;
-    save_usage_store(&store)
+pub async fn save_model_pricing(pricing: Vec<ModelPricing>) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let mut store = load_usage_store();
+        store.custom_pricing = pricing;
+        save_usage_store(&store)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-pub fn get_model_pricing() -> Result<Vec<ModelPricing>, String> {
-    Ok(load_usage_store().custom_pricing)
+pub async fn get_model_pricing() -> Result<Vec<ModelPricing>, String> {
+    tokio::task::spawn_blocking(|| -> Result<Vec<ModelPricing>, String> {
+        Ok(load_usage_store().custom_pricing)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 // Simple time helpers (no chrono dependency needed)

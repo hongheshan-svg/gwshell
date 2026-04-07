@@ -145,14 +145,14 @@ export const McpManager: React.FC<Props> = ({ t }) => {
               onClick={() => { setSelectedId(s.id); setEditForm({ ...s }); }}
             >
               <div className="ai-provider-card-info">
-                <span className="ai-provider-name">{s.name || '(unnamed)'}</span>
+                <span className="ai-provider-name">{s.name || t('mcp_new_server')}</span>
                 <span className="ai-provider-type">{s.command}</span>
               </div>
               <div className="ai-provider-badges">
                 {s.enabled ? (
-                  <span className="ai-badge active" title="Enabled">✓</span>
+                  <span className="ai-badge active" title={t('mcp_status_enabled')}>✓</span>
                 ) : (
-                  <span className="ai-badge" title="Disabled">✗</span>
+                  <span className="ai-badge" title={t('mcp_status_disabled')}>✗</span>
                 )}
               </div>
             </div>

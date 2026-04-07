@@ -26,6 +26,8 @@ export const StatusBar: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    let idleCallbackId: number | null = null;
+
     const loadAi = async () => {
       try {
         const [list, ids] = await Promise.all([
@@ -38,9 +40,31 @@ export const StatusBar: React.FC = () => {
         setActiveProvider(active?.name || '');
       } catch { /* empty */ }
     };
-    loadAi();
+
+    const initTimer = window.setTimeout(() => {
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        idleCallbackId = window.requestIdleCallback(() => {
+          void loadAi();
+        }, { timeout: 4000 });
+      } else {
+        idleCallbackId = setTimeout(() => {
+          void loadAi();
+        }, 0);
+      }
+    }, 15000);
+
     const interval = setInterval(loadAi, 10000);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(initTimer);
+      clearInterval(interval);
+      if (idleCallbackId != null) {
+        if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+          window.cancelIdleCallback(idleCallbackId);
+        } else {
+          clearTimeout(idleCallbackId);
+        }
+      }
+    };
   }, []);
 
   const handleSwitchProvider = async (providerId: string) => {

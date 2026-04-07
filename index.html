@@ -5,9 +5,197 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GWShell</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+      }
+
+      body {
+        font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+      }
+
+      /* Transparent backdrop — only the card is visible */
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+      }
+
+      /* Small square card — matches the app's card/panel style */
+      .boot-card {
+        width: 160px;
+        height: 160px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        background: #161822;
+        border: 1px solid #2a2d42;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(76, 141, 255, 0.08);
+        user-select: none;
+      }
+
+      /* Icon with pulsing rings */
+      .boot-logo {
+        position: relative;
+        width: 56px;
+        height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .boot-logo::before,
+      .boot-logo::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        border: 1px solid rgba(76, 141, 255, 0.45);
+        animation: boot-pulse 2.4s cubic-bezier(0.25, 0.6, 0.3, 1) infinite;
+      }
+      .boot-logo::after {
+        animation-delay: 1.2s;
+      }
+
+      @keyframes boot-pulse {
+        0%   { transform: scale(0.85); opacity: 0.7; }
+        80%  { transform: scale(1.65); opacity: 0; }
+        100% { transform: scale(1.65); opacity: 0; }
+      }
+
+      .boot-logo-core {
+        width: 38px;
+        height: 38px;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #4c8dff 0%, #8a5cf6 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: "JetBrains Mono", "Consolas", ui-monospace, monospace;
+        font-size: 15px;
+        font-weight: 700;
+        color: #fff;
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.08) inset,
+                    0 4px 16px -4px rgba(76, 141, 255, 0.6);
+        animation: boot-core-breath 2.4s ease-in-out infinite;
+      }
+
+      .boot-logo-core .boot-caret {
+        display: inline-block;
+        width: 1.5px;
+        height: 13px;
+        background: #fff;
+        margin-left: 2px;
+        border-radius: 1px;
+        animation: boot-blink 1s steps(1, end) infinite;
+      }
+
+      @keyframes boot-blink {
+        0%, 50% { opacity: 1; }
+        51%, 100% { opacity: 0; }
+      }
+
+      @keyframes boot-core-breath {
+        0%, 100% { transform: scale(1); }
+        50%       { transform: scale(1.05); }
+      }
+
+      /* Progress bar */
+      .boot-progress {
+        width: 80px;
+        height: 2px;
+        border-radius: 2px;
+        background: rgba(255,255,255,0.07);
+        overflow: hidden;
+        position: relative;
+      }
+
+      .boot-progress::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0;
+        height: 100%;
+        width: 40%;
+        border-radius: 2px;
+        background: linear-gradient(90deg, transparent, #4c8dff 40%, #8a5cf6 60%, transparent);
+        animation: boot-progress-slide 1.4s ease-in-out infinite;
+      }
+
+      @keyframes boot-progress-slide {
+        0%   { left: -40%; }
+        100% { left: 100%; }
+      }
+
+      /* Fade-out transition for boot splash */
+      #boot-splash.fade-out {
+        opacity: 0;
+        transition: opacity 0.35s ease-out;
+      }
+
+      /* App starts hidden, fades in */
+      #root {
+        opacity: 0;
+        transition: opacity 0.3s ease-in;
+      }
+      #root.ready {
+        opacity: 1;
+      }
+    </style>
+    <script>
+      // Record boot start time as early as possible so the React layer can
+      // guarantee a minimum splash display duration regardless of how fast
+      // the bundle parses.
+      window.__GWSHELL_BOOT_T0__ = performance.now();
+    </script>
+    <script>
+      // Global event delegate: intercepts titlebar button clicks using native
+      // DOM events + Tauri IPC. Works instantly even while the 666KB React
+      // bundle is still being parsed, because this listener is registered in
+      // <head> before any module scripts execute.
+      document.addEventListener('click', function(e) {
+        var t = e.target;
+        // Walk up at most 3 levels to find a button with data-gw-action
+        for (var i = 0; i < 3 && t && t !== document; i++, t = t.parentElement) {
+          var action = t.getAttribute && t.getAttribute('data-gw-action');
+          if (action) {
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+              window.__TAURI_INTERNALS__.invoke('plugin:window|' + action, {label:'main'});
+            } catch(ex) {}
+            return;
+          }
+        }
+      }, true); // useCapture=true so it fires before React's synthetic events
+    </script>
   </head>
 
   <body>
+    <div id="boot-splash" aria-hidden="true" data-tauri-drag-region>
+      <div class="boot-card">
+        <div class="boot-logo">
+          <div class="boot-logo-core">
+            &gt;_<span class="boot-caret"></span>
+          </div>
+        </div>
+        <div class="boot-progress"></div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

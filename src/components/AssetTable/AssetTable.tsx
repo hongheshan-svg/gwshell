@@ -28,7 +28,7 @@ export const AssetTable: React.FC = () => {
     setActiveTab,
     tabs,
     t,
-    updateSessionLatency,
+    batchUpdateLatency,
   } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: SessionConfig } | null>(null);
@@ -111,30 +111,109 @@ export const AssetTable: React.FC = () => {
     return <span className={cls}>{latency}ms</span>;
   };
 
-  // Ping latency: run once on mount, then every 60 seconds
+  // Ping latency: fully async, batch-update to avoid blocking renders
   const sessionsRef = useRef(realSessions);
   sessionsRef.current = realSessions;
 
-  const doPingRef = useRef(() => {});
-  doPingRef.current = () => {
-    const targets = sessionsRef.current.filter((s) => s.host);
-    targets.forEach(async (session) => {
-      try {
-        const latency = await invoke<number>('ping_host', {
-          host: session.host!,
-          port: session.port || 22,
-        });
-        updateSessionLatency(session.id, latency);
-      } catch {
-        updateSessionLatency(session.id, null);
-      }
-    });
+  const idleCallbackRef = useRef<number | null>(null);
+  const idleUsesTimeoutRef = useRef(false);
+  const lastInteractionRef = useRef(Date.now());
+  const pingLoopRunningRef = useRef(false);
+
+  const sleep = (ms: number) => new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+
+  const scheduleIdle = (callback: () => void) => {
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleUsesTimeoutRef.current = false;
+      idleCallbackRef.current = window.requestIdleCallback(callback, { timeout: 2000 });
+      return;
+    }
+    idleUsesTimeoutRef.current = true;
+    idleCallbackRef.current = setTimeout(callback, 0);
+  };
+
+  const cancelIdle = () => {
+    if (idleCallbackRef.current == null) return;
+    if (!idleUsesTimeoutRef.current && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+      window.cancelIdleCallback(idleCallbackRef.current);
+    } else {
+      clearTimeout(idleCallbackRef.current);
+    }
+    idleCallbackRef.current = null;
   };
 
   useEffect(() => {
-    doPingRef.current();
+    const markInteraction = () => {
+      lastInteractionRef.current = Date.now();
+    };
+
+    window.addEventListener('pointerdown', markInteraction, { passive: true });
+    window.addEventListener('keydown', markInteraction);
+    window.addEventListener('resize', markInteraction);
+
+    return () => {
+      window.removeEventListener('pointerdown', markInteraction);
+      window.removeEventListener('keydown', markInteraction);
+      window.removeEventListener('resize', markInteraction);
+    };
+  }, []);
+
+  const doPingRef = useRef(() => {});
+  doPingRef.current = async () => {
+    if (pingLoopRunningRef.current) return;
+    const targets = sessionsRef.current.filter((s) => s.host);
+    if (targets.length === 0) return;
+
+    pingLoopRunningRef.current = true;
+    const updates = new Map<string, number | null>();
+
+    try {
+      for (const session of targets) {
+        while (Date.now() - lastInteractionRef.current < 1500) {
+          await sleep(250);
+        }
+
+        if (document.hidden || !document.hasFocus()) {
+          break;
+        }
+
+        try {
+          const latency = await invoke<number>('ping_host', {
+            host: session.host!,
+            port: session.port || 22,
+          });
+          updates.set(session.id, latency);
+        } catch {
+          updates.set(session.id, null);
+        }
+
+        // Leave breathing room for UI interactions between hosts.
+        await sleep(150);
+      }
+
+      if (updates.size > 0) {
+        batchUpdateLatency(updates);
+      }
+    } finally {
+      pingLoopRunningRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    // First ping waits until the UI is already visible and the main thread is idle.
+    const initTimer = window.setTimeout(() => {
+      scheduleIdle(() => {
+        void doPingRef.current();
+      });
+    }, 8000);
     const timer = setInterval(() => doPingRef.current(), 60_000);
-    return () => clearInterval(timer);
+    return () => {
+      clearTimeout(initTimer);
+      clearInterval(timer);
+      cancelIdle();
+    };
   }, []);
 
   return (

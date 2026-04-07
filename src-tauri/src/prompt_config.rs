@@ -32,63 +32,81 @@ fn prompt_file_for_tool(tool: &str, project_dir: &str) -> Option<(String, PathBu
 
 /// List prompt files in a project directory
 #[tauri::command]
-pub fn list_prompt_files(project_dir: String) -> Result<Vec<PromptFile>, String> {
-    let tools = ["claude", "codex", "gemini"];
-    let mut results = Vec::new();
+pub async fn list_prompt_files(project_dir: String) -> Result<Vec<PromptFile>, String> {
+    tokio::task::spawn_blocking(move || -> Result<Vec<PromptFile>, String> {
+        let tools = ["claude", "codex", "gemini"];
+        let mut results = Vec::new();
 
-    for tool in &tools {
-        if let Some((filename, path)) = prompt_file_for_tool(tool, &project_dir) {
-            let exists = path.exists();
-            let content = if exists {
-                fs::read_to_string(&path).unwrap_or_default()
-            } else {
-                String::new()
-            };
-            results.push(PromptFile {
-                tool: tool.to_string(),
-                filename,
-                content,
-                exists,
-                path: path.to_string_lossy().to_string(),
-            });
+        for tool in &tools {
+            if let Some((filename, path)) = prompt_file_for_tool(tool, &project_dir) {
+                let exists = path.exists();
+                let content = if exists {
+                    fs::read_to_string(&path).unwrap_or_default()
+                } else {
+                    String::new()
+                };
+                results.push(PromptFile {
+                    tool: tool.to_string(),
+                    filename,
+                    content,
+                    exists,
+                    path: path.to_string_lossy().to_string(),
+                });
+            }
         }
-    }
 
-    Ok(results)
+        Ok(results)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 /// Read a specific prompt file
 #[tauri::command]
-pub fn read_prompt_file(file_path: String) -> Result<String, String> {
-    fs::read_to_string(&file_path).map_err(|e| format!("Read failed: {}", e))
+pub async fn read_prompt_file(file_path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || -> Result<String, String> {
+        fs::read_to_string(&file_path).map_err(|e| format!("Read failed: {}", e))
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 /// Write a prompt file
 #[tauri::command]
-pub fn write_prompt_file(file_path: String, content: String) -> Result<(), String> {
-    fs::write(&file_path, &content).map_err(|e| format!("Write failed: {}", e))
+pub async fn write_prompt_file(file_path: String, content: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        fs::write(&file_path, &content).map_err(|e| format!("Write failed: {}", e))
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 /// Sync prompt content from one tool to others in the same project directory
 #[tauri::command]
-pub fn sync_prompt_files(
+pub async fn sync_prompt_files(
     project_dir: String,
     source_tool: String,
     target_tools: Vec<String>,
     content: String,
 ) -> Result<Vec<String>, String> {
-    let mut synced = Vec::new();
+    tokio::task::spawn_blocking(move || -> Result<Vec<String>, String> {
+        let mut synced = Vec::new();
 
-    for tool in &target_tools {
-        if tool == &source_tool { continue; }
-        if let Some((filename, path)) = prompt_file_for_tool(tool, &project_dir) {
-            fs::write(&path, &content)
-                .map_err(|e| format!("Write {} failed: {}", filename, e))?;
-            synced.push(filename);
+        for tool in &target_tools {
+            if tool == &source_tool {
+                continue;
+            }
+            if let Some((filename, path)) = prompt_file_for_tool(tool, &project_dir) {
+                fs::write(&path, &content)
+                    .map_err(|e| format!("Write {} failed: {}", filename, e))?;
+                synced.push(filename);
+            }
         }
-    }
 
-    Ok(synced)
+        Ok(synced)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 /// Get prompt templates

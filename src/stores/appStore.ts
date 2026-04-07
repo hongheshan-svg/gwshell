@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { invoke } from '@tauri-apps/api/core';
 import type { SessionConfig, TabInfo, ThemeMode, MainView } from '../types';
 import { detectLocale, getT, type Locale, type TranslationKeys } from '../i18n';
 
@@ -27,6 +28,7 @@ interface AppStore {
   addSession: (session: SessionConfig) => void;
   removeSession: (id: string) => void;
   updateSessionLatency: (id: string, latency: number | null) => void;
+  batchUpdateLatency: (updates: Map<string, number | null>) => void;
   selectedSessionIds: string[];
   setSelectedSessionIds: (ids: string[]) => void;
   toggleSelectSession: (id: string) => void;
@@ -86,6 +88,21 @@ interface AppStore {
 const initialLocale = detectLocale();
 const initialT = getT(initialLocale);
 
+// Read sessions injected by Tauri's initialization_script before React loads.
+// This eliminates the IPC round-trip that causes the empty-then-populated flash.
+function popInjectedSessions(): SessionConfig[] {
+  if (typeof window === 'undefined') return [];
+  const win = window as unknown as Record<string, unknown>;
+  const data = win.__GWSHELL_SESSIONS__;
+  if (Array.isArray(data)) {
+    delete win.__GWSHELL_SESSIONS__;
+    return data as SessionConfig[];
+  }
+  return [];
+}
+
+const _initialSessions = popInjectedSessions();
+
 export const useAppStore = create<AppStore>((set, _get) => ({
   locale: initialLocale,
   setLocale: (locale: Locale) => set({ locale, t: getT(locale) }),
@@ -101,7 +118,7 @@ export const useAppStore = create<AppStore>((set, _get) => ({
   activeNavItem: 'sessions',
   setActiveNavItem: (item) => set({ activeNavItem: item }),
 
-  sessions: [],
+  sessions: _initialSessions,
   setSessions: (sessions) => set({ sessions }),
   addSession: (session) => {
     set((state) => {
@@ -113,24 +130,28 @@ export const useAppStore = create<AppStore>((set, _get) => ({
       return { sessions };
     });
     // Persist to backend (fire-and-forget)
-    import('@tauri-apps/api/core').then(({ invoke }) => {
-      invoke('save_session', { config: session }).catch(() => {});
-    });
+    invoke('save_session', { config: session }).catch(() => {});
   },
   removeSession: (id) => {
     set((state) => ({
       sessions: state.sessions.filter((s) => s.id !== id),
       selectedSessionIds: state.selectedSessionIds.filter((sid) => sid !== id),
     }));
-    import('@tauri-apps/api/core').then(({ invoke }) => {
-      invoke('delete_session', { sessionId: id }).catch(() => {});
-    });
+    invoke('delete_session', { sessionId: id }).catch(() => {});
   },
   updateSessionLatency: (id, latency) => {
     set((state) => ({
       sessions: state.sessions.map((s) =>
         s.id === id ? { ...s, latency } : s
       ),
+    }));
+  },
+  batchUpdateLatency: (updates) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) => {
+        const val = updates.get(s.id);
+        return val !== undefined ? { ...s, latency: val } : s;
+      }),
     }));
   },
   selectedSessionIds: [],
