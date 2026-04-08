@@ -1,4 +1,5 @@
 ﻿import React, { useState, useRef, useEffect } from "react";
+import { useTranslation } from 'react-i18next';
 import { X, FolderOpen, ChevronDown } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
@@ -71,7 +72,8 @@ const ShellPicker: React.FC<{
 
 // ---- Modal ----
 export const LocalTerminalModal: React.FC = () => {
-  const { showLocalTerminalModal, setShowLocalTerminalModal, addSession, addTab, t } = useAppStore();
+  const { showLocalTerminalModal, setShowLocalTerminalModal, addSession, addTab } = useAppStore();
+  const { t } = useTranslation();
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [shellOptions, setShellOptions] = useState<ShellOption[]>([
     { id: "powershell", label: "powershell" },

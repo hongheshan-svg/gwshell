@@ -1,14 +1,14 @@
 import React from 'react';
 import { Minus, Square, X } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useAppStore } from '../../stores/appStore';
+import { useTranslation } from 'react-i18next';
 
 // Cache the window reference at module level so the first click
 // doesn't pay the initialization cost of creating a new Window object.
 const appWindow = getCurrentWindow();
 
 export const TitleBar: React.FC = () => {
-  const t = useAppStore((s) => s.t);
+  const { t } = useTranslation();
 
   const handleMinimize = () => {
     appWindow.minimize();

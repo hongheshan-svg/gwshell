@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, FolderOpen } from 'lucide-react';
 import { ProviderEditor } from './ProviderEditor';
 import { McpManager } from './McpManager';
 import { PromptsManager } from './PromptsManager';
 import { UsageDashboard } from './UsageDashboard';
 import { useAppStore } from '../../stores/appStore';
-import { detectLocale, getT } from '../../i18n';
+import i18n from '../../i18n';
 import type { TranslationKeys } from '../../i18n';
 
 /* ---- Nav categories ---- */
@@ -112,7 +113,7 @@ export interface AppSettings {
   storageSource: string;
 }
 
-const _t = getT(detectLocale());
+const _t = (key: TranslationKeys) => i18n.t(key);
 
 const defaultSettings: AppSettings = {
   theme: 'dark',
@@ -327,7 +328,8 @@ const ShortcutTable: React.FC<{ left: ShortcutItem[]; right: ShortcutItem[]; t: 
 
 /* ---- Main Component ---- */
 export const SettingsModal: React.FC = () => {
-  const { showSettings, setShowSettings, theme, toggleTheme, t } = useAppStore();
+  const { showSettings, setShowSettings, theme, toggleTheme } = useAppStore();
+  const { t } = useTranslation();
   const [activeNav, setActiveNav] = useState('basic');
   const [settings, setSettings] = useState<AppSettings>({ ...defaultSettings });
   const [dirty, setDirty] = useState(false);
@@ -508,16 +510,16 @@ export const SettingsModal: React.FC = () => {
             )}
 
             {/* ===== AI ===== */}
-            {activeNav === 'ai' && <ProviderEditor t={t} />}
+            {activeNav === 'ai' && <ProviderEditor />}
 
             {/* ===== MCP ===== */}
-            {activeNav === 'mcp' && <McpManager t={t} />}
+            {activeNav === 'mcp' && <McpManager />}
 
             {/* ===== Prompts ===== */}
-            {activeNav === 'prompts' && <PromptsManager t={t} />}
+            {activeNav === 'prompts' && <PromptsManager />}
 
             {/* ===== Usage ===== */}
-            {activeNav === 'usage' && <UsageDashboard t={t} />}
+            {activeNav === 'usage' && <UsageDashboard />}
 
             {/* ===== 账号 ===== */}
             {activeNav === 'ai-account' && null}

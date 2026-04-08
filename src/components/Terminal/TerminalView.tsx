@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { useTranslation } from 'react-i18next';
 import type { TabInfo } from "../../types";
 import { useAppStore } from "../../stores/appStore";
 import "@xterm/xterm/css/xterm.css";
@@ -132,7 +133,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
   const containerRef = useRef<HTMLDivElement>(null);
   const sessions = useAppStore((s) => s.sessions);
   const theme = useAppStore((s) => s.theme);
-  const t = useAppStore((s) => s.t);
+  const { t } = useTranslation();
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
 

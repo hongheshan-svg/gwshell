@@ -5,8 +5,8 @@ import {
   Power, ChevronDown, Star, ExternalLink, Layers, RefreshCw,
   Wand2, FlaskConical, Coins, ChevronRight,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import type { TranslationKeys } from '../../i18n';
 import {
   APP_PRESETS, UNIVERSAL_PRESETS as UNIVERSAL_PRESET_LIST,
   PRESET_CATEGORY_ORDER,
@@ -149,9 +149,8 @@ function newProvider(): AiProvider {
  * Layout: Header (AppSwitcher + toolbar) → full-width ProviderList / EditForm
  * Matching: App.tsx + ProviderList.tsx + ProviderCard.tsx + AddProviderDialog.tsx
  * ============================================================ */
-interface Props { t: (k: TranslationKeys) => string; }
-
-export const ProviderEditor: React.FC<Props> = ({ t }) => {
+export const ProviderEditor: React.FC = () => {
+  const { t } = useTranslation();
   /* ---- state ---- */
   const [providers, setProviders] = useState<AiProvider[]>([]);
   const [activeIds, setActiveIds] = useState<Record<AppKey, string | undefined>>({

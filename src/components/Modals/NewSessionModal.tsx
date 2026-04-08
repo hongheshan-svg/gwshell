@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Eye, EyeOff } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import type { SessionConfig } from '../../types';
@@ -26,7 +27,8 @@ const authSecondary: { id: AuthType; labelKey: TranslationKeys }[] = [
 ];
 
 export const NewSessionModal: React.FC = () => {
-  const { showNewSession, setShowNewSession, addSession, addTab, editingSession, setEditingSession, t } = useAppStore();
+  const { showNewSession, setShowNewSession, addSession, addTab, editingSession, setEditingSession } = useAppStore();
+  const { t } = useTranslation();
 
   const [activeTab, setActiveTab] = useState('standard');
   const [showPassword, setShowPassword] = useState(false);

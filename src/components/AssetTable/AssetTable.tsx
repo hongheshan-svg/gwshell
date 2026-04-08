@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Search,
   Menu,
@@ -27,9 +28,9 @@ export const AssetTable: React.FC = () => {
     addTab,
     setActiveTab,
     tabs,
-    t,
     batchUpdateLatency,
   } = useAppStore();
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: SessionConfig } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);

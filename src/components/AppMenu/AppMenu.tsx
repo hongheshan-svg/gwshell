@@ -1,4 +1,5 @@
 import React, { useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ExternalLink,
   Clock,
@@ -14,7 +15,8 @@ import {
 import { useAppStore } from '../../stores/appStore';
 
 export const AppMenu: React.FC = () => {
-  const { showAppMenu, setShowAppMenu, setShowSettings, t, locale, setLocale } = useAppStore();
+  const { showAppMenu, setShowAppMenu, setShowSettings, locale, setLocale } = useAppStore();
+  const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

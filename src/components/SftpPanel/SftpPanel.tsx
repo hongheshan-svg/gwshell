@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { openPath } from '@tauri-apps/plugin-opener';
@@ -44,7 +45,7 @@ interface SftpPanelProps {
 }
 
 export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username }) => {
-  const t = useAppStore((s) => s.t);
+  const { t } = useTranslation();
   const toggleSftpPanel = useAppStore((s) => s.toggleSftpPanel);
 
   const [currentPath, setCurrentPath] = useState('');

@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore, type SplitCount } from '../../stores/appStore';
 import { TerminalView, safeFit } from './TerminalView';
 import { AssetTable } from '../AssetTable/AssetTable';
@@ -96,7 +97,7 @@ interface SplitPaneProps {
 }
 
 const SplitPane: React.FC<SplitPaneProps> = ({ slotIndex, tab, allTabs, isFocused, onFocus, onAssign }) => {
-  const t = useAppStore(s => s.t);
+  const { t } = useTranslation();
 
   // When a pane becomes focused, re-fit the terminal
   useEffect(() => {

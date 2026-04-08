@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Wifi, Clock, Monitor, Cloud, LayoutGrid, Zap } from 'lucide-react';
 import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
@@ -13,7 +14,8 @@ const SPLIT_OPTIONS: { count: SplitCount; label: string }[] = [
 ];
 
 export const StatusBar: React.FC = () => {
-  const { tabs, activeTabId, sessions, t, locale, splitCount, setSplitCount } = useAppStore();
+  const { tabs, activeTabId, sessions, locale, splitCount, setSplitCount } = useAppStore();
+  const { t } = useTranslation();
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const [showSplitMenu, setShowSplitMenu] = useState(false);
   const [version, setVersion] = useState('0.1.0');

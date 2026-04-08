@@ -10,7 +10,7 @@ import {
   Cable,
   Usb,
 } from 'lucide-react';
-import { useAppStore } from '../../stores/appStore';
+import { useTranslation } from 'react-i18next';
 import type { TranslationKeys } from '../../i18n';
 
 interface NewAssetMenuProps {
@@ -36,7 +36,7 @@ const menuItems: { id: string; icon: typeof FolderPlus; labelKey: TranslationKey
 ];
 
 export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, onSelect }) => {
-  const t = useAppStore((s) => s.t);
+  const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [submenuPos, setSubmenuPos] = useState<{ top: number; left: number } | null>(null);

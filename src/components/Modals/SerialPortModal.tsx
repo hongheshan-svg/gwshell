@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect } from "react";
+import { useTranslation } from 'react-i18next';
 import { X, Plus, Eye, Monitor, CornerDownLeft } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../../stores/appStore";
@@ -73,7 +74,8 @@ const defaultForm: SerialForm = {
 };
 
 export const SerialPortModal: React.FC = () => {
-  const { showSerialModal, setShowSerialModal, addSession, addTab, t } = useAppStore();
+  const { showSerialModal, setShowSerialModal, addSession, addTab } = useAppStore();
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<string>("standard");
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [form, setForm] = useState<SerialForm>({ ...defaultForm, autofill_rows: defaultAutofillRows.map((r) => ({ ...r })) });

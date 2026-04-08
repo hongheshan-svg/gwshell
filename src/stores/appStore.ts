@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { SessionConfig, TabInfo, ThemeMode, MainView } from '../types';
-import { detectLocale, getT, type Locale, type TranslationKeys } from '../i18n';
+import i18n, { detectLocale, type Locale } from '../i18n';
 
 /** Split layout: how many terminal panes to show simultaneously */
 export type SplitCount = 1 | 2 | 4 | 6 | 8;
@@ -10,7 +10,6 @@ interface AppStore {
   // Locale
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  t: (key: TranslationKeys, params?: Record<string, string | number>) => string;
 
   // Theme
   theme: ThemeMode;
@@ -86,7 +85,6 @@ interface AppStore {
 }
 
 const initialLocale = detectLocale();
-const initialT = getT(initialLocale);
 
 // Read sessions injected by Tauri's initialization_script before React loads.
 // This eliminates the IPC round-trip that causes the empty-then-populated flash.
@@ -105,8 +103,7 @@ const _initialSessions = popInjectedSessions();
 
 export const useAppStore = create<AppStore>((set, _get) => ({
   locale: initialLocale,
-  setLocale: (locale: Locale) => set({ locale, t: getT(locale) }),
-  t: initialT,
+  setLocale: (locale: Locale) => { i18n.changeLanguage(locale); set({ locale }); },
 
   theme: 'dark',
   toggleTheme: () =>
@@ -166,7 +163,7 @@ export const useAppStore = create<AppStore>((set, _get) => ({
   mainView: 'asset-list',
   setMainView: (view) => set({ mainView: view }),
 
-  tabs: [{ id: 'asset-list', sessionId: '', title: initialT('tab_list'), type: 'asset-list', connected: false }],
+  tabs: [{ id: 'asset-list', sessionId: '', title: i18n.t('tab_list'), type: 'asset-list', connected: false }],
   activeTabId: 'asset-list',
   addTab: (tab) =>
     set((state) => ({

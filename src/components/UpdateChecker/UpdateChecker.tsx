@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { check } from '@tauri-apps/plugin-updater';
 import { Download, X } from 'lucide-react';
-import { useAppStore } from '../../stores/appStore';
 
 type UpdateState = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error';
 
 export const UpdateChecker: React.FC = () => {
-  const t = useAppStore((s) => s.t);
+  const { t } = useTranslation();
   const [state, setState] = useState<UpdateState>('idle');
   const [newVersion, setNewVersion] = useState('');
   const [dismissed, setDismissed] = useState(false);

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Zap,
   FolderTree,
@@ -46,8 +47,8 @@ export const Sidebar: React.FC = () => {
     toggleSftpPanel,
     tabs,
     activeTabId,
-    t,
   } = useAppStore();
+  const { t } = useTranslation();
 
   const handleNavClick = (id: string) => {
     setActiveNavItem(id);

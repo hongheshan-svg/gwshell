@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { BarChart3, DollarSign, Zap, Trash2 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import type { TranslationKeys } from '../../i18n';
 
 interface UsageSummary {
   totalCost: number;
@@ -12,11 +12,8 @@ interface UsageSummary {
   dailyTrend: { date: string; cost: number; tokens: number; requests: number }[];
 }
 
-interface Props {
-  t: (k: TranslationKeys) => string;
-}
-
-export const UsageDashboard: React.FC<Props> = ({ t }) => {
+export const UsageDashboard: React.FC = () => {
+  const { t } = useTranslation();
   const [summary, setSummary] = useState<UsageSummary | null>(null);
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(false);

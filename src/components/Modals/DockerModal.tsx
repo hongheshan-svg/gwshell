@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import type { SessionConfig } from '../../types';
@@ -15,7 +16,8 @@ const dockerTabKeys: { id: string; labelKey: TranslationKeys }[] = [
 ];
 
 export const DockerModal: React.FC = () => {
-  const { showDockerModal, setShowDockerModal, addSession, sessions, t } = useAppStore();
+  const { showDockerModal, setShowDockerModal, addSession, sessions } = useAppStore();
+  const { t } = useTranslation();
 
   const [activeTab, setActiveTab] = useState('standard');
   const [touched, setTouched] = useState<Record<string, boolean>>({});

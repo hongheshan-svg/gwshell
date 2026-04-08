@@ -1,10 +1,12 @@
 import React, { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Plus, Menu, ChevronDown, FolderOpen } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
 
 export const TabBar: React.FC = () => {
-  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, setShowSerialModal, setShowDockerModal, setShowLocalTerminalModal, t, sftpPanelOpen, toggleSftpPanel } = useAppStore();
+  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, setShowSerialModal, setShowDockerModal, setShowLocalTerminalModal, sftpPanelOpen, toggleSftpPanel } = useAppStore();
+  const { t } = useTranslation();
   const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
   const addBtnRef = useRef<HTMLButtonElement>(null);
 

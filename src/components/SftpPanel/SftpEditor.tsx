@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { X, Save, RotateCcw } from 'lucide-react';
-import { useAppStore } from '../../stores/appStore';
 
 interface SftpEditorProps {
   sessionId: string;
@@ -11,7 +11,7 @@ interface SftpEditorProps {
 }
 
 export const SftpEditor: React.FC<SftpEditorProps> = ({ sessionId, remotePath, fileName, onClose }) => {
-  const t = useAppStore((s) => s.t);
+  const { t } = useTranslation();
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
   const [loading, setLoading] = useState(true);

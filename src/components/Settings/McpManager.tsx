@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Plus, Trash2, RefreshCw, Check } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import type { TranslationKeys } from '../../i18n';
 
 interface McpServer {
   id: string;
@@ -13,11 +13,8 @@ interface McpServer {
   enabled: boolean;
 }
 
-interface Props {
-  t: (k: TranslationKeys) => string;
-}
-
-export const McpManager: React.FC<Props> = ({ t }) => {
+export const McpManager: React.FC = () => {
+  const { t } = useTranslation();
   const [servers, setServers] = useState<McpServer[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<McpServer | null>(null);

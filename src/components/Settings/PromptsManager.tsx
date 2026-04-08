@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FileText, RefreshCw, Copy, Check, Download } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import type { TranslationKeys } from '../../i18n';
 
 interface PromptFile {
   tool: string;
@@ -11,11 +11,8 @@ interface PromptFile {
   path: string;
 }
 
-interface Props {
-  t: (k: TranslationKeys) => string;
-}
-
-export const PromptsManager: React.FC<Props> = ({ t }) => {
+export const PromptsManager: React.FC = () => {
+  const { t } = useTranslation();
   const [projectDir, setProjectDir] = useState('');
   const [files, setFiles] = useState<PromptFile[]>([]);
   const [selectedTool, setSelectedTool] = useState<string>('claude');
