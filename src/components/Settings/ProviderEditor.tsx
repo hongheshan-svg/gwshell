@@ -3,6 +3,7 @@ import {
   Plus, Trash2, Zap, Download, Check, Globe, Key, Server,
   Eye, EyeOff, Copy, Pencil, ArrowLeft, Search, X, GripVertical,
   Power, ChevronDown, Star, ExternalLink, Layers, RefreshCw,
+  Wand2, FlaskConical, Coins, ChevronRight,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import type { TranslationKeys } from '../../i18n';
@@ -39,6 +40,40 @@ export interface AiProvider {
   customHeaders?: Record<string, string>;
   createdAt?: number;
   sortIndex?: number;
+  meta?: ProviderMeta;
+}
+
+/* ---- CC Switch ProviderMeta sub-types ---- */
+interface ProviderTestConfig {
+  enabled: boolean;
+  testModel?: string;
+  timeoutSecs?: number;
+  testPrompt?: string;
+  degradedThresholdMs?: number;
+  maxRetries?: number;
+  _open?: boolean;
+}
+interface ProviderProxyConfig {
+  enabled: boolean;
+  proxyType?: 'http' | 'https' | 'socks5';
+  proxyHost?: string;
+  proxyPort?: number;
+  proxyUsername?: string;
+  proxyPassword?: string;
+  _open?: boolean;
+}
+interface ProviderPricingConfig {
+  enabled: boolean;
+  costMultiplier?: string;
+  pricingModelSource: 'inherit' | 'request' | 'response';
+  _open?: boolean;
+}
+interface ProviderMeta {
+  testConfig?: ProviderTestConfig;
+  proxyConfig?: ProviderProxyConfig;
+  commonConfigEnabled?: boolean;
+  costMultiplier?: string;
+  pricingModelSource?: string;
 }
 
 /* ---- CC Switch app definitions (matches AppSwitcher.tsx) ---- */
@@ -140,6 +175,15 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
   const [geminiEnvText, setGeminiEnvText] = useState('{}');
   const [geminiConfigText, setGeminiConfigText] = useState('{}');
   const [universalFormOpen, setUniversalFormOpen] = useState(false);
+  // Advanced config sections (CC Switch ProviderAdvancedConfig)
+  const [testConfig, setTestConfig] = useState<ProviderTestConfig>({ enabled: false });
+  const [proxyConfig, setProxyConfig] = useState<ProviderProxyConfig>({ enabled: false });
+  const [pricingConfig, setPricingConfig] = useState<ProviderPricingConfig>({ enabled: false, pricingModelSource: 'inherit' });
+  const [showProxyPassword, setShowProxyPassword] = useState(false);
+  // Common config (CC Switch CommonConfigEditor)
+  const [commonConfigEnabled, setCommonConfigEnabled] = useState(false);
+  const [commonConfigModalOpen, setCommonConfigModalOpen] = useState(false);
+  const [commonConfigSnippet, setCommonConfigSnippet] = useState('{}');
 
   const supportsUniversal = activeApp !== 'opencode' && activeApp !== 'openclaw';
 
@@ -252,6 +296,7 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
         const primaryApp = (Object.keys(toSave.apps) as AppKey[]).find(a => toSave.apps[a]) || activeApp;
         toSave.settingsConfig = setApiKey(primaryApp, toSave.settingsConfig, toSave.apiKey);
       }
+      toSave.meta = buildMeta();
       await invoke('save_ai_provider', { provider: toSave });
       flash(t('ai_save_success'));
       await loadData();
@@ -279,6 +324,7 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
     } else {
       syncConfigStates({});
     }
+    syncMetaStates(undefined);
     setEditForm(p);
     setShowApiKey(false);
   };
@@ -378,6 +424,7 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
       if (providerToSave.settingsConfig && providerToSave.apiKey) {
         providerToSave.settingsConfig = setApiKey(activeApp, providerToSave.settingsConfig, providerToSave.apiKey);
       }
+      providerToSave.meta = buildMeta();
       await invoke('save_ai_provider', { provider: providerToSave });
       flash(t('ai_save_success'));
       await loadData();
@@ -422,8 +469,38 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
   const openEdit = (p: AiProvider) => {
     setEditForm({ ...p });
     syncConfigStates(p.settingsConfig ?? {});
+    syncMetaStates(p.meta);
     setShowApiKey(false);
     setView('edit');
+  };
+
+  /** Sync meta states from provider.meta */
+  const syncMetaStates = (meta?: ProviderMeta) => {
+    setTestConfig(meta?.testConfig ?? { enabled: false });
+    setProxyConfig(meta?.proxyConfig ?? { enabled: false });
+    setPricingConfig({
+      enabled: meta?.costMultiplier !== undefined || meta?.pricingModelSource !== undefined,
+      costMultiplier: meta?.costMultiplier,
+      pricingModelSource: (meta?.pricingModelSource as any) || 'inherit',
+    });
+    setCommonConfigEnabled(meta?.commonConfigEnabled ?? false);
+    setShowProxyPassword(false);
+    // Load common config snippet from localStorage per app
+    const saved = localStorage.getItem(`gwshell-common-config-${activeApp}`);
+    setCommonConfigSnippet(saved || '{}');
+  };
+
+  /** Build meta object from current state */
+  const buildMeta = (): ProviderMeta | undefined => {
+    const meta: ProviderMeta = {};
+    if (testConfig.enabled) meta.testConfig = testConfig;
+    if (proxyConfig.enabled) meta.proxyConfig = proxyConfig;
+    if (commonConfigEnabled) meta.commonConfigEnabled = true;
+    if (pricingConfig.enabled) {
+      if (pricingConfig.costMultiplier) meta.costMultiplier = pricingConfig.costMultiplier;
+      if (pricingConfig.pricingModelSource !== 'inherit') meta.pricingModelSource = pricingConfig.pricingModelSource;
+    }
+    return Object.keys(meta).length > 0 ? meta : undefined;
   };
 
   /** Sync all per-app config text states from a settingsConfig object */
@@ -632,13 +709,44 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
       </button>
     );
 
+    const commonConfigRow = (
+      <div className="ccs-common-config-row">
+        {loadBtn}
+        <label className="ccs-common-config-toggle">
+          <input type="checkbox" checked={commonConfigEnabled}
+            onChange={e => setCommonConfigEnabled(e.target.checked)} />
+          <span>{t('ai_common_config_write')}</span>
+        </label>
+      </div>
+    );
+
+    const commonConfigLink = (
+      <button type="button" className="ccs-common-config-link"
+        onClick={() => setCommonConfigModalOpen(true)}>
+        {t('ai_common_config_edit')}
+      </button>
+    );
+
+    const formatBtn = (text: string, setter: (v: string) => void) => (
+      <button type="button" className="ccs-format-btn"
+        onClick={() => handleFormatJson(text, setter)}>
+        <Wand2 size={13} />
+        <span>{t('ai_format')}</span>
+      </button>
+    );
+
     /* ---- Claude: JSON editor + 5 quick toggles (CC Switch CommonConfigEditor) ---- */
     if (activeApp === 'claude') {
       return (
         <div className="ccs-form-field">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <label className="ccs-form-label" style={{ marginBottom: 0 }}>{t('ai_config_json')}</label>
-            {loadBtn}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {commonConfigRow}
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+            {commonConfigLink}
           </div>
           <div className="ccs-config-toggles">
             {([
@@ -667,6 +775,7 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
             spellCheck={false}
             placeholder={`{\n  "env": {\n    "ANTHROPIC_BASE_URL": "https://your-api-endpoint.com",\n    "ANTHROPIC_AUTH_TOKEN": "your-api-key-here"\n  }\n}`}
           />
+          {formatBtn(configText, setConfigText)}
         </div>
       );
     }
@@ -675,8 +784,14 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
     if (activeApp === 'codex') {
       return (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 6 }}>
-            {loadBtn}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {commonConfigRow}
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+            {commonConfigLink}
           </div>
           {/* Auth JSON section */}
           <div className="ccs-form-field">
@@ -697,6 +812,7 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
               spellCheck={false}
               placeholder={`{\n  "OPENAI_API_KEY": "sk-..."\n}`}
             />
+            {formatBtn(codexAuthText, setCodexAuthText)}
             <p className="ccs-config-hint">{t('ai_codex_auth_hint')}</p>
           </div>
 
@@ -736,8 +852,14 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
     if (activeApp === 'gemini') {
       return (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 6 }}>
-            {loadBtn}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {commonConfigRow}
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+            {commonConfigLink}
           </div>
           {/* Env section */}
           <div className="ccs-form-field">
@@ -760,6 +882,7 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
               spellCheck={false}
               placeholder={`{\n  "GOOGLE_GEMINI_BASE_URL": "https://your-api-endpoint.com",\n  "GEMINI_API_KEY": "your-api-key",\n  "GEMINI_MODEL": "gemini-3-pro-preview"\n}`}
             />
+            {formatBtn(geminiEnvText, setGeminiEnvText)}
             <p className="ccs-config-hint">{t('ai_gemini_env_hint')}</p>
           </div>
 
@@ -784,6 +907,7 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
               spellCheck={false}
               placeholder={`{\n  "timeout": 30000,\n  "maxRetries": 3\n}`}
             />
+            {formatBtn(geminiConfigText, setGeminiConfigText)}
             <p className="ccs-config-hint">{t('ai_gemini_config_hint')}</p>
           </div>
         </>
@@ -795,7 +919,12 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
       <div className="ccs-form-field">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <label className="ccs-form-label" style={{ marginBottom: 0 }}>{t('ai_config_json')}</label>
-          {loadBtn}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {commonConfigRow}
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+          {commonConfigLink}
         </div>
         <textarea
           className="ccs-form-input ccs-form-textarea ccs-json-editor"
@@ -807,6 +936,231 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
           rows={12}
           spellCheck={false}
         />
+        {formatBtn(configText, setConfigText)}
+      </div>
+    );
+  };
+
+  /* ---- Format JSON (CC Switch JsonEditor: Wand2 格式化 button) ---- */
+  const handleFormatJson = (text: string, setter: (v: string) => void) => {
+    try {
+      const parsed = JSON.parse(text.trim());
+      const formatted = JSON.stringify(parsed, null, 2);
+      setter(formatted);
+      // Also update settingsConfig if it's the main configText
+      if (setter === setConfigText) {
+        try { updateForm('settingsConfig', parsed); } catch { /* */ }
+      }
+      flash(t('ai_format_success'));
+    } catch {
+      flash(t('ai_format_error'));
+    }
+  };
+
+  /* ---- Common config save to localStorage ---- */
+  const handleCommonConfigSave = () => {
+    try {
+      JSON.parse(commonConfigSnippet); // validate
+      localStorage.setItem(`gwshell-common-config-${activeApp}`, commonConfigSnippet);
+      setCommonConfigModalOpen(false);
+      flash(t('ai_save_success'));
+    } catch {
+      flash(t('ai_invalid_json'));
+    }
+  };
+
+  /** Render 3 advanced config sections (CC Switch ProviderAdvancedConfig) */
+  const renderAdvancedConfig = () => {
+    if (!editForm) return null;
+
+    return (
+      <div className="ccs-advanced-sections">
+        {/* ── 模型测试配置 ── */}
+        <div className="ccs-adv-section">
+          <button type="button" className="ccs-adv-section-header"
+            onClick={() => setTestConfig(prev => ({ ...prev, _open: !prev._open } as any))}>
+            <div className="ccs-adv-section-left">
+              <FlaskConical size={14} />
+              <span>{t('ai_adv_test_config')}</span>
+            </div>
+            <div className="ccs-adv-section-right">
+              <label className="ccs-adv-toggle-label" onClick={e => e.stopPropagation()}>
+                <span>{t('ai_adv_use_custom')}</span>
+                <span className={`ccs-toggle-switch-mini${testConfig.enabled ? ' on' : ''}`}
+                  onClick={() => {
+                    const next = !testConfig.enabled;
+                    setTestConfig(prev => ({ ...prev, enabled: next, _open: next ? true : prev._open } as any));
+                  }}>
+                  <span className="ccs-toggle-knob" />
+                </span>
+              </label>
+              {(testConfig as any)._open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </div>
+          </button>
+          {(testConfig as any)._open && (
+            <div className="ccs-adv-section-body">
+              <p className="ccs-adv-desc">{t('ai_adv_test_desc')}</p>
+              <div className="ccs-adv-grid">
+                <div className="ccs-form-field">
+                  <label className="ccs-form-label">{t('ai_adv_test_model')}</label>
+                  <input className="ccs-form-input" disabled={!testConfig.enabled}
+                    value={testConfig.testModel ?? ''}
+                    onChange={e => setTestConfig(prev => ({ ...prev, testModel: e.target.value || undefined }))}
+                    placeholder={t('ai_adv_placeholder_global')} />
+                </div>
+                <div className="ccs-form-field">
+                  <label className="ccs-form-label">{t('ai_adv_timeout')}</label>
+                  <input className="ccs-form-input" type="number" min={1} max={300} disabled={!testConfig.enabled}
+                    value={testConfig.timeoutSecs ?? ''}
+                    onChange={e => setTestConfig(prev => ({ ...prev, timeoutSecs: e.target.value ? parseInt(e.target.value) : undefined }))}
+                    placeholder="45" />
+                </div>
+                <div className="ccs-form-field">
+                  <label className="ccs-form-label">{t('ai_adv_test_prompt')}</label>
+                  <input className="ccs-form-input" disabled={!testConfig.enabled}
+                    value={testConfig.testPrompt ?? ''}
+                    onChange={e => setTestConfig(prev => ({ ...prev, testPrompt: e.target.value || undefined }))}
+                    placeholder="Who are you?" />
+                </div>
+                <div className="ccs-form-field">
+                  <label className="ccs-form-label">{t('ai_adv_degraded_threshold')}</label>
+                  <input className="ccs-form-input" type="number" min={100} max={60000} disabled={!testConfig.enabled}
+                    value={testConfig.degradedThresholdMs ?? ''}
+                    onChange={e => setTestConfig(prev => ({ ...prev, degradedThresholdMs: e.target.value ? parseInt(e.target.value) : undefined }))}
+                    placeholder="6000" />
+                </div>
+                <div className="ccs-form-field">
+                  <label className="ccs-form-label">{t('ai_adv_max_retries')}</label>
+                  <input className="ccs-form-input" type="number" min={0} max={10} disabled={!testConfig.enabled}
+                    value={testConfig.maxRetries ?? ''}
+                    onChange={e => setTestConfig(prev => ({ ...prev, maxRetries: e.target.value ? parseInt(e.target.value) : undefined }))}
+                    placeholder="2" />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── 代理配置 ── */}
+        <div className="ccs-adv-section">
+          <button type="button" className="ccs-adv-section-header"
+            onClick={() => setProxyConfig(prev => ({ ...prev, _open: !prev._open } as any))}>
+            <div className="ccs-adv-section-left">
+              <Globe size={14} />
+              <span>{t('ai_adv_proxy_config')}</span>
+            </div>
+            <div className="ccs-adv-section-right">
+              <label className="ccs-adv-toggle-label" onClick={e => e.stopPropagation()}>
+                <span>{t('ai_adv_use_custom_proxy')}</span>
+                <span className={`ccs-toggle-switch-mini${proxyConfig.enabled ? ' on' : ''}`}
+                  onClick={() => {
+                    const next = !proxyConfig.enabled;
+                    setProxyConfig(prev => ({ ...prev, enabled: next, _open: next ? true : prev._open } as any));
+                  }}>
+                  <span className="ccs-toggle-knob" />
+                </span>
+              </label>
+              {(proxyConfig as any)._open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </div>
+          </button>
+          {(proxyConfig as any)._open && (
+            <div className="ccs-adv-section-body">
+              <p className="ccs-adv-desc">{t('ai_adv_proxy_desc')}</p>
+              <div className="ccs-form-field">
+                <input className="ccs-form-input" disabled={!proxyConfig.enabled}
+                  value={proxyConfig.proxyHost ? `${proxyConfig.proxyType || 'http'}://${proxyConfig.proxyHost}${proxyConfig.proxyPort ? ':' + proxyConfig.proxyPort : ''}` : ''}
+                  onChange={e => {
+                    const val = e.target.value;
+                    try {
+                      const m = val.match(/^(?:(\w+):\/\/)?([^:]+)(?::(\d+))?$/);
+                      if (m) {
+                        setProxyConfig(prev => ({
+                          ...prev,
+                          proxyType: (m[1] as any) || 'http',
+                          proxyHost: m[2] || undefined,
+                          proxyPort: m[3] ? parseInt(m[3]) : undefined,
+                        }));
+                      }
+                    } catch { /* */ }
+                  }}
+                  placeholder="http://127.0.0.1:7890 / socks5://127.0.0.1:1080" />
+              </div>
+              <div className="ccs-adv-grid">
+                <div className="ccs-form-field">
+                  <input className="ccs-form-input" disabled={!proxyConfig.enabled}
+                    value={proxyConfig.proxyUsername ?? ''}
+                    onChange={e => setProxyConfig(prev => ({ ...prev, proxyUsername: e.target.value || undefined }))}
+                    placeholder={t('ai_adv_proxy_username')} />
+                </div>
+                <div className="ccs-form-field">
+                  <div className="ccs-input-with-action">
+                    <input className="ccs-form-input" type={showProxyPassword ? 'text' : 'password'}
+                      disabled={!proxyConfig.enabled}
+                      value={proxyConfig.proxyPassword ?? ''}
+                      onChange={e => setProxyConfig(prev => ({ ...prev, proxyPassword: e.target.value || undefined }))}
+                      placeholder={t('ai_adv_proxy_password')} />
+                    <button type="button" className="ccs-inline-btn" onClick={() => setShowProxyPassword(!showProxyPassword)}>
+                      {showProxyPassword ? <EyeOff size={12} /> : <Eye size={12} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── 计费配置 ── */}
+        <div className="ccs-adv-section">
+          <button type="button" className="ccs-adv-section-header"
+            onClick={() => setPricingConfig(prev => ({ ...prev, _open: !prev._open } as any))}>
+            <div className="ccs-adv-section-left">
+              <Coins size={14} />
+              <span>{t('ai_adv_pricing_config')}</span>
+            </div>
+            <div className="ccs-adv-section-right">
+              <label className="ccs-adv-toggle-label" onClick={e => e.stopPropagation()}>
+                <span>{t('ai_adv_use_custom_pricing')}</span>
+                <span className={`ccs-toggle-switch-mini${pricingConfig.enabled ? ' on' : ''}`}
+                  onClick={() => {
+                    const next = !pricingConfig.enabled;
+                    setPricingConfig(prev => ({ ...prev, enabled: next, _open: next ? true : prev._open } as any));
+                  }}>
+                  <span className="ccs-toggle-knob" />
+                </span>
+              </label>
+              {(pricingConfig as any)._open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </div>
+          </button>
+          {(pricingConfig as any)._open && (
+            <div className="ccs-adv-section-body">
+              <p className="ccs-adv-desc">{t('ai_adv_pricing_desc')}</p>
+              <div className="ccs-adv-grid">
+                <div className="ccs-form-field">
+                  <label className="ccs-form-label">{t('ai_adv_cost_multiplier')}</label>
+                  <input className="ccs-form-input" type="number" step="0.01" disabled={!pricingConfig.enabled}
+                    value={pricingConfig.costMultiplier ?? ''}
+                    onChange={e => setPricingConfig(prev => ({ ...prev, costMultiplier: e.target.value || undefined }))}
+                    placeholder={t('ai_adv_cost_placeholder')} />
+                  <p className="ccs-config-hint">{t('ai_adv_cost_hint')}</p>
+                </div>
+                <div className="ccs-form-field">
+                  <label className="ccs-form-label">{t('ai_adv_pricing_model')}</label>
+                  <div className="ccs-select-wrap">
+                    <select className="ccs-form-input ccs-form-select" disabled={!pricingConfig.enabled}
+                      value={pricingConfig.pricingModelSource}
+                      onChange={e => setPricingConfig(prev => ({ ...prev, pricingModelSource: e.target.value as any }))}>
+                      <option value="inherit">{t('ai_adv_pricing_inherit')}</option>
+                      <option value="request">{t('ai_adv_pricing_request')}</option>
+                      <option value="response">{t('ai_adv_pricing_response')}</option>
+                    </select>
+                    <ChevronDown size={14} className="ccs-select-arrow" />
+                  </div>
+                  <p className="ccs-config-hint">{t('ai_adv_pricing_hint')}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     );
   };
@@ -1098,6 +1452,9 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
             {/* Settings Config Editor (CC Switch: per-app editor) */}
             {renderConfigEditor()}
 
+            {/* Advanced config: test / proxy / pricing (CC Switch ProviderAdvancedConfig) */}
+            {renderAdvancedConfig()}
+
             {/* Notes */}
             <div className="ccs-form-field">
               <label className="ccs-form-label">{t('ai_notes')}</label>
@@ -1271,6 +1628,9 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
 
                 {/* ── Settings Config Editor (CC Switch: per-app editor) ── */}
                 {renderConfigEditor()}
+
+                {/* ── Advanced config: test / proxy / pricing ── */}
+                {renderAdvancedConfig()}
               </>
             ) : !universalFormOpen ? (
               /* ===== Universal Provider List (CC Switch UniversalProviderPanel) ===== */
@@ -1435,6 +1795,44 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
           </div>
         )) : null}
       </div>
+
+      {/* ═══ Common Config Modal (CC Switch CommonConfigEditor fullscreen modal) ═══ */}
+      {commonConfigModalOpen && (
+        <div className="ccs-modal-overlay" onClick={() => setCommonConfigModalOpen(false)}>
+          <div className="ccs-modal-panel" onClick={e => e.stopPropagation()}>
+            <div className="ccs-modal-header">
+              <h3>{t('ai_common_config_title')}</h3>
+              <button className="ccs-modal-close" onClick={() => setCommonConfigModalOpen(false)}>
+                <X size={16} />
+              </button>
+            </div>
+            <div className="ccs-modal-body">
+              <p className="ccs-adv-desc">{t('ai_common_config_hint')}</p>
+              <textarea
+                className="ccs-form-input ccs-form-textarea ccs-json-editor"
+                value={commonConfigSnippet}
+                onChange={e => setCommonConfigSnippet(e.target.value)}
+                rows={16}
+                spellCheck={false}
+                placeholder={`{\n  "env": {\n    "ANTHROPIC_BASE_URL": "https://your-api-endpoint.com"\n  }\n}`}
+              />
+              <button type="button" className="ccs-format-btn"
+                onClick={() => handleFormatJson(commonConfigSnippet, setCommonConfigSnippet)}>
+                <Wand2 size={13} />
+                <span>{t('ai_format')}</span>
+              </button>
+            </div>
+            <div className="ccs-modal-footer">
+              <button className="ccs-back-btn" onClick={() => setCommonConfigModalOpen(false)}>
+                {t('common_cancel')}
+              </button>
+              <button className="ccs-save-btn" onClick={handleCommonConfigSave}>
+                <Check size={14} /> {t('common_save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

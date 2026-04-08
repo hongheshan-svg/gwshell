@@ -4061,6 +4061,262 @@ input, select, textarea, button {
   border-color: var(--accent-color);
 }
 
+/* ── Format Button ── */
+.ccs-format-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  margin-top: 4px;
+}
+.ccs-format-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+/* ── Common Config Row/Toggle/Link ── */
+.ccs-common-config-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 2px;
+}
+.ccs-common-config-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.ccs-common-config-toggle input[type="checkbox"] {
+  accent-color: var(--accent-color);
+}
+.ccs-common-config-link {
+  background: none;
+  border: none;
+  color: var(--accent-color);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ccs-common-config-link:hover {
+  color: var(--accent-hover);
+}
+
+/* ── Advanced Config Sections (Test / Proxy / Pricing) ── */
+.ccs-advanced-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.ccs-adv-section {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.ccs-adv-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  font-size: 13px;
+}
+.ccs-adv-section-header:hover {
+  background: var(--bg-secondary);
+}
+.ccs-adv-section-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ccs-adv-section-left svg {
+  transition: transform 0.2s ease;
+}
+.ccs-adv-section-left svg.rotated {
+  transform: rotate(90deg);
+}
+.ccs-adv-section-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ccs-adv-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.ccs-toggle-switch-mini {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--border-color);
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+}
+.ccs-toggle-switch-mini.on {
+  background: var(--accent-color);
+}
+.ccs-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s ease;
+}
+.ccs-toggle-switch-mini.on .ccs-toggle-knob {
+  transform: translateX(14px);
+}
+.ccs-adv-section-body {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
+}
+.ccs-adv-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.ccs-adv-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ccs-adv-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.ccs-adv-grid label.full-width {
+  grid-column: 1 / -1;
+}
+.ccs-adv-grid input,
+.ccs-adv-grid select,
+.ccs-adv-grid textarea {
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+}
+.ccs-adv-grid textarea {
+  min-height: 60px;
+  resize: vertical;
+}
+.ccs-adv-grid .hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* ── Common Config Modal ── */
+.ccs-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.ccs-modal-panel {
+  width: 520px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+.ccs-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+.ccs-modal-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.ccs-modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+}
+.ccs-modal-close:hover {
+  color: var(--text-primary);
+}
+.ccs-modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+.ccs-modal-body .hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.ccs-modal-body textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.ccs-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color);
+}
+
 /* ── Universal Provider Panel (CC Switch UniversalProviderPanel) ── */
 .ccs-universal-panel-header {
   display: flex;

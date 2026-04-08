@@ -44,6 +44,9 @@ pub struct AiProvider {
     pub created_at: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "sortIndex")]
     pub sort_index: Option<usize>,
+    /// CC Switch ProviderMeta: testConfig, proxyConfig, costMultiplier, pricingModelSource, commonConfigEnabled
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub meta: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -464,6 +467,7 @@ fn parse_cc_switch_provider(id: &str, val: &serde_json::Value, app: &str) -> Res
         enabled: false, is_partner: val.get("isPartner").and_then(|v| v.as_bool()),
         custom_headers: None, created_at: val.get("createdAt").and_then(|v| v.as_i64()),
         sort_index: val.get("sortIndex").and_then(|v| v.as_u64()).map(|v| v as usize),
+        meta: val.get("meta").cloned(),
     })
 }
 
@@ -490,6 +494,7 @@ fn parse_cc_switch_universal(id: &str, val: &serde_json::Value) -> Result<AiProv
         enabled: false, is_partner: None, custom_headers: None,
         created_at: val.get("createdAt").and_then(|v| v.as_i64()),
         sort_index: val.get("sortIndex").and_then(|v| v.as_u64()).map(|v| v as usize),
+        meta: None,
     })
 }
 
