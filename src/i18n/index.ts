@@ -1,10 +1,10 @@
-// gwshell i18n is implemented as an i18next instance under src/components/ai/i18n.
+// gwshell i18n is implemented as the canonical AI platform i18next instance.
 // This module re-exports it for legacy import paths.
-import i18n from '../components/ai/i18n';
-import type { TranslationKeys } from '../components/ai/i18n';
+import i18n from '../features/ai-platform/shared/i18n';
+import type { TranslationKeys } from '../features/ai-platform/shared/i18n';
 
-export { detectLocale } from '../components/ai/i18n';
-export type { Locale, TranslationKeys } from '../components/ai/i18n';
+export { detectLocale } from '../features/ai-platform/shared/i18n';
+export type { Locale, TranslationKeys } from '../features/ai-platform/shared/i18n';
 
 /**
  * Backwards-compatible getT(locale) that returns a translation function with

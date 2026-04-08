@@ -1,14 +1,13 @@
-import React, { lazy, Suspense, useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, FolderOpen } from 'lucide-react';
 import { McpManager } from './McpManager';
 import { PromptsManager } from './PromptsManager';
+import { ProviderEditor } from './ProviderEditor';
 import { UsageDashboard } from './UsageDashboard';
 import { useAppStore } from '../../stores/appStore';
 import i18n from '../../i18n';
 import type { TranslationKeys } from '../../i18n';
-
-const AiSection = lazy(() => import('../ai/AiSection').then((m) => ({ default: m.AiSection })));
 
 /* ---- Nav categories ---- */
 const navCategories: { title?: TranslationKeys; items: { id: string; labelKey: TranslationKeys }[] }[] = [
@@ -511,11 +510,7 @@ export const SettingsModal: React.FC = () => {
             )}
 
             {/* ===== AI ===== */}
-            {activeNav === 'ai' && (
-              <Suspense fallback={<div style={{ padding: 24 }}>Loading…</div>}>
-                <AiSection />
-              </Suspense>
-            )}
+            {activeNav === 'ai' && <ProviderEditor />}
 
             {/* ===== MCP ===== */}
             {activeNav === 'mcp' && <McpManager />}

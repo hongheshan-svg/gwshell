@@ -1,0 +1,1 @@
+//! Event contracts for ai_platform will live here.

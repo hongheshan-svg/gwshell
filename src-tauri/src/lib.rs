@@ -1,5 +1,6 @@
 mod ai_config;
 mod ai;
+mod ai_platform;
 mod database;
 mod mcp_config;
 mod prompt_config;
@@ -753,6 +754,45 @@ pub fn run() {
             usage_tracker::clear_usage_records,
             usage_tracker::save_model_pricing,
             usage_tracker::get_model_pricing,
+            ai_platform::interfaces::commands::health::ai_platform_health,
+            ai_platform::interfaces::commands::providers::ai_platform_list_providers,
+            ai_platform::interfaces::commands::providers::ai_platform_save_provider,
+            ai_platform::interfaces::commands::providers::ai_platform_delete_provider,
+            ai_platform::interfaces::commands::providers::ai_platform_switch_provider,
+            ai_platform::interfaces::commands::providers::ai_platform_check_provider_health,
+            ai_platform::interfaces::commands::sessions::ai_platform_get_sessions_snapshot,
+            ai_platform::interfaces::commands::sessions::ai_platform_delete_session_record,
+            ai_platform::interfaces::commands::mcp::ai_platform_get_mcp_snapshot,
+            ai_platform::interfaces::commands::mcp::ai_platform_save_mcp_server,
+            ai_platform::interfaces::commands::mcp::ai_platform_delete_mcp_server,
+            ai_platform::interfaces::commands::mcp::ai_platform_sync_mcp_servers,
+            ai_platform::interfaces::commands::openclaw::ai_platform_get_openclaw_snapshot,
+            ai_platform::interfaces::commands::openclaw::ai_platform_save_openclaw_config,
+            ai_platform::interfaces::commands::proxy::ai_platform_get_proxy_snapshot,
+            ai_platform::interfaces::commands::proxy::ai_platform_save_proxy_config,
+            ai_platform::interfaces::commands::prompts::ai_platform_get_prompt_snapshot,
+            ai_platform::interfaces::commands::prompts::ai_platform_write_prompt_file,
+            ai_platform::interfaces::commands::prompts::ai_platform_sync_prompt_files,
+            ai_platform::interfaces::commands::skills::ai_platform_get_skills_snapshot,
+            ai_platform::interfaces::commands::skills::ai_platform_add_skill_root,
+            ai_platform::interfaces::commands::skills::ai_platform_remove_skill_root,
+            ai_platform::interfaces::commands::skills::ai_platform_set_skill_enabled,
+            ai_platform::interfaces::commands::usage::ai_platform_get_usage_summary,
+            ai_platform::interfaces::commands::usage::ai_platform_clear_usage_records,
+            ai_platform::interfaces::commands::usage::ai_platform_add_usage_record,
+            ai_platform::interfaces::commands::usage::ai_platform_get_model_pricing,
+            ai_platform::interfaces::commands::usage::ai_platform_save_model_pricing,
+            ai_platform::interfaces::commands::agents::ai_platform_get_agents_snapshot,
+            ai_platform::interfaces::commands::agents::ai_platform_set_agent_enabled,
+            ai_platform::interfaces::commands::agents::ai_platform_save_agent_assignment,
+            ai_platform::interfaces::commands::agents::ai_platform_set_agents_routing_mode,
+            ai_platform::interfaces::commands::auth::ai_platform_get_auth_snapshot,
+            ai_platform::interfaces::commands::settings::ai_platform_get_settings_snapshot,
+            ai_platform::interfaces::commands::settings::ai_platform_save_settings,
+            ai_platform::interfaces::commands::workspace::ai_platform_get_workspace_snapshot,
+            ai_platform::interfaces::commands::workspace::ai_platform_write_workspace_file,
+            ai_platform::interfaces::commands::workspace::ai_platform_create_daily_memory,
+            ai_platform::interfaces::commands::workspace::ai_platform_delete_workspace_file,
         ])
         .setup(|app| {
             // Pre-warm OS info cache in a background thread so the first
@@ -836,7 +876,7 @@ pub fn run() {
             .decorations(false)
             .transparent(true)
             .resizable(true)
-            .visible(false)
+            .visible(true)
             .initialization_script(&init_script)
             .build()?;
 

@@ -1,0 +1,711 @@
+.ai-grid {
+  display: grid;
+}
+
+.ai-gap-4 {
+  gap: 1rem;
+}
+
+.ai-gap-2 {
+  gap: 0.5rem;
+}
+
+.ai-gap-3 {
+  gap: 0.75rem;
+}
+
+.ai-gap-6 {
+  gap: 1.5rem;
+}
+
+.ai-p-4 {
+  padding: 1rem;
+}
+
+.ai-p-5 {
+  padding: 1.25rem;
+}
+
+.ai-p-6 {
+  padding: 1.5rem;
+}
+
+.ai-mt-1 {
+  margin-top: 0.25rem;
+}
+
+.ai-mt-2 {
+  margin-top: 0.5rem;
+}
+
+.ai-flex {
+  display: flex;
+}
+
+.ai-wrap {
+  flex-wrap: wrap;
+}
+
+.ai-items-center {
+  align-items: center;
+}
+
+.ai-justify-between {
+  justify-content: space-between;
+}
+
+.ai-min-w-\[220px\] {
+  min-width: 220px;
+}
+
+.ai-max-w-2xl {
+  max-width: 42rem;
+}
+
+.ai-rounded-lg {
+  border-radius: 0.75rem;
+}
+
+.ai-rounded-xl {
+  border-radius: 1rem;
+}
+
+.ai-border {
+  border-width: 1px;
+  border-style: solid;
+}
+
+.ai-border-border {
+  border-color: hsl(var(--border));
+}
+
+.ai-bg-card {
+  background-color: hsl(var(--card));
+}
+
+.ai-bg-background {
+  background-color: hsl(var(--background));
+}
+
+.ai-text-card-foreground {
+  color: hsl(var(--card-foreground));
+}
+
+.ai-text-muted-foreground {
+  color: hsl(var(--muted-foreground));
+}
+
+.ai-text-xs {
+  font-size: 0.75rem;
+}
+
+.ai-text-sm {
+  font-size: 0.875rem;
+}
+
+.ai-text-base {
+  font-size: 1rem;
+}
+
+.ai-text-lg {
+  font-size: 1.125rem;
+}
+
+.ai-text-2xl {
+  font-size: 1.5rem;
+}
+
+.ai-font-medium {
+  font-weight: 500;
+}
+
+.ai-font-semibold {
+  font-weight: 600;
+}
+
+.ai-uppercase {
+  text-transform: uppercase;
+}
+
+.ai-leading-6 {
+  line-height: 1.5rem;
+}
+
+.ai-tracking-\[0\.18em\] {
+  letter-spacing: 0.18em;
+}
+
+.ai-tracking-\[0\.2em\] {
+  letter-spacing: 0.2em;
+}
+
+.ai-shadow-sm {
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.06);
+}
+
+.ai-domain-list {
+  margin: 0;
+  padding-left: 1.125rem;
+}
+
+.ai-platform-layout {
+  display: grid;
+  grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.ai-platform-sidebar {
+  position: sticky;
+  top: 0;
+  overflow: hidden;
+}
+
+.ai-platform-sidebar-header {
+  padding: 1.25rem 1.25rem 0;
+}
+
+.ai-platform-nav {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem 1rem 1.25rem;
+}
+
+.ai-platform-nav-item {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.9rem 1rem;
+  text-align: left;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.9rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  transition: border-color 140ms ease, transform 140ms ease, background-color 140ms ease;
+}
+
+.ai-platform-nav-item:hover {
+  border-color: hsl(var(--ring));
+  transform: translateY(-1px);
+}
+
+.ai-platform-nav-item.active {
+  border-color: hsl(var(--primary));
+  background: color-mix(in srgb, hsl(var(--primary)) 10%, hsl(var(--background)));
+}
+
+.ai-platform-nav-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.ai-platform-nav-desc {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: hsl(var(--muted-foreground));
+}
+
+.ai-platform-main {
+  min-width: 0;
+}
+
+.ai-section-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
+.ai-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.ai-pill {
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  padding: 0.55rem 0.9rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.ai-pill.active {
+  border-color: hsl(var(--primary));
+  background: color-mix(in srgb, hsl(var(--primary)) 12%, hsl(var(--background)));
+}
+
+.ai-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.ai-badge-neutral {
+  background: color-mix(in srgb, hsl(var(--muted)) 80%, white 20%);
+  color: hsl(var(--foreground));
+}
+
+.ai-badge-active {
+  background: color-mix(in srgb, hsl(var(--primary)) 18%, white 2%);
+  color: hsl(var(--foreground));
+}
+
+.ai-badge-success {
+  background: color-mix(in srgb, #10b981 22%, white 4%);
+  color: hsl(var(--foreground));
+}
+
+.ai-badge-warning {
+  background: color-mix(in srgb, #f59e0b 24%, white 6%);
+  color: hsl(var(--foreground));
+}
+
+.ai-badge-danger {
+  background: color-mix(in srgb, hsl(var(--destructive)) 20%, white 4%);
+  color: hsl(var(--foreground));
+}
+
+.ai-button {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.9rem;
+  padding: 0.72rem 1rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 140ms ease, border-color 140ms ease, background-color 140ms ease;
+}
+
+.ai-button:hover {
+  transform: translateY(-1px);
+}
+
+.ai-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+  transform: none;
+}
+
+.ai-button-primary {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-color: hsl(var(--primary));
+}
+
+.ai-button-secondary {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.ai-button-danger {
+  background: color-mix(in srgb, hsl(var(--destructive)) 14%, hsl(var(--background)));
+  color: hsl(var(--foreground));
+  border-color: color-mix(in srgb, hsl(var(--destructive)) 40%, hsl(var(--border)));
+}
+
+.ai-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.ai-active-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.ai-sync-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.ai-active-card {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 1rem;
+  padding: 1rem;
+  background: hsl(var(--background));
+}
+
+.ai-active-title {
+  font-size: 0.95rem;
+  color: hsl(var(--foreground));
+}
+
+.ai-active-meta {
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.ai-history-panel {
+  border: 1px solid hsl(var(--border));
+  border-radius: 1rem;
+  padding: 1rem;
+  background: hsl(var(--background));
+}
+
+.ai-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 1rem;
+}
+
+.ai-history-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.ai-history-item {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr) 170px;
+  gap: 0.75rem;
+  align-items: center;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.85rem;
+  padding: 0.85rem 0.95rem;
+  background: hsl(var(--card));
+}
+
+.ai-history-app {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: hsl(var(--muted-foreground));
+}
+
+.ai-history-provider {
+  color: hsl(var(--foreground));
+  font-size: 0.92rem;
+}
+
+.ai-history-meta {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.8rem;
+  text-align: right;
+}
+
+.ai-stat-card {
+  border: 1px solid hsl(var(--border));
+  border-radius: 1rem;
+  padding: 1rem;
+  background: hsl(var(--background));
+}
+
+.ai-stat-label {
+  display: block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: hsl(var(--muted-foreground));
+}
+
+.ai-stat-value {
+  display: block;
+  margin-top: 0.55rem;
+  font-size: 1.45rem;
+  color: hsl(var(--foreground));
+}
+
+.ai-inline-message {
+  color: hsl(var(--foreground));
+  font-size: 0.92rem;
+}
+
+.ai-inline-message-error {
+  color: hsl(var(--destructive));
+}
+
+.ai-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.ai-field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.ai-field-span-2 {
+  grid-column: span 2;
+}
+
+.ai-field-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+
+.ai-input {
+  width: 100%;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.9rem;
+  padding: 0.82rem 0.9rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.ai-textarea {
+  min-height: 110px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.ai-editor {
+  min-height: 420px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  line-height: 1.6;
+}
+
+.ai-checkbox-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.ai-checkbox-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  padding: 0.55rem 0.8rem;
+  background: hsl(var(--background));
+  font-size: 0.82rem;
+}
+
+.ai-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.ai-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.ai-provider-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.ai-provider-card {
+  border: 1px solid hsl(var(--border));
+  border-radius: 1rem;
+  padding: 1.25rem;
+  background: hsl(var(--card));
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.06);
+}
+
+.ai-card-title-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: hsl(var(--foreground));
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ai-provider-card.selected {
+  border-color: hsl(var(--primary));
+  box-shadow: 0 22px 42px rgba(10, 132, 255, 0.12);
+}
+
+.ai-provider-detail-card {
+  position: sticky;
+  top: 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: 1rem;
+  padding: 1.25rem;
+  background: hsl(var(--card));
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.06);
+}
+
+.ai-detail-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
+.ai-detail-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ai-detail-item {
+  display: grid;
+  gap: 0.3rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.9rem;
+  padding: 0.9rem;
+  background: hsl(var(--background));
+}
+
+.ai-detail-value {
+  color: hsl(var(--foreground));
+  font-size: 0.9rem;
+}
+
+.ai-detail-note {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.9rem;
+  padding: 0.9rem;
+  background: hsl(var(--background));
+  color: hsl(var(--muted-foreground));
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.ai-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.ai-detail-history-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ai-detail-empty {
+  min-height: 240px;
+  display: grid;
+  align-content: center;
+}
+
+.ai-usage-chart-card,
+.ai-usage-table-card {
+  border: 1px solid hsl(var(--border));
+  border-radius: 1rem;
+  padding: 1rem;
+  background: hsl(var(--card));
+}
+
+.ai-usage-chart {
+  display: grid;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  gap: 0.75rem;
+  min-height: 220px;
+  align-items: end;
+}
+
+.ai-usage-bar-col {
+  display: grid;
+  gap: 0.55rem;
+  align-items: end;
+  justify-items: stretch;
+}
+
+.ai-usage-bar {
+  width: 100%;
+  min-height: 6px;
+  border-radius: 0.8rem 0.8rem 0.2rem 0.2rem;
+  background: linear-gradient(180deg, color-mix(in srgb, hsl(var(--primary)) 70%, white 12%), hsl(var(--primary)));
+}
+
+.ai-usage-bar-label {
+  font-size: 0.72rem;
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+}
+
+.ai-usage-table-wrap {
+  overflow-x: auto;
+}
+
+.ai-usage-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ai-usage-table th,
+.ai-usage-table td {
+  padding: 0.8rem 0.65rem;
+  border-bottom: 1px solid hsl(var(--border));
+  text-align: left;
+  font-size: 0.86rem;
+}
+
+.ai-usage-table th {
+  color: hsl(var(--muted-foreground));
+  font-weight: 600;
+}
+
+.ai-usage-table td {
+  color: hsl(var(--foreground));
+}
+
+@media (min-width: 768px) {
+  .md\:ai-grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
+  .ai-platform-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-section-header,
+  .ai-stats-grid,
+  .ai-active-grid,
+  .ai-sync-grid,
+  .ai-form-grid,
+  .ai-provider-grid,
+  .ai-tool-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-provider-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-usage-chart {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  .ai-provider-detail-card {
+    position: static;
+  }
+
+  .ai-history-item {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-history-meta {
+    text-align: left;
+  }
+
+  .ai-section-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ai-field-span-2 {
+    grid-column: span 1;
+  }
+
+  .ai-platform-sidebar {
+    position: static;
+  }
+}

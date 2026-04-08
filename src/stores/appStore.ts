@@ -14,6 +14,7 @@ interface AppStore {
 
   // Theme
   theme: ThemeMode;
+  setTheme: (theme: ThemeMode) => void;
   toggleTheme: () => void;
 
   // Sidebar
@@ -114,6 +115,7 @@ export const useAppStore = create<AppStore>((set, _get) => ({
   t: i18n.getFixedT(initialLocale, 'gwshell') as (key: TranslationKeys, params?: Record<string, string | number>) => string,
 
   theme: 'dark',
+  setTheme: (theme) => set({ theme }),
   toggleTheme: () =>
     set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
 
