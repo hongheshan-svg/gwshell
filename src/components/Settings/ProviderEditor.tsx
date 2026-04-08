@@ -133,7 +133,12 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
-  const [configText, setConfigText] = useState('{}'); // raw settingsConfig text for add panel JSON editor
+  const [configText, setConfigText] = useState('{}'); // raw settingsConfig text for JSON editor
+  // Per-app config editor state (Codex: auth JSON + config TOML; Gemini: env JSON + config JSON)
+  const [codexAuthText, setCodexAuthText] = useState('{}');
+  const [codexConfigText, setCodexConfigText] = useState('');
+  const [geminiEnvText, setGeminiEnvText] = useState('{}');
+  const [geminiConfigText, setGeminiConfigText] = useState('{}');
   const [universalFormOpen, setUniversalFormOpen] = useState(false);
 
   const supportsUniversal = activeApp !== 'opencode' && activeApp !== 'openclaw';
@@ -228,9 +233,15 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
     if (!editForm) return;
     try {
       const toSave = { ...editForm };
-      // Parse configText into settingsConfig (handles user edits in JSON editor)
+      // Reconstruct settingsConfig from per-app editor states
       try {
-        toSave.settingsConfig = JSON.parse(configText);
+        if (activeApp === 'codex') {
+          toSave.settingsConfig = { auth: JSON.parse(codexAuthText), config: codexConfigText };
+        } else if (activeApp === 'gemini') {
+          toSave.settingsConfig = { env: JSON.parse(geminiEnvText), config: JSON.parse(geminiConfigText) };
+        } else {
+          toSave.settingsConfig = JSON.parse(configText);
+        }
       } catch {
         flash(t('ai_invalid_json'));
         return;
@@ -261,12 +272,12 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
       p.iconColor = preset.iconColor;
       p.category = preset.category;
       p.isPartner = preset.isPartner;
-      // Sync configText for JSON editor
-      setConfigText(JSON.stringify(preset.settingsConfig, null, 2));
+      // Sync all config text states for per-app editors
+      syncConfigStates(preset.settingsConfig);
       // Set apps: only the current app tab
       p.apps = { claude: activeApp === 'claude', codex: activeApp === 'codex', gemini: activeApp === 'gemini', opencode: activeApp === 'opencode', openclaw: activeApp === 'openclaw' };
     } else {
-      setConfigText('{}');
+      syncConfigStates({});
     }
     setEditForm(p);
     setShowApiKey(false);
@@ -348,10 +359,16 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
         flash(t('ai_name_required'));
         return;
       }
-      // Parse configText into settingsConfig (handles user edits in JSON editor)
+      // Reconstruct settingsConfig from per-app editor states
       if (addTab !== 'universal') {
         try {
-          providerToSave.settingsConfig = JSON.parse(configText);
+          if (activeApp === 'codex') {
+            providerToSave.settingsConfig = { auth: JSON.parse(codexAuthText), config: codexConfigText };
+          } else if (activeApp === 'gemini') {
+            providerToSave.settingsConfig = { env: JSON.parse(geminiEnvText), config: JSON.parse(geminiConfigText) };
+          } else {
+            providerToSave.settingsConfig = JSON.parse(configText);
+          }
         } catch {
           flash(t('ai_invalid_json'));
           return;
@@ -404,9 +421,20 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
 
   const openEdit = (p: AiProvider) => {
     setEditForm({ ...p });
-    setConfigText(JSON.stringify(p.settingsConfig ?? {}, null, 2));
+    syncConfigStates(p.settingsConfig ?? {});
     setShowApiKey(false);
     setView('edit');
+  };
+
+  /** Sync all per-app config text states from a settingsConfig object */
+  const syncConfigStates = (cfg: Record<string, any>) => {
+    setConfigText(JSON.stringify(cfg, null, 2));
+    // Codex: { auth: {...}, config: "TOML string" }
+    setCodexAuthText(JSON.stringify(cfg?.auth ?? {}, null, 2));
+    setCodexConfigText(typeof cfg?.config === 'string' ? cfg.config : '');
+    // Gemini: { env: {...}, config: {...} }
+    setGeminiEnvText(JSON.stringify(cfg?.env ?? {}, null, 2));
+    setGeminiConfigText(JSON.stringify(cfg?.config && typeof cfg.config === 'object' ? cfg.config : {}, null, 2));
   };
 
   const updateForm = <K extends keyof AiProvider>(key: K, value: AiProvider[K]) => {
@@ -507,6 +535,245 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
       )}
     </>
   );
+
+  /* ---- Claude quick-toggle helper (CC Switch CommonConfigEditor pattern) ---- */
+  const handleClaudeToggle = (toggleKey: string, checked: boolean) => {
+    try {
+      const config = JSON.parse(configText || '{}');
+      switch (toggleKey) {
+        case 'hideAttribution':
+          if (checked) { config.attribution = { commit: '', pr: '' }; }
+          else { delete config.attribution; }
+          break;
+        case 'teammates':
+          if (!config.env) config.env = {};
+          if (checked) { config.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = '1'; }
+          else { delete config.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS; if (Object.keys(config.env).length === 0) delete config.env; }
+          break;
+        case 'enableToolSearch':
+          if (!config.env) config.env = {};
+          if (checked) { config.env.ENABLE_TOOL_SEARCH = 'true'; }
+          else { delete config.env.ENABLE_TOOL_SEARCH; if (Object.keys(config.env).length === 0) delete config.env; }
+          break;
+        case 'effortHigh':
+          if (checked) { config.effortLevel = 'high'; }
+          else { delete config.effortLevel; }
+          break;
+        case 'disableAutoUpgrade':
+          if (!config.env) config.env = {};
+          if (checked) { config.env.DISABLE_AUTOUPDATER = '1'; }
+          else { delete config.env.DISABLE_AUTOUPDATER; if (Object.keys(config.env).length === 0) delete config.env; }
+          break;
+      }
+      const newText = JSON.stringify(config, null, 2);
+      setConfigText(newText);
+      updateForm('settingsConfig', config);
+    } catch { /* ignore invalid JSON */ }
+  };
+
+  /** Parse Claude toggle states from configText */
+  const claudeToggleStates = useMemo(() => {
+    try {
+      const c = JSON.parse(configText);
+      return {
+        hideAttribution: c?.attribution?.commit === '' && c?.attribution?.pr === '',
+        teammates: c?.env?.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS === '1',
+        enableToolSearch: c?.env?.ENABLE_TOOL_SEARCH === 'true' || c?.env?.ENABLE_TOOL_SEARCH === '1',
+        effortHigh: c?.effortLevel === 'high',
+        disableAutoUpgrade: c?.env?.DISABLE_AUTOUPDATER === '1',
+      };
+    } catch { return { hideAttribution: false, teammates: false, enableToolSearch: false, effortHigh: false, disableAutoUpgrade: false }; }
+  }, [configText]);
+
+  /* ---- Codex TOML context-window toggle (CC Switch CodexConfigSection) ---- */
+  const handleCodexContextToggle = (checked: boolean) => {
+    let toml = codexConfigText || '';
+    if (checked) {
+      if (!/model_context_window/.test(toml)) toml += (toml ? '\n' : '') + 'model_context_window = 1000000';
+      if (!/model_auto_compact_token_limit/.test(toml)) toml += '\nmodel_auto_compact_token_limit = 900000';
+    } else {
+      toml = toml.replace(/\n?model_context_window\s*=\s*\d+/g, '').replace(/\n?model_auto_compact_token_limit\s*=\s*\d+/g, '');
+    }
+    setCodexConfigText(toml);
+    // Rebuild settingsConfig
+    try {
+      const auth = JSON.parse(codexAuthText);
+      const cfg = { auth, config: toml };
+      setConfigText(JSON.stringify(cfg, null, 2));
+      updateForm('settingsConfig', cfg);
+    } catch { /* ignore */ }
+  };
+
+  /** Per-app config editor (CC Switch: CommonConfigEditor / CodexConfigEditor / GeminiConfigEditor / JsonEditor) */
+  const renderConfigEditor = () => {
+    if (!editForm) return null;
+
+    /* ---- Claude: JSON editor + 5 quick toggles (CC Switch CommonConfigEditor) ---- */
+    if (activeApp === 'claude') {
+      return (
+        <div className="ccs-form-field">
+          <label className="ccs-form-label">{t('ai_config_json')}</label>
+          <div className="ccs-config-toggles">
+            {([
+              ['hideAttribution', t('ai_claude_hide_attribution')],
+              ['teammates', t('ai_claude_enable_teammates')],
+              ['enableToolSearch', t('ai_claude_enable_tool_search')],
+              ['effortHigh', t('ai_claude_effort_high')],
+              ['disableAutoUpgrade', t('ai_claude_disable_auto_upgrade')],
+            ] as [string, string][]).map(([key, label]) => (
+              <label key={key} className="ccs-config-toggle-label">
+                <input type="checkbox"
+                  checked={(claudeToggleStates as any)[key] ?? false}
+                  onChange={e => handleClaudeToggle(key, e.target.checked)} />
+                <span>{label}</span>
+              </label>
+            ))}
+          </div>
+          <textarea
+            className="ccs-form-input ccs-form-textarea ccs-json-editor"
+            value={configText}
+            onChange={e => {
+              setConfigText(e.target.value);
+              try { updateForm('settingsConfig', JSON.parse(e.target.value)); } catch { /* allow typing */ }
+            }}
+            rows={14}
+            spellCheck={false}
+            placeholder={`{\n  "env": {\n    "ANTHROPIC_BASE_URL": "https://your-api-endpoint.com",\n    "ANTHROPIC_AUTH_TOKEN": "your-api-key-here"\n  }\n}`}
+          />
+        </div>
+      );
+    }
+
+    /* ---- Codex: Auth JSON + Config TOML (CC Switch CodexConfigEditor) ---- */
+    if (activeApp === 'codex') {
+      return (
+        <>
+          {/* Auth JSON section */}
+          <div className="ccs-form-field">
+            <label className="ccs-form-label">{t('ai_codex_auth_json')}</label>
+            <textarea
+              className="ccs-form-input ccs-form-textarea ccs-json-editor"
+              value={codexAuthText}
+              onChange={e => {
+                setCodexAuthText(e.target.value);
+                try {
+                  const auth = JSON.parse(e.target.value);
+                  const cfg = { auth, config: codexConfigText };
+                  setConfigText(JSON.stringify(cfg, null, 2));
+                  updateForm('settingsConfig', cfg);
+                } catch { /* allow typing */ }
+              }}
+              rows={6}
+              spellCheck={false}
+              placeholder={`{\n  "OPENAI_API_KEY": "sk-..."\n}`}
+            />
+            <p className="ccs-config-hint">{t('ai_codex_auth_hint')}</p>
+          </div>
+
+          {/* Config TOML section */}
+          <div className="ccs-form-field">
+            <label className="ccs-form-label">{t('ai_codex_config_toml')}</label>
+            <div className="ccs-config-toggles">
+              <label className="ccs-config-toggle-label">
+                <input type="checkbox"
+                  checked={/model_context_window\s*=\s*1000000/.test(codexConfigText)}
+                  onChange={e => handleCodexContextToggle(e.target.checked)} />
+                <span>{t('ai_codex_context_1m')}</span>
+              </label>
+            </div>
+            <textarea
+              className="ccs-form-input ccs-form-textarea ccs-json-editor"
+              value={codexConfigText}
+              onChange={e => {
+                setCodexConfigText(e.target.value);
+                try {
+                  const auth = JSON.parse(codexAuthText);
+                  const cfg = { auth, config: e.target.value };
+                  setConfigText(JSON.stringify(cfg, null, 2));
+                  updateForm('settingsConfig', cfg);
+                } catch { /* allow typing */ }
+              }}
+              rows={12}
+              spellCheck={false}
+            />
+            <p className="ccs-config-hint">{t('ai_codex_config_hint')}</p>
+          </div>
+        </>
+      );
+    }
+
+    /* ---- Gemini: Env JSON + Config JSON (CC Switch GeminiConfigEditor) ---- */
+    if (activeApp === 'gemini') {
+      return (
+        <>
+          {/* Env section */}
+          <div className="ccs-form-field">
+            <label className="ccs-form-label">{t('ai_gemini_env')}</label>
+            <textarea
+              className="ccs-form-input ccs-form-textarea ccs-json-editor"
+              value={geminiEnvText}
+              onChange={e => {
+                setGeminiEnvText(e.target.value);
+                try {
+                  const env = JSON.parse(e.target.value);
+                  let cfgObj = {};
+                  try { cfgObj = JSON.parse(geminiConfigText); } catch { /* */ }
+                  const cfg = { env, config: cfgObj };
+                  setConfigText(JSON.stringify(cfg, null, 2));
+                  updateForm('settingsConfig', cfg);
+                } catch { /* allow typing */ }
+              }}
+              rows={6}
+              spellCheck={false}
+              placeholder={`{\n  "GOOGLE_GEMINI_BASE_URL": "https://your-api-endpoint.com",\n  "GEMINI_API_KEY": "your-api-key",\n  "GEMINI_MODEL": "gemini-3-pro-preview"\n}`}
+            />
+            <p className="ccs-config-hint">{t('ai_gemini_env_hint')}</p>
+          </div>
+
+          {/* Config JSON section */}
+          <div className="ccs-form-field">
+            <label className="ccs-form-label">{t('ai_gemini_config_json')}</label>
+            <textarea
+              className="ccs-form-input ccs-form-textarea ccs-json-editor"
+              value={geminiConfigText}
+              onChange={e => {
+                setGeminiConfigText(e.target.value);
+                try {
+                  const cfgObj = JSON.parse(e.target.value);
+                  let env = {};
+                  try { env = JSON.parse(geminiEnvText); } catch { /* */ }
+                  const cfg = { env, config: cfgObj };
+                  setConfigText(JSON.stringify(cfg, null, 2));
+                  updateForm('settingsConfig', cfg);
+                } catch { /* allow typing */ }
+              }}
+              rows={8}
+              spellCheck={false}
+              placeholder={`{\n  "timeout": 30000,\n  "maxRetries": 3\n}`}
+            />
+            <p className="ccs-config-hint">{t('ai_gemini_config_hint')}</p>
+          </div>
+        </>
+      );
+    }
+
+    /* ---- OpenCode / OpenClaw: Plain JSON editor (CC Switch JsonEditor) ---- */
+    return (
+      <div className="ccs-form-field">
+        <label className="ccs-form-label">{t('ai_config_json')}</label>
+        <textarea
+          className="ccs-form-input ccs-form-textarea ccs-json-editor"
+          value={configText}
+          onChange={e => {
+            setConfigText(e.target.value);
+            try { updateForm('settingsConfig', JSON.parse(e.target.value)); } catch { /* allow typing */ }
+          }}
+          rows={12}
+          spellCheck={false}
+        />
+      </div>
+    );
+  };
 
   /* ==== RENDER ==== */
   return (
@@ -736,7 +1003,7 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
                       updateForm('websiteUrl', preset.websiteUrl);
                       updateForm('iconColor', preset.iconColor);
                       updateForm('settingsConfig', JSON.parse(JSON.stringify(preset.settingsConfig)));
-                      setConfigText(JSON.stringify(preset.settingsConfig, null, 2));
+                      syncConfigStates(preset.settingsConfig);
                     } else { updateForm('providerType', e.target.value); }
                   }}>
                   <option value="custom">{t('ai_preset_custom')}</option>
@@ -792,25 +1059,8 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
             {/* Per-app model config (CC Switch style: colored left border group) */}
             {renderModelSections(editForm)}
 
-            {/* Settings Config JSON Editor (CC Switch: always visible) */}
-            <div className="ccs-form-field">
-              <label className="ccs-form-label">{t('ai_config_json')}</label>
-              <textarea
-                className="ccs-form-input ccs-form-textarea ccs-json-editor"
-                value={configText}
-                onChange={e => {
-                  setConfigText(e.target.value);
-                  try {
-                    const parsed = JSON.parse(e.target.value);
-                    updateForm('settingsConfig', parsed);
-                  } catch {
-                    // Allow typing invalid JSON — parse on save
-                  }
-                }}
-                rows={12}
-                spellCheck={false}
-              />
-            </div>
+            {/* Settings Config Editor (CC Switch: per-app editor) */}
+            {renderConfigEditor()}
 
             {/* Notes */}
             <div className="ccs-form-field">
@@ -983,25 +1233,8 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
                   </div>
                 )}
 
-                {/* ── Settings Config JSON Editor (CC Switch: always visible) ── */}
-                <div className="ccs-form-field">
-                  <label className="ccs-form-label">{t('ai_config_json')}</label>
-                  <textarea
-                    className="ccs-form-input ccs-form-textarea ccs-json-editor"
-                    value={configText}
-                    onChange={e => {
-                      setConfigText(e.target.value);
-                      try {
-                        const parsed = JSON.parse(e.target.value);
-                        updateForm('settingsConfig', parsed);
-                      } catch {
-                        // Allow typing invalid JSON — parse on submit
-                      }
-                    }}
-                    rows={12}
-                    spellCheck={false}
-                  />
-                </div>
+                {/* ── Settings Config Editor (CC Switch: per-app editor) ── */}
+                {renderConfigEditor()}
               </>
             ) : !universalFormOpen ? (
               /* ===== Universal Provider List (CC Switch UniversalProviderPanel) ===== */

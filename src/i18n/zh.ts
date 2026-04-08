@@ -439,6 +439,23 @@ const zh = {
   ai_model_gemini: 'Gemini CLI',
   ai_model_opencode: 'OpenCode',
   ai_model_openclaw: 'OpenClaw',
+  // Claude config toggles
+  ai_claude_hide_attribution: '隐藏署名',
+  ai_claude_enable_teammates: '启用团队协作',
+  ai_claude_enable_tool_search: '启用工具搜索',
+  ai_claude_effort_high: '高性能模式',
+  ai_claude_disable_auto_upgrade: '禁用自动升级',
+  // Codex config sections
+  ai_codex_auth_json: '认证配置 (auth.json)',
+  ai_codex_auth_hint: 'Codex 认证 JSON，包含 OPENAI_API_KEY 等信息',
+  ai_codex_config_toml: '运行配置 (config.toml)',
+  ai_codex_config_hint: 'Codex TOML 配置，定义 model_provider、base_url 等',
+  ai_codex_context_1m: '1M 上下文窗口',
+  // Gemini config sections
+  ai_gemini_env: '环境变量 (.env)',
+  ai_gemini_env_hint: '使用 .env 格式配置 Gemini 环境变量',
+  ai_gemini_config_json: '配置文件 (config.json)',
+  ai_gemini_config_hint: '使用 JSON 格式配置 Gemini 扩展参数（可选）',
 
   // Settings - Shortcuts
   settings_sc_save: '保存',

@@ -441,6 +441,23 @@ const en: Record<TranslationKeys, string> = {
   ai_model_gemini: 'Gemini CLI',
   ai_model_opencode: 'OpenCode',
   ai_model_openclaw: 'OpenClaw',
+  // Claude config toggles
+  ai_claude_hide_attribution: 'Hide Attribution',
+  ai_claude_enable_teammates: 'Enable Teammates',
+  ai_claude_enable_tool_search: 'Enable Tool Search',
+  ai_claude_effort_high: 'Effort High',
+  ai_claude_disable_auto_upgrade: 'Disable Auto Upgrade',
+  // Codex config sections
+  ai_codex_auth_json: 'Auth Config (auth.json)',
+  ai_codex_auth_hint: 'Codex auth JSON with OPENAI_API_KEY etc.',
+  ai_codex_config_toml: 'Runtime Config (config.toml)',
+  ai_codex_config_hint: 'Codex TOML config defining model_provider, base_url, etc.',
+  ai_codex_context_1m: '1M Context Window',
+  // Gemini config sections
+  ai_gemini_env: 'Environment Variables (.env)',
+  ai_gemini_env_hint: 'Configure Gemini env variables in .env format',
+  ai_gemini_config_json: 'Config File (config.json)',
+  ai_gemini_config_hint: 'Configure Gemini extended parameters in JSON (optional)',
 
   // Settings - Shortcuts
   settings_sc_save: 'Save',

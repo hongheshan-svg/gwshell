@@ -4010,6 +4010,36 @@ input, select, textarea, button {
   resize: vertical;
 }
 
+/* ── Per-app config toggles (CC Switch CommonConfigEditor / CodexConfigSection) ── */
+.ccs-config-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-bottom: 6px;
+}
+.ccs-config-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.ccs-config-toggle-label input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+.ccs-config-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.8;
+  margin-top: 4px;
+}
+
 /* ── Universal Provider Panel (CC Switch UniversalProviderPanel) ── */
 .ccs-universal-panel-header {
   display: flex;
