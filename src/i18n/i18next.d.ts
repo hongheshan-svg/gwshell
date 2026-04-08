@@ -1,11 +1,13 @@
 import 'i18next';
-import type { TranslationKeys } from './zh';
+import gwshellZh from '../components/ai/i18n/locales/gwshell.zh.json';
+import aiZh from '../components/ai/i18n/locales/ai.zh.json';
 
 declare module 'i18next' {
   interface CustomTypeOptions {
-    defaultNS: 'translation';
+    defaultNS: 'gwshell';
     resources: {
-      translation: Record<TranslationKeys, string>;
+      gwshell: typeof gwshellZh;
+      ai: typeof aiZh;
     };
   }
 }

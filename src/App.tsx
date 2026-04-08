@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect } from 'react';
+import { I18nextProvider } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { TitleBar } from './components/TitleBar/TitleBar';
@@ -14,6 +15,7 @@ import { StatusBar } from './components/StatusBar/StatusBar';
 const TerminalContainer = lazy(() => import('./components/Terminal/TerminalContainer').then(m => ({ default: m.TerminalContainer })));
 const SftpPanel = lazy(() => import('./components/SftpPanel/SftpPanel').then(m => ({ default: m.SftpPanel })));
 import { useAppStore } from './stores/appStore';
+import i18n from './i18n';
 import type { SessionConfig } from './types';
 import './styles/global.css';
 
@@ -119,53 +121,55 @@ function App() {
   }, []);
 
   return (
-    <div className="app-root">
-      <TitleBar />
-      <div className="app-layout">
-        <Sidebar />
-        <SessionPanel />
-        <button
-          className="sidebar-collapse-toggle"
-          onClick={toggleSidebar}
-          title={sidebarCollapsed ? '展开面板' : '折叠面板'}
-        >
-          {sidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-        </button>
-        <div className="main-content">
-          <TabBar />
-          <div className="terminal-sftp-wrapper">
-            {showAssetTable && (
-              <div className="terminal-container">
-                <AssetTable />
-              </div>
-            )}
-            {needTerminals && (
-              <Suspense fallback={null}><TerminalContainer /></Suspense>
-            )}
-            {sftpPanelOpen && (() => {
-              const activeTab = tabs.find(t => t.id === activeTabId);
-              if (activeTab?.type !== 'ssh') return null;
-              const sess = sessions.find(s => s.id === activeTab.sessionId);
-              return (
-                <Suspense fallback={null}>
-                  <SftpPanel sessionId={activeTab.sessionId} username={sess?.username} />
-                </Suspense>
-              );
-            })()}
+    <I18nextProvider i18n={i18n}>
+      <div className="app-root">
+        <TitleBar />
+        <div className="app-layout">
+          <Sidebar />
+          <SessionPanel />
+          <button
+            className="sidebar-collapse-toggle"
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? '展开面板' : '折叠面板'}
+          >
+            {sidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+          </button>
+          <div className="main-content">
+            <TabBar />
+            <div className="terminal-sftp-wrapper">
+              {showAssetTable && (
+                <div className="terminal-container">
+                  <AssetTable />
+                </div>
+              )}
+              {needTerminals && (
+                <Suspense fallback={null}><TerminalContainer /></Suspense>
+              )}
+              {sftpPanelOpen && (() => {
+                const activeTab = tabs.find(t => t.id === activeTabId);
+                if (activeTab?.type !== 'ssh') return null;
+                const sess = sessions.find(s => s.id === activeTab.sessionId);
+                return (
+                  <Suspense fallback={null}>
+                    <SftpPanel sessionId={activeTab.sessionId} username={sess?.username} />
+                  </Suspense>
+                );
+              })()}
+            </div>
+            <StatusBar />
           </div>
-          <StatusBar />
         </div>
+        <Suspense fallback={null}>
+          {showNewSession && <NewSessionModal />}
+          {showDockerModal && <DockerModal />}
+          {showLocalTerminalModal && <LocalTerminalModal />}
+          {showSerialModal && <SerialPortModal />}
+          {showSettings && <SettingsModal />}
+          {showAppMenu && <AppMenu />}
+          <UpdateChecker />
+        </Suspense>
       </div>
-      <Suspense fallback={null}>
-        {showNewSession && <NewSessionModal />}
-        {showDockerModal && <DockerModal />}
-        {showLocalTerminalModal && <LocalTerminalModal />}
-        {showSerialModal && <SerialPortModal />}
-        {showSettings && <SettingsModal />}
-        {showAppMenu && <AppMenu />}
-        <UpdateChecker />
-      </Suspense>
-    </div>
+    </I18nextProvider>
   );
 }
 

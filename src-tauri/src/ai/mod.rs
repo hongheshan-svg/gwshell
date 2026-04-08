@@ -1,0 +1,1 @@
+//! AI namespace placeholder. Filled in starting Stage 1.

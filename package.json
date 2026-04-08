@@ -16,6 +16,8 @@
     "postversion": "node -e \"const fs=require('fs');const v=require('./package.json').version;const c=fs.readFileSync('src-tauri/Cargo.toml','utf8').replace(/^version = \\\"[^\\\"]+\\\"/m,'version = \\\"'+v+'\\\"');fs.writeFileSync('src-tauri/Cargo.toml',c);console.log('Cargo.toml version synced to '+v);\""
   },
   "dependencies": {
+    "@radix-ui/react-label": "^2.1.7",
+    "@radix-ui/react-slot": "^1.2.3",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-deep-link": "^2.4.8",
     "@tauri-apps/plugin-dialog": "^2.7.0",
@@ -24,11 +26,15 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/xterm": "^6.0.0",
-    "i18next": "^26.0.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "i18next": "^25.5.2",
+    "lucide-ai": "npm:lucide-react@^0.542.0",
     "lucide-react": "^1.7.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-i18next": "^17.0.2",
+    "react-i18next": "^16.0.0",
+    "tailwind-merge": "^3.3.1",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
@@ -36,6 +42,9 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
   }

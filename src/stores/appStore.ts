@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { SessionConfig, TabInfo, ThemeMode, MainView } from '../types';
-import i18n, { detectLocale, type Locale } from '../i18n';
+import i18n, { detectLocale, type Locale, type TranslationKeys } from '../i18n';
 
 /** Split layout: how many terminal panes to show simultaneously */
 export type SplitCount = 1 | 2 | 4 | 6 | 8;
@@ -10,6 +10,7 @@ interface AppStore {
   // Locale
   locale: Locale;
   setLocale: (locale: Locale) => void;
+  t: (key: TranslationKeys, params?: Record<string, string | number>) => string;
 
   // Theme
   theme: ThemeMode;
@@ -103,7 +104,14 @@ const _initialSessions = popInjectedSessions();
 
 export const useAppStore = create<AppStore>((set, _get) => ({
   locale: initialLocale,
-  setLocale: (locale: Locale) => { i18n.changeLanguage(locale); set({ locale }); },
+  setLocale: (locale) => {
+    void i18n.changeLanguage(locale);
+    set({
+      locale,
+      t: i18n.getFixedT(locale, 'gwshell') as (key: TranslationKeys, params?: Record<string, string | number>) => string,
+    });
+  },
+  t: i18n.getFixedT(initialLocale, 'gwshell') as (key: TranslationKeys, params?: Record<string, string | number>) => string,
 
   theme: 'dark',
   toggleTheme: () =>
@@ -163,7 +171,7 @@ export const useAppStore = create<AppStore>((set, _get) => ({
   mainView: 'asset-list',
   setMainView: (view) => set({ mainView: view }),
 
-  tabs: [{ id: 'asset-list', sessionId: '', title: i18n.t('tab_list'), type: 'asset-list', connected: false }],
+  tabs: [{ id: 'asset-list', sessionId: '', title: i18n.getFixedT(initialLocale, 'gwshell')('tab_list'), type: 'asset-list', connected: false }],
   activeTabId: 'asset-list',
   addTab: (tab) =>
     set((state) => ({
@@ -454,3 +462,16 @@ export const useAppStore = create<AppStore>((set, _get) => ({
   sftpPanelOpen: true,
   toggleSftpPanel: () => set((state) => ({ sftpPanelOpen: !state.sftpPanelOpen })),
 }));
+
+// Keep store in sync if i18next.changeLanguage is called from outside the store.
+i18n.on('languageChanged', (lng) => {
+  if (lng === 'zh' || lng === 'en') {
+    const cur = useAppStore.getState();
+    if (cur.locale !== lng) {
+      useAppStore.setState({
+        locale: lng,
+        t: i18n.getFixedT(lng, 'gwshell') as typeof cur.t,
+      });
+    }
+  }
+});

@@ -1,4 +1,5 @@
 mod ai_config;
+mod ai;
 mod database;
 mod mcp_config;
 mod prompt_config;
