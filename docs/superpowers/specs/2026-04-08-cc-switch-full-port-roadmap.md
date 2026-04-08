@@ -17,15 +17,20 @@
 | 1 | 嵌入位置 | **A** — 替换 `Settings → AI` 区域，沿用 cc-switch 的左侧 AppSwitcher 导航风格 |
 | 2 | UI 技术栈 | **B** — 引入 cc-switch 全套依赖（tailwind / shadcn / Radix / react-hook-form / zod / react-query / framer-motion / recharts / i18next / sonner），但在 AI 区域内 scoped；tailwind 加 prefix 隔离，避免污染 gwshell 终端/SFTP/会话现有样式 |
 | 3 | 数据兼容 | **A** — 写一次性 migration 脚本把 gwshell 现有 `ai_config.rs` / `mcp_config.rs` / `usage_tracker.rs` 数据导入 cc-switch 的 SQLite schema，迁移完成后**废弃旧的** Rust 模块和旧的 `ProviderEditor.tsx` / `McpManager.tsx` / `PromptsManager.tsx` / `UsageDashboard.tsx` |
-| 4 | 多语言 | **A** — AI 区域用独立的 i18next，原样搬 cc-switch 翻译资源；桥接 locale 同步（gwshell 的 `appStore.locale` 切换时调用 `i18next.changeLanguage()`）；gwshell 非 AI 部分继续用 `getT()`，不改 |
+| 4 | 多语言 | **D（修订）** — 全项目切换到 i18next + react-i18next。废弃现有 `src/i18n/getT()` 系统：把 `zh.ts`/`en.ts` 转换成 i18next 资源 namespace（`gwshell` namespace），cc-switch 翻译资源作为另一个 namespace（`ai`）共存于同一个 i18next 实例。`appStore.locale` 改为从 `i18next.language` 派生。所有 12 个 consumer 文件（含 TerminalView、IconNav、DockerModal、NewSessionModal、NewAssetMenu、SettingsModal 等）改用 `useTranslation('gwshell')` |
 
 ## 3. 整体架构
 
 ```
 gwshell/
 ├── src/
-│   ├── App.tsx                  # 不变；Settings 入口指向新 AiSection
-│   ├── stores/appStore.ts       # 增加 locale 桥接到 i18next
+│   ├── App.tsx                  # 顶层包 <I18nextProvider>；Settings 入口指向新 AiSection
+│   ├── i18n/
+│   │   ├── index.ts             # 改造：导出 i18next 实例，注册 gwshell + ai 两个 namespace
+│   │   ├── gwshell.zh.ts        # 由旧 zh.ts 转换而来
+│   │   ├── gwshell.en.ts        # 由旧 en.ts 转换而来
+│   │   └── ai.*.json            # cc-switch 翻译资源原样搬运
+│   ├── stores/appStore.ts       # locale 字段由 i18next.language 派生；setLocale 调用 i18next.changeLanguage()
 │   ├── components/
 │   │   ├── Settings/
 │   │   │   └── SettingsModal.tsx  # 改造：AI 标签页 mount <AiSection/>
@@ -107,9 +112,17 @@ gwshell/
 - 建立 `src/components/ai/` 目录骨架与空 `AiSection.tsx`
 - 建立 `src-tauri/src/ai/mod.rs` 骨架
 - tailwind 样式隔离 PoC：在 `AiSection` 内放一个测试组件，验证 `ai-` 前缀生效且不影响 gwshell 终端、SFTP、Sidebar 样式
-- i18next bootstrap：搬运 cc-switch 的 `src/i18n/` 资源，桥接 `appStore.locale` ↔ `i18next.changeLanguage()`
+- **i18next 全量迁移**（决策 4）：
+  1. 安装 `i18next` + `react-i18next`，新建统一 i18next 实例，注册两个 namespace：`gwshell`（默认）和 `ai`
+  2. 把现有 `src/i18n/zh.ts`、`en.ts`（共 1479 行）的扁平 key 字典转换成 i18next 资源对象，仍按原 key 名保留（不重命名），作为 `gwshell` namespace
+  3. cc-switch 的 i18n 资源原样搬运为 `ai` namespace（保留其原有 key 结构）
+  4. 改造 `src/i18n/index.ts`：删除旧的 `getT()`，导出 i18next 实例与 `detectLocale()`
+  5. 在 `App.tsx` 顶层包 `<I18nextProvider>`（虽然 react-i18next 不强制，但便于 SSR/测试）
+  6. 把 12 个 consumer 文件（TerminalView、appStore、IconNav、DockerModal、NewSessionModal、NewAssetMenu、SettingsModal、以及 5 个待删的旧 AI 组件）从 `getT(locale)` 改为 `useTranslation('gwshell')`；待删组件先适配以免编译失败，后续阶段一并删除
+  7. `appStore.locale` 字段保留供其它代码读取，但 `setLocale()` 改为调用 `i18next.changeLanguage(loc)` 并订阅 `languageChanged` 事件回写 store
+  8. 持久化：i18next 的 language 仍走原有 gwshell store 的 localStorage 路径，不引入 i18next-browser-languagedetector
 
-**验收**：`npm run tauri dev` 成功启动；gwshell 现有功能完全无视觉变化；Settings → AI 显示一个空的 cc-switch 风格面板；切换 gwshell 顶部语言时 AI 区域文案同步切换。
+**验收**：`npm run tauri dev` 成功启动；gwshell 现有所有界面文案与切换语言行为**和原来完全一致**（regression-free）；Settings → AI 显示一个空的 cc-switch 风格面板，能正确显示 `ai` namespace 文案；切换语言时 gwshell 与 AI 区域同步切换。
 
 ---
 
@@ -231,7 +244,8 @@ gwshell/
 | **bundle 体积膨胀** | 启动变慢 | tree-shaking、按需加载（AI 区域 lazy import）、recharts/codemirror 动态加载 |
 | **重复命令名冲突** | 阶段 0/1 编译失败 | 全部新命令统一加 `ai_` 前缀（除非 gwshell 不存在同名） |
 | **gwshell 现有用户数据迁移失败** | 用户数据丢失 | 迁移前自动备份原文件到 `*.bak`；migration 失败自动回滚；首次迁移后弹窗提示 |
-| **cc-switch 的 i18next 与 gwshell 的 `getT()` locale 不同步** | 切换语言一边没反应 | 在 `appStore.setLocale()` 中显式调用 `i18next.changeLanguage()`；写入持久化时双写 |
+| **i18next 全量迁移破坏 gwshell 现有界面文案** | 终端/侧边栏/对话框文案丢失或回退到 key | 阶段 0 在迁移完成后做一次完整人工冒烟：每个 consumer 文件至少触发一次 UI 路径；保留旧 `zh.ts/en.ts` 作为参考直到阶段 0 验收通过；key 名保持完全一致避免漏迁 |
+| **react-i18next 与 React 19 兼容** | 阶段 0 直接卡死 | 锁定 react-i18next ≥ 15（已支持 React 19）；如有问题降级到 14 + 临时类型声明 |
 
 ## 6. 验收准则（全部 10 阶段完成后）
 
@@ -246,8 +260,8 @@ gwshell/
 ## 7. 不在范围内（明确排除）
 
 - **不**重构 gwshell 现有的 SSH / PTY / SFTP / Serial / Sidebar / Terminal 模块
-- **不**统一 gwshell 现有 i18n 到 i18next（保留 `getT()`）
 - **不**统一 gwshell 现有 Zustand 到 react-query（react-query 仅在 AI 区域内使用）
+- **不**重命名现有翻译 key（i18next 迁移时 key 名保持原样，只换调用方式）
 - **不**移植 cc-switch 自带的 updater（gwshell 已有自己的 UpdateChecker）
 - **不**移植 cc-switch 的 `flatpak/`、`tests/`（gwshell 没有测试基建，按 CLAUDE.md 说明也不引入）
 - **不**在本任务中增加任何 cc-switch 没有的新功能
