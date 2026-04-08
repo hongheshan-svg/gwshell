@@ -736,6 +736,7 @@ pub fn run() {
             ai_config::delete_ai_provider,
             ai_config::switch_ai_provider,
             ai_config::import_from_cc_switch,
+            ai_config::read_ai_current_config,
             mcp_config::list_mcp_servers,
             mcp_config::save_mcp_server,
             mcp_config::delete_mcp_server,

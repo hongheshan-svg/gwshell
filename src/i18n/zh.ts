@@ -456,6 +456,10 @@ const zh = {
   ai_gemini_env_hint: '使用 .env 格式配置 Gemini 环境变量',
   ai_gemini_config_json: '配置文件 (config.json)',
   ai_gemini_config_hint: '使用 JSON 格式配置 Gemini 扩展参数（可选）',
+  ai_load_current_config: '读取当前配置',
+  ai_load_current_config_hint: '从磁盘读取当前 {app} 配置文件',
+  ai_load_config_success: '已加载当前配置',
+  ai_load_config_empty: '未找到配置文件',
 
   // Settings - Shortcuts
   settings_sc_save: '保存',

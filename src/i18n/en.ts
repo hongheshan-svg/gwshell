@@ -458,6 +458,10 @@ const en: Record<TranslationKeys, string> = {
   ai_gemini_env_hint: 'Configure Gemini env variables in .env format',
   ai_gemini_config_json: 'Config File (config.json)',
   ai_gemini_config_hint: 'Configure Gemini extended parameters in JSON (optional)',
+  ai_load_current_config: 'Load Current Config',
+  ai_load_current_config_hint: 'Read current {app} config from disk',
+  ai_load_config_success: 'Current config loaded',
+  ai_load_config_empty: 'No config file found',
 
   // Settings - Shortcuts
   settings_sc_save: 'Save',

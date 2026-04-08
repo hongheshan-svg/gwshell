@@ -604,15 +604,42 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
     } catch { /* ignore */ }
   };
 
+  /* ---- Load current config from disk (CC Switch import_default_config pattern) ---- */
+  const handleLoadCurrentConfig = async () => {
+    try {
+      const config = await invoke<Record<string, any>>('read_ai_current_config', { tool: activeApp });
+      if (!config || (typeof config === 'object' && Object.keys(config).length === 0)) {
+        flash(t('ai_load_config_empty'));
+        return;
+      }
+      syncConfigStates(config);
+      updateForm('settingsConfig', config);
+      flash(t('ai_load_config_success'));
+    } catch (e: any) {
+      flash(t('ai_error').replace('{error}', String(e)));
+    }
+  };
+
   /** Per-app config editor (CC Switch: CommonConfigEditor / CodexConfigEditor / GeminiConfigEditor / JsonEditor) */
   const renderConfigEditor = () => {
     if (!editForm) return null;
+
+    const loadBtn = (
+      <button className="ccs-load-config-btn" onClick={handleLoadCurrentConfig}
+        title={t('ai_load_current_config_hint').replace('{app}', activeApp)}>
+        <Download size={13} />
+        <span>{t('ai_load_current_config')}</span>
+      </button>
+    );
 
     /* ---- Claude: JSON editor + 5 quick toggles (CC Switch CommonConfigEditor) ---- */
     if (activeApp === 'claude') {
       return (
         <div className="ccs-form-field">
-          <label className="ccs-form-label">{t('ai_config_json')}</label>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <label className="ccs-form-label" style={{ marginBottom: 0 }}>{t('ai_config_json')}</label>
+            {loadBtn}
+          </div>
           <div className="ccs-config-toggles">
             {([
               ['hideAttribution', t('ai_claude_hide_attribution')],
@@ -648,6 +675,9 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
     if (activeApp === 'codex') {
       return (
         <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 6 }}>
+            {loadBtn}
+          </div>
           {/* Auth JSON section */}
           <div className="ccs-form-field">
             <label className="ccs-form-label">{t('ai_codex_auth_json')}</label>
@@ -706,6 +736,9 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
     if (activeApp === 'gemini') {
       return (
         <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 6 }}>
+            {loadBtn}
+          </div>
           {/* Env section */}
           <div className="ccs-form-field">
             <label className="ccs-form-label">{t('ai_gemini_env')}</label>
@@ -760,7 +793,10 @@ export const ProviderEditor: React.FC<Props> = ({ t }) => {
     /* ---- OpenCode / OpenClaw: Plain JSON editor (CC Switch JsonEditor) ---- */
     return (
       <div className="ccs-form-field">
-        <label className="ccs-form-label">{t('ai_config_json')}</label>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <label className="ccs-form-label" style={{ marginBottom: 0 }}>{t('ai_config_json')}</label>
+          {loadBtn}
+        </div>
         <textarea
           className="ccs-form-input ccs-form-textarea ccs-json-editor"
           value={configText}

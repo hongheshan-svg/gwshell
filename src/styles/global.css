@@ -4040,6 +4040,27 @@ input, select, textarea, button {
   margin-top: 4px;
 }
 
+/* ── Load Current Config Button ── */
+.ccs-load-config-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.ccs-load-config-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
 /* ── Universal Provider Panel (CC Switch UniversalProviderPanel) ── */
 .ccs-universal-panel-header {
   display: flex;

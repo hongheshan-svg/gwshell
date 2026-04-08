@@ -492,3 +492,120 @@ fn parse_cc_switch_universal(id: &str, val: &serde_json::Value) -> Result<AiProv
         sort_index: val.get("sortIndex").and_then(|v| v.as_u64()).map(|v| v as usize),
     })
 }
+
+// ============================================================================
+// Read current (live) AI config files from disk
+// ============================================================================
+
+/// Read the actual config files for a given AI tool from disk.
+/// Returns the settingsConfig JSON that reflects the current on-disk state.
+fn read_current_config_blocking(tool: &str) -> Result<serde_json::Value, String> {
+    match tool {
+        "claude" => {
+            let settings_path = home_dir().join(".claude").join("settings.json");
+            if !settings_path.exists() {
+                // Try legacy path
+                let legacy = home_dir().join(".claude").join("claude.json");
+                if legacy.exists() {
+                    let content = fs::read_to_string(&legacy)
+                        .map_err(|e| format!("Read claude.json failed: {}", e))?;
+                    return serde_json::from_str(&content)
+                        .map_err(|e| format!("Parse claude.json failed: {}", e));
+                }
+                return Ok(serde_json::json!({}));
+            }
+            let content = fs::read_to_string(&settings_path)
+                .map_err(|e| format!("Read settings.json failed: {}", e))?;
+            serde_json::from_str(&content)
+                .map_err(|e| format!("Parse settings.json failed: {}", e))
+        }
+        "codex" => {
+            let codex_dir = home_dir().join(".codex");
+            let auth_path = codex_dir.join("auth.json");
+            let config_path = codex_dir.join("config.toml");
+
+            let auth: serde_json::Value = if auth_path.exists() {
+                let content = fs::read_to_string(&auth_path)
+                    .map_err(|e| format!("Read auth.json failed: {}", e))?;
+                serde_json::from_str(&content)
+                    .map_err(|e| format!("Parse auth.json failed: {}", e))?
+            } else {
+                serde_json::json!({})
+            };
+
+            let config_text = if config_path.exists() {
+                fs::read_to_string(&config_path)
+                    .map_err(|e| format!("Read config.toml failed: {}", e))?
+            } else {
+                String::new()
+            };
+
+            Ok(serde_json::json!({ "auth": auth, "config": config_text }))
+        }
+        "gemini" => {
+            let gemini_dir = home_dir().join(".gemini");
+            let env_path = gemini_dir.join(".env");
+            let settings_path = gemini_dir.join("settings.json");
+
+            // Read .env file → parse as key=value pairs → wrap as { env: {...} }
+            let env_obj = if env_path.exists() {
+                let content = fs::read_to_string(&env_path)
+                    .map_err(|e| format!("Read .env failed: {}", e))?;
+                let mut map = serde_json::Map::new();
+                for line in content.lines() {
+                    let line = line.trim();
+                    if line.is_empty() || line.starts_with('#') { continue; }
+                    if let Some((key, value)) = line.split_once('=') {
+                        let key = key.trim();
+                        let value = value.trim();
+                        if !key.is_empty() && key.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                            map.insert(key.to_string(), serde_json::Value::String(value.to_string()));
+                        }
+                    }
+                }
+                serde_json::Value::Object(map)
+            } else {
+                serde_json::json!({})
+            };
+
+            let config_obj: serde_json::Value = if settings_path.exists() {
+                let content = fs::read_to_string(&settings_path)
+                    .map_err(|e| format!("Read gemini settings.json failed: {}", e))?;
+                serde_json::from_str(&content)
+                    .map_err(|e| format!("Parse gemini settings.json failed: {}", e))?
+            } else {
+                serde_json::json!({})
+            };
+
+            Ok(serde_json::json!({ "env": env_obj, "config": config_obj }))
+        }
+        "opencode" => {
+            let config_path = home_dir().join(".opencode").join("config.json");
+            if !config_path.exists() {
+                return Ok(serde_json::json!({}));
+            }
+            let content = fs::read_to_string(&config_path)
+                .map_err(|e| format!("Read opencode config.json failed: {}", e))?;
+            serde_json::from_str(&content)
+                .map_err(|e| format!("Parse opencode config.json failed: {}", e))
+        }
+        "openclaw" => {
+            let config_path = home_dir().join(".openclaw").join("config.json");
+            if !config_path.exists() {
+                return Ok(serde_json::json!({}));
+            }
+            let content = fs::read_to_string(&config_path)
+                .map_err(|e| format!("Read openclaw config.json failed: {}", e))?;
+            serde_json::from_str(&content)
+                .map_err(|e| format!("Parse openclaw config.json failed: {}", e))
+        }
+        _ => Err(format!("Unknown tool: {}", tool)),
+    }
+}
+
+#[tauri::command]
+pub async fn read_ai_current_config(tool: String) -> Result<serde_json::Value, String> {
+    tokio::task::spawn_blocking(move || read_current_config_blocking(&tool))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
+}
