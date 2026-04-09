@@ -770,6 +770,8 @@ pub fn run() {
             ai_platform::interfaces::commands::openclaw::ai_platform_save_openclaw_config,
             ai_platform::interfaces::commands::proxy::ai_platform_get_proxy_snapshot,
             ai_platform::interfaces::commands::proxy::ai_platform_save_proxy_config,
+            ai_platform::interfaces::commands::proxy::ai_platform_start_proxy,
+            ai_platform::interfaces::commands::proxy::ai_platform_stop_proxy,
             ai_platform::interfaces::commands::prompts::ai_platform_get_prompt_snapshot,
             ai_platform::interfaces::commands::prompts::ai_platform_write_prompt_file,
             ai_platform::interfaces::commands::prompts::ai_platform_sync_prompt_files,
@@ -798,6 +800,9 @@ pub fn run() {
             // Pre-warm OS info cache in a background thread so the first
             // frontend call to get_os_info returns instantly.
             std::thread::spawn(|| { OS_INFO.get_or_init(compute_os_info); });
+
+            // Start the AI proxy server if it was running when the app last closed.
+            ai_platform::runtime::bootstrap::start_if_configured();
 
             // Serialize initial sessions and inject them into the webview via an
             // initialization script so the frontend Zustand store can populate
@@ -876,7 +881,7 @@ pub fn run() {
             .decorations(false)
             .transparent(true)
             .resizable(true)
-            .visible(true)
+            .visible(false)
             .initialization_script(&init_script)
             .build()?;
 

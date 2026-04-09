@@ -35,3 +35,12 @@ pub struct ProxySnapshotDto {
     pub queue: Vec<ProxyQueueItemDto>,
     pub source: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProxyRuntimeStatusDto {
+    pub running: bool,
+    pub host: String,
+    pub port: u16,
+    pub message: String,
+}

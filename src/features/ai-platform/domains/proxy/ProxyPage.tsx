@@ -3,7 +3,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import {
   type ProxyControlPlaneRecord,
+  type ProxyRuntimeStatus,
   saveAiPlatformProxyConfig,
+  startAiPlatformProxy,
+  stopAiPlatformProxy,
 } from '../../infra/commands/proxy';
 import { useAiPlatformProxy } from '../../infra/query/useAiPlatformProxy';
 
@@ -18,12 +21,17 @@ export function ProxyPage() {
   const { data, isLoading, error } = useAiPlatformProxy();
   const [draft, setDraft] = useState<ProxyControlPlaneRecord | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [runtimeStatus, setRuntimeStatus] = useState<ProxyRuntimeStatus | null>(null);
 
   useEffect(() => {
-    if (!data) {
-      return;
-    }
+    if (!data) return;
     setDraft(cloneConfig(data.config));
+    setRuntimeStatus({
+      running: data.config.server.running,
+      host: data.config.server.listenHost,
+      port: data.config.server.listenPort,
+      message: '',
+    });
   }, [data]);
 
   const saveMutation = useMutation({
@@ -36,6 +44,26 @@ export function ProxyPage() {
     onError: (saveError) => {
       setMessage(String(saveError));
     },
+  });
+
+  const startMutation = useMutation({
+    mutationFn: startAiPlatformProxy,
+    onSuccess: async (status) => {
+      setRuntimeStatus(status);
+      setMessage(status.message);
+      await queryClient.invalidateQueries({ queryKey: ['ai-platform', 'proxy'] });
+    },
+    onError: (e) => setMessage(String(e)),
+  });
+
+  const stopMutation = useMutation({
+    mutationFn: stopAiPlatformProxy,
+    onSuccess: async (status) => {
+      setRuntimeStatus(status);
+      setMessage(status.message);
+      await queryClient.invalidateQueries({ queryKey: ['ai-platform', 'proxy'] });
+    },
+    onError: (e) => setMessage(String(e)),
   });
 
   const appStatuses = data?.appStatuses ?? [];
@@ -56,8 +84,72 @@ export function ProxyPage() {
     return <div className="ai-inline-message">正在加载 Proxy 控制台...</div>;
   }
 
+  const isRunning = runtimeStatus?.running ?? data?.config.server.running ?? false;
+  const proxyHost = runtimeStatus?.host || draft.server.listenHost;
+  const proxyPort = runtimeStatus?.port || draft.server.listenPort;
+  const busy = startMutation.isPending || stopMutation.isPending || saveMutation.isPending;
+
   return (
     <div className="ai-grid ai-gap-6">
+
+      {/* ── Runtime status banner ── */}
+      <section className="ai-rounded-xl ai-border ai-border-border ai-bg-card ai-p-5 ai-shadow-sm">
+        <div className="ai-flex ai-items-center ai-justify-between ai-gap-4 ai-wrap">
+          <div className="ai-grid ai-gap-1">
+            <div className="ai-flex ai-items-center ai-gap-2">
+              <span className={`ai-badge ${isRunning ? 'ai-badge-success' : 'ai-badge-neutral'}`}>
+                {isRunning ? 'Running' : 'Stopped'}
+              </span>
+              <span className="ai-text-base ai-font-semibold ai-text-card-foreground">
+                Local Reverse Proxy
+              </span>
+            </div>
+            {isRunning ? (
+              <div className="ai-grid ai-gap-1 ai-mt-1">
+                <span className="ai-text-sm ai-text-muted-foreground">
+                  Listening on <code className="ai-text-card-foreground">{proxyHost}:{proxyPort}</code>
+                </span>
+                <div className="ai-grid ai-gap-0">
+                  {(['claude', 'codex', 'gemini', 'opencode', 'openclaw'] as const).map((app) => (
+                    <span key={app} className="ai-text-xs ai-text-muted-foreground">
+                      {app}: <code>http://{proxyHost}:{proxyPort}/{app}</code>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <span className="ai-text-sm ai-text-muted-foreground ai-mt-1">
+                启动后各 CLI 工具将通过代理访问配置的 provider。
+              </span>
+            )}
+          </div>
+          <div className="ai-flex ai-gap-3">
+            {isRunning ? (
+              <button
+                type="button"
+                className="ai-button ai-button-danger"
+                disabled={busy}
+                onClick={() => stopMutation.mutate()}
+              >
+                {stopMutation.isPending ? 'Stopping...' : 'Stop Proxy'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="ai-button ai-button-primary"
+                disabled={busy}
+                onClick={() => startMutation.mutate()}
+              >
+                {startMutation.isPending ? 'Starting...' : 'Start Proxy'}
+              </button>
+            )}
+          </div>
+        </div>
+        {message && (
+          <p className="ai-inline-message ai-mt-3">{message}</p>
+        )}
+      </section>
+
       <section className="ai-grid ai-gap-4">
         <div className="ai-section-header">
           <div className="ai-grid ai-gap-2">

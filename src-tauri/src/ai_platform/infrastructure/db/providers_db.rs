@@ -1,5 +1,5 @@
 use crate::ai_platform::infrastructure::fs::providers_store::{
-    read_legacy_store, starter_store, ProviderStore,
+    read_disk_configs, read_legacy_store, starter_store, ProviderStore,
 };
 use crate::ai_platform::interfaces::dto::providers::{
     ProviderHealthDto, ProviderSwitchHistoryDto,
@@ -30,6 +30,16 @@ pub fn load_or_initialize_store() -> Result<LoadedProviderStore, String> {
         return Ok(LoadedProviderStore {
             store: legacy,
             source: "legacy-import".to_string(),
+        });
+    }
+
+    // Try to import from existing CLI config files on disk before falling back
+    // to the generic starter seed.
+    if let Some(disk) = read_disk_configs()? {
+        save_store(&disk)?;
+        return Ok(LoadedProviderStore {
+            store: disk,
+            source: "disk-import".to_string(),
         });
     }
 

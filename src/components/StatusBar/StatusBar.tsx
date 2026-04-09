@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Wifi, Clock, Monitor, Cloud, LayoutGrid, Zap } from 'lucide-react';
+import { Wifi, Clock, Monitor, Cloud, LayoutGrid, Zap, Activity } from 'lucide-react';
 import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore, type SplitCount } from '../../stores/appStore';
+import { getAiPlatformUsageSummary } from '../../features/ai-platform/infra/commands/usage';
 
 const SPLIT_OPTIONS: { count: SplitCount; label: string }[] = [
   { count: 1, label: '1' },
@@ -22,9 +23,29 @@ export const StatusBar: React.FC = () => {
   const [showAiMenu, setShowAiMenu] = useState(false);
   const [activeProvider, setActiveProvider] = useState<string>('');
   const [providers, setProviders] = useState<{ id: string; name: string }[]>([]);
+  const [todayTokens, setTodayTokens] = useState<number | null>(null);
+  const [todayRequests, setTodayRequests] = useState<number | null>(null);
+  const usageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const fetchUsage = async () => {
+      try {
+        const summary = await getAiPlatformUsageSummary(1);
+        setTodayTokens(summary.totalTokens);
+        setTodayRequests(summary.totalRequests);
+      } catch { /* silent */ }
+    };
+    // Initial fetch after a short delay to not block startup
+    const init = setTimeout(fetchUsage, 8000);
+    usageTimerRef.current = setInterval(fetchUsage, 60_000);
+    return () => {
+      clearTimeout(init);
+      if (usageTimerRef.current) clearInterval(usageTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -156,6 +177,18 @@ export const StatusBar: React.FC = () => {
         )}
       </div>
 
+      {/* AI usage today */}
+      {todayTokens !== null && todayTokens > 0 && (
+        <div
+          className="status-item"
+          title={`今日用量：${todayTokens.toLocaleString()} tokens，${todayRequests ?? 0} 次请求`}
+          style={{ cursor: 'default' }}
+        >
+          <Activity size={11} />
+          <span>{fmtTokens(todayTokens)}</span>
+        </div>
+      )}
+
       <div className="status-item">
         <Cloud size={11} />
         <span>25°C</span>
@@ -170,6 +203,13 @@ export const StatusBar: React.FC = () => {
     </div>
   );
 };
+
+/** Format token count compactly: 1234 → "1.2K", 1200000 → "1.2M" */
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M tok`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K tok`;
+  return `${n} tok`;
+}
 
 /** Mini icon showing the split layout grid */
 const SplitIcon: React.FC<{ count: SplitCount }> = ({ count }) => {

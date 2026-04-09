@@ -61,10 +61,25 @@ export interface ProxySnapshot {
   source: string;
 }
 
+export interface ProxyRuntimeStatus {
+  running: boolean;
+  host: string;
+  port: number;
+  message: string;
+}
+
 export function getAiPlatformProxySnapshot() {
   return invoke<ProxySnapshot>('ai_platform_get_proxy_snapshot');
 }
 
 export function saveAiPlatformProxyConfig(config: ProxyControlPlaneRecord) {
   return invoke<ProxySnapshot>('ai_platform_save_proxy_config', { config });
+}
+
+export function startAiPlatformProxy() {
+  return invoke<ProxyRuntimeStatus>('ai_platform_start_proxy');
+}
+
+export function stopAiPlatformProxy() {
+  return invoke<ProxyRuntimeStatus>('ai_platform_stop_proxy');
 }

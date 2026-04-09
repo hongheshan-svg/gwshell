@@ -2,8 +2,6 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ProvidersPage } from '../domains/providers/ProvidersPage';
-import { McpPage } from '../domains/mcp/McpPage';
-import { PromptsPage } from '../domains/prompts/PromptsPage';
 import { SkillsPage } from '../domains/skills/SkillsPage';
 import { AgentsPage } from '../domains/agents/AgentsPage';
 import { UsagePage } from '../domains/usage/UsagePage';
@@ -17,8 +15,6 @@ import { SettingsPage } from '../domains/settings/SettingsPage';
 
 type RouteId =
   | 'providers'
-  | 'mcp'
-  | 'prompts'
   | 'skills'
   | 'agents'
   | 'usage'
@@ -38,8 +34,6 @@ interface RouteItem {
 
 const routeDefinitions: RouteItem[] = [
   { id: 'providers', title: 'Providers', description: '多 app provider、模型、桥接与切换入口' },
-  { id: 'mcp', title: 'MCP', description: '服务器配置、向导、校验与磁盘同步' },
-  { id: 'prompts', title: 'Prompts', description: '系统提示词、项目提示词与同步管理' },
   { id: 'skills', title: 'Skills', description: '仓库、安装、启停与导入' },
   { id: 'agents', title: 'Agents', description: 'Agent、分类、模型槽位与策略' },
   { id: 'usage', title: 'Usage', description: '趋势图、模型统计、计费配置与请求日志' },
@@ -56,10 +50,6 @@ function renderRoute(route: RouteId) {
   switch (route) {
     case 'providers':
       return <ProvidersPage />;
-    case 'mcp':
-      return <McpPage />;
-    case 'prompts':
-      return <PromptsPage />;
     case 'skills':
       return <SkillsPage />;
     case 'agents':
