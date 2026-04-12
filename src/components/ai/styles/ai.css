@@ -30,6 +30,35 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
+/* CC Switch custom utilities (scoped to .ai-scope) */
+.ai-scope .scroll-overlay {
+  scrollbar-gutter: stable both-edges;
+  padding-right: 0.5rem;
+  margin-right: -0.5rem;
+  overflow-x: hidden;
+}
+
+.ai-scope .border-border-default {
+  border-color: hsl(var(--border));
+}
+
+.ai-scope .border-border-active {
+  border-color: hsl(var(--primary));
+}
+
+.ai-scope .border-border-hover {
+  border-color: hsl(var(--primary) / 0.4);
+}
+
+.ai-scope .border-default {
+  border-width: 1px;
+  border-color: hsl(var(--border));
+}
+
+.ai-scope .border-active {
+  border-width: 2px;
+}
+
 .ai-scope.dark {
   --background: 240 5% 12%;
   --foreground: 0 0% 98%;

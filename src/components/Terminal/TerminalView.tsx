@@ -7,6 +7,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from 'react-i18next';
 import type { TabInfo } from "../../types";
 import { useAppStore } from "../../stores/appStore";
+import { useSettingsStore } from "../../stores/settingsStore";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalViewProps {
@@ -214,15 +215,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         const osInfo = await getOsInfo();
         if (cancelled) return;
 
+        const s = useSettingsStore.getState().settings;
         const termOpts: Record<string, unknown> = {
-          fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace",
-          fontSize: 13,
-          lineHeight: 1.2,
+          fontFamily: s.terminalFont,
+          fontSize: parseInt(s.terminalFontSize) || 13,
+          lineHeight: parseFloat(s.terminalLineHeight) || 1.2,
+          letterSpacing: parseFloat(s.terminalLetterSpacing) || 0,
           cursorBlink: true,
           cursorStyle: "bar",
           theme: getThemeColors(),
           allowProposedApi: true,
-          scrollback: 10000,
+          scrollback: parseInt(s.terminalMaxScrollback) || 10000,
+          copyOnSelect: s.autoCopyOnSelect,
         };
 
         if (osInfo.os === "windows") {

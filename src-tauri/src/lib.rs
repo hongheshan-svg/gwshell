@@ -598,6 +598,86 @@ async fn list_serial_ports() -> Vec<String> {
         .unwrap_or_default()
 }
 
+// ---- App Settings Commands ----
+
+#[tauri::command]
+async fn save_app_settings(value: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.db.save_app_settings(&value))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
+}
+
+#[tauri::command]
+async fn load_app_settings(state: State<'_, Arc<AppState>>) -> Result<Option<String>, String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.db.load_app_settings())
+        .await
+        .map_err(|e| format!("task join: {}", e))?
+}
+
+// ---- Directory Picker ----
+
+#[tauri::command]
+async fn pick_directory(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    tokio::task::spawn_blocking(move || -> Result<Option<String>, String> {
+        Ok(app
+            .dialog()
+            .file()
+            .blocking_pick_folder()
+            .map(|p| p.to_string()))
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
+}
+
+// ---- Storage Operations ----
+
+#[tauri::command]
+async fn export_sessions_data(
+    path: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let json = state.db.export_sessions_json()?;
+        std::fs::write(&path, json).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
+}
+
+#[tauri::command]
+async fn import_sessions_data(
+    path: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<usize, String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || -> Result<usize, String> {
+        let json = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let count = state.db.import_sessions_json(&json)?;
+        // Reload sessions into memory
+        let sessions = state.db.get_sessions()?;
+        *state.sessions.lock() = sessions;
+        Ok(count)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
+}
+
+#[tauri::command]
+async fn clear_local_data(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        state.db.clear_all_sessions()?;
+        state.sessions.lock().clear();
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
+}
+
 // ---- Session Management Commands ----
 //
 // `get_sessions` reads only the in-memory cache (instant, no need to dispatch).
@@ -727,6 +807,12 @@ pub fn run() {
             write_to_serial,
             close_serial,
             list_serial_ports,
+            save_app_settings,
+            load_app_settings,
+            pick_directory,
+            export_sessions_data,
+            import_sessions_data,
+            clear_local_data,
             save_session,
             get_sessions,
             delete_session,

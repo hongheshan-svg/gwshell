@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import './styles/ai.css';
 import { useAppStore } from '../../stores/appStore';
-import { SmokeCard } from './_smoke/SmokeCard';
+import { AiProviders } from './AiProviders';
 
 export function AiSection() {
   const theme = useAppStore((s) => s.theme);
@@ -14,8 +14,8 @@ export function AiSection() {
   }, [theme]);
 
   return (
-    <div ref={rootRef} className={`ai-scope ${theme === 'dark' ? 'dark' : ''}`}>
-      <SmokeCard />
+    <div ref={rootRef} className={`ai-scope ${theme === 'dark' ? 'dark' : ''} h-full flex flex-col`}>
+      <AiProviders />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 use crate::session::{SessionConfig, SessionGroup};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -38,6 +38,10 @@ impl Database {
             CREATE TABLE IF NOT EXISTS groups (
                 name TEXT PRIMARY KEY,
                 data TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
             );",
         )
         .map_err(|e| e.to_string())
@@ -121,6 +125,54 @@ impl Database {
     pub fn delete_group(&self, name: &str) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         conn.execute("DELETE FROM groups WHERE name = ?1", params![name])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    // ---- App Settings ----
+
+    pub fn save_app_settings(&self, value: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('main', ?1)",
+            params![value],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn load_app_settings(&self) -> Result<Option<String>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare("SELECT value FROM app_settings WHERE key = 'main'")
+            .map_err(|e| e.to_string())?;
+        let result = stmt
+            .query_row([], |row| row.get::<_, String>(0))
+            .optional()
+            .map_err(|e| e.to_string())?;
+        Ok(result)
+    }
+
+    // ---- Storage Operations ----
+
+    pub fn export_sessions_json(&self) -> Result<String, String> {
+        let sessions = self.get_sessions()?;
+        serde_json::to_string_pretty(&sessions).map_err(|e| e.to_string())
+    }
+
+    pub fn import_sessions_json(&self, json: &str) -> Result<usize, String> {
+        let sessions: Vec<SessionConfig> =
+            serde_json::from_str(json).map_err(|e| e.to_string())?;
+        let count = sessions.len();
+        for session in &sessions {
+            self.save_session(session)?;
+        }
+        Ok(count)
+    }
+
+    pub fn clear_all_sessions(&self) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM sessions", [])
             .map_err(|e| e.to_string())?;
         Ok(())
     }

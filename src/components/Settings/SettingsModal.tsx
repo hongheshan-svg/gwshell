@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, FolderOpen } from 'lucide-react';
+import { AiSection } from '../ai/AiSection';
+import { McpManager } from './McpManager';
+import { PromptsManager } from './PromptsManager';
+import { UsageDashboard } from './UsageDashboard';
 import { useAppStore } from '../../stores/appStore';
 import i18n from '../../i18n';
 import type { TranslationKeys } from '../../i18n';
-
-const AiPlatformRoot = lazy(() =>
-  import('../../features/ai-platform').then((m) => ({ default: m.AiPlatformRoot })),
-);
 
 /* ---- Nav categories ---- */
 const navCategories: { title?: TranslationKeys; items: { id: string; labelKey: TranslationKeys }[] }[] = [
@@ -23,6 +23,9 @@ const navCategories: { title?: TranslationKeys; items: { id: string; labelKey: T
     title: 'settings_cat_ai',
     items: [
       { id: 'ai', labelKey: 'settings_ai_account' },
+      { id: 'mcp', labelKey: 'settings_mcp' },
+      { id: 'prompts', labelKey: 'settings_prompts' },
+      { id: 'usage', labelKey: 'settings_usage' },
     ],
   },
   {
@@ -506,12 +509,17 @@ export const SettingsModal: React.FC = () => {
               </>
             )}
 
-            {/* ===== AI Platform ===== */}
-            {activeNav === 'ai' && (
-              <Suspense fallback={null}>
-                <AiPlatformRoot />
-              </Suspense>
-            )}
+            {/* ===== AI ===== */}
+            {activeNav === 'ai' && <AiSection />}
+
+            {/* ===== MCP ===== */}
+            {activeNav === 'mcp' && <McpManager />}
+
+            {/* ===== Prompts ===== */}
+            {activeNav === 'prompts' && <PromptsManager />}
+
+            {/* ===== Usage ===== */}
+            {activeNav === 'usage' && <UsageDashboard />}
 
             {/* ===== 快捷键-基础 ===== */}
             {activeNav === 'shortcut-basic' && (

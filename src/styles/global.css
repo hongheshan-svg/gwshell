@@ -2728,6 +2728,13 @@ input, select, textarea, button {
 }
 
 /* AI tab needs flush panel layout — override content padding */
+.settings-content:has(.ai-scope) {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .settings-content:has(.ccs-root) {
   padding: 12px 0 0;
   overflow: hidden;
