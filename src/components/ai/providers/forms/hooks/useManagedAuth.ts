@@ -8,7 +8,15 @@
  * but all operations return "not authenticated" / "not supported" state.
  */
 
-export type ManagedAuthProvider = "github_copilot" | string;
+export type ManagedAuthProvider = "github_copilot" | "codex_oauth" | string;
+
+export interface DeviceCode {
+  user_code: string;
+  device_code: string;
+  verification_uri: string;
+  expires_in: number;
+  interval: number;
+}
 
 export interface GitHubAccount {
   id: string;
@@ -37,7 +45,7 @@ export function useManagedAuth(authProvider: ManagedAuthProvider) {
     defaultAccountId: null as string | null,
     migrationError: null as string | null,
     pollingState: "idle" as "idle" | "polling" | "success" | "error",
-    deviceCode: null,
+    deviceCode: null as DeviceCode | null,
     error: null as string | null,
     isPolling: false,
     isAddingAccount: false,

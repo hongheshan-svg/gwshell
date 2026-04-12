@@ -408,6 +408,48 @@ export const iconMetadata: Record<string, IconMetadata> = {
     keywords: ["stepfun", "step", "jieyue", "阶跃星辰"],
     defaultColor: "#005AFF",
   },
+  dds: {
+    name: "dds",
+    displayName: "DDS",
+    category: "other",
+    keywords: [],
+    defaultColor: "currentColor",
+  },
+  eflowcode: {
+    name: "eflowcode",
+    displayName: "E-FlowCode",
+    category: "ai-provider",
+    keywords: ["eflowcode", "e-flowcode", "flow"],
+    defaultColor: "currentColor",
+  },
+  lioncc: {
+    name: "lioncc",
+    displayName: "LionCC",
+    category: "ai-provider",
+    keywords: ["lioncc", "lion"],
+    defaultColor: "#F9DA3C",
+  },
+  pipellm: {
+    name: "pipellm",
+    displayName: "PIPELLM",
+    category: "ai-provider",
+    keywords: ["pipellm", "pipe"],
+    defaultColor: "currentColor",
+  },
+  shengsuanyun: {
+    name: "shengsuanyun",
+    displayName: "Shengsuanyun",
+    category: "ai-provider",
+    keywords: ["shengsuanyun"],
+    defaultColor: "currentColor",
+  },
+  xcode: {
+    name: "xcode",
+    displayName: "X-Code",
+    category: "tool",
+    keywords: ["xcode", "x-code"],
+    defaultColor: "currentColor",
+  },
 };
 
 export function getIconMetadata(name: string): IconMetadata | undefined {

@@ -81,6 +81,7 @@ import {
   useOmoDraftState,
   useOpenclawFormState,
   useCopilotAuth,
+  useCodexOauth,
 } from "./hooks";
 import {
   CLAUDE_DEFAULT_CONFIG,
@@ -345,10 +346,18 @@ export function ProviderForm({
   // Copilot OAuth auth state (Claude only) – always false in GWShell (stub)
   const { isAuthenticated: isCopilotAuthenticated } = useCopilotAuth();
 
+  // Codex OAuth auth state (ChatGPT Plus/Pro) – always false in GWShell (stub)
+  const { isAuthenticated: isCodexOauthAuthenticated } = useCodexOauth();
+
   // Selected GitHub account ID (multi-account support)
   const [selectedGitHubAccountId, setSelectedGitHubAccountId] = useState<
     string | null
   >(() => resolveManagedAccountId(initialData?.meta, "github_copilot"));
+
+  // Selected ChatGPT account ID (Codex OAuth multi-account support)
+  const [selectedCodexOauthAccountId] = useState<string | null>(
+    () => resolveManagedAccountId(initialData?.meta, "codex_oauth"),
+  );
 
   const {
     codexAuth,
@@ -780,11 +789,24 @@ export function ProviderForm({
       templatePreset?.providerType === "github_copilot" ||
       initialData?.meta?.providerType === "github_copilot" ||
       baseUrl.includes("githubcopilot.com");
+    // Codex OAuth uses ChatGPT Plus/Pro auth; skip API Key requirement
+    const isCodexOauthProvider =
+      templatePreset?.providerType === "codex_oauth" ||
+      initialData?.meta?.providerType === "codex_oauth";
     // GitHub Copilot requires login before adding
     if (isCopilotProvider && !isCopilotAuthenticated) {
       toast.error(
         t("copilot.loginRequired", {
           defaultValue: "请先登录 GitHub Copilot",
+        }),
+      );
+      return;
+    }
+    // Codex OAuth requires login before adding
+    if (isCodexOauthProvider && !isCodexOauthAuthenticated) {
+      toast.error(
+        t("codexOauth.loginRequired", {
+          defaultValue: "请先登录 ChatGPT 账号",
         }),
       );
       return;
@@ -800,7 +822,7 @@ export function ProviderForm({
           );
           return;
         }
-        if (!isCopilotProvider && !apiKey.trim()) {
+        if (!isCopilotProvider && !isCodexOauthProvider && !apiKey.trim()) {
           toast.error(
             t("providerForm.apiKeyRequired", {
               defaultValue: "非官方供应商请填写 API Key",
@@ -1020,7 +1042,13 @@ export function ProviderForm({
             authProvider: "github_copilot",
             accountId: selectedGitHubAccountId ?? undefined,
           }
-        : undefined,
+        : isCodexOauthProvider
+          ? {
+              source: "managed_account",
+              authProvider: "codex_oauth",
+              accountId: selectedCodexOauthAccountId ?? undefined,
+            }
+          : undefined,
       githubAccountId:
         isCopilotProvider && selectedGitHubAccountId
           ? selectedGitHubAccountId

@@ -217,6 +217,11 @@
       "title": "开启自动同步",
       "message": "开启自动同步后，每次数据库变更都会自动上传到 WebDAV 服务器。\n\n这可能会产生较高的网络流量消耗，请确保您的网络环境和 WebDAV 服务支持频繁的数据传输。",
       "confirm": "我已了解，继续开启"
+    },
+    "commonConfig": {
+      "title": "关于通用配置",
+      "message": "「通用配置片段」可以在不同供应商之间共享插件、环境变量等配置，避免切换供应商时丢失这些设置。\n\n使用方法：\n① 编辑供应商时点击「编辑通用配置」→「从编辑内容提取」\n② 新建供应商时勾选「写入通用配置」（默认已勾选）\n\n如果您新安装了插件或 Hook，请重新提取一次通用配置。",
+      "confirm": "我知道了"
     }
   },
   "settings": {
@@ -496,7 +501,8 @@
           "alacritty": "Alacritty",
           "kitty": "Kitty",
           "ghostty": "Ghostty",
-          "wezterm": "WezTerm"
+          "wezterm": "WezTerm",
+          "kaku": "Kaku"
         },
         "windows": {
           "cmd": "命令提示符",
@@ -597,7 +603,27 @@
       "defaultCostMultiplierRequired": "默认倍率不能为空",
       "defaultCostMultiplierInvalid": "默认倍率格式不正确"
     },
-    "saveFailedGeneric": "保存失败，请重试"
+    "saveFailedGeneric": "保存失败，请重试",
+    "tabAuth": "认证",
+    "authCenter": {
+      "title": "OAuth 认证中心",
+      "description": "在 Claude Code 中使用您的其他订阅，请注意合规风险。",
+      "beta": "Beta",
+      "copilotDescription": "管理 GitHub Copilot 账号",
+      "codexOauthDescription": "管理 ChatGPT 账号"
+    },
+    "skillStorage": {
+      "title": "Skills 存储位置",
+      "description": "选择 CC Switch 存放 Skills 主副本的目录",
+      "ccSwitch": "CC Switch",
+      "unified": "~/.agents/skills",
+      "ccSwitchHint": "技能存储在 ~/.cc-switch/skills/，由 CC Switch 统一管理并同步到各应用。",
+      "unifiedHint": "技能存储在 ~/.agents/skills/，遵循 Agent Skills 开放标准。兼容的工具（Claude Code、Codex、Gemini CLI 等）可直接发现此目录中的技能。",
+      "confirmTitle": "迁移技能存储",
+      "confirmMessage": "将移动 {{count}} 个技能到新位置，是否继续？",
+      "migrationSuccess": "已成功迁移 {{count}} 个技能",
+      "migrationPartial": "迁移了 {{migrated}} 个技能，{{errors}} 个失败，请查看日志"
+    }
   },
   "apps": {
     "claude": "Claude",
@@ -733,10 +759,14 @@
       "ucloud": "优云智算为CC Switch 的用户提供了特殊优惠，通过此链接注册，可以获得五元平台体验金！",
       "micu": "Micu 是 CC Switch 的官方合作伙伴",
       "x-code": "XCodeAPI 为CC Switch 的用户提供特别福利，使用此链接注册后首单加赠10%的额度(联系站长领取)",
-      "ctok": "官网加入CTok社群，订阅套餐。"
+      "ctok": "官网加入CTok社群，订阅套餐。",
+      "ddshub": "呆呆兽为CC Switch 的用户提供了特别福利，通过此链接注册后，首单充值可额外赠送 10% 额度（联系群主领取）！",
+      "lionccapi": "LionCCAPI 为 CC Switch 的用户提供了特别福利，注册后添加客服微信HSQBJ088888888，发暗号cc-switch备注即可送10美金额度！",
+      "shengsuanyun": "胜算云为 CC Switch 的用户提供了特别福利，使用此链接注册的新用户可获 10 元模力及首充 10% 赠送！"
     },
     "presets": {
-      "ucloud": "优云智算"
+      "ucloud": "优云智算",
+      "shengsuanyun": "胜算云"
     },
     "parameterConfig": "参数配置 - {{name}} *",
     "mainModel": "主模型 (可选)",
@@ -1077,7 +1107,32 @@
     "pricingAdded": "定价已添加",
     "pricingUpdated": "定价已更新",
     "cacheReadCostPerMillion": "缓存读取成本 (每百万 tokens, USD)",
-    "cacheCreationCostPerMillion": "缓存写入成本 (每百万 tokens, USD)"
+    "cacheCreationCostPerMillion": "缓存写入成本 (每百万 tokens, USD)",
+    "source": "来源",
+    "requestsLabel": "次请求",
+    "costLabel": "总成本",
+    "appFilter": {
+      "all": "全部",
+      "claude": "Claude Code",
+      "codex": "Codex",
+      "gemini": "Gemini"
+    },
+    "dataSources": "数据来源",
+    "dataSource": {
+      "proxy": "代理",
+      "session_log": "会话日志",
+      "codex_db": "Codex 数据库",
+      "codex_session": "Codex 会话日志",
+      "gemini_session": "Gemini 会话日志"
+    },
+    "sessionSync": {
+      "trigger": "同步会话日志",
+      "import": "导入会话",
+      "resync": "同步",
+      "imported": "从会话日志导入了 {{count}} 条记录",
+      "upToDate": "会话日志已是最新",
+      "failed": "会话同步失败"
+    }
   },
   "usageScript": {
     "title": "配置用量查询",
@@ -1151,7 +1206,9 @@
     "fieldExtra": "• extra: 字符串，扩展字段，可自由补充需要展示的文本",
     "tip1": "• 变量 {{apiKey}} 和 {{baseUrl}} 会自动替换",
     "tip2": "• extractor 函数在沙箱环境中执行，支持 ES2020+ 语法",
-    "tip3": "• 整个配置必须用 () 包裹，形成对象字面量表达式"
+    "tip3": "• 整个配置必须用 () 包裹，形成对象字面量表达式",
+    "templateBalance": "官方",
+    "balanceHint": "自动使用供应商的 API Key 查询账户余额"
   },
   "errors": {
     "usage_query_failed": "用量查询失败",
@@ -1680,6 +1737,31 @@
       "successSingle": "技能 {{name}} 已安装",
       "successMultiple": "成功安装 {{count}} 个技能",
       "noSkillsFound": "ZIP 文件中未找到技能（需包含 SKILL.md 文件）"
+    },
+    "update": "更新",
+    "updating": "更新中...",
+    "updateAvailable": "可更新",
+    "updateSuccess": "技能 {{name}} 已更新到最新版本",
+    "updateFailed": "更新失败",
+    "checkUpdates": "检查更新",
+    "checkingUpdates": "检查中...",
+    "noUpdates": "所有技能已是最新版本",
+    "updatesFound": "发现 {{count}} 个技能有可用更新",
+    "updateAll": "全部更新 ({{count}})",
+    "updatingAll": "更新中...",
+    "updateAllSuccess": "已成功更新 {{count}} 个技能",
+    "searchSource": {
+      "repos": "仓库",
+      "skillssh": "skills.sh"
+    },
+    "skillssh": {
+      "searchPlaceholder": "搜索 skills.sh（至少 2 个字符）...",
+      "installs": "{{count}} 次安装",
+      "loadMore": "加载更多",
+      "loading": "正在搜索 skills.sh...",
+      "noResults": "未找到 \"{{query}}\" 相关技能",
+      "error": "搜索 skills.sh 失败",
+      "poweredBy": "由 skills.sh 提供"
     }
   },
   "deeplink": {
@@ -2239,7 +2321,8 @@
       "librarian": "图书管理员",
       "explorer": "探索者",
       "designer": "设计师",
-      "fixer": "修复者"
+      "fixer": "修复者",
+      "council": "议会"
     },
     "slimAgentTooltip": {
       "orchestrator": "编写执行代码，编排多代理工作流，召唤专家",
@@ -2247,8 +2330,10 @@
       "librarian": "文档查询、GitHub 代码搜索（只读）",
       "explorer": "正则搜索、AST 模式匹配、文件发现（只读）",
       "designer": "现代响应式设计、CSS/Tailwind 精通",
-      "fixer": "代码实现、重构、测试、验证"
-    }
+      "fixer": "代码实现、重构、测试、验证",
+      "council": "多模型共识代理，并行运行多个只读 councillor，再由 master 汇总最终答案。"
+    },
+    "slimOtherFieldsHint": "OMO Slim 的 council、fallback、multiplexer、disabled_mcps、todoContinuation 等顶层配置请写在这里。"
   },
   "openclawConfig": {
     "defaultModel": {
@@ -2295,6 +2380,43 @@
     "expired": "会话已过期",
     "expiredHint": "请运行 {{tool}} 命令刷新登录",
     "queryFailed": "查询失败",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "copilotPremium": "高级请求"
+  },
+  "firstRunNotice": {
+    "title": "欢迎使用 CC Switch",
+    "bodyDefault": "CC Switch 可以帮你在 Claude Code / Codex / Gemini CLI 的多个供应商之间一键切换。如果你之前已经配置过这些工具，CC Switch 会自动把现有设置保存为名为 “default” 的供应商，保证你的配置不会丢失。",
+    "bodyOfficial": "列表里还预置了 “官方（Official）” 供应商，随时点一下即可切回官方默认配置。切换前 CC Switch 会自动把当前配置备份回 default，可以放心来回切。CC Switch 就是这样工作的 😊",
+    "confirm": "我知道了"
+  },
+  "commonConfig": {
+    "guideTitle": "什么是通用配置片段？",
+    "guidePurpose": "用来在不同供应商之间共享插件、环境变量等非敏感配置。切换供应商时不会丢失这些设置。",
+    "guideUsage": "用法：① 点击「从编辑内容提取」保存通用部分  ② 新建供应商时勾选「写入通用配置」",
+    "guideReExtract": "如果您新安装了插件或 Hook，请重新提取一次通用配置，以便同步到其他供应商。",
+    "guideReassurance": "放心：您的原始配置已保存在默认供应商中，不会丢失。",
+    "emptyTitle": "还没有通用配置片段",
+    "emptyHint": "点击下方「从编辑内容提取」按钮，从当前配置中提取可复用的部分"
+  },
+  "codexOauth": {
+    "authStatus": "认证状态",
+    "notAuthenticated": "未认证",
+    "loginWithChatGPT": "使用 ChatGPT 登录",
+    "loginRequired": "请先登录 ChatGPT 账号",
+    "waitingForAuth": "等待授权中...",
+    "enterCode": "请在浏览器中输入以下验证码：",
+    "accountCount": "{{count}} 个账号",
+    "selectAccount": "选择账号",
+    "selectAccountPlaceholder": "选择一个 ChatGPT 账号",
+    "useDefaultAccount": "使用默认账号",
+    "loggedInAccounts": "已登录账号",
+    "defaultAccount": "默认",
+    "selected": "已选中",
+    "removeAccount": "移除账号",
+    "setAsDefault": "设为默认",
+    "addAnotherAccount": "添加其他账号",
+    "logoutAll": "注销所有账号",
+    "retry": "重试",
+    "copyCode": "复制代码"
   }
 }
