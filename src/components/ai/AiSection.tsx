@@ -7,8 +7,9 @@ import { McpPanel } from './mcp/McpPanel';
 import { SkillsPanel } from './skills/SkillsPanel';
 import { AgentsPanel } from './agents/AgentsPanel';
 import { UsageDashboard } from './usage/UsageDashboard';
+import { SettingsPanel } from './settings/SettingsPanel';
 
-type AiView = 'providers' | 'mcp' | 'skills' | 'agents' | 'usage';
+type AiView = 'providers' | 'mcp' | 'skills' | 'agents' | 'usage' | 'settings';
 
 const TABS: { id: AiView; labelKey: string; defaultLabel: string }[] = [
   { id: 'providers', labelKey: 'nav.providers', defaultLabel: '供应商' },
@@ -16,6 +17,7 @@ const TABS: { id: AiView; labelKey: string; defaultLabel: string }[] = [
   { id: 'skills', labelKey: 'nav.skills', defaultLabel: 'Skills' },
   { id: 'agents', labelKey: 'nav.agents', defaultLabel: 'Agents' },
   { id: 'usage', labelKey: 'nav.usage', defaultLabel: 'Usage' },
+  { id: 'settings', labelKey: 'nav.settings', defaultLabel: '设置' },
 ];
 
 export function AiSection() {
@@ -42,6 +44,8 @@ export function AiSection() {
         return <AgentsPanel />;
       case 'usage':
         return <UsageDashboard />;
+      case 'settings':
+        return <SettingsPanel />;
     }
   };
 
