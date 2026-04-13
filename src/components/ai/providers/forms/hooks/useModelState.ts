@@ -9,10 +9,11 @@ function parseModelsFromConfig(settingsConfig: string) {
     const env = cfg?.env || {};
     const model =
       typeof env.ANTHROPIC_MODEL === "string" ? env.ANTHROPIC_MODEL : "";
-    const reasoning =
+    const explicitReasoning =
       typeof env.ANTHROPIC_REASONING_MODEL === "string"
         ? env.ANTHROPIC_REASONING_MODEL
         : "";
+    const reasoning = explicitReasoning || model;
     const small =
       typeof env.ANTHROPIC_SMALL_FAST_MODEL === "string"
         ? env.ANTHROPIC_SMALL_FAST_MODEL
