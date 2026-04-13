@@ -20,6 +20,7 @@ import { ChevronDown, ChevronRight, Download, Loader2 } from "lucide-react";
 import EndpointSpeedTest from "./EndpointSpeedTest";
 import { ApiKeySection, EndpointField, ModelInputWithFetch } from "./shared";
 import { CopilotAuthSection } from "./CopilotAuthSection";
+import { CodexOAuthSection } from "./CodexOAuthSection";
 import {
   fetchModelsForConfig,
   showFetchModelsError,
@@ -51,6 +52,12 @@ interface ClaudeFormFieldsProps {
   isCopilotAuthenticated?: boolean;
   selectedGitHubAccountId?: string | null;
   onGitHubAccountSelect?: (accountId: string | null) => void;
+
+  // Codex OAuth (ChatGPT Plus/Pro)
+  isCodexOauthPreset?: boolean;
+  isCodexOauthAuthenticated?: boolean;
+  selectedCodexAccountId?: string | null;
+  onCodexAccountSelect?: (accountId: string | null) => void;
 
   // Template Values
   templateValueEntries: Array<[string, TemplateValueConfig]>;
@@ -115,6 +122,9 @@ export function ClaudeFormFields({
   usesOAuth,
   selectedGitHubAccountId,
   onGitHubAccountSelect,
+  isCodexOauthPreset,
+  selectedCodexAccountId,
+  onCodexAccountSelect,
   templateValueEntries,
   templateValues,
   templatePresetName,
@@ -215,6 +225,14 @@ export function ClaudeFormFields({
         <CopilotAuthSection
           selectedAccountId={selectedGitHubAccountId}
           onAccountSelect={onGitHubAccountSelect}
+        />
+      )}
+
+      {/* Codex OAuth (ChatGPT Plus/Pro) - stub-backed in GWShell */}
+      {isCodexOauthPreset && (
+        <CodexOAuthSection
+          selectedAccountId={selectedCodexAccountId}
+          onAccountSelect={onCodexAccountSelect}
         />
       )}
 

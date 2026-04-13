@@ -814,7 +814,7 @@ export function ProviderForm({
 
     if (category !== "official" && category !== "cloud_provider") {
       if (appId === "claude") {
-        if (!baseUrl.trim()) {
+        if (!isCodexOauthProvider && !baseUrl.trim()) {
           toast.error(
             t("providerForm.endpointRequired", {
               defaultValue: "非官方供应商请填写 API 端点",
@@ -1520,11 +1520,19 @@ export function ProviderForm({
               templatePreset?.requiresOAuth === true ||
               templatePreset?.providerType === "github_copilot" ||
               initialData?.meta?.providerType === "github_copilot" ||
-              baseUrl.includes("githubcopilot.com")
+              baseUrl.includes("githubcopilot.com") ||
+              templatePreset?.providerType === "codex_oauth" ||
+              initialData?.meta?.providerType === "codex_oauth"
             }
             isCopilotAuthenticated={isCopilotAuthenticated}
             selectedGitHubAccountId={selectedGitHubAccountId}
             onGitHubAccountSelect={setSelectedGitHubAccountId}
+            isCodexOauthPreset={
+              templatePreset?.providerType === "codex_oauth" ||
+              initialData?.meta?.providerType === "codex_oauth"
+            }
+            isCodexOauthAuthenticated={isCodexOauthAuthenticated}
+            selectedCodexAccountId={selectedCodexOauthAccountId}
             templateValueEntries={templateValueEntries}
             templateValues={templateValues}
             templatePresetName={templatePreset?.name || ""}
