@@ -29,6 +29,7 @@ interface AiProvidersProps {
 
 export function AiProviders({
   activeApp,
+  onActiveAppChange: _onActiveAppChange,
   addOpen,
   onAddOpenChange,
 }: AiProvidersProps) {
