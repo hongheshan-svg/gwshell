@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from './ui/sonner';
 import './styles/ai.css';
 import { useAppStore } from '../../stores/appStore';
 import { AiProviders } from './AiProviders';
@@ -8,23 +9,38 @@ import { SkillsPanel } from './skills/SkillsPanel';
 import { AgentsPanel } from './agents/AgentsPanel';
 import { UsageDashboard } from './usage/UsageDashboard';
 import { SettingsPanel } from './settings/SettingsPanel';
+import { ProxyPanel } from './proxy/ProxyPanel';
+import { WorkspacePanel } from './workspace/WorkspacePanel';
+import { AuthPanel } from './auth/AuthPanel';
+import { PromptsPanel } from './prompts/PromptsPanel';
+import { SessionsPanel } from './sessions/SessionsPanel';
+import { AiToolbar, type AiView } from './AiToolbar';
+import type { AppId } from './lib/api';
 
-type AiView = 'providers' | 'mcp' | 'skills' | 'agents' | 'usage' | 'settings';
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, staleTime: 30_000 },
+  },
+});
 
-const TABS: { id: AiView; labelKey: string; defaultLabel: string }[] = [
-  { id: 'providers', labelKey: 'nav.providers', defaultLabel: '供应商' },
-  { id: 'mcp', labelKey: 'nav.mcp', defaultLabel: 'MCP' },
-  { id: 'skills', labelKey: 'nav.skills', defaultLabel: 'Skills' },
-  { id: 'agents', labelKey: 'nav.agents', defaultLabel: 'Agents' },
-  { id: 'usage', labelKey: 'nav.usage', defaultLabel: 'Usage' },
-  { id: 'settings', labelKey: 'nav.settings', defaultLabel: '设置' },
-];
+const STORAGE_KEY = 'gwshell-ai-last-app';
+
+const getInitialApp = (): AppId => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY) as AppId | null;
+    if (saved && ['claude', 'codex', 'gemini', 'opencode', 'openclaw'].includes(saved)) {
+      return saved;
+    }
+  } catch {}
+  return 'claude';
+};
 
 export function AiSection() {
   const theme = useAppStore((s) => s.theme);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [view, setView] = useState<AiView>('providers');
-  const { t } = useTranslation('ai');
+  const [activeApp, setActiveApp] = useState<AppId>(getInitialApp);
+  const [addOpen, setAddOpen] = useState(false);
 
   useEffect(() => {
     const el = rootRef.current;
@@ -32,10 +48,22 @@ export function AiSection() {
     el.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
+  const handleAppChange = (app: AppId) => {
+    localStorage.setItem(STORAGE_KEY, app);
+    setActiveApp(app);
+  };
+
   const renderContent = () => {
     switch (view) {
       case 'providers':
-        return <AiProviders />;
+        return (
+          <AiProviders
+            activeApp={activeApp}
+            onActiveAppChange={handleAppChange}
+            addOpen={addOpen}
+            onAddOpenChange={setAddOpen}
+          />
+        );
       case 'mcp':
         return <McpPanel onBack={() => setView('providers')} />;
       case 'skills':
@@ -44,36 +72,37 @@ export function AiSection() {
         return <AgentsPanel />;
       case 'usage':
         return <UsageDashboard />;
+      case 'proxy':
+        return <ProxyPanel />;
+      case 'workspace':
+        return <WorkspacePanel />;
+      case 'prompts':
+        return <PromptsPanel />;
+      case 'auth':
+        return <AuthPanel />;
+      case 'sessions':
+        return <SessionsPanel />;
       case 'settings':
         return <SettingsPanel />;
     }
   };
 
   return (
-    <div ref={rootRef} className={`ai-scope ${theme === 'dark' ? 'dark' : ''} h-full flex flex-col`}>
-      {/* Tab bar */}
-      <div className="flex-shrink-0 border-b border-border flex items-center px-6 gap-1 h-10">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setView(tab.id)}
-            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-              view === tab.id
-                ? 'bg-muted text-foreground font-medium'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-            }`}
-          >
-            {t(tab.labelKey, { defaultValue: tab.defaultLabel })}
-          </button>
-        ))}
+    <QueryClientProvider client={queryClient}>
+      <div ref={rootRef} className={`ai-scope ${theme === 'dark' ? 'dark' : ''} h-full flex flex-col`}>
+        <AiToolbar
+          activeView={view}
+          activeApp={activeApp}
+          onViewChange={setView}
+          onAppChange={handleAppChange}
+          onAdd={() => setAddOpen(true)}
+        />
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          {renderContent()}
+        </div>
       </div>
-
-      {/* Panel content */}
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        {renderContent()}
-      </div>
-    </div>
+      <Toaster />
+    </QueryClientProvider>
   );
 }
 
