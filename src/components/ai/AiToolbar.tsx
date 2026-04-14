@@ -1,5 +1,6 @@
 // src/components/ai/AiToolbar.tsx
 import { Plus, Plug, Zap, Bot, BarChart2, Settings } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { cn } from './lib/utils';
 import type { AppId } from './lib/api';
 import { ProviderIcon } from './providers/ProviderIcon';
@@ -33,7 +34,7 @@ const APPS: { id: AppId; icon: string; label: string }[] = [
   { id: 'openclaw', icon: 'openclaw', label: 'OpenClaw' },
 ];
 
-const ACTION_VIEWS: { id: AiView; icon: React.ReactNode; label: string }[] = [
+const ACTION_VIEWS: { id: AiView; icon: ReactNode; label: string }[] = [
   { id: 'mcp', icon: <Plug className="h-4 w-4" />, label: 'MCP' },
   { id: 'skills', icon: <Zap className="h-4 w-4" />, label: 'Skills' },
   { id: 'agents', icon: <Bot className="h-4 w-4" />, label: 'Agents' },
@@ -102,10 +103,10 @@ export function AiToolbar({
         title="Settings"
         onClick={() => onViewChange('settings')}
         className={cn(
-          'w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150 bg-muted',
+          'w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150',
           activeView === 'settings'
             ? 'bg-background shadow-sm text-foreground'
-            : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
+            : 'bg-muted text-muted-foreground hover:bg-background/60 hover:text-foreground',
         )}
       >
         <Settings className="h-4 w-4" />
