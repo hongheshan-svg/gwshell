@@ -8,6 +8,14 @@ import type { AiProvider, AppId } from "../lib/api";
 import { cn } from "../lib/utils";
 import { ProviderActions } from "./ProviderActions";
 import { ProviderIcon } from "./ProviderIcon";
+import { HealthStatusIndicator } from "./HealthStatusIndicator";
+
+interface ProviderHealthDto {
+  providerId: string;
+  status: string;
+  latencyMs?: number;
+  message: string;
+}
 
 interface DragHandleProps {
   attributes: DraggableAttributes;
@@ -30,6 +38,7 @@ interface ProviderCardProps {
   onTest?: (provider: AiProvider) => void;
   onOpenTerminal?: (provider: AiProvider) => void;
   isTesting?: boolean;
+  healthResult?: ProviderHealthDto;
   isProxyRunning: boolean;
   isProxyTakeover?: boolean;
   dragHandleProps?: DragHandleProps;
@@ -92,6 +101,7 @@ export function ProviderCard({
   onTest,
   onOpenTerminal,
   isTesting,
+  healthResult,
   isProxyRunning: _isProxyRunning,
   isProxyTakeover = false,
   dragHandleProps,
@@ -144,20 +154,6 @@ export function ProviderCard({
           "cursor-grabbing border-primary shadow-lg scale-105 z-10",
       )}
     >
-      <div
-        className={cn(
-          "absolute inset-0 bg-gradient-to-r to-transparent transition-opacity duration-500 pointer-events-none",
-          shouldUseGreen && "from-emerald-500/10",
-          (shouldUseBlue || hasPersistentConfigHighlight) && "from-blue-500/10",
-          !shouldUseGreen &&
-            !shouldUseBlue &&
-            !hasPersistentConfigHighlight &&
-            "from-primary/10",
-          isActiveProvider || hasPersistentConfigHighlight
-            ? "opacity-100"
-            : "opacity-0",
-        )}
-      />
       <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-1 items-center gap-2">
           <button
@@ -174,7 +170,7 @@ export function ProviderCard({
             <GripVertical className="h-4 w-4" />
           </button>
 
-          <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center border border-border group-hover:scale-105 transition-transform duration-300">
+          <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform duration-300">
             <ProviderIcon
               icon={provider.icon}
               name={provider.name}
@@ -214,6 +210,18 @@ export function ProviderCard({
               >
                 <span className="truncate">{displayUrl}</span>
               </button>
+            )}
+            {healthResult && (
+              <HealthStatusIndicator
+                status={
+                  healthResult.status === 'ok'
+                    ? 'operational'
+                    : healthResult.status === 'timeout'
+                      ? 'degraded'
+                      : 'failed'
+                }
+                responseTimeMs={healthResult.latencyMs}
+              />
             )}
           </div>
         </div>
