@@ -298,19 +298,19 @@ export const SerialPortModal: React.FC = () => {
 
                       <div className="autofill-controls">
                         <button className={`autofill-ctrl-btn ${row.enabled ? "ctrl-green" : ""}`}
-                          onClick={() => updateRow(row.id, { enabled: !row.enabled })} title="启用">
+                          onClick={() => updateRow(row.id, { enabled: !row.enabled })} title={t('serial_rule_enabled')}>
                           &#10003;
                         </button>
                         <span className="autofill-seq">&#9312;</span>
                         <button className={`autofill-ctrl-btn ${row.sequential ? "ctrl-green" : ""}`}
-                          onClick={() => updateRow(row.id, { sequential: !row.sequential })} title="匹配后发送">
+                          onClick={() => updateRow(row.id, { sequential: !row.sequential })} title={t('serial_rule_sequence')}>
                           &#10003;
                         </button>
                         <button className={`autofill-ctrl-btn ${row.autoEnter ? "ctrl-blue" : ""}`}
-                          onClick={() => updateRow(row.id, { autoEnter: !row.autoEnter })} title="自带回车">
+                          onClick={() => updateRow(row.id, { autoEnter: !row.autoEnter })} title={t('serial_rule_auto_enter')}>
                           <CornerDownLeft size={12} />
                         </button>
-                        <button className="autofill-ctrl-btn ctrl-red" onClick={() => removeRow(row.id)} title="删除">
+                        <button className="autofill-ctrl-btn ctrl-red" onClick={() => removeRow(row.id)} title={t('serial_rule_delete')}>
                           <X size={12} />
                         </button>
                       </div>

@@ -8,7 +8,7 @@ use std::io::{self, ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
 // === Known-hosts storage ===
@@ -472,18 +472,42 @@ impl SshManager {
         let sid = session_id.to_string();
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
-            let mut last_keepalive = std::time::Instant::now();
+            let mut last_io = Instant::now();
+            let mut last_keepalive = Instant::now();
             loop {
                 let result = {
                     let mut inst = reader_instance.lock();
 
-                    // Send keepalive periodically
-                    if last_keepalive.elapsed() >= Duration::from_secs(30) {
-                        let _ = inst.session.keepalive_send();
-                        last_keepalive = std::time::Instant::now();
-                    }
+                    // Keep idle sessions alive. libssh2 keepalive packets are
+                    // best sent in blocking mode; in non-blocking mode they
+                    // can be skipped as WouldBlock and the server may close an
+                    // otherwise healthy idle connection.
+                    let keepalive_error = if last_io.elapsed() >= Duration::from_secs(20)
+                        && last_keepalive.elapsed() >= Duration::from_secs(20)
+                    {
+                        inst.session.set_blocking(true);
+                        let keepalive_result = inst.session.keepalive_send();
+                        inst.session.set_blocking(false);
+                        last_keepalive = Instant::now();
+                        match keepalive_result {
+                            Ok(_) => {
+                                last_io = Instant::now();
+                                None
+                            }
+                            Err(e) => Some(io::Error::new(
+                                ErrorKind::ConnectionAborted,
+                                format!("SSH keepalive failed: {}", e),
+                            )),
+                        }
+                    } else {
+                        None
+                    };
 
-                    inst.channel.read(&mut buf)
+                    if let Some(e) = keepalive_error {
+                        Err(e)
+                    } else {
+                        inst.channel.read(&mut buf)
+                    }
                 };
                 match result {
                     Ok(0) => {
@@ -499,6 +523,7 @@ impl SshManager {
                         std::thread::sleep(Duration::from_millis(10));
                     }
                     Ok(n) => {
+                        last_io = Instant::now();
                         let data = String::from_utf8_lossy(&buf[..n]).to_string();
                         let _ = app_handle.emit(&format!("ssh-data-{}", sid), data);
                     }

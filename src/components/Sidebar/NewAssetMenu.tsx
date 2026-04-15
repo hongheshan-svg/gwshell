@@ -19,20 +19,20 @@ interface NewAssetMenuProps {
   onSelect: (type: string) => void;
 }
 
-const remoteItems: { id: string; icon: typeof TerminalSquare; labelKey: TranslationKeys }[] = [
+const remoteItems: { id: string; icon: typeof TerminalSquare; labelKey: TranslationKeys; disabled?: boolean }[] = [
   { id: 'ssh', icon: TerminalSquare, labelKey: 'newasset_ssh' },
   { id: 'ssh-tunnel', icon: Network, labelKey: 'newasset_ssh_tunnel' },
-  { id: 'rdp', icon: Monitor, labelKey: 'newasset_rdp' },
-  { id: 'telnet', icon: Cable, labelKey: 'newasset_telnet' },
+  { id: 'rdp', icon: Monitor, labelKey: 'newasset_rdp', disabled: true },
+  { id: 'telnet', icon: Cable, labelKey: 'newasset_telnet', disabled: true },
   { id: 'serial', icon: Usb, labelKey: 'newasset_serial' },
 ];
 
-const menuItems: { id: string; icon: typeof FolderPlus; labelKey: TranslationKeys; hasSubmenu?: boolean }[] = [
-  { id: 'directory', icon: FolderPlus, labelKey: 'newasset_directory' },
+const menuItems: { id: string; icon: typeof FolderPlus; labelKey: TranslationKeys; hasSubmenu?: boolean; disabled?: boolean }[] = [
+  { id: 'directory', icon: FolderPlus, labelKey: 'newasset_directory', disabled: true },
   { id: 'localshell', icon: TerminalSquare, labelKey: 'newasset_localshell' },
   { id: 'docker', icon: Box, labelKey: 'newasset_docker' },
   { id: 'remote', icon: Monitor, labelKey: 'newasset_remote', hasSubmenu: true },
-  { id: 'database', icon: Database, labelKey: 'newasset_database' },
+  { id: 'database', icon: Database, labelKey: 'newasset_database', disabled: true },
 ];
 
 export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, onSelect }) => {
@@ -85,8 +85,10 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
           <div
             key={item.id}
             className={`new-asset-menu-item ${hoveredItem === item.id ? 'hovered' : ''}`}
+            aria-disabled={item.disabled}
+            style={item.disabled ? { opacity: 0.55, cursor: 'not-allowed' } : undefined}
             onClick={() => {
-              if (!item.hasSubmenu) {
+              if (!item.disabled && !item.hasSubmenu) {
                 onSelect(item.id);
                 onClose();
               }
@@ -96,6 +98,11 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
           >
             <span className="new-asset-menu-icon"><item.icon size={15} /></span>
             <span>{t(item.labelKey)}</span>
+            {item.disabled && (
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)' }}>
+                {t('common_unavailable')}
+              </span>
+            )}
             {item.hasSubmenu && <span className="new-asset-menu-arrow"><ChevronRight size={14} /></span>}
           </div>
         ))}
@@ -110,10 +117,21 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
               <div
                 key={item.id}
                 className="new-asset-menu-item"
-                onClick={() => { onSelect(item.id); onClose(); }}
+                aria-disabled={item.disabled}
+                style={item.disabled ? { opacity: 0.55, cursor: 'not-allowed' } : undefined}
+                onClick={() => {
+                  if (item.disabled) return;
+                  onSelect(item.id);
+                  onClose();
+                }}
               >
                 <span className="new-asset-menu-icon"><item.icon size={15} /></span>
                 <span>{t(item.labelKey)}</span>
+                {item.disabled && (
+                  <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)' }}>
+                    {t('common_unavailable')}
+                  </span>
+                )}
               </div>
             ))}
           </div>

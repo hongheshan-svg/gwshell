@@ -1,14 +1,8 @@
-mod ai_config;
-mod ai;
-mod ai_platform;
 mod database;
-mod mcp_config;
-mod prompt_config;
 mod pty;
 mod serial;
 mod session;
 mod ssh;
-mod usage_tracker;
 
 use database::Database;
 use parking_lot::Mutex;
@@ -17,36 +11,7 @@ use serial::SerialManager;
 use session::{SessionConfig, SessionGroup};
 use ssh::SshManager;
 use std::sync::Arc;
-use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder},
-    tray::TrayIconBuilder,
-    Manager, State,
-};
-
-/// Detect system locale and return true if Chinese
-fn is_system_chinese() -> bool {
-    if let Ok(lang) = std::env::var("LANG") {
-        if lang.starts_with("zh") { return true; }
-    }
-    #[cfg(windows)]
-    {
-        // Use Windows API directly — instant, no subprocess
-        use std::ffi::OsString;
-        use std::os::windows::ffi::OsStringExt;
-        extern "system" {
-            fn GetUserDefaultLocaleName(lp_locale_name: *mut u16, cch_locale_name: i32) -> i32;
-        }
-        let mut buf = [0u16; 85]; // LOCALE_NAME_MAX_LENGTH
-        let len = unsafe { GetUserDefaultLocaleName(buf.as_mut_ptr(), buf.len() as i32) };
-        if len > 0 {
-            let name = OsString::from_wide(&buf[..((len - 1) as usize)]);
-            if let Some(s) = name.to_str() {
-                if s.starts_with("zh") { return true; }
-            }
-        }
-    }
-    false
-}
+use tauri::{Manager, State};
 
 pub struct AppState {
     pub pty_manager: PtyManager,
@@ -818,77 +783,11 @@ pub fn run() {
             delete_session,
             save_group,
             get_groups,
-            ai_config::list_ai_providers,
-            ai_config::get_ai_active_ids,
-            ai_config::save_ai_provider,
-            ai_config::delete_ai_provider,
-            ai_config::switch_ai_provider,
-            ai_config::import_from_cc_switch,
-            ai_config::read_ai_current_config,
-            mcp_config::list_mcp_servers,
-            mcp_config::save_mcp_server,
-            mcp_config::delete_mcp_server,
-            mcp_config::sync_mcp_servers,
-            mcp_config::get_mcp_templates,
-            prompt_config::list_prompt_files,
-            prompt_config::read_prompt_file,
-            prompt_config::write_prompt_file,
-            prompt_config::sync_prompt_files,
-            prompt_config::get_prompt_templates,
-            usage_tracker::add_usage_record,
-            usage_tracker::get_usage_summary,
-            usage_tracker::clear_usage_records,
-            usage_tracker::save_model_pricing,
-            usage_tracker::get_model_pricing,
-            ai_platform::interfaces::commands::health::ai_platform_health,
-            ai_platform::interfaces::commands::providers::ai_platform_list_providers,
-            ai_platform::interfaces::commands::providers::ai_platform_save_provider,
-            ai_platform::interfaces::commands::providers::ai_platform_delete_provider,
-            ai_platform::interfaces::commands::providers::ai_platform_switch_provider,
-            ai_platform::interfaces::commands::providers::ai_platform_check_provider_health,
-            ai_platform::interfaces::commands::sessions::ai_platform_get_sessions_snapshot,
-            ai_platform::interfaces::commands::sessions::ai_platform_delete_session_record,
-            ai_platform::interfaces::commands::mcp::ai_platform_get_mcp_snapshot,
-            ai_platform::interfaces::commands::mcp::ai_platform_save_mcp_server,
-            ai_platform::interfaces::commands::mcp::ai_platform_delete_mcp_server,
-            ai_platform::interfaces::commands::mcp::ai_platform_sync_mcp_servers,
-            ai_platform::interfaces::commands::openclaw::ai_platform_get_openclaw_snapshot,
-            ai_platform::interfaces::commands::openclaw::ai_platform_save_openclaw_config,
-            ai_platform::interfaces::commands::proxy::ai_platform_get_proxy_snapshot,
-            ai_platform::interfaces::commands::proxy::ai_platform_save_proxy_config,
-            ai_platform::interfaces::commands::proxy::ai_platform_start_proxy,
-            ai_platform::interfaces::commands::proxy::ai_platform_stop_proxy,
-            ai_platform::interfaces::commands::prompts::ai_platform_get_prompt_snapshot,
-            ai_platform::interfaces::commands::prompts::ai_platform_write_prompt_file,
-            ai_platform::interfaces::commands::prompts::ai_platform_sync_prompt_files,
-            ai_platform::interfaces::commands::skills::ai_platform_get_skills_snapshot,
-            ai_platform::interfaces::commands::skills::ai_platform_add_skill_root,
-            ai_platform::interfaces::commands::skills::ai_platform_remove_skill_root,
-            ai_platform::interfaces::commands::skills::ai_platform_set_skill_enabled,
-            ai_platform::interfaces::commands::usage::ai_platform_get_usage_summary,
-            ai_platform::interfaces::commands::usage::ai_platform_clear_usage_records,
-            ai_platform::interfaces::commands::usage::ai_platform_add_usage_record,
-            ai_platform::interfaces::commands::usage::ai_platform_get_model_pricing,
-            ai_platform::interfaces::commands::usage::ai_platform_save_model_pricing,
-            ai_platform::interfaces::commands::agents::ai_platform_get_agents_snapshot,
-            ai_platform::interfaces::commands::agents::ai_platform_set_agent_enabled,
-            ai_platform::interfaces::commands::agents::ai_platform_save_agent_assignment,
-            ai_platform::interfaces::commands::agents::ai_platform_set_agents_routing_mode,
-            ai_platform::interfaces::commands::auth::ai_platform_get_auth_snapshot,
-            ai_platform::interfaces::commands::settings::ai_platform_get_settings_snapshot,
-            ai_platform::interfaces::commands::settings::ai_platform_save_settings,
-            ai_platform::interfaces::commands::workspace::ai_platform_get_workspace_snapshot,
-            ai_platform::interfaces::commands::workspace::ai_platform_write_workspace_file,
-            ai_platform::interfaces::commands::workspace::ai_platform_create_daily_memory,
-            ai_platform::interfaces::commands::workspace::ai_platform_delete_workspace_file,
         ])
         .setup(|app| {
             // Pre-warm OS info cache in a background thread so the first
             // frontend call to get_os_info returns instantly.
             std::thread::spawn(|| { OS_INFO.get_or_init(compute_os_info); });
-
-            // Start the AI proxy server if it was running when the app last closed.
-            ai_platform::runtime::bootstrap::start_if_configured();
 
             // Serialize initial sessions and inject them into the webview via an
             // initialization script so the frontend Zustand store can populate
@@ -904,52 +803,6 @@ pub fn run() {
                 "window.__GWSHELL_SESSIONS__={};try{{window.__TAURI_INTERNALS__.invoke('get_os_info')}}catch(e){{}}",
                 sessions_json
             );
-
-            // ---- System Tray (created BEFORE the window so that setup()
-            //      finishes immediately after show(), letting the event loop
-            //      start processing IPC calls without delay) ----
-            let zh = is_system_chinese();
-            let show_label = if zh { "显示 GWShell" } else { "Show GWShell" };
-            let quit_label = if zh { "退出" } else { "Quit" };
-            let show_item = MenuItemBuilder::with_id("show", show_label).build(app)?;
-            let quit_item = MenuItemBuilder::with_id("quit", quit_label).build(app)?;
-            let tray_menu = MenuBuilder::new(app)
-                .item(&show_item)
-                .separator()
-                .item(&quit_item)
-                .build()?;
-
-            let tray_icon = app.default_window_icon().cloned()
-                .unwrap_or_else(|| tauri::image::Image::new_owned(vec![0; 4 * 32 * 32], 32, 32));
-
-            TrayIconBuilder::new()
-                .icon(tray_icon)
-                .tooltip("GWShell")
-                .menu(&tray_menu)
-                .on_menu_event(|app, event| match event.id().as_ref() {
-                    "show" => {
-                        if let Some(win) = app.get_webview_window("main") {
-                            let _ = win.show();
-                            let _ = win.unminimize();
-                            let _ = win.set_focus();
-                        }
-                    }
-                    "quit" => {
-                        app.exit(0);
-                    }
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let tauri::tray::TrayIconEvent::DoubleClick { .. } = event {
-                        let app = tray.app_handle();
-                        if let Some(win) = app.get_webview_window("main") {
-                            let _ = win.show();
-                            let _ = win.unminimize();
-                            let _ = win.set_focus();
-                        }
-                    }
-                })
-                .build(app)?;
 
             // Create the main window programmatically so we can attach the
             // initialization script (not possible via tauri.conf.json).
@@ -976,12 +829,6 @@ pub fn run() {
             // This eliminates the white flash on startup.
 
             Ok(())
-        })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
-            }
         })
         .run(tauri::generate_context!())
         .expect("error while running GWShell");

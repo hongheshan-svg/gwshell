@@ -40,7 +40,7 @@
 
 ### 計画中 🚧
 
-RDP 接続、Telnet、VNC ビューアー、ファイル同期、コマンドスニペット、セッション録画、多言語 i18n、タブドラッグ＆ドロップ、SSH config インポート、CC-Switch 深度統合、プラグインシステム
+RDP 接続、Telnet、VNC ビューアー、ファイル同期、コマンドスニペット、セッション録画、多言語 i18n、タブドラッグ＆ドロップ、SSH config インポート、プラグインシステム
 
 ---
 
@@ -52,8 +52,6 @@ RDP 接続、Telnet、VNC ビューアー、ファイル同期、コマンドス
 
 ## 🙏 謝辞
 
-- [HexHub](https://github.com/user/hexhub) — SFTP ブラウザーと分割画面のデザインにインスピレーション
-- [CC-Switch](https://github.com/farion1231/cc-switch) — AI プロバイダー管理にインスピレーション
 - [Tauri](https://tauri.app/)、[xterm.js](https://xtermjs.org/)、[Tabby](https://github.com/Eugeny/tabby)、[WindTerm](https://github.com/nicedayzhu/WindTerm)
 
 ## 📄 ライセンス

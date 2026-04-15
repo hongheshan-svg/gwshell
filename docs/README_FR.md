@@ -40,7 +40,7 @@
 
 ### Planifiées 🚧
 
-Connexions RDP, Telnet, visionneuse VNC, synchronisation de fichiers, gestionnaire de snippets, enregistrement de sessions, i18n multilingue, glisser-déposer d'onglets, import SSH config, intégration profonde CC-Switch, système de plugins
+Connexions RDP, Telnet, visionneuse VNC, synchronisation de fichiers, gestionnaire de snippets, enregistrement de sessions, i18n multilingue, glisser-déposer d'onglets, import SSH config, système de plugins
 
 ---
 
@@ -52,8 +52,6 @@ Téléchargez l'installateur ou la version portable pour votre plateforme depuis
 
 ## 🙏 Remerciements
 
-- [HexHub](https://github.com/user/hexhub) — Inspiration pour le navigateur SFTP et l'écran partagé
-- [CC-Switch](https://github.com/farion1231/cc-switch) — Inspiration pour la gestion des fournisseurs AI
 - [Tauri](https://tauri.app/), [xterm.js](https://xtermjs.org/), [Tabby](https://github.com/Eugeny/tabby), [WindTerm](https://github.com/nicedayzhu/WindTerm)
 
 ## 📄 Licence

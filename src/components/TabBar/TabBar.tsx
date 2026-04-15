@@ -9,6 +9,7 @@ export const TabBar: React.FC = () => {
   const { t } = useTranslation();
   const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
   const addBtnRef = useRef<HTMLButtonElement>(null);
+  const supportedQuickCreateTypes = new Set(['ssh', 'ssh-tunnel']);
 
   const handleCloseTab = (tabId: string) => {
     import('../Terminal/TerminalView').then(({ destroyTerminal }) => {
@@ -25,7 +26,7 @@ export const TabBar: React.FC = () => {
   };
 
   const handleNewAssetSelect = (type: string) => {
-    if (type === 'ssh' || type === 'ssh-tunnel' || type === 'rdp' || type === 'telnet') {
+    if (supportedQuickCreateTypes.has(type)) {
       setShowNewSession(true);
     } else if (type === 'serial') {
       setShowSerialModal(true);
@@ -41,7 +42,7 @@ export const TabBar: React.FC = () => {
       {tabs.map((tab) => (
         <div
           key={tab.id}
-          className={`tab-item ${tab.id === activeTabId ? 'active' : ''}`}
+          className={`tab-item ${tab.type === 'asset-list' ? 'asset-list-tab' : ''} ${tab.id === activeTabId ? 'active' : ''}`}
           onClick={() => setActiveTab(tab.id)}
           onMouseDown={(e) => handleMiddleClick(e, tab.id)}
         >
@@ -53,8 +54,8 @@ export const TabBar: React.FC = () => {
             </>
           ) : (
             <>
-              <span className={`tab-dot ${tab.type}`} />
-              <span>{tab.title}</span>
+              <span className={`tab-dot ${tab.connected ? 'connected' : 'disconnected'}`} />
+              <span className="tab-title">{tab.title}</span>
               <button
                 className="tab-close"
                 onClick={(e) => {

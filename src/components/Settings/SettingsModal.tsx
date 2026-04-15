@@ -1,11 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, FolderOpen } from 'lucide-react';
-import { AiSection } from '../ai/AiSection';
-import { McpManager } from './McpManager';
-import { PromptsManager } from './PromptsManager';
-import { UsageDashboard } from './UsageDashboard';
 import { useAppStore } from '../../stores/appStore';
+import { useSettingsStore, defaultSettings as persistedDefaultSettings } from '../../stores/settingsStore';
 import i18n from '../../i18n';
 import type { TranslationKeys } from '../../i18n';
 
@@ -17,15 +14,6 @@ const navCategories: { title?: TranslationKeys; items: { id: string; labelKey: T
       { id: 'basic', labelKey: 'settings_basic' },
       { id: 'ssh-sftp', labelKey: 'settings_ssh_sftp' },
       { id: 'database', labelKey: 'settings_database' },
-    ],
-  },
-  {
-    title: 'settings_cat_ai',
-    items: [
-      { id: 'ai', labelKey: 'settings_ai_account' },
-      { id: 'mcp', labelKey: 'settings_mcp' },
-      { id: 'prompts', labelKey: 'settings_prompts' },
-      { id: 'usage', labelKey: 'settings_usage' },
     ],
   },
   {
@@ -114,6 +102,7 @@ export interface AppSettings {
 }
 
 const _t = (key: TranslationKeys) => i18n.t(key);
+const CMD_TERMINAL_FONT = 'Consolas, "Cascadia Mono", "Courier New", monospace';
 
 const defaultSettings: AppSettings = {
   theme: 'dark',
@@ -140,7 +129,7 @@ const defaultSettings: AppSettings = {
   lockScreenPassword: '',
   sessionTabMemory: false,
   showVipBadge: true,
-  terminalFont: 'JetBrainsMono, NotoSansSC',
+  terminalFont: CMD_TERMINAL_FONT,
   terminalFontSize: '12px',
   terminalHighlight: true,
   sshSftpPathLink: false,
@@ -182,6 +171,7 @@ const defaultSettings: AppSettings = {
   storageAutoSync: true,
   storageSource: _t('settings_storage_source_off'),
 };
+void defaultSettings;
 
 /* ---- Shortcut data ---- */
 interface ShortcutItem { labelKey: TranslationKeys; keys: string }
@@ -278,11 +268,21 @@ const Toggle: React.FC<{ value: boolean; onChange: (v: boolean) => void }> = ({ 
   </button>
 );
 
-const Sel: React.FC<{ value: string; options: string[]; onChange: (v: string) => void }> = ({ value, options, onChange }) => (
-  <select className="settings-select" value={value} onChange={(e) => onChange(e.target.value)}>
-    {options.map((o) => <option key={o} value={o}>{o}</option>)}
-  </select>
-);
+type SelectOption = string | { value: string; label: string };
+const optionValue = (option: SelectOption) => typeof option === 'string' ? option : option.value;
+const optionLabel = (option: SelectOption) => typeof option === 'string' ? option : option.label;
+
+const Sel: React.FC<{ value: string; options: SelectOption[]; onChange: (v: string) => void }> = ({ value, options, onChange }) => {
+  const resolvedOptions = (value === 'zh' || value === 'en') && !options.some((o) => optionValue(o) === value)
+    ? [{ value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' }]
+    : options;
+
+  return (
+    <select className="settings-select" value={value} onChange={(e) => onChange(e.target.value)}>
+      {resolvedOptions.map((o) => <option key={optionValue(o)} value={optionValue(o)}>{optionLabel(o)}</option>)}
+    </select>
+  );
+};
 
 const NumInput: React.FC<{ value: string; onChange: (v: string) => void; prefix?: string; width?: number }> = ({ value, onChange, prefix, width }) => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -328,34 +328,37 @@ const ShortcutTable: React.FC<{ left: ShortcutItem[]; right: ShortcutItem[]; t: 
 
 /* ---- Main Component ---- */
 export const SettingsModal: React.FC = () => {
-  const { showSettings, setShowSettings, theme, toggleTheme } = useAppStore();
+  const { showSettings, setShowSettings, theme, setTheme } = useAppStore();
+  const persistedSettings = useSettingsStore((s) => s.settings);
+  const saveSettings = useSettingsStore((s) => s.save);
   const { t } = useTranslation();
   const [activeNav, setActiveNav] = useState('basic');
-  const [settings, setSettings] = useState<AppSettings>({ ...defaultSettings });
+  const [settings, setSettings] = useState<AppSettings>({ ...persistedDefaultSettings, theme });
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
     if (showSettings) {
-      setSettings((prev) => ({ ...prev, theme }));
+      setSettings({ ...persistedSettings, theme });
       setDirty(false);
     }
-  }, [showSettings, theme]);
+  }, [showSettings, persistedSettings, theme]);
 
   const u = useCallback(<K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
     setDirty(true);
   }, []);
 
-  const handleApply = () => {
-    if (settings.theme !== theme) toggleTheme();
+  const handleApply = async () => {
+    await saveSettings(settings);
+    setTheme(settings.theme);
     setDirty(false);
   };
 
-  const handleReset = () => { setSettings({ ...defaultSettings, theme }); setDirty(true); };
+  const handleReset = () => { setSettings({ ...persistedDefaultSettings, theme }); setDirty(true); };
 
   if (!showSettings) return null;
   const handleClose = () => setShowSettings(false);
-  const fonts = ['JetBrainsMono, NotoSansSC', 'Consolas', 'Cascadia Code', 'Fira Code', 'monospace'];
+  const fonts = [CMD_TERMINAL_FONT, 'Consolas', 'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono, "Noto Sans SC", monospace', 'Fira Code', 'monospace'];
 
   return (
     <div className="settings-overlay">
@@ -395,7 +398,7 @@ export const SettingsModal: React.FC = () => {
                   <Row label={t('settings_line_ending')}><Sel value={settings.editorLineEnding} options={['(compat) \\r\\n', '\\n', '\\r']} onChange={(v) => u('editorLineEnding', v)} /></Row>
                   <Row label={t('settings_animation')}><Toggle value={settings.enableAnimation} onChange={(v) => u('enableAnimation', v)} /></Row>
                   <Row label={t('settings_realtime_info')} desc={t('settings_realtime_info_desc')}><Toggle value={settings.showRealtimeInfo} onChange={(v) => u('showRealtimeInfo', v)} /></Row>
-                  <Row label={t('settings_tab_close_pos')}><Sel value={settings.tabCloseButtonPos} options={[t('settings_tab_close_left'), t('settings_tab_close_right')]} onChange={(v) => u('tabCloseButtonPos', v)} /></Row>
+                  <Row label={t('settings_tab_close_pos')}><Sel value={settings.tabCloseButtonPos} options={[{ value: 'left', label: t('settings_tab_close_left') }, { value: 'right', label: t('settings_tab_close_right') }]} onChange={(v) => u('tabCloseButtonPos', v)} /></Row>
                   <Row label={t('settings_ligatures')}><Toggle value={settings.ligatures} onChange={(v) => u('ligatures', v)} /></Row>
                   <Row label={t('settings_mouse_zoom')}><Toggle value={settings.mouseWheelZoom} onChange={(v) => u('mouseWheelZoom', v)} /></Row>
                   <Row label={t('settings_tab_close_confirm')} desc={t('settings_tab_close_confirm_desc')}><Toggle value={settings.tabCloseConfirm} onChange={(v) => u('tabCloseConfirm', v)} /></Row>
@@ -405,14 +408,14 @@ export const SettingsModal: React.FC = () => {
                 <div className="settings-col">
                   <SectionTitle>&nbsp;</SectionTitle>
                   <Row label={t('settings_language')}><Sel value={settings.language} options={['简体中文', 'English', '繁體中文', '日本語']} onChange={(v) => u('language', v)} /></Row>
-                  <Row label={t('settings_update_channel')} desc={t('settings_update_channel_desc')}><Sel value={settings.updateChannel} options={[t('settings_update_stable'), t('settings_update_beta'), t('settings_update_dev')]} onChange={(v) => u('updateChannel', v)} /></Row>
+                  <Row label={t('settings_update_channel')} desc={t('settings_update_channel_desc')}><Sel value={settings.updateChannel} options={[{ value: 'stable', label: t('settings_update_stable') }, { value: 'beta', label: t('settings_update_beta') }, { value: 'dev', label: t('settings_update_dev') }]} onChange={(v) => u('updateChannel', v)} /></Row>
                   <Row label={t('settings_editor_font')}><Sel value={settings.editorFont} options={fonts} onChange={(v) => u('editorFont', v)} /></Row>
                   <Row label={t('settings_zoom')}><Sel value={settings.zoomLevel} options={['80%', '90%', '100%', '110%', '120%', '150%']} onChange={(v) => u('zoomLevel', v)} /></Row>
                   <Row label={t('settings_editor_fontsize')}><Sel value={settings.editorFontSize} options={['12px', '13px', '14px', '15px', '16px', '18px', '20px']} onChange={(v) => u('editorFontSize', v)} /></Row>
                   <Row label={t('settings_editor_wrap')}><Toggle value={settings.editorAutoWrap} onChange={(v) => u('editorAutoWrap', v)} /></Row>
-                  <Row label={t('settings_editor_tab_mode')}><Sel value={settings.editorTabMode} options={[t('settings_tab_mode_tab'), t('settings_tab_mode_space2'), t('settings_tab_mode_space4')]} onChange={(v) => u('editorTabMode', v)} /></Row>
+                  <Row label={t('settings_editor_tab_mode')}><Sel value={settings.editorTabMode} options={[{ value: 'tab', label: t('settings_tab_mode_tab') }, { value: 'space2', label: t('settings_tab_mode_space2') }, { value: 'space4', label: t('settings_tab_mode_space4') }]} onChange={(v) => u('editorTabMode', v)} /></Row>
                   <Row label={t('settings_auto_lock')} desc={t('settings_auto_lock_desc')}><Toggle value={settings.autoLockScreen} onChange={(v) => u('autoLockScreen', v)} /></Row>
-                  <Row label={t('settings_auto_lock_time')}><Sel value={settings.autoLockScreenTime} options={[t('settings_lock_time_off'), t('settings_lock_time_1m'), t('settings_lock_time_5m'), t('settings_lock_time_10m'), t('settings_lock_time_30m')]} onChange={(v) => u('autoLockScreenTime', v)} /></Row>
+                  <Row label={t('settings_auto_lock_time')}><Sel value={settings.autoLockScreenTime} options={[{ value: 'off', label: t('settings_lock_time_off') }, { value: '1m', label: t('settings_lock_time_1m') }, { value: '5m', label: t('settings_lock_time_5m') }, { value: '10m', label: t('settings_lock_time_10m') }, { value: '30m', label: t('settings_lock_time_30m') }]} onChange={(v) => u('autoLockScreenTime', v)} /></Row>
                   <Row label={t('settings_lock_password')}><input type="password" className="settings-input" value={settings.lockScreenPassword} onChange={(e) => u('lockScreenPassword', e.target.value)} disabled={!settings.autoLockScreen} /></Row>
                   <Row label={t('settings_session_tab_memory')} desc={t('settings_session_tab_memory_desc')}><Toggle value={settings.sessionTabMemory} onChange={(v) => u('sessionTabMemory', v)} /></Row>
                   <Row label={t('settings_show_vip')} desc={t('settings_show_vip_desc')}><Toggle value={settings.showVipBadge} onChange={(v) => u('showVipBadge', v)} /></Row>
@@ -509,18 +512,6 @@ export const SettingsModal: React.FC = () => {
               </>
             )}
 
-            {/* ===== AI ===== */}
-            {activeNav === 'ai' && <AiSection />}
-
-            {/* ===== MCP ===== */}
-            {activeNav === 'mcp' && <McpManager />}
-
-            {/* ===== Prompts ===== */}
-            {activeNav === 'prompts' && <PromptsManager />}
-
-            {/* ===== Usage ===== */}
-            {activeNav === 'usage' && <UsageDashboard />}
-
             {/* ===== 快捷键-基础 ===== */}
             {activeNav === 'shortcut-basic' && (
               <>
@@ -599,8 +590,6 @@ export const SettingsModal: React.FC = () => {
         <div className="settings-footer">
           {activeNav === 'storage' ? (
             <span className="settings-footer-hint">{t('settings_footer_storage')}</span>
-          ) : activeNav === 'ai' ? (
-            <span className="settings-footer-hint">{t('settings_footer_ai')}</span>
           ) : (
             <span className="settings-footer-hint">{t('settings_footer_default')}</span>
           )}

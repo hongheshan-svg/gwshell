@@ -2,12 +2,15 @@ import React, { useEffect, useRef, useCallback, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { WebglAddon } from "@xterm/addon-webgl";
+import { CanvasAddon } from "@xterm/addon-canvas/lib/xterm-addon-canvas.mjs";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from 'react-i18next';
 import type { TabInfo } from "../../types";
 import { useAppStore } from "../../stores/appStore";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { terminalInstances } from "./terminalRegistry";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalViewProps {
@@ -42,9 +45,6 @@ async function getOsInfo(): Promise<{ os: string; windowsBuild?: number }> {
 // so it's ready before the first terminal is created.
 getOsInfo();
 
-// Global map to preserve terminal instances across re-renders
-export const terminalInstances = new Map<string, { terminal: Terminal; fitAddon: FitAddon }>();
-
 // Track which tab IDs have active backend connections (SSH/PTY/serial)
 // so we can avoid closing them during split-mode transitions.
 const connectedTabs = new Set<string>();
@@ -54,6 +54,8 @@ const connectedTabs = new Set<string>();
 // when React StrictMode double-invokes effects or when components
 // remount during single↔split transitions.
 const tabListenerCleanups = new Map<string, () => void>();
+const fitFrameIds = new Map<string, number>();
+const settleTimerIds = new Map<string, ReturnType<typeof setTimeout>>();
 
 /** Remove event listeners for a tab (idempotent). */
 function cleanupTabListeners(tabId: string): void {
@@ -64,6 +66,12 @@ function cleanupTabListeners(tabId: string): void {
 /** Destroy a terminal instance associated with a tab (called when the tab closes). */
 export function destroyTerminal(tabId: string): void {
   cleanupTabListeners(tabId);
+  const frameId = fitFrameIds.get(tabId);
+  if (frameId !== undefined) cancelAnimationFrame(frameId);
+  fitFrameIds.delete(tabId);
+  const settleTimerId = settleTimerIds.get(tabId);
+  if (settleTimerId) clearTimeout(settleTimerId);
+  settleTimerIds.delete(tabId);
   connectedTabs.delete(tabId);
   const inst = terminalInstances.get(tabId);
   if (inst) {
@@ -82,11 +90,37 @@ export function safeFit(tabId: string): void {
   const inst = terminalInstances.get(tabId);
   if (!inst) return;
   const el = inst.terminal.element?.parentElement;
-  if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) return;
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  if (rect.width < 2 || rect.height < 2) return;
   try {
     inst.fitAddon.fit();
     inst.terminal.refresh(0, inst.terminal.rows - 1);
   } catch {}
+}
+
+export function scheduleTerminalFit(tabId: string): void {
+  if (fitFrameIds.has(tabId)) return;
+  const frameId = requestAnimationFrame(() => {
+    fitFrameIds.delete(tabId);
+    safeFit(tabId);
+  });
+  fitFrameIds.set(tabId, frameId);
+}
+
+export function scheduleTerminalResizeSettle(
+  tabId: string,
+  sessionId: string,
+  tabType: TabInfo['type'],
+  delayMs = 180
+): void {
+  const existing = settleTimerIds.get(tabId);
+  if (existing) clearTimeout(existing);
+  const timerId = setTimeout(() => {
+    settleTimerIds.delete(tabId);
+    forceTerminalRedraw(tabId, sessionId, tabType);
+  }, delayMs);
+  settleTimerIds.set(tabId, timerId);
 }
 
 /**
@@ -115,7 +149,9 @@ export function forceTerminalRedraw(
   const inst = terminalInstances.get(tabId);
   if (!inst) return;
   const el = inst.terminal.element?.parentElement;
-  if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) return;
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  if (rect.width < 2 || rect.height < 2) return;
   try { inst.fitAddon.fit(); } catch {}
   try { inst.terminal.clearTextureAtlas(); } catch {}
   try { inst.terminal.refresh(0, inst.terminal.rows - 1); } catch {}
@@ -249,16 +285,33 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       if (cancelled) return;
 
       // Re-attach the terminal if its parent is a different container.
+      // (renderer addon attaches after terminal.open below)
       // Track whether we actually moved the element to a new container —
       // that's the case where we need a full renderer reset (clear glyph
       // atlas + force SIGWINCH) so TUI apps like Claude redraw cleanly.
       const currentParent = instance.terminal.element?.parentElement;
       const wasReparented = !!existingInstance && currentParent !== container;
+      const wasFreshlyOpened = !instance.terminal.element;
       if (currentParent !== container) {
         if (instance.terminal.element) {
           container.appendChild(instance.terminal.element);
         } else {
           instance.terminal.open(container);
+        }
+      }
+
+      // Attach the GPU-accelerated renderer once the terminal is in the DOM.
+      // WebGL preferred; falls back to Canvas if WebGL context creation fails
+      // (e.g. headless test envs, restrictive GPU driver). Falling back to the
+      // default DOM renderer is what causes the "jitter / overlapping glyphs"
+      // visible during high-throughput output.
+      if (wasFreshlyOpened) {
+        try {
+          const webgl = new WebglAddon();
+          webgl.onContextLoss(() => { try { webgl.dispose(); } catch {} });
+          instance.terminal.loadAddon(webgl);
+        } catch {
+          try { instance.terminal.loadAddon(new CanvasAddon()); } catch {}
         }
       }
 
@@ -276,7 +329,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           if (wasReparented) {
             forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
           } else {
-            safeFit(tab.id);
+            scheduleTerminalFit(tab.id);
+            scheduleTerminalResizeSettle(tab.id, tab.sessionId, tab.type, 80);
           }
         });
       });
@@ -420,6 +474,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       }
 
       try {
+        let connectionReady = alreadyConnected;
         if (!alreadyConnected) {
         if (tab.type === "localshell") {
           // Wait for layout to settle so the PTY is created with the
@@ -445,6 +500,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
             workingDir: session?.working_dir ?? null,
             charset: session?.charset ?? null,
           });
+          connectionReady = true;
           if (session?.init_command) {
             const cmd = session.init_command;
             setTimeout(() => {
@@ -476,6 +532,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
               `...\x1b[0m\r\n`
             );
             await doSshConnect(session);
+            connectionReady = true;
 
             if (session.tunnel_enabled && session.tunnel_local_port && session.tunnel_remote_host && session.tunnel_remote_port) {
               try {
@@ -524,10 +581,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
               stopBits: session.serial_stop_bits || "1",
               parity: session.serial_parity || "None",
             });
+            connectionReady = true;
           }
         }
         } // end if (!alreadyConnected)
+        if (!connectionReady && !alreadyConnected) {
+          connectedTabs.delete(tab.id);
+        }
+        useAppStore.getState().updateTabConnected(tab.id, connectionReady);
       } catch (err) {
+        connectedTabs.delete(tab.id);
+        useAppStore.getState().updateTabConnected(tab.id, false);
         instance?.terminal.write(`\r\n\x1b[31m${t('term_conn_error', { error: String(err) })}\x1b[0m\r\n`);
       }
     };
@@ -545,6 +609,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       const tabStillExists = store.tabs.some(t2 => t2.id === tab.id);
       if (!tabStillExists) {
         connectedTabs.delete(tab.id);
+        useAppStore.getState().updateTabConnected(tab.id, false);
         const closeCmd = tab.type === "ssh" ? "close_ssh" : tab.type === "serial" ? "close_serial" : "close_pty";
         invoke(closeCmd, { sessionId: tab.sessionId }).catch(() => {});
       }
@@ -586,7 +651,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
     const el = containerRef.current;
     if (!el) return;
 
-    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let resizeTimerId: ReturnType<typeof setTimeout> | null = null;
     let lastW = el.offsetWidth;
     let lastH = el.offsetHeight;
     const observer = new ResizeObserver(() => {
@@ -596,10 +661,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       if (w === lastW && h === lastH) return;
       lastW = w;
       lastH = h;
-      if (timerId) clearTimeout(timerId);
-      timerId = setTimeout(() => {
-        safeFit(tab.id);
-      }, 150);
+      scheduleTerminalFit(tab.id);
+      scheduleTerminalResizeSettle(tab.id, tab.sessionId, tab.type);
     });
     observer.observe(el);
 
@@ -612,13 +675,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       if (window.devicePixelRatio !== currentDpr) {
         currentDpr = window.devicePixelRatio;
         setupDprListener();
-        if (timerId) clearTimeout(timerId);
-        timerId = setTimeout(() => {
+        if (resizeTimerId) clearTimeout(resizeTimerId);
+        resizeTimerId = setTimeout(() => {
           const inst = terminalInstances.get(tab.id);
           if (inst) {
             try { inst.terminal.clearTextureAtlas(); } catch {}
           }
-          safeFit(tab.id);
+          forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
         }, 100);
       }
     };
@@ -630,11 +693,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
     setupDprListener();
 
     return () => {
-      if (timerId) clearTimeout(timerId);
+      const frameId = fitFrameIds.get(tab.id);
+      if (frameId !== undefined) cancelAnimationFrame(frameId);
+      fitFrameIds.delete(tab.id);
+      const settleTimerId = settleTimerIds.get(tab.id);
+      if (settleTimerId) clearTimeout(settleTimerId);
+      settleTimerIds.delete(tab.id);
+      if (resizeTimerId) clearTimeout(resizeTimerId);
       observer.disconnect();
       if (activeDprMedia) activeDprMedia.removeEventListener("change", handleDprChange);
     };
-  }, [tab.id]);
+  }, [tab.id, tab.sessionId, tab.type]);
 
   return (
     <>

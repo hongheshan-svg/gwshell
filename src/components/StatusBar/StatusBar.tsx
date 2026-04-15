@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Wifi, Clock, Monitor, Cloud, LayoutGrid, Zap, Activity } from 'lucide-react';
+import { Wifi, Clock, Monitor, Cloud, LayoutGrid } from 'lucide-react';
 import { getVersion } from '@tauri-apps/api/app';
-import { invoke } from '@tauri-apps/api/core';
 import { useAppStore, type SplitCount } from '../../stores/appStore';
-import { getAiPlatformUsageSummary } from '../../features/ai-platform/infra/commands/usage';
 
 const SPLIT_OPTIONS: { count: SplitCount; label: string }[] = [
   { count: 1, label: '1' },
@@ -20,84 +18,10 @@ export const StatusBar: React.FC = () => {
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const [showSplitMenu, setShowSplitMenu] = useState(false);
   const [version, setVersion] = useState('0.1.0');
-  const [showAiMenu, setShowAiMenu] = useState(false);
-  const [activeProvider, setActiveProvider] = useState<string>('');
-  const [providers, setProviders] = useState<{ id: string; name: string }[]>([]);
-  const [todayTokens, setTodayTokens] = useState<number | null>(null);
-  const [todayRequests, setTodayRequests] = useState<number | null>(null);
-  const usageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => {});
   }, []);
-
-  useEffect(() => {
-    const fetchUsage = async () => {
-      try {
-        const summary = await getAiPlatformUsageSummary(1);
-        setTodayTokens(summary.totalTokens);
-        setTodayRequests(summary.totalRequests);
-      } catch { /* silent */ }
-    };
-    // Initial fetch after a short delay to not block startup
-    const init = setTimeout(fetchUsage, 8000);
-    usageTimerRef.current = setInterval(fetchUsage, 60_000);
-    return () => {
-      clearTimeout(init);
-      if (usageTimerRef.current) clearInterval(usageTimerRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    let idleCallbackId: number | null = null;
-
-    const loadAi = async () => {
-      try {
-        const [list, ids] = await Promise.all([
-          invoke<{ id: string; name: string }[]>('list_ai_providers'),
-          invoke<[string | null, string | null, string | null, string | null, string | null]>('get_ai_active_ids'),
-        ]);
-        setProviders(list);
-        const activeId = ids[0] || ids[1] || ids[2] || ids[3] || ids[4];
-        const active = list.find(p => p.id === activeId);
-        setActiveProvider(active?.name || '');
-      } catch { /* empty */ }
-    };
-
-    const initTimer = window.setTimeout(() => {
-      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        idleCallbackId = window.requestIdleCallback(() => {
-          void loadAi();
-        }, { timeout: 4000 });
-      } else {
-        idleCallbackId = setTimeout(() => {
-          void loadAi();
-        }, 0);
-      }
-    }, 15000);
-
-    const interval = setInterval(loadAi, 10000);
-    return () => {
-      clearTimeout(initTimer);
-      clearInterval(interval);
-      if (idleCallbackId != null) {
-        if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-          window.cancelIdleCallback(idleCallbackId);
-        } else {
-          clearTimeout(idleCallbackId);
-        }
-      }
-    };
-  }, []);
-
-  const handleSwitchProvider = async (providerId: string) => {
-    try {
-      await invoke('switch_ai_provider', { providerId, tool: 'all' });
-      const p = providers.find(pp => pp.id === providerId);
-      setActiveProvider(p?.name || '');
-      setShowAiMenu(false);
-    } catch { /* empty */ }
-  };
 
   return (
     <div className="status-bar">
@@ -110,7 +34,7 @@ export const StatusBar: React.FC = () => {
         <>
           <div className="status-item">
             <span className={`status-dot ${activeTab.connected ? 'connected' : 'disconnected'}`} />
-            <span>{activeTab.connected ? t('status_connected') : t('status_connecting')}</span>
+            <span>{activeTab.connected ? t('status_connected') : t('status_disconnected')}</span>
           </div>
           <div className="status-item">
             <Wifi size={11} />
@@ -147,48 +71,6 @@ export const StatusBar: React.FC = () => {
         )}
       </div>
 
-      {/* AI Provider quick switch */}
-      <div className="status-item split-picker-wrap" style={{ position: 'relative' }}>
-        <button
-          className="split-picker-btn"
-          onClick={() => setShowAiMenu(!showAiMenu)}
-          title={t('ai_quick_switch')}
-        >
-          <Zap size={12} />
-          <span>{activeProvider || 'AI'}</span>
-        </button>
-        {showAiMenu && (
-          <div className="split-picker-menu" style={{ minWidth: 160 }}>
-            {providers.map(p => (
-              <button
-                key={p.id}
-                className={`split-picker-option ${p.name === activeProvider ? 'active' : ''}`}
-                onClick={() => handleSwitchProvider(p.id)}
-              >
-                <span>{p.name}</span>
-              </button>
-            ))}
-            {providers.length === 0 && (
-              <div style={{ padding: '6px 10px', color: 'var(--text-muted)', fontSize: 11 }}>
-                {t('ai_no_providers')}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* AI usage today */}
-      {todayTokens !== null && todayTokens > 0 && (
-        <div
-          className="status-item"
-          title={`今日用量：${todayTokens.toLocaleString()} tokens，${todayRequests ?? 0} 次请求`}
-          style={{ cursor: 'default' }}
-        >
-          <Activity size={11} />
-          <span>{fmtTokens(todayTokens)}</span>
-        </div>
-      )}
-
       <div className="status-item">
         <Cloud size={11} />
         <span>25°C</span>
@@ -204,14 +86,6 @@ export const StatusBar: React.FC = () => {
   );
 };
 
-/** Format token count compactly: 1234 → "1.2K", 1200000 → "1.2M" */
-function fmtTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M tok`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K tok`;
-  return `${n} tok`;
-}
-
-/** Mini icon showing the split layout grid */
 const SplitIcon: React.FC<{ count: SplitCount }> = ({ count }) => {
   const w = 18, h = 12;
   const rects: React.ReactNode[] = [];

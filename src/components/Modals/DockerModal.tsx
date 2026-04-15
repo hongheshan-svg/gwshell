@@ -84,7 +84,6 @@ export const DockerModal: React.FC = () => {
   const handleTest = () => {
     setTouched({ name: true });
     if (!form.name) return;
-    // TODO: actual docker test
     handleSave();
   };
 
@@ -246,9 +245,24 @@ export const DockerModal: React.FC = () => {
 
         {/* Footer */}
         <div className="ssh-modal-footer">
-          <button className="ssh-footer-link" style={{ fontSize: 12 }}>{t('docker_auto_config')}</button>
+          <button
+            className="ssh-footer-link"
+            style={{ fontSize: 12, opacity: 0.55, cursor: 'not-allowed' }}
+            disabled
+            title={t('docker_auto_config')}
+          >
+            {t('docker_auto_config')}
+          </button>
           <div style={{ display: 'flex', gap: 12 }}>
-            <button className="ssh-footer-link" onClick={handleTest}>{t('docker_test')}</button>
+            <button
+              className="ssh-footer-link"
+              style={{ opacity: 0.55, cursor: 'not-allowed' }}
+              onClick={handleTest}
+              disabled
+              title={t('docker_test')}
+            >
+              {t('docker_test')}
+            </button>
             <button className="ssh-footer-link" onClick={handleSave}>{t('ssh_save')}</button>
           </div>
         </div>

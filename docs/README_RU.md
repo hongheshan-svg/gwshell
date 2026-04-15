@@ -40,7 +40,7 @@
 
 ### Планируется 🚧
 
-RDP-соединения, Telnet, VNC-просмотрщик, синхронизация файлов, менеджер сниппетов, запись сессий, многоязычная i18n, перетаскивание вкладок, импорт SSH config, глубокая интеграция CC-Switch, система плагинов
+RDP-соединения, Telnet, VNC-просмотрщик, синхронизация файлов, менеджер сниппетов, запись сессий, многоязычная i18n, перетаскивание вкладок, импорт SSH config, система плагинов
 
 ---
 
@@ -52,8 +52,6 @@ RDP-соединения, Telnet, VNC-просмотрщик, синхрониз
 
 ## 🙏 Благодарности
 
-- [HexHub](https://github.com/user/hexhub) — Вдохновение для файлового менеджера SFTP и разделения экрана
-- [CC-Switch](https://github.com/farion1231/cc-switch) — Вдохновение для управления AI-провайдерами
 - [Tauri](https://tauri.app/), [xterm.js](https://xtermjs.org/), [Tabby](https://github.com/Eugeny/tabby), [WindTerm](https://github.com/nicedayzhu/WindTerm)
 
 ## 📄 Лицензия

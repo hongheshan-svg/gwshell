@@ -41,7 +41,6 @@
 | **Serial** | Serial port console | Connect to COM/ttyUSB devices with baud rate config |
 | **Docker** | Docker management | Connect to Docker hosts via SSH tunnel (WIP) |
 | **AI** | Provider management | Configure & switch AI CLI providers (Claude Code, Codex, Gemini, etc.) |
-| **AI** | CC-Switch import | Import provider configs from [CC-Switch](https://github.com/farion1231/cc-switch) |
 | **UI** | Dark / Light theme | System-aware theme with manual toggle |
 | **UI** | i18n (English, 中文) | Full bilingual interface |
 | **UI** | Collapsible sidebar | Drag-free sidebar with icon navigation |
@@ -63,7 +62,6 @@
 | Multi-language i18n | Japanese, Korean, Spanish, French, German, Russian |
 | Tab drag & drop | Reorder tabs by dragging |
 | SSH config import | Import from `~/.ssh/config` |
-| CC-Switch deep integration | Full AI provider management built-in |
 | Plugin system | Extend GWShell with community plugins |
 | WebDAV / S3 browser | Cloud storage file management |
 | Database client | Built-in MySQL/PostgreSQL/Redis client |
@@ -126,12 +124,6 @@ npm run tauri build    # Production build
 ## 🙏 Acknowledgments
 
 GWShell is inspired by and grateful to these outstanding open-source projects:
-
-### [HexHub](https://github.com/user/hexhub)
-A powerful SSH/SFTP client that inspired GWShell's SFTP file browser design, inline editor, and split-screen terminal layout. HexHub's elegant approach to multi-tab session management and dual-panel file transfer was a major influence on GWShell's architecture.
-
-### [CC-Switch](https://github.com/farion1231/cc-switch)
-An innovative AI CLI provider switcher that inspired GWShell's AI integration. CC-Switch's approach to managing multiple AI providers (Claude Code, Codex, Gemini CLI, etc.) and its clean configuration system led to GWShell's built-in AI provider management feature and the config interoperability design.
 
 ### Other Inspirations
 - [Tabby](https://github.com/Eugeny/tabby) — Modern terminal emulator

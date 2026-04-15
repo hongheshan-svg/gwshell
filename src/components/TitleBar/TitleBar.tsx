@@ -19,7 +19,7 @@ export const TitleBar: React.FC = () => {
   };
 
   const handleClose = () => {
-    appWindow.hide();
+    appWindow.close();
   };
 
   return (

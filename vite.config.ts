@@ -29,4 +29,20 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("@xterm/xterm")) return "xterm-core";
+          if (id.includes("@xterm/addon-canvas")) return "xterm-canvas";
+          if (id.includes("@xterm/addon-webgl")) return "xterm-webgl";
+          if (id.includes("@xterm/addon-fit") || id.includes("@xterm/addon-web-links")) {
+            return "xterm-addons";
+          }
+          if (id.includes("@tauri-apps/")) return "tauri-api";
+        },
+      },
+    },
+  },
 }));

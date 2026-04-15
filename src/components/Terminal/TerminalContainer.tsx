@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore, type SplitCount } from '../../stores/appStore';
-import { TerminalView, safeFit } from './TerminalView';
+import { TerminalView, scheduleTerminalFit } from './TerminalView';
 import { AssetTable } from '../AssetTable/AssetTable';
 
 /** CSS grid template for each split count */
@@ -103,7 +103,7 @@ const SplitPane: React.FC<SplitPaneProps> = ({ slotIndex, tab, allTabs, isFocuse
   useEffect(() => {
     if (isFocused && tab) {
       requestAnimationFrame(() => {
-        safeFit(tab.id);
+        scheduleTerminalFit(tab.id);
       });
     }
   }, [isFocused, tab?.id]);
@@ -137,7 +137,7 @@ const SplitPane: React.FC<SplitPaneProps> = ({ slotIndex, tab, allTabs, isFocuse
     >
       <div className="split-pane-header">
         <span className="split-pane-title">
-          <span className={`tab-dot ${tab.type}`} />
+          <span className={`tab-dot ${tab.connected ? 'connected' : 'disconnected'}`} />
           {tab.title}
         </span>
         <select

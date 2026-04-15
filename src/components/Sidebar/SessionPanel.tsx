@@ -59,6 +59,8 @@ export const SessionPanel: React.FC = () => {
     setExpandedGroups((prev) => ({ ...prev, [name]: !prev[name] }));
   };
 
+  const supportedQuickCreateTypes = new Set(['ssh', 'ssh-tunnel']);
+
   const handleConnect = (session: SessionConfig) => {
     const existingTab = tabs.find((t) => t.sessionId === session.id);
     if (existingTab) {
@@ -92,7 +94,7 @@ export const SessionPanel: React.FC = () => {
   };
 
   const handleNewAssetSelect = (type: string) => {
-    if (type === 'ssh' || type === 'ssh-tunnel' || type === 'rdp' || type === 'telnet') {
+    if (supportedQuickCreateTypes.has(type)) {
       setShowNewSession(true);
     } else if (type === 'serial') {
       setShowSerialModal(true);
@@ -248,7 +250,9 @@ const SessionItem: React.FC<{
   onContextMenu: (e: React.MouseEvent, session: SessionConfig) => void;
 }> = ({ session, onConnect, onContextMenu }) => {
   const { activeTabId, tabs } = useAppStore();
-  const isActive = tabs.some((t) => t.sessionId === session.id && t.id === activeTabId);
+  const sessionTab = tabs.find((t) => t.sessionId === session.id);
+  const isActive = sessionTab?.id === activeTabId;
+  const isConnected = sessionTab?.connected === true;
 
   return (
     <div
@@ -258,6 +262,7 @@ const SessionItem: React.FC<{
     >
       <span className="session-item-icon"><Server size={14} /></span>
       <span className="session-item-name">{session.name}</span>
+      <span className={`session-status-dot ${isConnected ? 'connected' : 'disconnected'}`} />
     </div>
   );
 };

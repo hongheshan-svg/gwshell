@@ -1,13 +1,13 @@
 import { useEffect } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAppStore } from '../stores/appStore';
-import { terminalInstances } from '../components/Terminal/TerminalView';
+import { terminalInstances } from '../components/Terminal/terminalRegistry';
 
 const LANG_MAP: Record<string, 'zh' | 'en'> = {
+  zh: 'zh',
+  en: 'en',
   '简体中文': 'zh',
-  'English': 'en',
-  '繁體中文': 'en',
-  '日本語': 'en',
+  English: 'en',
 };
 
 const ZOOM_MAP: Record<string, number> = {
@@ -21,49 +21,41 @@ const ZOOM_MAP: Record<string, number> = {
 
 function parsePx(value: string, fallback: number): number {
   const n = parseInt(value);
-  return isNaN(n) ? fallback : n;
+  return Number.isNaN(n) ? fallback : n;
 }
 
 function parseNum(value: string, fallback: number): number {
   const n = parseFloat(value);
-  return isNaN(n) ? fallback : n;
+  return Number.isNaN(n) ? fallback : n;
 }
 
-/** Apply all settings side-effects. Call once in App root after settings are loaded. */
+/** Apply settings side effects once the persisted settings store changes. */
 export function useSettingsEffects() {
   const settings = useSettingsStore((s) => s.settings);
   const setTheme = useAppStore((s) => s.setTheme);
   const setLocale = useAppStore((s) => s.setLocale);
 
-  // Theme
   useEffect(() => {
     setTheme(settings.theme);
   }, [settings.theme, setTheme]);
 
-  // Language
   useEffect(() => {
-    const locale = LANG_MAP[settings.language] ?? 'zh';
-    setLocale(locale);
+    setLocale(LANG_MAP[settings.language] ?? 'zh');
   }, [settings.language, setLocale]);
 
-  // Zoom level
   useEffect(() => {
     const zoom = ZOOM_MAP[settings.zoomLevel] ?? 1.0;
-    // Use CSS zoom on the root element (simplest cross-platform approach)
-    (document.documentElement.style as unknown as Record<string, string>)['zoom'] = String(zoom);
+    (document.documentElement.style as unknown as Record<string, string>).zoom = String(zoom);
   }, [settings.zoomLevel]);
 
-  // Animation
   useEffect(() => {
     document.documentElement.classList.toggle('enable-animation', settings.enableAnimation);
   }, [settings.enableAnimation]);
 
-  // Stripe background
   useEffect(() => {
     document.documentElement.classList.toggle('terminal-stripe-bg', settings.terminalStripeBackground);
   }, [settings.terminalStripeBackground]);
 
-  // Terminal options — update all existing xterm instances
   useEffect(() => {
     const fontSize = parsePx(settings.terminalFontSize, 13);
     const lineHeight = parseNum(settings.terminalLineHeight, 1.2);
@@ -85,11 +77,10 @@ export function useSettingsEffects() {
     settings.terminalMaxScrollback,
   ]);
 
-  // Auto-copy on select
   useEffect(() => {
     terminalInstances.forEach(({ terminal }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (terminal.options as any).copyOnSelect = settings.autoCopyOnSelect;
+      // xterm exposes this through options but its public type can lag beta builds.
+      (terminal.options as unknown as { copyOnSelect?: boolean }).copyOnSelect = settings.autoCopyOnSelect;
     });
   }, [settings.autoCopyOnSelect]);
 }

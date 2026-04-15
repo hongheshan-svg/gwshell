@@ -480,7 +480,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username }) => 
           {/* New folder input */}
           {newFolderMode && (
             <div className="sftp-file-item sftp-new-folder-item">
-              <Folder size={14} className="sftp-icon sftp-icon-folder" />
+              <Folder size={18} className="sftp-icon sftp-icon-folder" />
               <input
                 className="sftp-rename-input"
                 value={newFolderName}
@@ -515,7 +515,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username }) => 
               className="sftp-file-item sftp-file-dir"
               onClick={goUp}
             >
-              <FolderUp size={14} className="sftp-icon sftp-icon-folder" />
+              <FolderUp size={18} className="sftp-icon sftp-icon-folder" />
               <span className="sftp-file-name">..</span>
               <span className="sftp-file-size">-</span>
               <span className="sftp-file-perm" />
@@ -531,7 +531,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username }) => 
               onContextMenu={(e) => handleContextMenu(e, entry)}
             >
               {entry.is_dir ? (
-                <Folder size={14} className="sftp-icon sftp-icon-folder" />
+                <Folder size={18} className="sftp-icon sftp-icon-folder" />
               ) : (
                 <File size={14} className="sftp-icon sftp-icon-file" />
               )}

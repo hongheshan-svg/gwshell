@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 
-// ---- Types ----
+const LEGACY_TERMINAL_FONT = 'JetBrainsMono, NotoSansSC';
+const CMD_TERMINAL_FONT = 'Consolas, "Cascadia Mono", "Courier New", monospace';
 
 export interface AppSettings {
-  // Basic
   theme: 'dark' | 'light';
   middleClickCloseTab: boolean;
   uiFont: string;
@@ -29,7 +29,6 @@ export interface AppSettings {
   lockScreenPassword: string;
   sessionTabMemory: boolean;
   showVipBadge: boolean;
-  // SSH/SFTP
   terminalFont: string;
   terminalFontSize: string;
   terminalHighlight: boolean;
@@ -54,7 +53,6 @@ export interface AppSettings {
   sftpParentDirClick: boolean;
   sftpDefaultSavePath: string;
   sftpDoubleClickAction: string;
-  // Database
   dbTableFont: string;
   dbAutoExpand: boolean;
   dbShowPrimaryKey: boolean;
@@ -70,7 +68,6 @@ export interface AppSettings {
   redisMaxLoad: string;
   redisShowValue: boolean;
   redisGroupSeparator: string;
-  // Storage
   storageAutoSync: boolean;
   storageSource: string;
 }
@@ -88,7 +85,7 @@ export const defaultSettings: AppSettings = {
   tabCloseConfirm: true,
   tabFlashAlert: true,
   multiLineTab: false,
-  language: '简体中文',
+  language: 'zh',
   updateChannel: 'stable',
   editorFont: 'JetBrainsMono, NotoSansSC',
   zoomLevel: '100%',
@@ -100,7 +97,7 @@ export const defaultSettings: AppSettings = {
   lockScreenPassword: '',
   sessionTabMemory: false,
   showVipBadge: true,
-  terminalFont: 'JetBrainsMono, NotoSansSC',
+  terminalFont: CMD_TERMINAL_FONT,
   terminalFontSize: '13px',
   terminalHighlight: true,
   sshSftpPathLink: false,
@@ -143,15 +140,23 @@ export const defaultSettings: AppSettings = {
   storageSource: 'off',
 };
 
-// ---- Store ----
-
 interface SettingsStore {
   settings: AppSettings;
   loaded: boolean;
-  /** true once the user has saved settings at least once (vs first-run defaults) */
   hasSaved: boolean;
   load: () => Promise<void>;
   save: (s: AppSettings) => Promise<void>;
+}
+
+function normalizeSettings(saved: Partial<AppSettings>): AppSettings {
+  const settings = { ...defaultSettings, ...saved };
+  if (settings.terminalFont === LEGACY_TERMINAL_FONT) {
+    settings.terminalFont = CMD_TERMINAL_FONT;
+  }
+  if (settings.language !== 'zh' && settings.language !== 'en') {
+    settings.language = settings.language === 'English' ? 'en' : 'zh';
+  }
+  return settings;
 }
 
 export const useSettingsStore = create<SettingsStore>((set) => ({
@@ -164,7 +169,12 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const json = await invoke<string | null>('load_app_settings');
       if (json) {
         const saved = JSON.parse(json) as Partial<AppSettings>;
-        set({ settings: { ...defaultSettings, ...saved }, loaded: true, hasSaved: true });
+        const merged = { ...defaultSettings, ...saved };
+        const settings = normalizeSettings(saved);
+        set({ settings, loaded: true, hasSaved: true });
+        if (JSON.stringify(settings) !== JSON.stringify(merged)) {
+          invoke('save_app_settings', { value: JSON.stringify(settings) }).catch(() => {});
+        }
       } else {
         set({ loaded: true, hasSaved: false });
       }
@@ -174,7 +184,8 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   },
 
   save: async (settings: AppSettings) => {
-    set({ settings, hasSaved: true });
-    await invoke('save_app_settings', { value: JSON.stringify(settings) });
+    const normalized = normalizeSettings(settings);
+    set({ settings: normalized, hasSaved: true });
+    await invoke('save_app_settings', { value: JSON.stringify(normalized) });
   },
 }));

@@ -39,9 +39,8 @@
 | **终端** | xterm.js 渲染 | GPU 加速终端，支持链接点击、文本选择 |
 | **终端** | 主题同步 | 终端颜色跟随应用亮/暗主题 |
 | **串口** | 串口控制台 | 连接 COM/ttyUSB 设备，配置波特率 |
-| **Docker** | Docker 管理 | 通过 SSH 隧道连接 Docker 主机（开发中） |
+| **Docker** | Docker 管理 | 通过 SSH 隧道连接 Docker 主机；代理与测试入口已标记为开发中 |
 | **AI** | 供应商管理 | 配置和切换 AI CLI 供应商（Claude Code、Codex、Gemini 等） |
-| **AI** | CC-Switch 导入 | 从 [CC-Switch](https://github.com/farion1231/cc-switch) 导入供应商配置 |
 | **界面** | 暗色 / 亮色主题 | 支持系统主题感知和手动切换 |
 | **界面** | 国际化（英文、中文） | 完整双语界面 |
 | **界面** | 可折叠侧边栏 | 图标导航侧边栏 |
@@ -63,7 +62,6 @@
 | 多语言 i18n | 日语、韩语、西班牙语、法语、德语、俄语 |
 | 标签页拖拽 | 拖拽重排标签页 |
 | SSH config 导入 | 从 `~/.ssh/config` 导入 |
-| CC-Switch 深度集成 | 完整内置 AI 供应商管理 |
 | 插件系统 | 社区插件扩展 |
 | WebDAV / S3 浏览器 | 云存储文件管理 |
 | 数据库客户端 | 内置 MySQL/PostgreSQL/Redis 客户端 |
@@ -126,12 +124,6 @@ npm run tauri build    # 生产构建
 ## 🙏 致谢
 
 GWShell 受到以下优秀开源项目的启发，在此特别感谢：
-
-### [HexHub](https://github.com/user/hexhub)
-一款强大的 SSH/SFTP 客户端，启发了 GWShell 的 SFTP 文件浏览器设计、在线编辑器和分屏终端布局。HexHub 优雅的多标签会话管理和双面板文件传输方案对 GWShell 的架构产生了重要影响。
-
-### [CC-Switch](https://github.com/farion1231/cc-switch)
-一款创新的 AI CLI 供应商切换工具，启发了 GWShell 的 AI 集成功能。CC-Switch 管理多种 AI 供应商（Claude Code、Codex、Gemini CLI 等）的方案和简洁的配置系统，促成了 GWShell 内置的 AI 供应商管理功能和配置互通设计。
 
 ### 其他灵感来源
 - [Tabby](https://github.com/Eugeny/tabby) — 现代终端模拟器

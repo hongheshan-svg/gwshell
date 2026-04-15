@@ -40,7 +40,7 @@
 
 ### Geplant 🚧
 
-RDP-Verbindungen, Telnet, VNC-Viewer, Dateisynchronisation, Snippet-Manager, Sitzungsaufzeichnung, mehrsprachige i18n, Tab Drag & Drop, SSH config Import, CC-Switch tiefe Integration, Plugin-System
+RDP-Verbindungen, Telnet, VNC-Viewer, Dateisynchronisation, Snippet-Manager, Sitzungsaufzeichnung, mehrsprachige i18n, Tab Drag & Drop, SSH config Import, Plugin-System
 
 ---
 
@@ -52,8 +52,6 @@ Laden Sie den Installer oder die portable Version für Ihre Plattform von [der n
 
 ## 🙏 Danksagungen
 
-- [HexHub](https://github.com/user/hexhub) — Inspiration für SFTP-Browser und geteilten Bildschirm
-- [CC-Switch](https://github.com/farion1231/cc-switch) — Inspiration für AI-Anbieter-Verwaltung
 - [Tauri](https://tauri.app/), [xterm.js](https://xtermjs.org/), [Tabby](https://github.com/Eugeny/tabby), [WindTerm](https://github.com/nicedayzhu/WindTerm)
 
 ## 📄 Lizenz

@@ -15,6 +15,8 @@ import { StatusBar } from './components/StatusBar/StatusBar';
 const TerminalContainer = lazy(() => import('./components/Terminal/TerminalContainer').then(m => ({ default: m.TerminalContainer })));
 const SftpPanel = lazy(() => import('./components/SftpPanel/SftpPanel').then(m => ({ default: m.SftpPanel })));
 import { useAppStore } from './stores/appStore';
+import { useSettingsStore } from './stores/settingsStore';
+import { useSettingsEffects } from './hooks/useSettingsEffects';
 import i18n from './i18n';
 import type { SessionConfig } from './types';
 import './styles/global.css';
@@ -28,9 +30,11 @@ const AppMenu = lazy(() => import('./components/AppMenu/AppMenu').then((m) => ({
 const UpdateChecker = lazy(() => import('./components/UpdateChecker/UpdateChecker').then((m) => ({ default: m.UpdateChecker })));
 
 function App() {
+  useSettingsEffects();
   const { theme, setSessions, sidebarCollapsed, toggleSidebar, tabs, activeTabId, sftpPanelOpen, sessions,
     showNewSession, showDockerModal, showLocalTerminalModal, showSerialModal, showSettings, showAppMenu,
     mainView, splitCount } = useAppStore();
+  const loadSettings = useSettingsStore((s) => s.load);
 
   // Show asset table directly (synchronous) when no terminal is active.
   // TerminalContainer is lazy-loaded with xterm.js (344KB); showing AssetTable
@@ -42,6 +46,10 @@ function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    void loadSettings();
+  }, [loadSettings]);
 
   // Boot sequence: show only the splash card for 2s, then crossfade to the app.
   // 1. Show the window immediately (transparent — only the card is visible).
@@ -77,47 +85,6 @@ function App() {
         .then((s) => { if (s.length > 0) setSessions(s); })
         .catch(() => {});
     }
-  }, []);
-
-  // Deep link handler: gwshell://import/provider?data=... | gwshell://connect/ssh?host=...&user=...
-  // Both the plugin module AND its registration are deferred ~5s after startup
-  // — deep links are never needed in the first seconds, and dynamic-importing
-  // the plugin keeps it out of the main bundle.
-  useEffect(() => {
-    let cancelled = false;
-    let unlistenFn: (() => void) | null = null;
-    const timer = setTimeout(() => {
-      if (cancelled) return;
-      import('@tauri-apps/plugin-deep-link').then(({ onOpenUrl }) => {
-        if (cancelled) return;
-        onOpenUrl((urls: string[]) => {
-          for (const raw of urls) {
-            try {
-              const url = new URL(raw);
-              const path = url.hostname + url.pathname;
-              if (path === 'import/provider') {
-                const data = url.searchParams.get('data');
-                if (data) {
-                  const provider = JSON.parse(decodeURIComponent(data));
-                  invoke('save_ai_provider', { provider }).catch(console.error);
-                }
-              } else if (path === 'import/mcp') {
-                const data = url.searchParams.get('data');
-                if (data) {
-                  const server = JSON.parse(decodeURIComponent(data));
-                  invoke('save_mcp_server', { server }).catch(console.error);
-                }
-              }
-            } catch { /* ignore malformed URLs */ }
-          }
-        }).then(fn => { if (!cancelled) unlistenFn = fn; });
-      }).catch(() => {});
-    }, 5000);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-      unlistenFn?.();
-    };
   }, []);
 
   return (

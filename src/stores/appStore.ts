@@ -44,6 +44,7 @@ interface AppStore {
   addTab: (tab: TabInfo) => void;
   removeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
+  updateTabConnected: (id: string, connected: boolean) => void;
 
   // Modals
   showNewSession: boolean;
@@ -226,6 +227,12 @@ export const useAppStore = create<AppStore>((set, _get) => ({
     }),
   setActiveTab: (id) =>
     set({ activeTabId: id, mainView: id === 'asset-list' ? 'asset-list' : 'terminal' }),
+  updateTabConnected: (id, connected) =>
+    set((state) => ({
+      tabs: state.tabs.map((tab) =>
+        tab.id === id ? { ...tab, connected } : tab
+      ),
+    })),
 
   showNewSession: false,
   setShowNewSession: (show) => set({ showNewSession: show }),
