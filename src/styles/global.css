@@ -1,72 +1,79 @@
 :root {
-  /* Dark theme (default) */
-  --bg-primary: #0f1019;
-  --bg-secondary: #161822;
-  --bg-tertiary: #1c1e2d;
-  --bg-hover: #252738;
-  --bg-active: #2a2d42;
-  --bg-card: #1a1c2b;
+  /* Dark theme (default) — modern terminal style */
+  --bg-primary: #0c0c14;
+  --bg-secondary: #12121c;
+  --bg-tertiary: #1a1a28;
+  --bg-hover: #222233;
+  --bg-active: #2a2a3d;
+  --bg-card: #14141e;
 
-  --border-color: #2a2d42;
-  --border-light: #353849;
+  --border-color: #2a2a3d;
+  --border-light: #333348;
 
-  --text-primary: #e4e6f0;
-  --text-secondary: #8b8fa7;
-  --text-muted: #5c6078;
+  --text-primary: #d4d4d8;
+  --text-secondary: #8888a0;
+  --text-muted: #555570;
 
-  --accent-primary: #4c8dff;
-  --accent-primary-rgb: 76, 141, 255;
-  --accent-hover: #6aa1ff;
-  --accent-bg: rgba(76, 141, 255, 0.12);
+  --accent-primary: #5ac8fa;
+  --accent-primary-rgb: 90, 200, 250;
+  --accent-hover: #7dd6fc;
+  --accent-bg: rgba(90, 200, 250, 0.10);
 
-  --success: #42d392;
-  --success-rgb: 66, 211, 146;
-  --warning: #f5a623;
-  --warning-rgb: 245, 166, 35;
-  --danger: #ef4444;
-  --danger-rgb: 239, 68, 68;
+  --success: #50fa7b;
+  --success-rgb: 80, 250, 123;
+  --warning: #f1fa8c;
+  --warning-rgb: 241, 250, 140;
+  --danger: #ff5555;
+  --danger-rgb: 255, 85, 85;
 
-  --sidebar-width: 240px;
-  --sidebar-collapsed-width: 48px;
-  --navbar-width: 48px;
-  --tabbar-height: 38px;
-  --statusbar-height: 26px;
+  --sidebar-width: 220px;
+  --sidebar-collapsed-width: 44px;
+  --navbar-width: 44px;
+  --tabbar-height: 32px;
+  --statusbar-height: 24px;
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  --radius-sm: 1px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
 
-  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
+  --font-mono: 'Cascadia Mono', 'JetBrains Mono', 'Consolas', 'Fira Code', monospace;
+  --font-sans: var(--font-mono);
 
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-sm: none;
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 [data-theme='light'] {
-  --bg-primary: #f5f6fa;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #ebedf5;
-  --bg-hover: #e8eaf2;
-  --bg-active: #dddfe8;
-  --bg-card: #ffffff;
+  --bg-primary: #f0f0f4;
+  --bg-secondary: #e8e8ee;
+  --bg-tertiary: #dddde6;
+  --bg-hover: #d0d0dc;
+  --bg-active: #c8c8d6;
+  --bg-card: #eaeaf0;
 
-  --border-color: #e0e2ea;
-  --border-light: #ebedf5;
+  --border-color: #c0c0cc;
+  --border-light: #d0d0dc;
 
-  --text-primary: #1a1b2e;
-  --text-secondary: #5c6078;
-  --text-muted: #8b8fa7;
+  --text-primary: #1a1a2e;
+  --text-secondary: #555570;
+  --text-muted: #8888a0;
 
-  --accent-primary: #3b7dff;
-  --accent-primary-rgb: 59, 125, 255;
-  --accent-hover: #2a6cf0;
-  --accent-bg: rgba(59, 125, 255, 0.08);
+  --accent-primary: #0078d4;
+  --accent-primary-rgb: 0, 120, 212;
+  --accent-hover: #006abc;
+  --accent-bg: rgba(0, 120, 212, 0.08);
 
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --success: #16a34a;
+  --success-rgb: 22, 163, 74;
+  --warning: #ca8a04;
+  --warning-rgb: 202, 138, 4;
+  --danger: #dc2626;
+  --danger-rgb: 220, 38, 38;
+
+  --shadow-sm: none;
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
 * {
@@ -79,8 +86,9 @@ html, body, #root {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 13px;
+  line-height: 20px;
   color: var(--text-primary);
 }
 
@@ -101,7 +109,7 @@ html, body, #root {
 
 ::-webkit-scrollbar-thumb {
   background-color: var(--border-light);
-  border-radius: 3px;
+  border-radius: 1px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -143,7 +151,7 @@ input, select, textarea, button {
 .titlebar-title {
   padding-left: 12px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-secondary);
   pointer-events: none;
   flex-shrink: 0;
@@ -172,7 +180,7 @@ input, select, textarea, button {
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background 0.1s linear;
 }
 
 .titlebar-btn:hover {
@@ -201,17 +209,18 @@ input, select, textarea, button {
 }
 
 .nav-icon-btn {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--text-muted);
   background: transparent;
   border: none;
-  transition: all 0.15s ease;
+  border-left: 2px solid transparent;
+  transition: all 0.1s linear;
   position: relative;
 }
 
@@ -223,18 +232,7 @@ input, select, textarea, button {
 .nav-icon-btn.active {
   background: var(--accent-bg);
   color: var(--accent-primary);
-}
-
-.nav-icon-btn.active::before {
-  content: '';
-  position: absolute;
-  left: -4px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 18px;
-  background: var(--accent-primary);
-  border-radius: 0 2px 2px 0;
+  border-left-color: var(--accent-primary);
 }
 
 .nav-spacer {
@@ -251,7 +249,7 @@ input, select, textarea, button {
   flex-direction: column;
   flex-shrink: 0;
   overflow: hidden;
-  transition: width 0.2s ease;
+  transition: width 0.15s linear;
 }
 
 .sidebar-panel.collapsed {
@@ -272,7 +270,7 @@ input, select, textarea, button {
   color: var(--text-muted);
   cursor: pointer;
   padding: 0;
-  transition: color 0.15s, background 0.15s;
+  transition: color 0.1s linear, background 0.1s linear;
   z-index: 5;
 }
 
@@ -291,8 +289,8 @@ input, select, textarea, button {
 .sidebar-header-row {
   display: flex;
   align-items: center;
-  padding: 6px 8px 4px 12px;
-  gap: 6px;
+  padding: 4px 8px 3px 10px;
+  gap: 4px;
 }
 
 .sidebar-header h3 {
@@ -317,8 +315,8 @@ input, select, textarea, button {
 }
 
 .sidebar-action-btn {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -327,7 +325,7 @@ input, select, textarea, button {
   color: var(--text-muted);
   cursor: pointer;
   border-radius: var(--radius-sm);
-  transition: all 0.15s;
+  transition: all 0.1s linear;
   flex-shrink: 0;
 }
 
@@ -398,7 +396,7 @@ input, select, textarea, button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--bg-tertiary);
   color: var(--text-muted);
 }
@@ -406,24 +404,25 @@ input, select, textarea, button {
 .session-item {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 6px 8px 6px 28px;
+  gap: 8px;
+  padding: 5px 8px 5px 24px;
   cursor: pointer;
   border-radius: var(--radius-sm);
-  transition: all 0.12s;
+  border-left: 2px solid transparent;
+  transition: all 0.1s linear;
   user-select: none;
-  font-size: 12.5px;
-  min-height: 32px;
+  font-size: 12px;
+  min-height: 30px;
 }
 
 .session-item:hover {
-  background: color-mix(in srgb, var(--bg-hover) 88%, transparent);
+  background: var(--bg-hover);
 }
 
 .session-item.active {
-  background: linear-gradient(90deg, rgba(var(--accent-primary-rgb), 0.18), rgba(var(--accent-primary-rgb), 0.08));
+  background: var(--bg-active);
   color: var(--accent-primary);
-  box-shadow: inset 2px 0 0 var(--accent-primary);
+  border-left-color: var(--accent-primary);
 }
 
 .session-item-icon {
@@ -455,12 +454,10 @@ input, select, textarea, button {
 
 .session-status-dot.connected {
   background: var(--success);
-  box-shadow: 0 0 0 3px rgba(var(--success-rgb), 0.12);
 }
 
 .session-status-dot.disconnected {
   background: var(--danger);
-  box-shadow: 0 0 0 3px rgba(var(--danger-rgb), 0.12);
 }
 
 .sidebar-search-wrapper {
@@ -481,7 +478,6 @@ input, select, textarea, button {
 
 .sidebar-search:focus-within {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb), 0.12);
 }
 
 .sidebar-search input {
@@ -538,18 +534,19 @@ input, select, textarea, button {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 12px;
-  height: 32px;
-  min-width: 140px;
-  max-width: 220px;
+  padding: 0 10px;
+  height: 28px;
+  min-width: 120px;
+  max-width: 200px;
   background: transparent;
   border: none;
-  border-radius: var(--radius-sm);
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   cursor: pointer;
   color: var(--text-secondary);
   font-size: 12px;
   white-space: nowrap;
-  transition: all 0.12s;
+  transition: all 0.1s linear;
   position: relative;
 }
 
@@ -573,29 +570,14 @@ input, select, textarea, button {
 }
 
 .tab-item:hover {
-  background: color-mix(in srgb, var(--bg-hover) 82%, transparent);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
 .tab-item.active {
-  background: linear-gradient(180deg, var(--bg-active), color-mix(in srgb, var(--bg-active) 72%, var(--bg-primary)));
+  background: var(--bg-active);
   color: var(--text-primary);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
-}
-
-.tab-item.active::after {
-  content: '';
-  position: absolute;
-  bottom: -4px;
-  left: 20px;
-  right: 20px;
-  height: 2px;
-  background: var(--accent-primary);
-  border-radius: 1px;
-}
-
-.tab-item.active .tab-dot {
-  box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.1);
+  border-bottom-color: var(--accent-primary);
 }
 
 .tab-dot {
@@ -609,18 +591,18 @@ input, select, textarea, button {
 .tab-dot.disconnected { background: var(--danger); }
 
 .tab-close {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: transparent;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
   opacity: 0;
-  transition: all 0.12s;
+  transition: all 0.1s linear;
   margin-left: auto;
   flex-shrink: 0;
 }
@@ -635,19 +617,19 @@ input, select, textarea, button {
 }
 
 .tab-add-btn {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--bg-tertiary);
-  border: 1px dashed var(--border-light);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  border-radius: 0;
   color: var(--text-muted);
   cursor: pointer;
   margin-left: 4px;
   flex-shrink: 0;
-  transition: all 0.15s;
+  transition: all 0.1s linear;
 }
 
 .tab-add-btn:hover {
@@ -661,7 +643,7 @@ input, select, textarea, button {
 .terminal-container {
   flex: 1;
   display: flex;
-  background: radial-gradient(circle at 20% 0%, rgba(var(--accent-primary-rgb), 0.04), transparent 28%), var(--bg-primary);
+  background: var(--bg-primary);
   position: relative;
   overflow: hidden;
   min-width: 0;
@@ -738,8 +720,7 @@ input, select, textarea, button {
 }
 
 .split-pane-focused {
-  border-color: rgba(var(--accent-primary-rgb), 0.45);
-  box-shadow: inset 0 0 0 1px rgba(var(--accent-primary-rgb), 0.18);
+  border-color: var(--accent-primary);
 }
 
 .split-pane-empty {
@@ -765,10 +746,10 @@ input, select, textarea, button {
   align-items: center;
   justify-content: space-between;
   padding: 2px 6px;
-  background: linear-gradient(180deg, var(--bg-secondary), color-mix(in srgb, var(--bg-secondary) 82%, var(--bg-primary)));
+  background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
-  height: 24px;
+  height: 22px;
 }
 
 .split-pane-title {
@@ -814,8 +795,8 @@ input, select, textarea, button {
   color: var(--text-secondary);
   font-size: 11px;
   cursor: pointer;
-  border-radius: 4px;
-  transition: background 0.12s, border-color 0.12s;
+  border-radius: var(--radius-sm);
+  transition: background 0.1s linear, border-color 0.1s linear;
 }
 .split-picker-btn:hover {
   background: var(--bg-hover);
@@ -832,8 +813,8 @@ input, select, textarea, button {
   padding: 4px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  box-shadow: 0 -4px 16px rgba(0,0,0,0.3);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
   z-index: 1000;
 }
 
@@ -848,8 +829,8 @@ input, select, textarea, button {
   color: var(--text-secondary);
   font-size: 10px;
   cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.12s;
+  border-radius: var(--radius-sm);
+  transition: all 0.1s linear;
 }
 .split-picker-option:hover {
   background: var(--bg-hover);
@@ -873,15 +854,14 @@ input, select, textarea, button {
 }
 
 .terminal-placeholder-logo {
-  width: 72px;
-  height: 72px;
-  border-radius: 16px;
-  background: linear-gradient(180deg, var(--bg-secondary), var(--bg-tertiary));
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border-color);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .terminal-placeholder h2 {
@@ -911,21 +891,19 @@ input, select, textarea, button {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 14px 22px;
+  padding: 12px 20px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   cursor: pointer;
   color: var(--text-secondary);
-  transition: all 0.2s;
+  transition: all 0.1s linear;
 }
 
 .quick-action-btn:hover {
   border-color: var(--accent-primary);
   color: var(--accent-primary);
   background: var(--accent-bg);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
 }
 
 .quick-action-btn span {
@@ -1137,7 +1115,6 @@ input, select, textarea, button {
   color: #f2b53f;
   fill: rgba(242, 181, 63, 0.26);
   stroke-width: 2.15;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
 }
 
 .sftp-icon-file {
@@ -1271,10 +1248,10 @@ input, select, textarea, button {
 .sftp-chmod-dialog {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 16px;
   min-width: 260px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  box-shadow: var(--shadow-lg);
 }
 
 .sftp-chmod-title {
@@ -1373,7 +1350,7 @@ input, select, textarea, button {
   min-height: 400px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
@@ -1580,11 +1557,9 @@ input, select, textarea, button {
 
 .status-dot.connected {
   background: var(--success);
-  box-shadow: 0 0 0 3px rgba(var(--success-rgb), 0.12);
 }
 .status-dot.disconnected {
   background: var(--danger);
-  box-shadow: 0 0 0 3px rgba(var(--danger-rgb), 0.12);
 }
 
 .status-spacer { flex: 1; }
@@ -1597,12 +1572,11 @@ input, select, textarea, button {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.65);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  backdrop-filter: blur(4px);
 }
 
 .modal-content {
@@ -1619,7 +1593,7 @@ input, select, textarea, button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -1667,14 +1641,14 @@ input, select, textarea, button {
 
 .form-group input,
 .form-group select {
-  height: 34px;
+  height: 32px;
   padding: 0 10px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.1s linear;
 }
 
 .form-group input:focus,
@@ -1700,8 +1674,8 @@ input, select, textarea, button {
 }
 
 .btn {
-  height: 32px;
-  padding: 0 16px;
+  height: 30px;
+  padding: 0 14px;
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
@@ -1709,7 +1683,7 @@ input, select, textarea, button {
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
   color: var(--text-primary);
-  transition: all 0.15s;
+  transition: all 0.1s linear;
 }
 
 .btn:hover {
@@ -1760,6 +1734,17 @@ input, select, textarea, button {
   color: var(--accent-primary);
 }
 
+.context-menu-item:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  opacity: 0.55;
+}
+
+.context-menu-item:disabled:hover {
+  background: transparent;
+  color: var(--text-muted);
+}
+
 .context-menu-divider {
   height: 1px;
   background: var(--border-color);
@@ -1774,7 +1759,7 @@ input, select, textarea, button {
   gap: 3px;
   font-size: 10px;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-weight: 500;
 }
 
@@ -1796,7 +1781,7 @@ input, select, textarea, button {
 /* ========== Nav Logo ========== */
 
 .nav-logo {
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   color: var(--accent-primary) !important;
 }
 
@@ -1870,7 +1855,6 @@ input, select, textarea, button {
 
 .asset-search-box:focus-within {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb), 0.12);
 }
 
 .asset-search-box input {
@@ -1883,8 +1867,8 @@ input, select, textarea, button {
 }
 
 .asset-toolbar-btn {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1893,7 +1877,7 @@ input, select, textarea, button {
   color: var(--text-muted);
   cursor: pointer;
   border-radius: var(--radius-sm);
-  transition: all 0.12s;
+  transition: all 0.1s linear;
 }
 
 .asset-toolbar-btn:hover {
@@ -1947,11 +1931,11 @@ input, select, textarea, button {
 }
 
 .asset-table tbody tr {
-  transition: background 0.1s, box-shadow 0.1s;
+  transition: background 0.1s linear;
 }
 
 .asset-table tbody tr:hover {
-  background: color-mix(in srgb, var(--bg-hover) 86%, transparent);
+  background: var(--bg-hover);
 }
 
 .asset-table tbody tr.selected {
@@ -2374,7 +2358,7 @@ input, select, textarea, button {
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.1s linear;
 }
 
 .ssh-form-group input,
@@ -2412,12 +2396,12 @@ input, select, textarea, button {
   border-radius: 50%;
   border: 2px solid transparent;
   cursor: pointer;
-  transition: transform 0.12s, border-color 0.12s;
+  transition: border-color 0.1s linear;
   padding: 0;
 }
 
 .color-dot:hover {
-  transform: scale(1.2);
+  border-color: var(--text-muted);
 }
 
 .color-dot.selected {
@@ -2453,16 +2437,16 @@ input, select, textarea, button {
 }
 
 .ssh-auth-btn {
-  height: 30px;
-  padding: 0 14px;
-  border-radius: 15px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
   color: var(--text-secondary);
-  transition: all 0.15s;
+  transition: all 0.1s linear;
 }
 
 .ssh-auth-btn:hover {
@@ -2724,7 +2708,7 @@ input, select, textarea, button {
   font-weight: 600;
   color: #fff;
   background: var(--danger);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 
@@ -2742,12 +2726,11 @@ input, select, textarea, button {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.65);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 5000;
-  backdrop-filter: blur(4px);
 }
 
 .settings-panel {
@@ -2837,8 +2820,8 @@ input, select, textarea, button {
   border: none;
   text-align: left;
   cursor: pointer;
-  transition: all 0.12s;
-  border-left: 3px solid transparent;
+  transition: all 0.1s linear;
+  border-left: 2px solid transparent;
 }
 
 .settings-nav-item:hover {
@@ -2917,14 +2900,14 @@ input, select, textarea, button {
 /* Toggle switch */
 .settings-toggle {
   position: relative;
-  width: 40px;
-  height: 22px;
-  border-radius: 11px;
+  width: 36px;
+  height: 20px;
+  border-radius: 4px;
   border: none;
   background: var(--bg-active);
   cursor: pointer;
   padding: 0;
-  transition: background 0.2s;
+  transition: background 0.1s linear;
 }
 
 .settings-toggle.on {
@@ -2935,16 +2918,15 @@ input, select, textarea, button {
   position: absolute;
   top: 3px;
   left: 3px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
   background: #fff;
-  transition: transform 0.2s;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  transition: transform 0.1s linear;
 }
 
 .settings-toggle.on .settings-toggle-knob {
-  transform: translateX(18px);
+  transform: translateX(16px);
 }
 
 /* Select */
@@ -2966,7 +2948,6 @@ input, select, textarea, button {
 
 .settings-select:focus {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb), 0.12);
 }
 
 /* Input */
@@ -2984,7 +2965,6 @@ input, select, textarea, button {
 
 .settings-input:focus {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb), 0.12);
 }
 
 .settings-input:disabled {
@@ -3023,8 +3003,8 @@ input, select, textarea, button {
 }
 
 .settings-btn-outline {
-  height: 32px;
-  padding: 0 18px;
+  height: 30px;
+  padding: 0 16px;
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
@@ -3032,7 +3012,7 @@ input, select, textarea, button {
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
   color: var(--text-primary);
-  transition: all 0.12s;
+  transition: all 0.1s linear;
 }
 
 .settings-btn-outline:hover {
@@ -3041,8 +3021,8 @@ input, select, textarea, button {
 }
 
 .settings-btn-primary {
-  height: 32px;
-  padding: 0 18px;
+  height: 30px;
+  padding: 0 16px;
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
@@ -3050,13 +3030,12 @@ input, select, textarea, button {
   border: 1px solid var(--accent-primary);
   background: var(--accent-primary);
   color: #fff;
-  transition: all 0.12s;
+  transition: all 0.1s linear;
 }
 
 .settings-btn-primary:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
-  box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb), 0.14);
 }
 
 .settings-btn-primary.disabled {
@@ -3139,9 +3118,9 @@ input, select, textarea, button {
   min-width: 26px;
   height: 22px;
   padding: 0 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 11px;
-  font-family: inherit;
+  font-family: var(--font-mono);
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
@@ -3161,17 +3140,17 @@ input, select, textarea, button {
 .shell-picker-btn:hover { border-color: var(--accent-primary); }
 .shell-picker-list {
   position: absolute; left: 0; right: 0; top: calc(100% + 4px);
-  background: var(--bg-secondary); border: 1px solid var(--border);
-  border-radius: 8px; padding: 4px;
-  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  background: var(--bg-secondary); border: 1px solid var(--border-color);
+  border-radius: var(--radius-md); padding: 4px;
+  box-shadow: var(--shadow-md);
   z-index: 200;
 }
 .shell-picker-item {
   display: block; width: 100%; padding: 8px 12px;
   text-align: left; background: transparent; border: none;
-  border-radius: 5px; color: var(--text-secondary);
-  font-size: 13px; font-family: "JetBrains Mono", "Consolas", monospace;
-  cursor: pointer; transition: background .1s, color .1s;
+  border-radius: var(--radius-sm); color: var(--text-secondary);
+  font-size: 13px; font-family: var(--font-mono);
+  cursor: pointer; transition: background .1s linear, color .1s linear;
 }
 .shell-picker-item:hover { background: var(--bg-hover); color: var(--text-primary); }
 .shell-picker-item.active { background: rgba(76,141,255,.15); color: #4c8dff; }
@@ -3192,7 +3171,7 @@ input, select, textarea, button {
   font-family: var(--font-mono);
   background: var(--bg-hover);
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   font-size: 11px;
 }
 
@@ -3238,12 +3217,11 @@ input, select, textarea, button {
 .fingerprint-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.65);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 500;
-  backdrop-filter: blur(2px);
 }
 
 .fingerprint-dialog {
@@ -3328,14 +3306,14 @@ input, select, textarea, button {
 }
 
 .fingerprint-btn {
-  height: 32px;
-  padding: 0 16px;
+  height: 30px;
+  padding: 0 14px;
   border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   border: none;
-  transition: all 0.15s;
+  transition: all 0.1s linear;
 }
 
 .fingerprint-btn-reject {
@@ -3368,10 +3346,10 @@ input, select, textarea, button {
   align-items: center;
   gap: 8px;
   background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
   padding: 8px 12px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-md);
   z-index: 10000;
   font-size: 12px;
   max-width: 420px;
@@ -3397,8 +3375,8 @@ input, select, textarea, button {
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
   background: var(--bg-tertiary);
   color: var(--text-primary);
   cursor: pointer;
@@ -3425,13 +3403,13 @@ input, select, textarea, button {
   flex: 1;
   height: 4px;
   background: var(--bg-tertiary);
-  border-radius: 2px;
+  border-radius: 0;
   min-width: 100px;
 }
 
 .update-progress-bar {
   height: 100%;
   background: var(--accent-primary);
-  border-radius: 2px;
-  transition: width 0.3s ease;
+  border-radius: 0;
+  transition: width 0.1s linear;
 }

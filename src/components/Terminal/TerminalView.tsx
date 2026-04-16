@@ -6,6 +6,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { CanvasAddon } from "@xterm/addon-canvas/lib/xterm-addon-canvas.mjs";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { readText as clipboardRead, writeText as clipboardWrite } from "@tauri-apps/plugin-clipboard-manager";
 import { useTranslation } from 'react-i18next';
 import type { TabInfo } from "../../types";
 import { useAppStore } from "../../stores/appStore";
@@ -26,6 +27,64 @@ interface FingerprintInfo {
   host: string;
   port: number;
 }
+
+interface TerminalContextMenu {
+  x: number;
+  y: number;
+  canCopy: boolean;
+}
+
+const isPasteAction = (value: string) => value === "paste" || value === "Paste" || value === "\u7c98\u8d34";
+
+const writeClipboardText = async (text: string) => {
+  const browserWrite = navigator.clipboard?.writeText(text).catch(() => {});
+  await clipboardWrite(text).catch(() => browserWrite);
+  const current = await clipboardRead().catch(() => "");
+  if (current !== text) {
+    await browserWrite;
+    await clipboardWrite(text).catch(() => {});
+  }
+};
+
+const readClipboardText = async () => {
+  const tauriText = await clipboardRead().catch(() => undefined);
+  if (typeof tauriText === "string") return tauriText;
+  return navigator.clipboard?.readText().catch(() => "") ?? "";
+};
+
+const readTerminalSelection = (terminal: Terminal) => {
+  const selection = terminal.getSelection();
+  return selection && selection.trim().length > 0 ? selection : "";
+};
+
+const isMacPlatform = () => {
+  if (cachedOsInfo?.os === "macos") return true;
+  return /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
+};
+
+const isCopyShortcut = (e: KeyboardEvent) => {
+  const key = e.key.toLowerCase();
+  const isKeyC = e.code === "KeyC" || key === "c";
+  const isInsert = e.code === "Insert" || key === "insert";
+  const isMac = isMacPlatform();
+
+  if (isMac && e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && isKeyC) return true;
+  if (!e.metaKey && e.ctrlKey && e.shiftKey && !e.altKey && isKeyC) return true;
+  if (!isMac && !e.metaKey && e.ctrlKey && !e.shiftKey && !e.altKey && isKeyC) return true;
+  return !e.metaKey && e.ctrlKey && !e.shiftKey && !e.altKey && isInsert;
+};
+
+const isPasteShortcut = (e: KeyboardEvent, ctrlVPaste: boolean) => {
+  const key = e.key.toLowerCase();
+  const isKeyV = e.code === "KeyV" || key === "v";
+  const isInsert = e.code === "Insert" || key === "insert";
+  const isMac = isMacPlatform();
+
+  if (isMac && e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && isKeyV) return true;
+  if (!e.metaKey && e.ctrlKey && e.shiftKey && !e.altKey && isKeyV) return true;
+  if (!isMac && ctrlVPaste && !e.metaKey && e.ctrlKey && !e.shiftKey && !e.altKey && isKeyV) return true;
+  return !e.metaKey && !e.ctrlKey && e.shiftKey && !e.altKey && isInsert;
+};
 
 // Cached platform info (fetched once, shared by all terminals)
 let cachedOsInfo: { os: string; windowsBuild?: number } | null = null;
@@ -54,6 +113,7 @@ const connectedTabs = new Set<string>();
 // when React StrictMode double-invokes effects or when components
 // remount during single↔split transitions.
 const tabListenerCleanups = new Map<string, () => void>();
+const terminalInteractionCleanups = new Map<string, () => void>();
 const fitFrameIds = new Map<string, number>();
 const settleTimerIds = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -63,9 +123,15 @@ function cleanupTabListeners(tabId: string): void {
   if (fn) { fn(); tabListenerCleanups.delete(tabId); }
 }
 
+function cleanupTerminalInteractions(tabId: string): void {
+  const fn = terminalInteractionCleanups.get(tabId);
+  if (fn) { fn(); terminalInteractionCleanups.delete(tabId); }
+}
+
 /** Destroy a terminal instance associated with a tab (called when the tab closes). */
 export function destroyTerminal(tabId: string): void {
   cleanupTabListeners(tabId);
+  cleanupTerminalInteractions(tabId);
   const frameId = fitFrameIds.get(tabId);
   if (frameId !== undefined) cancelAnimationFrame(frameId);
   fitFrameIds.delete(tabId);
@@ -173,64 +239,109 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
   const { t } = useTranslation();
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
+  const selectionSnapshotRef = useRef("");
 
   const [fingerprintInfo, setFingerprintInfo] = useState<FingerprintInfo | null>(null);
+  const [contextMenu, setContextMenu] = useState<TerminalContextMenu | null>(null);
   const fingerprintResolveRef = useRef<(accepted: boolean) => void>(() => {});
+
+  const copySelection = useCallback(() => {
+    const inst = terminalInstances.get(tab.id);
+    const terminal = inst?.terminal;
+    if (!terminal) return;
+
+    const selection = readTerminalSelection(terminal) || selectionSnapshotRef.current;
+    if (selection) {
+      void writeClipboardText(selection);
+      terminal.clearSelection();
+      selectionSnapshotRef.current = "";
+    }
+    terminal.focus();
+    setContextMenu(null);
+  }, [tab.id]);
+
+  const pasteClipboard = useCallback(() => {
+    const inst = terminalInstances.get(tab.id);
+    const terminal = inst?.terminal;
+    if (!terminal) return;
+
+    readClipboardText()
+      .then((text) => {
+        if (text) terminal.paste(text);
+      })
+      .catch(() => {});
+    terminal.focus();
+    setContextMenu(null);
+  }, [tab.id]);
+
+  const selectAllTerminal = useCallback(() => {
+    const inst = terminalInstances.get(tab.id);
+    inst?.terminal.selectAll();
+    inst?.terminal.focus();
+    setContextMenu(null);
+  }, [tab.id]);
+
+  const clearTerminal = useCallback(() => {
+    const inst = terminalInstances.get(tab.id);
+    inst?.terminal.clear();
+    inst?.terminal.focus();
+    setContextMenu(null);
+  }, [tab.id]);
 
   const getThemeColors = useCallback(() => {
     const isDark = document.documentElement.getAttribute("data-theme") !== "light";
     return isDark
       ? {
-          background: "#0f1019",
-          foreground: "#e4e6f0",
-          cursor: "#4c8dff",
-          cursorAccent: "#0f1019",
-          selectionBackground: "rgba(76, 141, 255, 0.3)",
-          black: "#1c1e2d",
-          red: "#ef4444",
-          green: "#42d392",
-          yellow: "#f5a623",
-          blue: "#4c8dff",
+          background: "#0c0c14",
+          foreground: "#d4d4d8",
+          cursor: "#5ac8fa",
+          cursorAccent: "#0c0c14",
+          selectionBackground: "rgba(90, 200, 250, 0.3)",
+          black: "#1a1a28",
+          red: "#ff5555",
+          green: "#50fa7b",
+          yellow: "#f1fa8c",
+          blue: "#5ac8fa",
           magenta: "#c084fc",
           cyan: "#22d3ee",
-          white: "#e4e6f0",
-          brightBlack: "#5c6078",
-          brightRed: "#f87171",
-          brightGreen: "#6ee7b7",
-          brightYellow: "#fbbf24",
-          brightBlue: "#6aa1ff",
+          white: "#d4d4d8",
+          brightBlack: "#555570",
+          brightRed: "#ff6e6e",
+          brightGreen: "#69ff94",
+          brightYellow: "#ffffa5",
+          brightBlue: "#7dd6fc",
           brightMagenta: "#d8b4fe",
           brightCyan: "#67e8f9",
           brightWhite: "#ffffff",
-          scrollbarSliderBackground: "rgba(255, 255, 255, 0.28)",
-          scrollbarSliderHoverBackground: "rgba(255, 255, 255, 0.42)",
-          scrollbarSliderActiveBackground: "rgba(255, 255, 255, 0.56)",
+          scrollbarSliderBackground: "rgba(255, 255, 255, 0.18)",
+          scrollbarSliderHoverBackground: "rgba(255, 255, 255, 0.32)",
+          scrollbarSliderActiveBackground: "rgba(255, 255, 255, 0.46)",
         }
       : {
-          background: "#f5f6fa",
-          foreground: "#1a1b2e",
-          cursor: "#3b7dff",
-          cursorAccent: "#ffffff",
-          selectionBackground: "rgba(59, 125, 255, 0.2)",
-          black: "#1a1b2e",
+          background: "#f0f0f4",
+          foreground: "#1a1a2e",
+          cursor: "#0078d4",
+          cursorAccent: "#f0f0f4",
+          selectionBackground: "rgba(0, 120, 212, 0.2)",
+          black: "#1a1a2e",
           red: "#dc2626",
           green: "#16a34a",
           yellow: "#ca8a04",
-          blue: "#3b7dff",
+          blue: "#0078d4",
           magenta: "#9333ea",
           cyan: "#0891b2",
-          white: "#e4e6f0",
-          brightBlack: "#8b8fa7",
+          white: "#d4d4d8",
+          brightBlack: "#8888a0",
           brightRed: "#ef4444",
           brightGreen: "#22c55e",
           brightYellow: "#eab308",
-          brightBlue: "#5b93ff",
+          brightBlue: "#2a8de6",
           brightMagenta: "#a855f7",
           brightCyan: "#06b6d4",
           brightWhite: "#ffffff",
-          scrollbarSliderBackground: "rgba(0, 0, 0, 0.22)",
-          scrollbarSliderHoverBackground: "rgba(0, 0, 0, 0.34)",
-          scrollbarSliderActiveBackground: "rgba(0, 0, 0, 0.46)",
+          scrollbarSliderBackground: "rgba(0, 0, 0, 0.18)",
+          scrollbarSliderHoverBackground: "rgba(0, 0, 0, 0.30)",
+          scrollbarSliderActiveBackground: "rgba(0, 0, 0, 0.42)",
         };
   }, []);
 
@@ -262,7 +373,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           theme: getThemeColors(),
           allowProposedApi: true,
           scrollback: parseInt(s.terminalMaxScrollback) || 10000,
-          copyOnSelect: s.autoCopyOnSelect,
+          copyOnSelect: false,
         };
 
         if (osInfo.os === "windows") {
@@ -298,6 +409,222 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         } else {
           instance.terminal.open(container);
         }
+      }
+
+      // Copy/paste support: attach to the current React view so context-menu
+      // state still works after tab moves or split-pane reparenting.
+      if (instance.terminal.element) {
+        cleanupTerminalInteractions(tab.id);
+        const termEl = instance.terminal.element;
+        const termRef = instance.terminal;
+
+        const doPaste = () => {
+          readClipboardText().then((text) => {
+            if (text) termRef.paste(text);
+          }).catch(() => {});
+        };
+
+        const doCopy = () => {
+          copyCurrentSelection();
+          const sel = readTerminalSelection(termRef) || selectionSnapshotRef.current;
+          if (!sel) return false;
+          void writeClipboardText(sel);
+          termRef.clearSelection();
+          selectionSnapshotRef.current = "";
+          return true;
+        };
+
+        let selectionCopyTimer: ReturnType<typeof setTimeout> | null = null;
+        const copyCurrentSelection = () => {
+          const selection = readTerminalSelection(termRef);
+          if (!selection) return false;
+          selectionSnapshotRef.current = selection;
+          void writeClipboardText(selection);
+          return true;
+        };
+
+        const selectionDispose = termRef.onSelectionChange(() => {
+          if (termRef.hasSelection()) {
+            const selection = readTerminalSelection(termRef);
+            selectionSnapshotRef.current = selection;
+            if (selection && useSettingsStore.getState().settings.autoCopyOnSelect) {
+              if (selectionCopyTimer) clearTimeout(selectionCopyTimer);
+              selectionCopyTimer = setTimeout(() => {
+                if (selectionSnapshotRef.current) {
+                  void writeClipboardText(selectionSnapshotRef.current);
+                }
+              }, 120);
+            }
+          }
+        });
+
+        const snapshotSelection = () => {
+          if (termRef.hasSelection()) {
+            selectionSnapshotRef.current = readTerminalSelection(termRef);
+          }
+        };
+
+        let lastRightActionAt = 0;
+        const runCmdRightClickAction = () => {
+          const now = Date.now();
+          if (now - lastRightActionAt < 120) return;
+          lastRightActionAt = now;
+          setTimeout(() => {
+            snapshotSelection();
+            if (!doCopy()) doPaste();
+            termRef.focus();
+            setContextMenu(null);
+          }, 0);
+        };
+
+        const handleContextMenu = (e: MouseEvent) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          const s = useSettingsStore.getState().settings;
+          if (isPasteAction(s.rightClickAction)) {
+            runCmdRightClickAction();
+          } else {
+            snapshotSelection();
+            setContextMenu({
+              x: e.clientX,
+              y: e.clientY,
+              canCopy: !!(readTerminalSelection(termRef) || selectionSnapshotRef.current),
+            });
+            termRef.focus();
+          }
+        };
+
+        const handleMouseDown = (e: MouseEvent) => {
+          const s = useSettingsStore.getState().settings;
+          if (e.button === 0) {
+            selectionSnapshotRef.current = "";
+            setContextMenu(null);
+            return;
+          }
+          if (e.button === 2 && (termRef.hasSelection() || selectionSnapshotRef.current)) {
+            snapshotSelection();
+            return;
+          }
+          if (e.button === 1 && isPasteAction(s.middleClickAction)) {
+            e.preventDefault();
+            doPaste();
+            termRef.focus();
+          }
+        };
+
+        const handlePointerDown = (e: PointerEvent) => {
+          if (e.button === 2) {
+            snapshotSelection();
+          }
+        };
+
+        const handleMouseUp = (e: MouseEvent) => {
+          if (e.button === 0) {
+            setTimeout(() => {
+              if (useSettingsStore.getState().settings.autoCopyOnSelect) {
+                copyCurrentSelection();
+              }
+            }, 30);
+            return;
+          }
+          if (e.button === 2) {
+            const s = useSettingsStore.getState().settings;
+            if (isPasteAction(s.rightClickAction)) {
+              e.preventDefault();
+              e.stopPropagation();
+              runCmdRightClickAction();
+            }
+          }
+        };
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+          if (e.defaultPrevented) return;
+          const s = useSettingsStore.getState().settings;
+
+          if (isPasteShortcut(e, s.ctrlVPaste)) {
+            e.preventDefault();
+            e.stopPropagation();
+            doPaste();
+            return;
+          }
+
+          if (isCopyShortcut(e) && (termRef.hasSelection() || selectionSnapshotRef.current)) {
+            e.preventDefault();
+            e.stopPropagation();
+            doCopy();
+          }
+        };
+
+        termRef.attachCustomKeyEventHandler((e) => {
+          if (e.type !== "keydown") return true;
+
+          if (isCopyShortcut(e)) {
+            const selection = readTerminalSelection(termRef) || selectionSnapshotRef.current;
+            if (selection) {
+              e.preventDefault();
+              void writeClipboardText(selection);
+              termRef.clearSelection();
+              selectionSnapshotRef.current = "";
+              return false;
+            }
+          }
+
+          if (isPasteShortcut(e, useSettingsStore.getState().settings.ctrlVPaste)) {
+            e.preventDefault();
+            doPaste();
+            return false;
+          }
+
+          return true;
+        });
+
+        const handleCopy = (e: ClipboardEvent) => {
+          const selection = readTerminalSelection(termRef) || selectionSnapshotRef.current;
+          if (!selection) return;
+          e.preventDefault();
+          e.clipboardData?.setData("text/plain", selection);
+          void writeClipboardText(selection);
+          termRef.clearSelection();
+          selectionSnapshotRef.current = "";
+        };
+
+        const handlePaste = (e: ClipboardEvent) => {
+          e.preventDefault();
+          const text = e.clipboardData?.getData("text/plain");
+          if (text) {
+            termRef.paste(text);
+          } else {
+            doPaste();
+          }
+        };
+
+        const closeContextMenu = () => setContextMenu(null);
+
+        termEl.addEventListener("contextmenu", handleContextMenu, true);
+        termEl.addEventListener("pointerdown", handlePointerDown, true);
+        termEl.addEventListener("mousedown", handleMouseDown, true);
+        termEl.addEventListener("mouseup", handleMouseUp, true);
+        termEl.addEventListener("keydown", handleKeyDown, true);
+        termEl.addEventListener("copy", handleCopy, true);
+        termEl.addEventListener("paste", handlePaste, true);
+        window.addEventListener("click", closeContextMenu);
+        window.addEventListener("blur", closeContextMenu);
+
+        terminalInteractionCleanups.set(tab.id, () => {
+          termEl.removeEventListener("contextmenu", handleContextMenu, true);
+          termEl.removeEventListener("pointerdown", handlePointerDown, true);
+          termEl.removeEventListener("mousedown", handleMouseDown, true);
+          termEl.removeEventListener("mouseup", handleMouseUp, true);
+          termEl.removeEventListener("keydown", handleKeyDown, true);
+          termEl.removeEventListener("copy", handleCopy, true);
+          termEl.removeEventListener("paste", handlePaste, true);
+          window.removeEventListener("click", closeContextMenu);
+          window.removeEventListener("blur", closeContextMenu);
+          if (selectionCopyTimer) clearTimeout(selectionCopyTimer);
+          termRef.attachCustomKeyEventHandler(() => true);
+          try { selectionDispose.dispose(); } catch {}
+        });
       }
 
       // Attach the GPU-accelerated renderer once the terminal is in the DOM.
@@ -604,6 +931,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
     return () => {
       cancelled = true;
       cleanupTabListeners(tab.id);
+      cleanupTerminalInteractions(tab.id);
       // Only close backend connection if tab is being removed (not just relocated to split pane)
       const store = useAppStore.getState();
       const tabStillExists = store.tabs.some(t2 => t2.id === tab.id);
@@ -712,6 +1040,41 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         className="terminal-pane"
         style={{ display: (forceVisible || isActive) ? "block" : "none" }}
       />
+
+      {contextMenu && (forceVisible || isActive) && (
+        <div className="context-menu terminal-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
+          <button
+            type="button"
+            className="context-menu-item"
+            disabled={!contextMenu.canCopy}
+            onClick={copySelection}
+          >
+            {t('settings_sc_copy')}
+          </button>
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={pasteClipboard}
+          >
+            {t('settings_sc_paste')}
+          </button>
+          <div className="context-menu-divider" />
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={selectAllTerminal}
+          >
+            {t('settings_sc_selectall')}
+          </button>
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={clearTerminal}
+          >
+            {t('settings_sc_clear')}
+          </button>
+        </div>
+      )}
 
       {fingerprintInfo && isActive && (
         <div className="fingerprint-overlay">

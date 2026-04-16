@@ -62,12 +62,18 @@ export function useSettingsEffects() {
     const letterSpacing = parseNum(settings.terminalLetterSpacing, 0);
     const scrollback = parsePx(settings.terminalMaxScrollback, 10000);
 
-    terminalInstances.forEach(({ terminal }) => {
+    terminalInstances.forEach(({ terminal, fitAddon }) => {
       terminal.options.fontFamily = settings.terminalFont;
       terminal.options.fontSize = fontSize;
       terminal.options.lineHeight = lineHeight;
       terminal.options.letterSpacing = letterSpacing;
       terminal.options.scrollback = scrollback;
+
+      requestAnimationFrame(() => {
+        try { fitAddon.fit(); } catch {}
+        try { terminal.clearTextureAtlas(); } catch {}
+        try { terminal.refresh(0, terminal.rows - 1); } catch {}
+      });
     });
   }, [
     settings.terminalFont,
@@ -79,8 +85,9 @@ export function useSettingsEffects() {
 
   useEffect(() => {
     terminalInstances.forEach(({ terminal }) => {
-      // xterm exposes this through options but its public type can lag beta builds.
-      (terminal.options as unknown as { copyOnSelect?: boolean }).copyOnSelect = settings.autoCopyOnSelect;
+      // GWShell handles terminal copy through the Tauri clipboard plugin so
+      // right-click copy and paste match Windows CMD behavior consistently.
+      (terminal.options as unknown as { copyOnSelect?: boolean }).copyOnSelect = false;
     });
   }, [settings.autoCopyOnSelect]);
 }

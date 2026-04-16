@@ -141,10 +141,10 @@ const defaultSettings: AppSettings = {
   terminalStripeBackground: true,
   renderMode: true,
   autoReconnect: false,
-  middleClickAction: _t('settings_middle_none'),
-  rightClickAction: _t('settings_right_menu'),
+  middleClickAction: 'none',
+  rightClickAction: 'paste',
   terminalSound: false,
-  ctrlVPaste: false,
+  ctrlVPaste: true,
   terminalLineHeight: '1',
   terminalLetterSpacing: '0',
   terminalMaxScrollback: '1000',
@@ -443,8 +443,8 @@ export const SettingsModal: React.FC = () => {
                   <div className="settings-col">
                     <Row label={t('settings_terminal_fontsize')}><Sel value={settings.terminalFontSize} options={['10px', '11px', '12px', '13px', '14px', '16px', '18px']} onChange={(v) => u('terminalFontSize', v)} /></Row>
                     <Row label={t('settings_auto_reconnect')}><Toggle value={settings.autoReconnect} onChange={(v) => u('autoReconnect', v)} /></Row>
-                    <Row label={t('settings_middle_click')}><Sel value={settings.middleClickAction} options={[t('settings_middle_none'), t('settings_middle_paste')]} onChange={(v) => u('middleClickAction', v)} /></Row>
-                    <Row label={t('settings_right_click')}><Sel value={settings.rightClickAction} options={[t('settings_right_menu'), t('settings_right_paste')]} onChange={(v) => u('rightClickAction', v)} /></Row>
+                    <Row label={t('settings_middle_click')}><Sel value={settings.middleClickAction} options={[{ value: 'none', label: t('settings_middle_none') }, { value: 'paste', label: t('settings_middle_paste') }]} onChange={(v) => u('middleClickAction', v)} /></Row>
+                    <Row label={t('settings_right_click')}><Sel value={settings.rightClickAction} options={[{ value: 'menu', label: t('settings_right_menu') }, { value: 'paste', label: t('settings_right_paste') }]} onChange={(v) => u('rightClickAction', v)} /></Row>
                     <Row label={t('settings_terminal_sound')}><Toggle value={settings.terminalSound} onChange={(v) => u('terminalSound', v)} /></Row>
                     <Row label={t('settings_ctrl_v_paste')} desc={t('settings_ctrl_v_paste_desc')}><Toggle value={settings.ctrlVPaste} onChange={(v) => u('ctrlVPaste', v)} /></Row>
                     <Row label={t('settings_line_height')}><NumInput value={settings.terminalLineHeight} onChange={(v) => u('terminalLineHeight', v)} prefix={t('settings_line_height_prefix')} /></Row>

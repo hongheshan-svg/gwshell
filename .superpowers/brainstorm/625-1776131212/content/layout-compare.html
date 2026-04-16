@@ -1,0 +1,133 @@
+<h2>AI Section: Current vs CC Switch Style</h2>
+<p class="subtitle">What changes would align gwshell's AI section with CC Switch's design language?</p>
+
+<div class="split" style="gap:24px;align-items:flex-start">
+
+  <!-- Current -->
+  <div>
+    <p class="label" style="margin-bottom:8px">Current gwshell</p>
+    <div class="mockup" style="padding:0;overflow:hidden;border-radius:12px;min-width:320px">
+      <!-- Tab bar -->
+      <div style="background:#f4f4f5;border-bottom:1px solid #e4e4e7;padding:6px 12px;display:flex;gap:4px;overflow-x:auto">
+        <span style="background:white;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;color:#111;white-space:nowrap">供应商</span>
+        <span style="padding:4px 10px;font-size:12px;color:#888;white-space:nowrap">MCP</span>
+        <span style="padding:4px 10px;font-size:12px;color:#888;white-space:nowrap">Skills</span>
+        <span style="padding:4px 10px;font-size:12px;color:#888;white-space:nowrap">Agents</span>
+        <span style="padding:4px 10px;font-size:12px;color:#888;white-space:nowrap">Usage</span>
+        <span style="padding:4px 10px;font-size:12px;color:#888;white-space:nowrap">代理</span>
+        <span style="padding:4px 10px;font-size:12px;color:#888;white-space:nowrap">Settings</span>
+      </div>
+      <!-- AppSwitcher -->
+      <div style="padding:10px 12px;border-bottom:1px solid #e4e4e7;background:white">
+        <div style="display:inline-flex;background:#f4f4f5;border-radius:10px;padding:3px;gap:2px">
+          <span style="background:white;border-radius:7px;padding:4px 10px;font-size:12px;display:flex;align-items:center;gap:5px;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+            <span style="width:16px;height:16px;background:#d97706;border-radius:3px;display:inline-block"></span> Claude
+          </span>
+          <span style="padding:4px 10px;font-size:12px;display:flex;align-items:center;gap:5px;color:#888">
+            <span style="width:16px;height:16px;background:#888;border-radius:3px;display:inline-block"></span> Codex
+          </span>
+          <span style="padding:4px 10px;font-size:12px;display:flex;align-items:center;gap:5px;color:#888">
+            <span style="width:16px;height:16px;background:#4285f4;border-radius:3px;display:inline-block"></span> Gemini
+          </span>
+        </div>
+        <span style="float:right;font-size:11px;padding:4px 8px;border:1px solid #e4e4e7;border-radius:6px;color:#888">通用</span>
+      </div>
+      <!-- Provider cards -->
+      <div style="padding:12px;background:white;display:flex;flex-direction:column;gap:10px">
+        <!-- Active card -->
+        <div style="border:1.5px solid #3b82f6;border-radius:12px;padding:14px;background:linear-gradient(to right,rgba(59,130,246,0.06),transparent);position:relative">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="color:#ccc;font-size:14px;cursor:grab">⋮⋮</span>
+            <span style="width:32px;height:32px;background:#f4f4f5;border-radius:8px;display:flex;align-items:center;justify-content:center;border:1px solid #e4e4e7;font-size:14px">🔶</span>
+            <div>
+              <div style="font-size:14px;font-weight:600">Claude Official</div>
+              <div style="font-size:12px;color:#3b82f6">https://www.anthropic.com/claude-code</div>
+            </div>
+          </div>
+        </div>
+        <!-- Second card -->
+        <div style="border:1px solid #e4e4e7;border-radius:12px;padding:14px;background:white">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="color:#ccc;font-size:14px;cursor:grab">⋮⋮</span>
+            <span style="width:32px;height:32px;background:#f4f4f5;border-radius:8px;display:flex;align-items:center;justify-content:center;border:1px solid #e4e4e7;font-size:14px">🅶</span>
+            <div>
+              <div style="font-size:14px;font-weight:600">gw-link</div>
+              <div style="font-size:12px;color:#3b82f6">https://gw-link.com</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Bottom bar -->
+      <div style="border-top:1px solid #e4e4e7;padding:10px 14px;background:white;display:flex;align-items:center;justify-content:between">
+        <span style="font-size:11px;color:#888;flex:1">2 个供应商</span>
+        <span style="background:#111;color:white;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600">+ 添加</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CC Switch Style -->
+  <div>
+    <p class="label" style="margin-bottom:8px">CC Switch Style (proposed)</p>
+    <div class="mockup" style="padding:0;overflow:hidden;border-radius:12px;min-width:320px">
+      <!-- Top toolbar -->
+      <div style="background:white;border-bottom:1px solid #e4e4e7;padding:10px 14px;display:flex;align-items:center;gap:8px">
+        <!-- App icon pills (left) -->
+        <div style="display:flex;background:#f4f4f5;border-radius:20px;padding:4px;gap:2px">
+          <span style="width:32px;height:32px;background:white;border-radius:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.12);font-size:16px" title="Claude">🔶</span>
+          <span style="width:32px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:16px;color:#888" title="ChatGPT">⬜</span>
+          <span style="width:32px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:16px;color:#888" title="Gemini">💠</span>
+          <span style="width:32px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#888" title="OpenCode">◼</span>
+          <span style="width:32px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:16px" title="OpenClaw">🐙</span>
+        </div>
+        <!-- Spacer -->
+        <div style="flex:1"></div>
+        <!-- Action icons (right) -->
+        <div style="display:flex;background:#f4f4f5;border-radius:20px;padding:4px;gap:2px">
+          <span style="width:30px;height:30px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#666" title="MCP">🔌</span>
+          <span style="width:30px;height:30px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#666" title="Agents">🤖</span>
+          <span style="width:30px;height:30px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#666" title="Usage">📊</span>
+          <span style="width:30px;height:30px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#666" title="Settings">⚙️</span>
+        </div>
+        <!-- Add button -->
+        <span style="width:32px;height:32px;background:#ea580c;border-radius:16px;display:flex;align-items:center;justify-content:center;color:white;font-size:18px;font-weight:300;cursor:pointer">+</span>
+      </div>
+      <!-- Provider list (clean) -->
+      <div style="padding:12px 14px;background:white;display:flex;flex-direction:column;gap:8px">
+        <!-- Active card -->
+        <div style="border:1.5px solid #3b82f6;border-radius:12px;padding:12px 14px;background:#f0f7ff">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="color:#ccc;font-size:14px">⋮⋮</span>
+            <span style="width:36px;height:36px;background:#d97706;border-radius:18px;display:flex;align-items:center;justify-content:center;color:white;font-size:14px;font-weight:700;flex-shrink:0">A</span>
+            <div>
+              <div style="font-size:14px;font-weight:700;color:#111">Claude Official</div>
+              <div style="font-size:12px;color:#3b82f6">https://www.anthropic.com/claude-code</div>
+            </div>
+          </div>
+        </div>
+        <!-- Second card -->
+        <div style="border:1px solid #e4e4e7;border-radius:12px;padding:12px 14px;background:white">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="color:#ccc;font-size:14px">⋮⋮</span>
+            <span style="width:36px;height:36px;background:#6b7280;border-radius:18px;display:flex;align-items:center;justify-content:center;color:white;font-size:14px;font-weight:700;flex-shrink:0">G</span>
+            <div>
+              <div style="font-size:14px;font-weight:700;color:#111">gw-link</div>
+              <div style="font-size:12px;color:#3b82f6">https://gw-link.com</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:24px">
+<h3>Key differences in the CC Switch style</h3>
+<ul style="font-size:14px;line-height:2;color:#555;margin-left:16px">
+  <li><strong>Navigation:</strong> Text tabs replaced with icon-only toolbar — app pills on left, action icons on right</li>
+  <li><strong>Provider avatars:</strong> Rounded circle (not square) with colored background + initial letter</li>
+  <li><strong>Provider cards:</strong> No gradient overlay, lighter highlight for active item</li>
+  <li><strong>Add button:</strong> Orange circle + button in top toolbar (not bottom bar)</li>
+  <li><strong>Overall:</strong> Cleaner, more compact, less chrome</li>
+</ul>
+</div>

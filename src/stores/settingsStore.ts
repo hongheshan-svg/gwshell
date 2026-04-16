@@ -110,9 +110,9 @@ export const defaultSettings: AppSettings = {
   renderMode: true,
   autoReconnect: false,
   middleClickAction: 'none',
-  rightClickAction: 'menu',
+  rightClickAction: 'paste',
   terminalSound: false,
-  ctrlVPaste: false,
+  ctrlVPaste: true,
   terminalLineHeight: '1.2',
   terminalLetterSpacing: '0',
   terminalMaxScrollback: '10000',
@@ -155,6 +155,16 @@ function normalizeSettings(saved: Partial<AppSettings>): AppSettings {
   }
   if (settings.language !== 'zh' && settings.language !== 'en') {
     settings.language = settings.language === 'English' ? 'en' : 'zh';
+  }
+  if (settings.middleClickAction === 'Paste' || settings.middleClickAction === '\u7c98\u8d34') {
+    settings.middleClickAction = 'paste';
+  } else if (settings.middleClickAction === 'None' || settings.middleClickAction === '\u4e0d\u6267\u884c') {
+    settings.middleClickAction = 'none';
+  }
+  if (settings.rightClickAction === 'Paste' || settings.rightClickAction === '\u7c98\u8d34') {
+    settings.rightClickAction = 'paste';
+  } else if (settings.rightClickAction === 'Show Menu' || settings.rightClickAction === '\u663e\u793a\u83dc\u5355') {
+    settings.rightClickAction = 'menu';
   }
   return settings;
 }

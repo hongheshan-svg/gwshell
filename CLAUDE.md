@@ -19,9 +19,18 @@ npm run dev
 
 # TypeScript type-check + frontend build
 npm run build
+
+# Static smoke check (scans for common code issues, no runtime)
+npm run smoke:check
 ```
 
-There are no automated tests in this project.
+There are no automated tests in this project. Use `npm run smoke:check` to catch common issues before committing.
+
+### Prerequisites
+
+- Node.js 20+
+- Rust 1.80+
+- Platform-specific Tauri v2 prerequisites (C++ build tools on Windows, webkit2gtk on Linux, etc.)
 
 ## Architecture
 
@@ -30,11 +39,12 @@ GWShell is a **Tauri 2** desktop application: a React/TypeScript frontend render
 ### Frontend (`src/`)
 
 - **`App.tsx`** — root layout: TitleBar + Sidebar + SessionPanel + main content area (TabBar + TerminalContainer/SftpPanel + StatusBar), plus all modals rendered at root level
-- **`stores/appStore.ts`** — single Zustand store for all app state: sessions, tabs, split-pane config, modals, theme, locale. Most state mutations here also fire backend `invoke()` calls as side effects (e.g. `addSession` saves to SQLite).
+- **`stores/appStore.ts`** — primary Zustand store: sessions, tabs, split-pane config, modals, theme, locale. Most state mutations also fire backend `invoke()` calls as side effects (e.g. `addSession` saves to SQLite).
+- **`stores/settingsStore.ts`** — separate Zustand store for user preferences (terminal font/size, editor settings, UI toggles). Persisted to backend via `invoke("save_settings")`.
 - **`types/index.ts`** — shared TypeScript types (`SessionConfig`, `TabInfo`, `ThemeMode`, `MainView`)
-- **`components/Terminal/TerminalView.tsx`** — xterm.js terminal. Maintains global maps (`terminalInstances`, `tabListenerCleanups`, `connectedTabs`) outside React to preserve terminal instances across re-renders and split-mode transitions. Critical: only ONE set of event listeners per tab ID is allowed—`cleanupTabListeners()` must be called before re-attaching.
+- **`components/Terminal/TerminalView.tsx`** — xterm.js terminal. Maintains global maps (`terminalInstances`, `tabListenerCleanups`, `connectedTabs`) outside React to preserve terminal instances across re-renders and split-mode transitions. **Critical: only ONE set of event listeners per tab ID is allowed—`cleanupTabListeners()` must be called before re-attaching.**
 - **`components/Terminal/TerminalContainer.tsx`** — renders one or more `TerminalView`s in a CSS grid based on `splitCount` (1/2/4/6/8 panes)
-- **`i18n/`** — bilingual (en/zh) translation via `getT(locale)` returning a typed `t(key)` function stored directly in the Zustand store
+- **`i18n/`** — bilingual (en/zh) via `i18next` + `react-i18next`. Translation files in `i18n/locales/gwshell.{en,zh}.json`. Namespace is `gwshell`.
 
 ### Backend (`src-tauri/src/`)
 
@@ -42,16 +52,14 @@ GWShell is a **Tauri 2** desktop application: a React/TypeScript frontend render
 - **`ssh.rs`** — `SshManager`: SSH connections via `libssh2`, SFTP operations, port forwarding. Known hosts stored in `%LOCALAPPDATA%/gwshell/known_hosts.json`
 - **`pty.rs`** — `PtyManager`: local shell sessions via `portable_pty`. Per-OS shell resolution (PowerShell, CMD, Bash, Git Bash, WSL distros, Zsh, Fish)
 - **`serial.rs`** — `SerialManager`: serial port connections
+- **`session.rs`** — `SessionConfig` and `SessionGroup` data structures
 - **`database.rs`** — SQLite persistence via `rusqlite`, stored in the Tauri app data directory
-- **`ai_config.rs`** — AI provider config management (Claude Code, Codex, Gemini, etc.), compatible with CC-Switch format
-- **`mcp_config.rs`** — MCP server config management, syncs to Claude/Gemini config files on disk
-- **`usage_tracker.rs`** — AI usage/cost tracking records
 
 ### IPC Event Pattern
 
 Backend pushes terminal output to the frontend via Tauri events:
 - `pty-data-{session_id}` — PTY stdout chunks
-- `ssh-data-{session_id}` — SSH stdout chunks  
+- `ssh-data-{session_id}` — SSH stdout chunks
 - `serial-data-{session_id}` — Serial port data
 
 `TerminalView` listens for these events and writes them to the xterm.js terminal instance.
@@ -63,3 +71,7 @@ Backend pushes terminal output to the frontend via Tauri events:
 ### Session Types
 
 `session_type`: `ssh` | `sftp` | `localshell` | `docker` | `serial`. The `TabInfo.type` mirrors this plus `asset-list` for the session manager view.
+
+### Version Syncing
+
+`npm version` triggers a `postversion` script that syncs the version from `package.json` into `src-tauri/Cargo.toml` automatically.
