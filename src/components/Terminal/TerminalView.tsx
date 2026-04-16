@@ -8,7 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { readText as clipboardRead, writeText as clipboardWrite } from "@tauri-apps/plugin-clipboard-manager";
 import { useTranslation } from 'react-i18next';
-import type { TabInfo } from "../../types";
+import type { TabInfo, ThemeMode } from "../../types";
 import { useAppStore } from "../../stores/appStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { terminalInstances } from "./terminalRegistry";
@@ -33,6 +33,63 @@ interface TerminalContextMenu {
   y: number;
   canCopy: boolean;
 }
+
+const getTerminalThemeColors = (theme: ThemeMode) => {
+  const isDark = theme === "dark";
+  return isDark
+    ? {
+        background: "#0c0c14",
+        foreground: "#d4d4d8",
+        cursor: "#5ac8fa",
+        cursorAccent: "#0c0c14",
+        selectionBackground: "rgba(90, 200, 250, 0.3)",
+        black: "#1a1a28",
+        red: "#ff5555",
+        green: "#50fa7b",
+        yellow: "#f1fa8c",
+        blue: "#5ac8fa",
+        magenta: "#c084fc",
+        cyan: "#22d3ee",
+        white: "#d4d4d8",
+        brightBlack: "#555570",
+        brightRed: "#ff6e6e",
+        brightGreen: "#69ff94",
+        brightYellow: "#ffffa5",
+        brightBlue: "#7dd6fc",
+        brightMagenta: "#d8b4fe",
+        brightCyan: "#67e8f9",
+        brightWhite: "#ffffff",
+        scrollbarSliderBackground: "rgba(255, 255, 255, 0.18)",
+        scrollbarSliderHoverBackground: "rgba(255, 255, 255, 0.32)",
+        scrollbarSliderActiveBackground: "rgba(255, 255, 255, 0.46)",
+      }
+    : {
+        background: "#f0f0f4",
+        foreground: "#1a1a2e",
+        cursor: "#0078d4",
+        cursorAccent: "#f0f0f4",
+        selectionBackground: "rgba(0, 120, 212, 0.2)",
+        black: "#1a1a2e",
+        red: "#dc2626",
+        green: "#16a34a",
+        yellow: "#ca8a04",
+        blue: "#0078d4",
+        magenta: "#9333ea",
+        cyan: "#0891b2",
+        white: "#d4d4d8",
+        brightBlack: "#8888a0",
+        brightRed: "#ef4444",
+        brightGreen: "#22c55e",
+        brightYellow: "#eab308",
+        brightBlue: "#2a8de6",
+        brightMagenta: "#a855f7",
+        brightCyan: "#06b6d4",
+        brightWhite: "#ffffff",
+        scrollbarSliderBackground: "rgba(0, 0, 0, 0.18)",
+        scrollbarSliderHoverBackground: "rgba(0, 0, 0, 0.30)",
+        scrollbarSliderActiveBackground: "rgba(0, 0, 0, 0.42)",
+      };
+};
 
 const isPasteAction = (value: string) => value === "paste" || value === "Paste" || value === "\u7c98\u8d34";
 
@@ -288,63 +345,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
     setContextMenu(null);
   }, [tab.id]);
 
-  const getThemeColors = useCallback(() => {
-    const isDark = document.documentElement.getAttribute("data-theme") !== "light";
-    return isDark
-      ? {
-          background: "#0c0c14",
-          foreground: "#d4d4d8",
-          cursor: "#5ac8fa",
-          cursorAccent: "#0c0c14",
-          selectionBackground: "rgba(90, 200, 250, 0.3)",
-          black: "#1a1a28",
-          red: "#ff5555",
-          green: "#50fa7b",
-          yellow: "#f1fa8c",
-          blue: "#5ac8fa",
-          magenta: "#c084fc",
-          cyan: "#22d3ee",
-          white: "#d4d4d8",
-          brightBlack: "#555570",
-          brightRed: "#ff6e6e",
-          brightGreen: "#69ff94",
-          brightYellow: "#ffffa5",
-          brightBlue: "#7dd6fc",
-          brightMagenta: "#d8b4fe",
-          brightCyan: "#67e8f9",
-          brightWhite: "#ffffff",
-          scrollbarSliderBackground: "rgba(255, 255, 255, 0.18)",
-          scrollbarSliderHoverBackground: "rgba(255, 255, 255, 0.32)",
-          scrollbarSliderActiveBackground: "rgba(255, 255, 255, 0.46)",
-        }
-      : {
-          background: "#f0f0f4",
-          foreground: "#1a1a2e",
-          cursor: "#0078d4",
-          cursorAccent: "#f0f0f4",
-          selectionBackground: "rgba(0, 120, 212, 0.2)",
-          black: "#1a1a2e",
-          red: "#dc2626",
-          green: "#16a34a",
-          yellow: "#ca8a04",
-          blue: "#0078d4",
-          magenta: "#9333ea",
-          cyan: "#0891b2",
-          white: "#d4d4d8",
-          brightBlack: "#8888a0",
-          brightRed: "#ef4444",
-          brightGreen: "#22c55e",
-          brightYellow: "#eab308",
-          brightBlue: "#2a8de6",
-          brightMagenta: "#a855f7",
-          brightCyan: "#06b6d4",
-          brightWhite: "#ffffff",
-          scrollbarSliderBackground: "rgba(0, 0, 0, 0.18)",
-          scrollbarSliderHoverBackground: "rgba(0, 0, 0, 0.30)",
-          scrollbarSliderActiveBackground: "rgba(0, 0, 0, 0.42)",
-        };
-  }, []);
-
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -370,7 +370,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           letterSpacing: parseFloat(s.terminalLetterSpacing) || 0,
           cursorBlink: true,
           cursorStyle: "bar",
-          theme: getThemeColors(),
+          theme: getTerminalThemeColors(useAppStore.getState().theme),
           allowProposedApi: true,
           scrollback: parseInt(s.terminalMaxScrollback) || 10000,
           copyOnSelect: false,
@@ -942,15 +942,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         invoke(closeCmd, { sessionId: tab.sessionId }).catch(() => {});
       }
     };
-  }, [tab.id, tab.sessionId, tab.type, getThemeColors]);
+  }, [tab.id, tab.sessionId, tab.type]);
 
   // Update terminal theme when app theme changes
   useEffect(() => {
     const inst = terminalInstances.get(tab.id);
     if (inst) {
-      inst.terminal.options.theme = getThemeColors();
+      inst.terminal.options.theme = getTerminalThemeColors(theme);
     }
-  }, [theme, tab.id, getThemeColors]);
+  }, [theme, tab.id]);
 
   useEffect(() => {
     if (isActive) {
