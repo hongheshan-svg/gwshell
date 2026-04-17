@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import type { AutoModeCustomRule } from '../types';
 
 const LEGACY_TERMINAL_FONT = 'JetBrainsMono, NotoSansSC';
 const CMD_TERMINAL_FONT = 'Consolas, "Cascadia Mono", "Courier New", monospace';
@@ -70,6 +71,11 @@ export interface AppSettings {
   redisGroupSeparator: string;
   storageAutoSync: boolean;
   storageSource: string;
+  // Auto Mode
+  autoModeDefaultEnabled: boolean;
+  autoModeCooldownCount: number;
+  autoModeCooldownWindowMs: number;
+  autoModeCustomRules: AutoModeCustomRule[];
 }
 
 export const defaultSettings: AppSettings = {
@@ -138,6 +144,10 @@ export const defaultSettings: AppSettings = {
   redisGroupSeparator: ':',
   storageAutoSync: true,
   storageSource: 'off',
+  autoModeDefaultEnabled: false,
+  autoModeCooldownCount: 20,
+  autoModeCooldownWindowMs: 5 * 60 * 1000,
+  autoModeCustomRules: [],
 };
 
 interface SettingsStore {

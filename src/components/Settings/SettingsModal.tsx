@@ -5,6 +5,7 @@ import { useAppStore } from '../../stores/appStore';
 import { useSettingsStore, defaultSettings as persistedDefaultSettings } from '../../stores/settingsStore';
 import i18n from '../../i18n';
 import type { TranslationKeys } from '../../i18n';
+import type { AutoModeCustomRule } from '../../types';
 
 /* ---- Nav categories ---- */
 const navCategories: { title?: TranslationKeys; items: { id: string; labelKey: TranslationKeys }[] }[] = [
@@ -99,6 +100,11 @@ export interface AppSettings {
   // Storage
   storageAutoSync: boolean;
   storageSource: string;
+  // Auto Mode
+  autoModeDefaultEnabled: boolean;
+  autoModeCooldownCount: number;
+  autoModeCooldownWindowMs: number;
+  autoModeCustomRules: AutoModeCustomRule[];
 }
 
 const _t = (key: TranslationKeys) => i18n.t(key);
@@ -170,6 +176,10 @@ const defaultSettings: AppSettings = {
   redisGroupSeparator: ':',
   storageAutoSync: true,
   storageSource: _t('settings_storage_source_off'),
+  autoModeDefaultEnabled: false,
+  autoModeCooldownCount: 20,
+  autoModeCooldownWindowMs: 5 * 60 * 1000,
+  autoModeCustomRules: [],
 };
 void defaultSettings;
 
