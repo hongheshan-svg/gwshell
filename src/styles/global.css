@@ -1,3 +1,5 @@
+@import './auto-mode.css';
+
 :root {
   /* Dark theme (default) — modern terminal style */
   --bg-primary: #0c0c14;
