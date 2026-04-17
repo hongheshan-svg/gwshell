@@ -28,6 +28,7 @@ const SerialPortModal = lazy(() => import('./components/Modals/SerialPortModal')
 const SettingsModal = lazy(() => import('./components/Settings/SettingsModal').then((m) => ({ default: m.SettingsModal })));
 const AppMenu = lazy(() => import('./components/AppMenu/AppMenu').then((m) => ({ default: m.AppMenu })));
 const UpdateChecker = lazy(() => import('./components/UpdateChecker/UpdateChecker').then((m) => ({ default: m.UpdateChecker })));
+const AutoModeLogPanel = lazy(() => import('./components/Terminal/AutoModeLogPanel').then((m) => ({ default: m.AutoModeLogPanel })));
 
 function App() {
   useSettingsEffects();
@@ -134,6 +135,7 @@ function App() {
           {showSettings && <SettingsModal />}
           {showAppMenu && <AppMenu />}
           <UpdateChecker />
+          <AutoModeLogPanel />
         </Suspense>
       </div>
     </I18nextProvider>
