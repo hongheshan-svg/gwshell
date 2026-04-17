@@ -12,6 +12,8 @@ import type { TabInfo, ThemeMode } from "../../types";
 import { useAppStore } from "../../stores/appStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { terminalInstances } from "./terminalRegistry";
+import { AutoModeWatcher } from "./AutoModeWatcher";
+import { useAutoModeStore } from "../../stores/autoModeStore";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalViewProps {
@@ -174,6 +176,9 @@ const terminalInteractionCleanups = new Map<string, () => void>();
 const fitFrameIds = new Map<string, number>();
 const settleTimerIds = new Map<string, ReturnType<typeof setTimeout>>();
 
+/** One AutoModeWatcher per tab, lifecycle-bound to the xterm instance. */
+const autoModeWatchers = new Map<string, AutoModeWatcher>();
+
 /** Remove event listeners for a tab (idempotent). */
 function cleanupTabListeners(tabId: string): void {
   const fn = tabListenerCleanups.get(tabId);
@@ -187,6 +192,11 @@ function cleanupTerminalInteractions(tabId: string): void {
 
 /** Destroy a terminal instance associated with a tab (called when the tab closes). */
 export function destroyTerminal(tabId: string): void {
+  const watcher = autoModeWatchers.get(tabId);
+  if (watcher) {
+    try { watcher.dispose(); } catch {}
+    autoModeWatchers.delete(tabId);
+  }
   cleanupTabListeners(tabId);
   cleanupTerminalInteractions(tabId);
   const frameId = fitFrameIds.get(tabId);
@@ -639,6 +649,26 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           instance.terminal.loadAddon(webgl);
         } catch {
           try { instance.terminal.loadAddon(new CanvasAddon()); } catch {}
+        }
+      }
+
+      // ── Auto Mode Watcher ──────────────────────────────
+      // Only create for terminal tabs where Auto Mode is meaningful.
+      if ((tab.type === 'ssh' || tab.type === 'localshell') && !autoModeWatchers.has(tab.id)) {
+        const watcher = new AutoModeWatcher({
+          tabId: tab.id,
+          sessionId: tab.sessionId,
+          tabType: tab.type,
+          terminal: instance.terminal,
+        });
+        autoModeWatchers.set(tab.id, watcher);
+        watcher.start();
+
+        // Initialize enabled flag from user's default setting (only once per tab).
+        const amStore = useAutoModeStore.getState();
+        if (amStore.enabled[tab.id] === undefined) {
+          const s = useSettingsStore.getState().settings;
+          amStore.setEnabled(tab.id, s.autoModeDefaultEnabled);
         }
       }
 
