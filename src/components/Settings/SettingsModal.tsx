@@ -26,6 +26,7 @@ const navCategories: { title?: TranslationKeys; items: { id: string; labelKey: T
     ],
   },
   { items: [{ id: 'docker', labelKey: 'settings_docker' }] },
+  { items: [{ id: 'auto-mode', labelKey: 'auto_mode_settings_title' }] },
   { items: [{ id: 'storage', labelKey: 'settings_storage' }] },
   { items: [{ id: 'referral', labelKey: 'settings_referral' }] },
 ];
@@ -336,6 +337,141 @@ const ShortcutTable: React.FC<{ left: ShortcutItem[]; right: ShortcutItem[]; t: 
   </div>
 );
 
+/* ---- Auto Mode: Custom Rule Editor ---- */
+interface CustomRuleTableProps {
+  rules: AutoModeCustomRule[];
+  onChange: (rules: AutoModeCustomRule[]) => void;
+}
+
+const CustomRuleTable: React.FC<CustomRuleTableProps> = ({ rules, onChange }) => {
+  const { t } = useTranslation();
+  const [editing, setEditing] = useState<AutoModeCustomRule | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  const startAdd = () => {
+    setEditing({
+      id: (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+      enabled: true,
+      priority: 250,
+      pattern: '',
+      flags: 'm',
+      response: 'y\\r',
+      label: '',
+    });
+    setAdding(true);
+  };
+
+  const save = (rule: AutoModeCustomRule) => {
+    const next = adding ? [...rules, rule] : rules.map((r) => (r.id === rule.id ? rule : r));
+    onChange(next);
+    setEditing(null);
+    setAdding(false);
+  };
+
+  const remove = (id: string) => onChange(rules.filter((r) => r.id !== id));
+
+  return (
+    <div style={{ width: '100%' }}>
+      <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left', padding: '4px 6px' }}>{t('auto_mode_settings_rule_enabled')}</th>
+            <th style={{ textAlign: 'left', padding: '4px 6px' }}>{t('auto_mode_settings_rule_priority')}</th>
+            <th style={{ textAlign: 'left', padding: '4px 6px' }}>{t('auto_mode_settings_rule_pattern')}</th>
+            <th style={{ textAlign: 'left', padding: '4px 6px' }}>{t('auto_mode_settings_rule_response')}</th>
+            <th style={{ textAlign: 'left', padding: '4px 6px' }}>{t('auto_mode_settings_rule_label')}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rules.map((r) => (
+            <tr key={r.id}>
+              <td style={{ padding: '4px 6px' }}>
+                <input
+                  type="checkbox"
+                  checked={r.enabled}
+                  onChange={(e) => onChange(rules.map((x) => (x.id === r.id ? { ...x, enabled: e.target.checked } : x)))}
+                />
+              </td>
+              <td style={{ padding: '4px 6px' }}>{r.priority}</td>
+              <td style={{ padding: '4px 6px', fontFamily: 'monospace' }}>{r.pattern}</td>
+              <td style={{ padding: '4px 6px', fontFamily: 'monospace' }}>{r.response}</td>
+              <td style={{ padding: '4px 6px' }}>{r.label}</td>
+              <td style={{ padding: '4px 6px' }}>
+                <button className="settings-icon-btn" onClick={() => { setEditing(r); setAdding(false); }}>✎</button>
+                <button className="settings-icon-btn" onClick={() => remove(r.id)}>✗</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button onClick={startAdd} className="settings-btn-outline" style={{ marginTop: 6 }}>
+        + {t('auto_mode_settings_addrule')}
+      </button>
+      {editing && (
+        <RuleEditor
+          initial={editing}
+          onCancel={() => { setEditing(null); setAdding(false); }}
+          onSave={save}
+        />
+      )}
+    </div>
+  );
+};
+
+const RuleEditor: React.FC<{
+  initial: AutoModeCustomRule;
+  onCancel: () => void;
+  onSave: (rule: AutoModeCustomRule) => void;
+}> = ({ initial, onCancel, onSave }) => {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState<AutoModeCustomRule>(initial);
+  const [error, setError] = useState<string | null>(null);
+
+  const validate = (): boolean => {
+    try {
+      new RegExp(draft.pattern, draft.flags);
+      setError(null);
+      return true;
+    } catch {
+      setError(t('auto_mode_settings_rule_invalid_regex'));
+      return false;
+    }
+  };
+
+  const handleSave = () => { if (validate()) onSave(draft); };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+    }}>
+      <div style={{ background: 'var(--panel-bg, #1b1b24)', padding: 20, borderRadius: 6, minWidth: 420 }}>
+        <div style={{ marginBottom: 8, fontWeight: 600 }}>
+          {initial.label ? t('auto_mode_settings_editrule') : t('auto_mode_settings_addrule')}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: 8, alignItems: 'center' }}>
+          <label>{t('auto_mode_settings_rule_priority')}</label>
+          <input className="settings-input" type="number" value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: parseInt(e.target.value, 10) || 250 })} />
+          <label>{t('auto_mode_settings_rule_pattern')}</label>
+          <input className="settings-input" value={draft.pattern} onChange={(e) => setDraft({ ...draft, pattern: e.target.value })} style={{ fontFamily: 'monospace' }} />
+          <label>{t('auto_mode_settings_rule_flags')}</label>
+          <input className="settings-input" value={draft.flags} onChange={(e) => setDraft({ ...draft, flags: e.target.value })} style={{ fontFamily: 'monospace' }} />
+          <label>{t('auto_mode_settings_rule_response')}</label>
+          <input className="settings-input" value={draft.response} onChange={(e) => setDraft({ ...draft, response: e.target.value })} style={{ fontFamily: 'monospace' }} placeholder="y\r" />
+          <label>{t('auto_mode_settings_rule_label')}</label>
+          <input className="settings-input" value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
+        </div>
+        {error && <div style={{ color: '#e74c3c', marginTop: 8, fontSize: 12 }}>{error}</div>}
+        <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="settings-btn-outline" onClick={onCancel}>{t('auto_mode_settings_rule_cancel')}</button>
+          <button className="settings-btn-primary" onClick={handleSave}>{t('auto_mode_settings_rule_save')}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /* ---- Main Component ---- */
 export const SettingsModal: React.FC = () => {
   const { showSettings, setShowSettings, theme, setTheme } = useAppStore();
@@ -553,6 +689,53 @@ export const SettingsModal: React.FC = () => {
               <>
                 <SectionTitle>Docker</SectionTitle>
                 <ShortcutTable left={shortcutsDockerLeft} right={shortcutsDockerRight} t={t} />
+              </>
+            )}
+
+            {/* ===== Auto Mode ===== */}
+            {activeNav === 'auto-mode' && (
+              <>
+                <SectionTitle>{t('auto_mode_settings_title')}</SectionTitle>
+                <div className="settings-col" style={{ maxWidth: 900 }}>
+                  <Row label={t('auto_mode_settings_default_enabled')}>
+                    <Toggle value={settings.autoModeDefaultEnabled} onChange={(v) => u('autoModeDefaultEnabled', v)} />
+                  </Row>
+                  <Row label={t('auto_mode_settings_cooldown')} desc={t('auto_mode_settings_cooldown_hint')}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <input
+                        className="settings-input"
+                        type="number"
+                        min={1}
+                        max={1000}
+                        value={settings.autoModeCooldownCount}
+                        onChange={(e) => u('autoModeCooldownCount', parseInt(e.target.value, 10) || 20)}
+                        style={{ width: 70 }}
+                      />
+                      <span className="settings-desc">{t('auto_mode_settings_cooldown_count')}</span>
+                      <span className="settings-desc">/</span>
+                      <input
+                        className="settings-input"
+                        type="number"
+                        min={1}
+                        max={120}
+                        value={Math.round(settings.autoModeCooldownWindowMs / 60000)}
+                        onChange={(e) => {
+                          const mins = parseInt(e.target.value, 10) || 5;
+                          u('autoModeCooldownWindowMs', mins * 60 * 1000);
+                        }}
+                        style={{ width: 70 }}
+                      />
+                      <span className="settings-desc">{t('auto_mode_settings_cooldown_window')}</span>
+                    </div>
+                  </Row>
+                  <div style={{ marginTop: 16 }}>
+                    <SectionTitle>{t('auto_mode_settings_customrules')}</SectionTitle>
+                    <CustomRuleTable
+                      rules={settings.autoModeCustomRules}
+                      onChange={(rules) => u('autoModeCustomRules', rules)}
+                    />
+                  </div>
+                </div>
               </>
             )}
 
