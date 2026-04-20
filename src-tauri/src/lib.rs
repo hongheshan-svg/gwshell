@@ -16,11 +16,12 @@ use tauri::{Manager, State};
 
 pub struct AppState {
     pub pty_manager: PtyManager,
-    pub ssh_manager: SshManager,
+    pub ssh_manager: Arc<SshManager>,
     pub serial_manager: SerialManager,
     pub sessions: Mutex<Vec<SessionConfig>>,
     pub groups: Mutex<Vec<SessionGroup>>,
     pub db: Database,
+    pub metrics: metrics::MetricsManager,
 }
 
 // ---- Platform Info ----
@@ -494,6 +495,42 @@ async fn ssh_exec(
         .map_err(|e| format!("task join: {}", e))?
 }
 
+// ---- Server Panel (Metrics) Commands ----
+
+#[tauri::command]
+fn start_server_metrics(
+    session_id: String,
+    state: State<'_, Arc<AppState>>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let ssh = state.ssh_manager.clone();
+    state.metrics.start(session_id, ssh, app_handle);
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_server_metrics(session_id: String, state: State<'_, Arc<AppState>>) {
+    state.metrics.stop(&session_id);
+}
+
+#[tauri::command]
+async fn kill_remote_process(
+    session_id: String,
+    pid: u32,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let cmd = format!("kill {}", pid);
+        state
+            .ssh_manager
+            .ssh_exec(&session_id, &cmd)
+            .map(|_| ())
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
+}
+
 // ---- Ping Command ----
 
 #[tauri::command]
@@ -721,11 +758,12 @@ pub fn run() {
 
     let app_state = Arc::new(AppState {
         pty_manager: PtyManager::new(),
-        ssh_manager: SshManager::new(),
+        ssh_manager: Arc::new(SshManager::new()),
         serial_manager: SerialManager::new(),
         sessions: Mutex::new(initial_sessions),
         groups: Mutex::new(initial_groups),
         db,
+        metrics: metrics::MetricsManager::new(),
     });
 
     tauri::Builder::default()
@@ -771,6 +809,9 @@ pub fn run() {
             sftp_chmod,
             sftp_create_file,
             ssh_exec,
+            start_server_metrics,
+            stop_server_metrics,
+            kill_remote_process,
             ping_host,
             serial_open,
             write_to_serial,
