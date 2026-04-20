@@ -76,6 +76,11 @@ async fn app_ready(window: tauri::WebviewWindow) {
     let _ = window.set_focus();
 }
 
+#[tauri::command]
+fn quit_app(app_handle: tauri::AppHandle) {
+    app_handle.exit(0);
+}
+
 // ---- PTY Commands ----
 
 #[tauri::command]
@@ -209,7 +214,7 @@ async fn ssh_trust_host(host: String, port: u16, fingerprint: String, key_type: 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 async fn start_tunnel(
-    _session_id: String,
+    session_id: String,
     host: String,
     port: u16,
     username: String,
@@ -234,6 +239,7 @@ async fn start_tunnel(
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || -> Result<u16, String> {
         state.ssh_manager.start_local_forward(
+            &session_id,
             &host,
             port,
             &username,
@@ -783,6 +789,7 @@ pub fn run() {
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             app_ready,
+            quit_app,
             get_os_info,
             create_local_shell,
             list_shells,

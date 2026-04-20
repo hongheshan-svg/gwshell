@@ -1,4 +1,4 @@
-﻿use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use ssh2::{HashType, KeyboardInteractivePrompt, Prompt, Session};
@@ -7,7 +7,10 @@ use std::fs;
 use std::io::{self, ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
@@ -131,7 +134,10 @@ fn tcp_direct(host: &str, port: u16, timeout_secs: u32) -> Result<TcpStream, Str
                 return Ok(s);
             }
         }
-        Err(format!("Connection to {} timed out ({}s)", addr, timeout_secs))
+        Err(format!(
+            "Connection to {} timed out ({}s)",
+            addr, timeout_secs
+        ))
     } else {
         TcpStream::connect(&addr).map_err(|e| format!("Connection to {} failed: {}", addr, e))
     }
@@ -212,8 +218,8 @@ fn tcp_via_jump(
     let jump_tcp = TcpStream::connect(format!("{}:{}", jump_host, jump_port))
         .map_err(|e| format!("Jump host connection failed: {}", e))?;
 
-    let mut jump_sess = Session::new()
-        .map_err(|e| format!("Jump session creation failed: {}", e))?;
+    let mut jump_sess =
+        Session::new().map_err(|e| format!("Jump session creation failed: {}", e))?;
     jump_sess.set_tcp_stream(jump_tcp);
     jump_sess
         .handshake()
@@ -300,8 +306,7 @@ fn tcp_via_jump(
     });
 
     // Connect from the main thread to the local proxy port.
-    TcpStream::connect(local_addr)
-        .map_err(|e| format!("Connect to jump proxy failed: {}", e))
+    TcpStream::connect(local_addr).map_err(|e| format!("Connect to jump proxy failed: {}", e))
 }
 
 // === SshInstance / SshManager ===
@@ -325,12 +330,19 @@ pub struct SftpEntry {
 
 pub struct SshManager {
     instances: Mutex<HashMap<String, Arc<Mutex<SshInstance>>>>,
+    forwards: Mutex<HashMap<String, LocalForward>>,
+}
+
+struct LocalForward {
+    stop_flag: Arc<AtomicBool>,
+    local_port: u16,
 }
 
 impl SshManager {
     pub fn new() -> Self {
         Self {
             instances: Mutex::new(HashMap::new()),
+            forwards: Mutex::new(HashMap::new()),
         }
     }
 
@@ -395,8 +407,7 @@ impl SshManager {
         };
 
         // == Step 2: SSH handshake ==
-        let mut session =
-            Session::new().map_err(|e| format!("Session creation failed: {}", e))?;
+        let mut session = Session::new().map_err(|e| format!("Session creation failed: {}", e))?;
         session.set_tcp_stream(tcp);
         session
             .handshake()
@@ -605,7 +616,19 @@ impl SshManager {
     }
 
     pub fn close_ssh(&self, session_id: &str) {
+        self.close_local_forward(session_id);
         if let Some(instance) = self.instances.lock().remove(session_id) {
+            let mut inst = instance.lock();
+            inst.session.set_blocking(true);
+            let _ = inst.channel.close();
+            let _ = inst.channel.wait_close();
+        }
+    }
+
+    pub fn close_all(&self) {
+        self.close_all_local_forwards();
+        let instances: Vec<_> = self.instances.lock().drain().map(|(_, v)| v).collect();
+        for instance in instances {
             let mut inst = instance.lock();
             inst.session.set_blocking(true);
             let _ = inst.channel.close();
@@ -732,17 +755,12 @@ impl SshManager {
             remote_file
                 .read_to_end(&mut buf)
                 .map_err(|e| format!("SFTP read failed: {}", e))?;
-            fs::write(local_path, &buf)
-                .map_err(|e| format!("Local write failed: {}", e))?;
+            fs::write(local_path, &buf).map_err(|e| format!("Local write failed: {}", e))?;
             Ok(())
         })
     }
 
-    pub fn sftp_read_text(
-        &self,
-        session_id: &str,
-        remote_path: &str,
-    ) -> Result<String, String> {
+    pub fn sftp_read_text(&self, session_id: &str, remote_path: &str) -> Result<String, String> {
         self.with_sftp(session_id, |sftp| {
             let mut remote_file = sftp
                 .open(Path::new(remote_path))
@@ -751,8 +769,7 @@ impl SshManager {
             remote_file
                 .read_to_end(&mut buf)
                 .map_err(|e| format!("SFTP read failed: {}", e))?;
-            String::from_utf8(buf)
-                .map_err(|_| "File is not valid UTF-8 text".to_string())
+            String::from_utf8(buf).map_err(|_| "File is not valid UTF-8 text".to_string())
         })
     }
 
@@ -780,8 +797,7 @@ impl SshManager {
         local_path: &str,
     ) -> Result<(), String> {
         self.with_sftp(session_id, |sftp| {
-            let data =
-                fs::read(local_path).map_err(|e| format!("Local read failed: {}", e))?;
+            let data = fs::read(local_path).map_err(|e| format!("Local read failed: {}", e))?;
             let mut remote_file = sftp
                 .create(Path::new(remote_path))
                 .map_err(|e| format!("SFTP create failed: {}", e))?;
@@ -792,12 +808,7 @@ impl SshManager {
         })
     }
 
-    pub fn sftp_chmod(
-        &self,
-        session_id: &str,
-        path: &str,
-        mode: u32,
-    ) -> Result<(), String> {
+    pub fn sftp_chmod(&self, session_id: &str, path: &str, mode: u32) -> Result<(), String> {
         self.with_sftp(session_id, |sftp| {
             let mut stat = sftp
                 .stat(Path::new(path))
@@ -849,6 +860,7 @@ impl SshManager {
     #[allow(clippy::too_many_arguments)]
     pub fn start_local_forward(
         &self,
+        session_id: &str,
         host: &str,
         port: u16,
         username: &str,
@@ -869,6 +881,8 @@ impl SshManager {
         remote_host: &str,
         remote_port: u16,
     ) -> Result<u16, String> {
+        self.close_local_forward(session_id);
+
         // Bind local listener first so caller gets the actual port immediately.
         let listener = TcpListener::bind(format!("127.0.0.1:{}", local_port))
             .map_err(|e| format!("Tunnel bind 127.0.0.1:{} failed: {}", local_port, e))?;
@@ -876,6 +890,17 @@ impl SshManager {
             .local_addr()
             .map_err(|e| format!("Tunnel get port failed: {}", e))?
             .port();
+        listener
+            .set_nonblocking(true)
+            .map_err(|e| format!("Tunnel set nonblocking failed: {}", e))?;
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        self.forwards.lock().insert(
+            session_id.to_string(),
+            LocalForward {
+                stop_flag: stop_flag.clone(),
+                local_port: actual_port,
+            },
+        );
 
         // Snapshot everything needed by the background thread.
         let host = host.to_string();
@@ -894,14 +919,22 @@ impl SshManager {
         let remote_host = remote_host.to_string();
 
         std::thread::spawn(move || {
-            for client in listener.incoming() {
-                let Ok(client_stream) = client else {
-                    continue;
+            loop {
+                if stop_flag.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                let client_stream = match listener.accept() {
+                    Ok((stream, _)) => stream,
+                    Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(50));
+                        continue;
+                    }
+                    Err(_) => break,
                 };
 
                 // Create a dedicated SSH session for this tunnel connection.
-                let tcp_result = if let Some(ref jh) = jump_host.clone().filter(|h| !h.is_empty())
-                {
+                let tcp_result = if let Some(ref jh) = jump_host.clone().filter(|h| !h.is_empty()) {
                     tcp_via_jump(
                         jh,
                         jump_port,
@@ -1050,6 +1083,19 @@ impl SshManager {
 
         Ok(actual_port)
     }
+
+    pub fn close_local_forward(&self, session_id: &str) {
+        if let Some(forward) = self.forwards.lock().remove(session_id) {
+            forward.stop_flag.store(true, Ordering::Relaxed);
+            let _ = TcpStream::connect(("127.0.0.1", forward.local_port));
+        }
+    }
+
+    fn close_all_local_forwards(&self) {
+        let forwards: Vec<_> = self.forwards.lock().drain().map(|(_, v)| v).collect();
+        for forward in forwards {
+            forward.stop_flag.store(true, Ordering::Relaxed);
+            let _ = TcpStream::connect(("127.0.0.1", forward.local_port));
+        }
+    }
 }
-
-

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Minus, Square, X, Activity } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../stores/appStore';
 
@@ -22,8 +23,16 @@ export const TitleBar: React.FC = () => {
     appWindow.toggleMaximize();
   };
 
-  const handleClose = () => {
-    appWindow.close();
+  const handleClose = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    void invoke('quit_app').catch(() => {});
+    window.setTimeout(() => {
+      appWindow.destroy().catch(() => {
+        appWindow.close().catch(() => {});
+      });
+    }, 100);
   };
 
   return (
@@ -48,7 +57,14 @@ export const TitleBar: React.FC = () => {
         <button className="titlebar-btn" onClick={handleMaximize} data-gw-action="toggle_maximize" title={t('titlebar_maximize')}>
           <Square size={10} />
         </button>
-        <button className="titlebar-btn titlebar-close" onClick={handleClose} data-gw-action="hide" title={t('titlebar_close')}>
+        <button
+          type="button"
+          className="titlebar-btn titlebar-close"
+          onClick={handleClose}
+          onMouseDown={(event) => event.stopPropagation()}
+          data-gw-action="exit"
+          title={t('titlebar_close')}
+        >
           <X size={14} />
         </button>
       </div>

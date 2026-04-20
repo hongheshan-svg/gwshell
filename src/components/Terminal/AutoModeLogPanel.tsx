@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { useAutoModeStore } from '../../stores/autoModeStore';
 import { useAppStore } from '../../stores/appStore';
 
+const EMPTY_LOG_ENTRIES: never[] = [];
+
 function formatTime(ts: number): string {
   const d = new Date(ts);
   const h = String(d.getHours()).padStart(2, '0');
@@ -15,7 +17,7 @@ function formatTime(ts: number): string {
 export const AutoModeLogPanel: React.FC = () => {
   const open = useAutoModeStore((s) => s.logPanelOpen);
   const tabId = useAutoModeStore((s) => s.logPanelTabId);
-  const entries = useAutoModeStore((s) => (tabId ? s.logs[tabId] ?? [] : []));
+  const entries = useAutoModeStore((s) => (tabId ? s.logs[tabId] ?? EMPTY_LOG_ENTRIES : EMPTY_LOG_ENTRIES));
   const closeLogPanel = useAutoModeStore((s) => s.closeLogPanel);
   const clearLog = useAutoModeStore((s) => s.clearLog);
   const tabs = useAppStore((s) => s.tabs);

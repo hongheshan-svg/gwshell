@@ -113,6 +113,34 @@ if (missingCommands.length) {
   fail(`Frontend invokes missing backend handlers: ${missingCommands.join(', ')}`);
 }
 
+// ---- Server Panel wiring ----
+
+const serverPanelPath = path.join(srcRoot, 'components', 'ServerPanel', 'ServerPanel.tsx');
+if (!fs.existsSync(serverPanelPath)) {
+  fail('Missing src/components/ServerPanel/ServerPanel.tsx');
+} else {
+  const text = readText(serverPanelPath);
+  if (!/invoke\(\s*['"`]stop_server_metrics['"`]/.test(text)) {
+    fail('ServerPanel.tsx useEffect cleanup must invoke stop_server_metrics');
+  }
+}
+
+const metricsPath = path.join(tauriRoot, 'metrics.rs');
+if (!fs.existsSync(metricsPath)) {
+  fail('Missing src-tauri/src/metrics.rs');
+} else {
+  const text = readText(metricsPath);
+  if (!/timeout\(\s*Duration::from_secs\(\s*5\s*\)/.test(text)) {
+    fail('metrics.rs polling loop must wrap ssh_exec in a 5s timeout');
+  }
+}
+
+for (const cmd of ['start_server_metrics', 'stop_server_metrics', 'kill_remote_process']) {
+  if (!backendCommands.includes(cmd)) {
+    fail(`Backend invoke_handler is missing ${cmd}`);
+  }
+}
+
 const markers = findMarkers();
 if (markers.length) {
   warn(`Visible TODO / dev markers found in production code (${markers.length}):`);

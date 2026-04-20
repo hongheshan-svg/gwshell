@@ -381,6 +381,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           letterSpacing: parseFloat(s.terminalLetterSpacing) || 0,
           cursorBlink: false,
           cursorStyle: "bar",
+          cursorInactiveStyle: "none",
           theme: getTerminalThemeColors(useAppStore.getState().theme),
           allowProposedApi: true,
           scrollback: parseInt(s.terminalMaxScrollback) || 10000,
@@ -989,6 +990,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
     if (inst) {
       inst.terminal.options.theme = getTerminalThemeColors(theme);
       inst.terminal.options.cursorBlink = false;
+      inst.terminal.options.cursorInactiveStyle = "none";
     }
   }, [theme, tab.id]);
 

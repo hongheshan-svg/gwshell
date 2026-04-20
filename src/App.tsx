@@ -1,7 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { TitleBar } from './components/TitleBar/TitleBar';
 import { Sidebar } from './components/Sidebar/IconNav';
 import { SessionPanel } from './components/Sidebar/SessionPanel';
@@ -33,7 +32,7 @@ const ServerPanel = lazy(() => import('./components/ServerPanel').then((m) => ({
 
 function App() {
   useSettingsEffects();
-  const { theme, setSessions, sidebarCollapsed, toggleSidebar, tabs, activeTabId, sftpPanelOpen, sessions,
+  const { theme, setSessions, tabs, activeTabId, sftpPanelOpen, sessions,
     showNewSession, showDockerModal, showLocalTerminalModal, showSerialModal, showSettings, showAppMenu,
     mainView, splitCount } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
@@ -96,13 +95,6 @@ function App() {
         <div className="app-layout">
           <Sidebar />
           <SessionPanel />
-          <button
-            className="sidebar-collapse-toggle"
-            onClick={toggleSidebar}
-            title={sidebarCollapsed ? '展开面板' : '折叠面板'}
-          >
-            {sidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-          </button>
           <div className="main-content">
             <TabBar />
             <div className="terminal-sftp-wrapper">

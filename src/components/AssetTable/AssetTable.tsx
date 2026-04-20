@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Search,
-  Menu,
   Server,
   RefreshCw,
   Plus,
@@ -10,6 +9,8 @@ import {
   Edit,
   Play,
   Copy,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../../stores/appStore';
@@ -29,6 +30,8 @@ export const AssetTable: React.FC = () => {
     setActiveTab,
     tabs,
     batchUpdateLatency,
+    sidebarCollapsed,
+    toggleSidebar,
   } = useAppStore();
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
@@ -222,7 +225,15 @@ export const AssetTable: React.FC = () => {
       {/* Toolbar */}
       <div className="asset-toolbar">
         <div className="asset-toolbar-left">
-          <span className="asset-toolbar-icon"><Menu size={14} /></span>
+          <button
+            type="button"
+            className="asset-session-toggle"
+            onClick={toggleSidebar}
+            title={t('nav_toggle_sidebar')}
+            aria-label={t('nav_toggle_sidebar')}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
+          </button>
           <span className="asset-toolbar-title">{t('table_title')}</span>
         </div>
         <div className="asset-toolbar-center">

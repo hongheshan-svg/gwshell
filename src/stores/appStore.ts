@@ -108,6 +108,14 @@ function popInjectedSessions(): SessionConfig[] {
 
 const _initialSessions = popInjectedSessions();
 
+const randomCloneName = (baseName: string) => {
+  const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `${baseName}-${suffix}`;
+};
+
+const terminalTabExists = (tabs: TabInfo[], tabId: string | null): tabId is string =>
+  !!tabId && tabs.some((t) => t.id === tabId && t.type !== 'asset-list');
+
 export const useAppStore = create<AppStore>((set, _get) => ({
   locale: initialLocale,
   setLocale: (locale) => {
@@ -283,14 +291,22 @@ export const useAppStore = create<AppStore>((set, _get) => ({
       selectedSources[0] ||
       currentSessions.find(s => !s._temporary);
 
-    // --- Shrinking: remove excess temporary tabs/sessions ---
+    const focusedTabId = state.splitPanes[state.focusedPane] ?? null;
+    const preferredActiveTabId =
+      terminalTabExists(terminalTabs, focusedTabId) ? focusedTabId :
+      terminalTabExists(terminalTabs, state.activeTabId) ? state.activeTabId :
+      terminalTabs[0]?.id ?? null;
+    let preservedPaneIds: string[] | null = null;
+
+    // --- Shrinking: preserve the active terminal, then remove excess temporary tabs/sessions ---
     if (count < state.splitCount) {
       const tabsToRemove: string[] = [];
       const sessionIdsToRemove = new Set<string>();
 
       if (count <= 1) {
-        // Going back to single: remove ALL temporary tabs
+        // Going back to single: keep the active/focused terminal even if it is a temporary clone.
         for (const tab of terminalTabs) {
+          if (tab.id === preferredActiveTabId) continue;
           const sess = currentSessions.find(s => s.id === tab.sessionId);
           if (sess?._temporary) {
             tabsToRemove.push(tab.id);
@@ -298,8 +314,24 @@ export const useAppStore = create<AppStore>((set, _get) => ({
           }
         }
       } else {
-        // Shrinking to fewer panes: keep panes[0..count-1], remove excess temporary
-        const keepPaneTabIds = new Set(state.splitPanes.slice(0, count).filter(Boolean) as string[]);
+        // Shrinking to fewer panes: keep the leading panes, but make room for
+        // the active/focused terminal if it would otherwise be dropped.
+        const keepPaneIds = state.splitPanes.slice(0, count).filter((id): id is string =>
+          terminalTabExists(terminalTabs, id)
+        );
+        if (
+          preferredActiveTabId &&
+          !keepPaneIds.includes(preferredActiveTabId) &&
+          terminalTabExists(terminalTabs, preferredActiveTabId)
+        ) {
+          if (keepPaneIds.length >= count) {
+            keepPaneIds[count - 1] = preferredActiveTabId;
+          } else {
+            keepPaneIds.push(preferredActiveTabId);
+          }
+        }
+        const keepPaneTabIds = new Set(keepPaneIds);
+        preservedPaneIds = keepPaneIds;
         for (const tab of terminalTabs) {
           if (keepPaneTabIds.has(tab.id)) continue;
           const sess = currentSessions.find(s => s.id === tab.sessionId);
@@ -358,24 +390,24 @@ export const useAppStore = create<AppStore>((set, _get) => ({
     for (let i = 0; i < needed; i++) {
       const sessionId = crypto.randomUUID();
       const tabId = crypto.randomUUID();
-      const num = terminalTabs.length + i + 1;
       // Pick a source for the clone: cycle through selected sources, or use single source
       const cloneFrom = selectedSources.length > 0
         ? selectedSources[(terminalTabs.length + i) % selectedSources.length]
         : sourceSession;
 
       if (cloneFrom) {
+        const cloneName = randomCloneName(cloneFrom.name);
         const cloned: SessionConfig = {
           ...cloneFrom,
           id: sessionId,
-          name: `${cloneFrom.name} ${num}`,
+          name: cloneName,
           created_at: new Date().toISOString().slice(0, 10),
           _temporary: true,
         };
         const tab: TabInfo = {
           id: tabId,
           sessionId,
-          title: cloned.name,
+          title: cloneName,
           type: cloned.session_type as TabInfo['type'],
           connected: false,
         };
@@ -383,9 +415,10 @@ export const useAppStore = create<AppStore>((set, _get) => ({
         currentTabs = [...currentTabs, tab];
         terminalTabs.push(tab);
       } else {
+        const name = randomCloneName('Terminal');
         const session: SessionConfig = {
           id: sessionId,
-          name: `Terminal ${num}`,
+          name,
           session_type: 'localshell',
           auth_method: 'password',
           created_at: new Date().toISOString().slice(0, 10),
@@ -394,7 +427,7 @@ export const useAppStore = create<AppStore>((set, _get) => ({
         const tab: TabInfo = {
           id: tabId,
           sessionId,
-          title: session.name,
+          title: name,
           type: 'localshell',
           connected: false,
         };
@@ -407,7 +440,7 @@ export const useAppStore = create<AppStore>((set, _get) => ({
     const panes: (string | null)[] = [];
     const used = new Set<string>();
     for (let i = 0; i < count; i++) {
-      const existing = state.splitPanes[i];
+      const existing = preservedPaneIds?.[i] ?? state.splitPanes[i];
       if (existing && !used.has(existing) && terminalTabs.some(t => t.id === existing)) {
         panes.push(existing);
         used.add(existing);
@@ -432,17 +465,29 @@ export const useAppStore = create<AppStore>((set, _get) => ({
     };
     if (count > 1) {
       result.mainView = 'terminal';
-      if (firstPane) {
+      if (preferredActiveTabId && panes.includes(preferredActiveTabId)) {
+        result.activeTabId = preferredActiveTabId;
+        result.focusedPane = panes.indexOf(preferredActiveTabId);
+      } else if (firstPane) {
         result.activeTabId = firstPane;
+        result.focusedPane = panes.indexOf(firstPane);
       }
     } else if (count === 1) {
-      // Single pane: activate the first remaining terminal tab, or show asset list
-      if (realTerminalTabs.length > 0) {
-        result.activeTabId = realTerminalTabs[0].id;
+      // Single pane: keep the active/focused terminal if it still exists.
+      const singleActiveTabId =
+        preferredActiveTabId && realTerminalTabs.some(t => t.id === preferredActiveTabId)
+          ? preferredActiveTabId
+          : realTerminalTabs[0]?.id;
+      if (singleActiveTabId) {
+        result.activeTabId = singleActiveTabId;
         result.mainView = 'terminal';
+        result.splitPanes = [singleActiveTabId];
+        result.focusedPane = 0;
       } else {
         result.activeTabId = 'asset-list';
         result.mainView = 'asset-list';
+        result.splitPanes = [null];
+        result.focusedPane = 0;
       }
     }
     return result;
