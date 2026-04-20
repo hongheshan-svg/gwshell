@@ -85,6 +85,10 @@ interface AppStore {
   // SFTP Panel
   sftpPanelOpen: boolean;
   toggleSftpPanel: () => void;
+
+  // Server Panel (right-side live metrics drawer — SSH only)
+  serverPanelOpen: boolean;
+  toggleServerPanel: () => void;
 }
 
 const initialLocale = detectLocale();
@@ -470,6 +474,9 @@ export const useAppStore = create<AppStore>((set, _get) => ({
 
   sftpPanelOpen: true,
   toggleSftpPanel: () => set((state) => ({ sftpPanelOpen: !state.sftpPanelOpen })),
+
+  serverPanelOpen: false,
+  toggleServerPanel: () => set((state) => ({ serverPanelOpen: !state.serverPanelOpen })),
 }));
 
 // Keep store in sync if i18next.changeLanguage is called from outside the store.
