@@ -1,4 +1,5 @@
 mod database;
+mod metrics;
 mod pty;
 mod serial;
 mod session;
