@@ -29,6 +29,7 @@ const SettingsModal = lazy(() => import('./components/Settings/SettingsModal').t
 const AppMenu = lazy(() => import('./components/AppMenu/AppMenu').then((m) => ({ default: m.AppMenu })));
 const UpdateChecker = lazy(() => import('./components/UpdateChecker/UpdateChecker').then((m) => ({ default: m.UpdateChecker })));
 const AutoModeLogPanel = lazy(() => import('./components/Terminal/AutoModeLogPanel').then((m) => ({ default: m.AutoModeLogPanel })));
+const ServerPanel = lazy(() => import('./components/ServerPanel').then((m) => ({ default: m.ServerPanel })));
 
 function App() {
   useSettingsEffects();
@@ -136,6 +137,7 @@ function App() {
           {showAppMenu && <AppMenu />}
           <UpdateChecker />
           <AutoModeLogPanel />
+          <ServerPanel />
         </Suspense>
       </div>
     </I18nextProvider>
