@@ -123,6 +123,7 @@
   "ssh_env_desc": "One per line, format: KEY=VALUE. Only variables allowed by AcceptEnv in sshd_config will take effect.",
   "ssh_conn_timeout": "Connection Timeout (sec)",
   "ssh_keepalive": "Keepalive Interval (sec)",
+  "ssh_idle_disconnect": "Idle Disconnect (min)",
   "ssh_compression": "Enable Compression",
   "ssh_jump_title": "Jump Host (-J)",
   "ssh_jump_host": "Jump Host Address",

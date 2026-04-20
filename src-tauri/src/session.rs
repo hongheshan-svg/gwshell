@@ -41,6 +41,7 @@ pub struct SessionConfig {
     pub keepalive_interval: Option<u32>,
     pub connection_timeout: Option<u32>,
     pub server_alive_count_max: Option<u32>,
+    pub idle_disconnect_minutes: Option<u32>,
     pub compression: Option<bool>,
     // Docker-specific
     pub docker_protocol: Option<String>,
@@ -125,6 +126,7 @@ impl Default for SessionConfig {
             keepalive_interval: None,
             connection_timeout: None,
             server_alive_count_max: None,
+            idle_disconnect_minutes: None,
             compression: None,
             docker_protocol: None,
             docker_unix_path: None,

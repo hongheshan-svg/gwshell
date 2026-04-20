@@ -38,6 +38,7 @@ export interface SessionConfig {
   keepalive_interval?: number;
   connection_timeout?: number;
   server_alive_count_max?: number;
+  idle_disconnect_minutes?: number;
   compression?: boolean;
   // Docker-specific
   docker_protocol?: 'unix' | 'tcp' | 'http' | 'https';

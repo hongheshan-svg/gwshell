@@ -310,6 +310,7 @@ pub struct SshInstance {
     session: Session,
     channel: ssh2::Channel,
     sftp: Option<ssh2::Sftp>,
+    last_user_input: Instant,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -355,6 +356,7 @@ impl SshManager {
         proxy_username: Option<&str>,
         proxy_password: Option<&str>,
         connection_timeout: u32,
+        idle_disconnect_minutes: u32,
         app_handle: AppHandle,
         rows: u32,
         cols: u32,
@@ -461,7 +463,12 @@ impl SshManager {
 
         session.set_blocking(false);
 
-        let instance = Arc::new(Mutex::new(SshInstance { session, channel, sftp: None }));
+        let instance = Arc::new(Mutex::new(SshInstance {
+            session,
+            channel,
+            sftp: None,
+            last_user_input: Instant::now(),
+        }));
         let reader_instance = instance.clone();
 
         self.instances
@@ -477,6 +484,17 @@ impl SshManager {
             loop {
                 let result = {
                     let mut inst = reader_instance.lock();
+
+                    if idle_disconnect_minutes > 0
+                        && inst.last_user_input.elapsed()
+                            >= Duration::from_secs(idle_disconnect_minutes as u64 * 60)
+                    {
+                        inst.session.set_blocking(true);
+                        let _ = inst.channel.close();
+                        let _ = inst.channel.wait_close();
+                        let _ = app_handle.emit(&format!("ssh-exit-{}", sid), ());
+                        break;
+                    }
 
                     // Keep idle sessions alive. libssh2 keepalive packets are
                     // best sent in blocking mode; in non-blocking mode they
@@ -556,6 +574,7 @@ impl SshManager {
         let instances = self.instances.lock();
         if let Some(instance) = instances.get(session_id) {
             let mut inst = instance.lock();
+            inst.last_user_input = Instant::now();
             inst.session.set_blocking(true);
             let result = inst
                 .channel

@@ -123,6 +123,7 @@
   "ssh_env_desc": "每行一个，格式为 KEY=VALUE。仅在服务器 sshd_config 中 AcceptEnv 允许的变量才会生效。",
   "ssh_conn_timeout": "连接超时（秒）",
   "ssh_keepalive": "Keepalive 间隔（秒）",
+  "ssh_idle_disconnect": "空闲自动断开（分钟）",
   "ssh_compression": "启用数据压缩",
   "ssh_jump_title": "跳板机（Jump Host / -J）",
   "ssh_jump_host": "跳板机地址",

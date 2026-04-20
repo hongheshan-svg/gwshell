@@ -208,6 +208,7 @@ export function destroyTerminal(tabId: string): void {
   connectedTabs.delete(tabId);
   const inst = terminalInstances.get(tabId);
   if (inst) {
+    try { inst.rendererAddon?.dispose(); } catch {}
     inst.terminal.dispose();
     terminalInstances.delete(tabId);
   }
@@ -378,7 +379,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           fontSize: parseInt(s.terminalFontSize) || 13,
           lineHeight: parseFloat(s.terminalLineHeight) || 1.2,
           letterSpacing: parseFloat(s.terminalLetterSpacing) || 0,
-          cursorBlink: true,
+          cursorBlink: false,
           cursorStyle: "bar",
           theme: getTerminalThemeColors(useAppStore.getState().theme),
           allowProposedApi: true,
@@ -637,18 +638,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         });
       }
 
-      // Attach the GPU-accelerated renderer once the terminal is in the DOM.
-      // WebGL preferred; falls back to Canvas if WebGL context creation fails
-      // (e.g. headless test envs, restrictive GPU driver). Falling back to the
-      // default DOM renderer is what causes the "jitter / overlapping glyphs"
-      // visible during high-throughput output.
+      // Attach a canvas renderer once the terminal is in the DOM.
+      // WebGL is fast, but it is more prone to stale cells in full-screen TUIs
+      // during reparent/focus/resize cycles. Canvas is still accelerated enough
+      // for normal shell output and clears Codex/Claude status rows reliably.
       if (wasFreshlyOpened) {
         try {
-          const webgl = new WebglAddon();
-          webgl.onContextLoss(() => { try { webgl.dispose(); } catch {} });
-          instance.terminal.loadAddon(webgl);
+          const canvas = new CanvasAddon();
+          instance.terminal.loadAddon(canvas);
+          instance.rendererAddon = canvas;
         } catch {
-          try { instance.terminal.loadAddon(new CanvasAddon()); } catch {}
+          try {
+            const webgl = new WebglAddon();
+            webgl.onContextLoss(() => { try { webgl.dispose(); } catch {} });
+            instance.terminal.loadAddon(webgl);
+            instance.rendererAddon = webgl;
+          } catch {}
         }
       }
 
@@ -725,7 +730,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
 
       const unlistenExit = await listen(
         `${eventPrefix}-exit-${tab.sessionId}`,
-        () => { instance?.terminal.write(`\r\n\x1b[33m${t('term_session_ended')}\x1b[0m\r\n`); }
+        () => {
+          instance?.terminal.write(`\r\n\x1b[33m${t('term_session_ended')}\x1b[0m\r\n`);
+          useAppStore.getState().updateTabConnected(tab.id, false);
+        }
       );
       if (cancelled) { unlistenData(); unlistenExit(); return; }
 
@@ -783,6 +791,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         proxyUsername: sess?.proxy_username ?? null,
         proxyPassword: sess?.proxy_password ?? null,
         connectionTimeout: sess?.connection_timeout ?? 30,
+        idleDisconnectMinutes: sess?.idle_disconnect_minutes ?? null,
         rows: instance!.terminal.rows,
         cols: instance!.terminal.cols,
       });
@@ -979,6 +988,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
     const inst = terminalInstances.get(tab.id);
     if (inst) {
       inst.terminal.options.theme = getTerminalThemeColors(theme);
+      inst.terminal.options.cursorBlink = false;
     }
   }, [theme, tab.id]);
 
