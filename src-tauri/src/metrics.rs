@@ -390,3 +390,399 @@ mod tests {
         assert_eq!(cpu_percent(prev, cur), 100.0);
     }
 }
+
+// ---- MetricsManager (live polling against a remote SSH session) ----
+
+use crate::ssh::SshManager;
+use parking_lot::Mutex;
+use std::collections::HashMap as StdHashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tauri::{AppHandle, Emitter};
+use tokio::task::JoinHandle;
+use tokio::time::{sleep, timeout};
+
+pub struct LastSample {
+    pub cpu_total: CpuTimes,
+    pub cpu_per_core: Vec<CpuTimes>,
+    pub net_bytes: StdHashMap<String, (u64, u64)>,
+    pub taken_at: Instant,
+}
+
+pub struct MetricsManager {
+    tasks: Mutex<StdHashMap<String, JoinHandle<()>>>,
+    last: Arc<Mutex<StdHashMap<String, LastSample>>>,
+    static_host: Arc<Mutex<StdHashMap<String, HostInfo>>>,
+}
+
+impl MetricsManager {
+    pub fn new() -> Self {
+        Self {
+            tasks: Mutex::new(StdHashMap::new()),
+            last: Arc::new(Mutex::new(StdHashMap::new())),
+            static_host: Arc::new(Mutex::new(StdHashMap::new())),
+        }
+    }
+
+    /// Idempotent. If a task already exists for this session_id, returns early.
+    pub fn start(
+        &self,
+        session_id: String,
+        ssh: Arc<SshManager>,
+        app: AppHandle,
+    ) {
+        let mut tasks = self.tasks.lock();
+        if tasks.contains_key(&session_id) {
+            return;
+        }
+        let last = self.last.clone();
+        let static_host = self.static_host.clone();
+        let sid = session_id.clone();
+
+        let handle = tokio::spawn(async move {
+            let static_cmd = r#"
+echo '---HOST---'
+whoami
+hostname
+uname -sr
+cat /etc/os-release 2>/dev/null
+nproc
+grep '^model name' /proc/cpuinfo | head -1
+echo '---HOSTEND---'
+"#;
+            let ssh_static = ssh.clone();
+            let sid_static = sid.clone();
+            let static_out = tokio::task::spawn_blocking(move || {
+                ssh_static.ssh_exec(&sid_static, static_cmd)
+            })
+            .await;
+
+            match static_out {
+                Ok(Ok(text)) => {
+                    let host = parse_static_host(&text);
+                    if host.cpu_cores == 0 {
+                        let _ = app.emit(
+                            &format!("server-metrics-error-{}", sid),
+                            serde_json::json!({ "reason": "unsupported" }),
+                        );
+                        return;
+                    }
+                    static_host.lock().insert(sid.clone(), host);
+                }
+                _ => {
+                    let _ = app.emit(
+                        &format!("server-metrics-error-{}", sid),
+                        serde_json::json!({ "reason": "disconnected" }),
+                    );
+                    return;
+                }
+            }
+
+            let mut consecutive_timeouts: u32 = 0;
+            loop {
+                let probe = r#"
+echo '---STAT---';   cat /proc/stat
+echo '---MEM---';    cat /proc/meminfo
+echo '---NET---';    cat /proc/net/dev
+echo '---UPT---';    cat /proc/uptime
+echo '---LOAD---';   cat /proc/loadavg
+echo '---PROC---';   ps -eo pid,comm,%cpu,%mem,rss --sort=-%cpu 2>/dev/null | head -21
+echo '---NIC4---';   ip -o -4 addr show 2>/dev/null
+echo '---NICLINK---';ip -o link show 2>/dev/null
+echo '---END---'
+"#;
+                let ssh_tick = ssh.clone();
+                let sid_tick = sid.clone();
+                let exec_fut = tokio::task::spawn_blocking(move || {
+                    ssh_tick.ssh_exec(&sid_tick, probe)
+                });
+
+                let out = match timeout(Duration::from_secs(5), exec_fut).await {
+                    Ok(Ok(Ok(text))) => {
+                        consecutive_timeouts = 0;
+                        text
+                    }
+                    Ok(Ok(Err(_))) => {
+                        let _ = app.emit(
+                            &format!("server-metrics-error-{}", sid),
+                            serde_json::json!({ "reason": "disconnected" }),
+                        );
+                        break;
+                    }
+                    Ok(Err(_)) => {
+                        let _ = app.emit(
+                            &format!("server-metrics-error-{}", sid),
+                            serde_json::json!({ "reason": "disconnected" }),
+                        );
+                        break;
+                    }
+                    Err(_) => {
+                        consecutive_timeouts += 1;
+                        if consecutive_timeouts >= 3 {
+                            let _ = app.emit(
+                                &format!("server-metrics-error-{}", sid),
+                                serde_json::json!({ "reason": "timeout" }),
+                            );
+                            break;
+                        }
+                        sleep(Duration::from_secs(2)).await;
+                        continue;
+                    }
+                };
+
+                let snapshot = build_snapshot(&out, &sid, &last, &static_host);
+                let _ = app.emit(&format!("server-metrics-{}", sid), &snapshot);
+
+                sleep(Duration::from_secs(2)).await;
+            }
+
+            last.lock().remove(&sid);
+            static_host.lock().remove(&sid);
+        });
+
+        tasks.insert(session_id, handle);
+    }
+
+    pub fn stop(&self, session_id: &str) {
+        let mut tasks = self.tasks.lock();
+        if let Some(handle) = tasks.remove(session_id) {
+            handle.abort();
+        }
+        self.last.lock().remove(session_id);
+        self.static_host.lock().remove(session_id);
+    }
+}
+
+impl Default for MetricsManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn parse_static_host(text: &str) -> HostInfo {
+    let mut iter = text.lines();
+    let mut host = HostInfo::default();
+
+    for line in &mut iter {
+        if line.trim() == "---HOST---" {
+            break;
+        }
+    }
+
+    host.user = iter.next().unwrap_or("").trim().to_string();
+    host.hostname = iter.next().unwrap_or("").trim().to_string();
+    host.kernel = iter.next().unwrap_or("").trim().to_string();
+
+    let mut os_lines: Vec<String> = Vec::new();
+    let mut cores: u32 = 0;
+    for line in &mut iter {
+        let trimmed = line.trim();
+        if trimmed.chars().all(|c| c.is_ascii_digit()) && !trimmed.is_empty() {
+            cores = trimmed.parse().unwrap_or(0);
+            break;
+        }
+        if trimmed == "---HOSTEND---" {
+            break;
+        }
+        os_lines.push(line.to_string());
+    }
+    host.os_pretty = parse_os_pretty(&os_lines.join("\n"));
+    host.cpu_cores = cores;
+
+    if let Some(line) = iter.next() {
+        if let Some(after) = line.split_once(':') {
+            host.cpu_model = after.1.trim().to_string();
+        }
+    }
+
+    host
+}
+
+pub fn build_snapshot(
+    text: &str,
+    session_id: &str,
+    last: &Arc<Mutex<StdHashMap<String, LastSample>>>,
+    static_host: &Arc<Mutex<StdHashMap<String, HostInfo>>>,
+) -> MetricsSnapshot {
+    let mut sections: StdHashMap<&str, String> = StdHashMap::new();
+    let mut current: Option<&str> = None;
+    let mut buf = String::new();
+    for line in text.lines() {
+        if let Some(tag) = line.strip_prefix("---").and_then(|s| s.strip_suffix("---")) {
+            if let Some(prev) = current.take() {
+                sections.insert(prev, std::mem::take(&mut buf));
+            }
+            if tag != "END" {
+                current = Some(match tag {
+                    "STAT" => "STAT",
+                    "MEM" => "MEM",
+                    "NET" => "NET",
+                    "UPT" => "UPT",
+                    "LOAD" => "LOAD",
+                    "PROC" => "PROC",
+                    "NIC4" => "NIC4",
+                    "NICLINK" => "NICLINK",
+                    _ => "",
+                });
+            }
+            continue;
+        }
+        if current.is_some() {
+            buf.push_str(line);
+            buf.push('\n');
+        }
+    }
+
+    let now = Instant::now();
+    let mut prev_lock = last.lock();
+    let prev = prev_lock.remove(session_id);
+
+    let (cpu_stats, new_cpu_total, new_cpu_per_core) = match sections.get("STAT") {
+        Some(stat_text) => match parse_proc_stat(stat_text) {
+            Some((total, per_core)) => {
+                let (cpu_pct, user_pct, sys_pct, iowait_pct, per_core_pct) = match &prev {
+                    Some(p) => {
+                        let t = cpu_percent(p.cpu_total, total);
+                        let (u, s, w) = cpu_breakdown(p.cpu_total, total);
+                        let core_pcts: Vec<f64> = per_core
+                            .iter()
+                            .enumerate()
+                            .map(|(i, cur)| {
+                                p.cpu_per_core
+                                    .get(i)
+                                    .map(|prev_c| cpu_percent(*prev_c, *cur))
+                                    .unwrap_or(0.0)
+                            })
+                            .collect();
+                        (t, u, s, w, core_pcts)
+                    }
+                    None => (0.0, 0.0, 0.0, 0.0, vec![0.0; per_core.len()]),
+                };
+                let (l1, l5, l15) = sections
+                    .get("LOAD")
+                    .map(|s| parse_loadavg(s))
+                    .unwrap_or((0.0, 0.0, 0.0));
+                (
+                    Some(CpuStats {
+                        total_percent: cpu_pct,
+                        user_percent: user_pct,
+                        system_percent: sys_pct,
+                        iowait_percent: iowait_pct,
+                        per_core: per_core_pct,
+                        loadavg_1m: l1,
+                        loadavg_5m: l5,
+                        loadavg_15m: l15,
+                    }),
+                    total,
+                    per_core,
+                )
+            }
+            None => (None, CpuTimes::default(), Vec::new()),
+        },
+        None => (None, CpuTimes::default(), Vec::new()),
+    };
+
+    let mem_stats = sections.get("MEM").map(|t| parse_meminfo(t));
+
+    let new_net = sections
+        .get("NET")
+        .map(|t| parse_net_dev(t))
+        .unwrap_or_default();
+    let net_stats = {
+        let mut total_rx: u64 = 0;
+        let mut total_tx: u64 = 0;
+        for (_, (rx, tx)) in &new_net {
+            total_rx += rx;
+            total_tx += tx;
+        }
+        let (rx_rate, tx_rate) = match &prev {
+            Some(p) => {
+                let dt = now.saturating_duration_since(p.taken_at).as_secs_f64().max(0.001);
+                let mut prx: u64 = 0;
+                let mut ptx: u64 = 0;
+                for (_, (rx, tx)) in &p.net_bytes {
+                    prx += rx;
+                    ptx += tx;
+                }
+                let rx_d = total_rx.saturating_sub(prx) as f64 / dt;
+                let tx_d = total_tx.saturating_sub(ptx) as f64 / dt;
+                (rx_d.max(0.0), tx_d.max(0.0))
+            }
+            None => (0.0, 0.0),
+        };
+        if new_net.is_empty() {
+            None
+        } else {
+            Some(NetStats {
+                total_rx_bytes: total_rx,
+                total_tx_bytes: total_tx,
+                rx_bytes_per_sec: rx_rate,
+                tx_bytes_per_sec: tx_rate,
+            })
+        }
+    };
+
+    let procs = sections.get("PROC").map(|t| parse_ps(t));
+
+    let nics = {
+        let ipv4 = sections
+            .get("NIC4")
+            .map(|t| parse_ip_addr(t))
+            .unwrap_or_default();
+        let macs = sections
+            .get("NICLINK")
+            .map(|t| parse_ip_link(t))
+            .unwrap_or_default();
+        if ipv4.is_empty() && macs.is_empty() {
+            None
+        } else {
+            let mut names: std::collections::BTreeSet<String> = Default::default();
+            for n in ipv4.keys() { names.insert(n.clone()); }
+            for n in macs.keys() { if n != "lo" { names.insert(n.clone()); } }
+            Some(
+                names
+                    .into_iter()
+                    .map(|name| NicInfo {
+                        ipv4: ipv4.get(&name).cloned(),
+                        mac: macs.get(&name).cloned(),
+                        name,
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        }
+    };
+
+    let host = static_host.lock().get(session_id).cloned().map(|mut h| {
+        if let Some(upt) = sections.get("UPT") {
+            if let Some(first) = upt.split_ascii_whitespace().next() {
+                if let Ok(s) = first.parse::<f64>() {
+                    h.uptime_seconds = s as u64;
+                }
+            }
+        }
+        h
+    });
+
+    prev_lock.insert(
+        session_id.to_string(),
+        LastSample {
+            cpu_total: new_cpu_total,
+            cpu_per_core: new_cpu_per_core,
+            net_bytes: new_net,
+            taken_at: now,
+        },
+    );
+
+    MetricsSnapshot {
+        host,
+        cpu: cpu_stats,
+        mem: mem_stats,
+        net: net_stats,
+        procs,
+        nics,
+        collected_at: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0),
+    }
+}
