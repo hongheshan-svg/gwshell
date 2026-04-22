@@ -379,7 +379,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           fontSize: parseInt(s.terminalFontSize) || 13,
           lineHeight: parseFloat(s.terminalLineHeight) || 1.2,
           letterSpacing: parseFloat(s.terminalLetterSpacing) || 0,
-          cursorBlink: false,
+          cursorBlink: true,
           cursorStyle: "bar",
           cursorInactiveStyle: "none",
           theme: getTerminalThemeColors(useAppStore.getState().theme),
@@ -989,15 +989,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
     const inst = terminalInstances.get(tab.id);
     if (inst) {
       inst.terminal.options.theme = getTerminalThemeColors(theme);
-      inst.terminal.options.cursorBlink = false;
+      inst.terminal.options.cursorBlink = true;
       inst.terminal.options.cursorInactiveStyle = "none";
     }
   }, [theme, tab.id]);
 
   useEffect(() => {
+    const inst = terminalInstances.get(tab.id);
+    if (!inst) return;
+
+    inst.terminal.options.cursorBlink = isActive;
+    inst.terminal.options.cursorInactiveStyle = "none";
+
     if (isActive) {
-      const inst = terminalInstances.get(tab.id);
-      if (inst) {
         // Double-RAF: wait for layout to settle (especially after
         // display:none → block). Going from hidden → visible may leave the
         // glyph atlas stale and the cached TUI state out of sync, so do a
@@ -1008,7 +1012,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
             try { inst.terminal.focus(); } catch {}
           });
         });
-      }
+    } else {
+      try { inst.terminal.blur(); } catch {}
     }
   }, [isActive, tab.id, tab.sessionId, tab.type]);
 
