@@ -27,12 +27,11 @@ export const TitleBar: React.FC = () => {
     event.preventDefault();
     event.stopPropagation();
 
-    void invoke('quit_app').catch(() => {});
-    window.setTimeout(() => {
+    void invoke('quit_app').catch(() => {
       appWindow.destroy().catch(() => {
         appWindow.close().catch(() => {});
       });
-    }, 100);
+    });
   };
 
   return (

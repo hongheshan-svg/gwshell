@@ -11,7 +11,9 @@ use pty::PtyManager;
 use serial::SerialManager;
 use session::{SessionConfig, SessionGroup};
 use ssh::SshManager;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::{Manager, State};
 
 pub struct AppState {
@@ -29,6 +31,7 @@ pub struct AppState {
 use std::sync::OnceLock;
 
 static OS_INFO: OnceLock<serde_json::Value> = OnceLock::new();
+static EXIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 fn compute_os_info() -> serde_json::Value {
     let os = std::env::consts::OS;
@@ -77,8 +80,30 @@ async fn app_ready(window: tauri::WebviewWindow) {
 }
 
 #[tauri::command]
-fn quit_app(app_handle: tauri::AppHandle) {
-    app_handle.exit(0);
+fn quit_app(app_handle: tauri::AppHandle, state: State<'_, Arc<AppState>>) {
+    if EXIT_REQUESTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.hide();
+    }
+
+    let state = state.inner().clone();
+    let exit_handle = app_handle.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(1500));
+        std::process::exit(0);
+    });
+
+    std::thread::spawn(move || {
+        state.metrics.stop_all();
+        state.pty_manager.close_all();
+        state.serial_manager.close_all();
+        state.ssh_manager.close_all();
+        exit_handle.exit(0);
+        std::process::exit(0);
+    });
 }
 
 // ---- PTY Commands ----

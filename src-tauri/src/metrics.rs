@@ -551,6 +551,20 @@ echo '---END---'
         self.last.lock().remove(session_id);
         self.static_host.lock().remove(session_id);
     }
+
+    pub fn stop_all(&self) {
+        let handles: Vec<_> = self
+            .tasks
+            .lock()
+            .drain()
+            .map(|(_, handle)| handle)
+            .collect();
+        for handle in handles {
+            handle.abort();
+        }
+        self.last.lock().clear();
+        self.static_host.lock().clear();
+    }
 }
 
 impl Default for MetricsManager {

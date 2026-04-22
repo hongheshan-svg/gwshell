@@ -1,4 +1,6 @@
 import React, { useRef, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTranslation } from 'react-i18next';
 import {
   ExternalLink,
@@ -13,6 +15,8 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+
+const appWindow = getCurrentWindow();
 
 export const AppMenu: React.FC = () => {
   const { showAppMenu, setShowAppMenu, setShowSettings, locale, setLocale } = useAppStore();
@@ -32,6 +36,15 @@ export const AppMenu: React.FC = () => {
   }, [showAppMenu, setShowAppMenu]);
 
   if (!showAppMenu) return null;
+
+  const handleQuit = () => {
+    setShowAppMenu(false);
+    void invoke('quit_app').catch(() => {
+      appWindow.destroy().catch(() => {
+        appWindow.close().catch(() => {});
+      });
+    });
+  };
 
   return (
     <div className="app-menu-overlay">
@@ -76,7 +89,7 @@ export const AppMenu: React.FC = () => {
           <RotateCcw size={14} />
           <span>{t('menu_reload')}</span>
         </div>
-        <div className="app-menu-item danger">
+        <div className="app-menu-item danger" onClick={handleQuit}>
           <LogOut size={14} />
           <span>{t('menu_quit')}</span>
           <span className="app-menu-shortcut">Alt+F4</span>
