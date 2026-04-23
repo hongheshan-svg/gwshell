@@ -11,9 +11,7 @@ use pty::PtyManager;
 use serial::SerialManager;
 use session::{SessionConfig, SessionGroup};
 use ssh::SshManager;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 use tauri::{Manager, State};
 
 pub struct AppState {
@@ -31,7 +29,6 @@ pub struct AppState {
 use std::sync::OnceLock;
 
 static OS_INFO: OnceLock<serde_json::Value> = OnceLock::new();
-static EXIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 fn compute_os_info() -> serde_json::Value {
     let os = std::env::consts::OS;
@@ -80,30 +77,9 @@ async fn app_ready(window: tauri::WebviewWindow) {
 }
 
 #[tauri::command]
-fn quit_app(app_handle: tauri::AppHandle, state: State<'_, Arc<AppState>>) {
-    if EXIT_REQUESTED.swap(true, Ordering::SeqCst) {
-        return;
-    }
-
-    if let Some(window) = app_handle.get_webview_window("main") {
-        let _ = window.hide();
-    }
-
-    let state = state.inner().clone();
-    let exit_handle = app_handle.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(1500));
-        std::process::exit(0);
-    });
-
-    std::thread::spawn(move || {
-        state.metrics.stop_all();
-        state.pty_manager.close_all();
-        state.serial_manager.close_all();
-        state.ssh_manager.close_all();
-        exit_handle.exit(0);
-        std::process::exit(0);
-    });
+fn quit_app(app_handle: tauri::AppHandle) {
+    app_handle.exit(0);
+    std::process::exit(0);
 }
 
 // ---- PTY Commands ----
@@ -808,6 +784,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -877,7 +854,18 @@ pub fn run() {
             // Inject sessions AND fire a cheap IPC call to warm up the
             // __TAURI_INTERNALS__ → Rust pipeline before the user clicks anything.
             let init_script = format!(
-                "window.__GWSHELL_SESSIONS__={};try{{window.__TAURI_INTERNALS__.invoke('get_os_info')}}catch(e){{}}",
+                concat!(
+                    "window.__GWSHELL_SESSIONS__={};",
+                    "try{{window.__TAURI_INTERNALS__.invoke('get_os_info')}}catch(e){{}};",
+                    // Native click handler for the close button — fires in capture phase,
+                    // bypasses React entirely. Uses raw Tauri IPC as a guaranteed exit path.
+                    "document.addEventListener('click',function(e){{",
+                      "if(e.target&&e.target.closest&&e.target.closest('[data-gw-action=\"exit\"]')){{",
+                        "try{{window.__TAURI_INTERNALS__.invoke('plugin:process|exit',{{code:0}})}}catch(_){{}}",
+                        "try{{window.__TAURI_INTERNALS__.invoke('quit_app')}}catch(_){{}}",
+                      "}}",
+                    "}},true);"
+                ),
                 sessions_json
             );
 
@@ -885,7 +873,7 @@ pub fn run() {
             // initialization script (not possible via tauri.conf.json).
             // Built AFTER the tray so that show() is the very last thing
             // in setup — the event loop starts immediately after.
-            let _main_window = tauri::WebviewWindowBuilder::new(
+            let main_window = tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
                 tauri::WebviewUrl::App("index.html".into()),
@@ -900,6 +888,12 @@ pub fn run() {
             .visible(false)
             .initialization_script(&init_script)
             .build()?;
+
+            main_window.on_window_event(|event| {
+                if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                    std::process::exit(0);
+                }
+            });
 
             // Window stays hidden until the frontend calls `app_ready`
             // after React has mounted and painted the first frame.

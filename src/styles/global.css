@@ -170,6 +170,8 @@ input, select, textarea, button {
 .titlebar-controls {
   display: flex;
   height: 100%;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .titlebar-btn {
@@ -666,6 +668,11 @@ input, select, textarea, button {
 
 .terminal-pane .xterm-screen canvas {
   display: block;
+}
+
+.terminal-pane .xterm:not(.focus) .xterm-cursor,
+.terminal-pane .xterm .xterm-cursor.xterm-cursor-hidden {
+  display: none !important;
 }
 
 /* ---- xterm scrollbar: thin by default, expands on hover (Windows CMD style) ---- */

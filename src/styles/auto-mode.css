@@ -19,11 +19,6 @@
 }
 .auto-mode-toggle.on {
   color: #f1c40f;
-  animation: auto-mode-pulse 2s ease-in-out infinite;
-}
-@keyframes auto-mode-pulse {
-  0%, 100% { filter: drop-shadow(0 0 0 rgba(241, 196, 15, 0)); }
-  50%      { filter: drop-shadow(0 0 2px rgba(241, 196, 15, 0.7)); }
 }
 
 /* ── Auto Mode: status-bar indicator ──────────────────────── */
@@ -41,11 +36,6 @@
 .auto-mode-indicator:hover {
   background: rgba(241, 196, 15, 0.12);
 }
-.auto-mode-indicator.flash {
-  background: rgba(241, 196, 15, 0.45);
-  transition: background 0.3s ease;
-}
-
 /* ── Auto Mode: log panel drawer ──────────────────────────── */
 .auto-mode-log-panel {
   position: fixed;

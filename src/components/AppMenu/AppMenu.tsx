@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { exit } from '@tauri-apps/plugin-process';
 import { useTranslation } from 'react-i18next';
 import {
   ExternalLink,
@@ -39,11 +40,13 @@ export const AppMenu: React.FC = () => {
 
   const handleQuit = () => {
     setShowAppMenu(false);
-    void invoke('quit_app').catch(() => {
+    exit(0).catch(() => {});
+    invoke('quit_app').catch(() => {});
+    setTimeout(() => {
       appWindow.destroy().catch(() => {
         appWindow.close().catch(() => {});
       });
-    });
+    }, 800);
   };
 
   return (

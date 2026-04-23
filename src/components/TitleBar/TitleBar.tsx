@@ -1,12 +1,10 @@
 import React from 'react';
 import { Minus, Square, X, Activity } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { invoke } from '@tauri-apps/api/core';
+import { exit } from '@tauri-apps/plugin-process';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../stores/appStore';
 
-// Cache the window reference at module level so the first click
-// doesn't pay the initialization cost of creating a new Window object.
 const appWindow = getCurrentWindow();
 
 export const TitleBar: React.FC = () => {
@@ -23,19 +21,13 @@ export const TitleBar: React.FC = () => {
     appWindow.toggleMaximize();
   };
 
-  const handleClose = (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    void invoke('quit_app').catch(() => {
-      appWindow.destroy().catch(() => {
-        appWindow.close().catch(() => {});
-      });
-    });
+  const handleClose = () => {
+    exit(0).catch(() => {});
+    appWindow.close().catch(() => {});
   };
 
   return (
-    <div className="titlebar" data-tauri-drag-region>
+    <div className="titlebar">
       <div className="titlebar-title" data-tauri-drag-region>
         GWShell
       </div>
@@ -56,14 +48,7 @@ export const TitleBar: React.FC = () => {
         <button className="titlebar-btn" onClick={handleMaximize} data-gw-action="toggle_maximize" title={t('titlebar_maximize')}>
           <Square size={10} />
         </button>
-        <button
-          type="button"
-          className="titlebar-btn titlebar-close"
-          onClick={handleClose}
-          onMouseDown={(event) => event.stopPropagation()}
-          data-gw-action="exit"
-          title={t('titlebar_close')}
-        >
+        <button className="titlebar-btn titlebar-close" onClick={handleClose} data-gw-action="exit" title={t('titlebar_close')}>
           <X size={14} />
         </button>
       </div>
