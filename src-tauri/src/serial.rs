@@ -128,6 +128,14 @@ impl SerialManager {
             inst.stop_flag.store(true, Ordering::Relaxed);
         }
     }
+
+    pub fn close_all(&self) {
+        let instances: Vec<_> = self.instances.lock().drain().map(|(_, v)| v).collect();
+        for instance in instances {
+            let inst = instance.lock();
+            inst.stop_flag.store(true, Ordering::Relaxed);
+        }
+    }
 }
 
 pub fn list_serial_ports() -> Vec<String> {

@@ -129,6 +129,7 @@ export const NewSessionModal: React.FC = () => {
       keepalive_interval: form.keepalive_interval || undefined,
       connection_timeout: form.connection_timeout || undefined,
       server_alive_count_max: form.server_alive_count_max || undefined,
+      idle_disconnect_minutes: form.idle_disconnect_minutes || undefined,
       compression: form.compression || undefined,
       // Env vars
       env_vars: form.env_vars || undefined,
@@ -594,6 +595,19 @@ export const NewSessionModal: React.FC = () => {
                   />
                 </div>
                 <div className="ssh-form-group">
+                  <label>{t('ssh_idle_disconnect')}</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="0"
+                    value={form.idle_disconnect_minutes || ''}
+                    onChange={(e) => setForm({ ...form, idle_disconnect_minutes: parseInt(e.target.value) || undefined })}
+                  />
+                </div>
+              </div>
+
+              <div className="ssh-form-row">
+                <div className="ssh-form-group">
                   <label style={{ visibility: 'hidden' }}>{t('common_placeholder')}</label>
                   <label className="ssh-toggle-label">
                     <input
@@ -604,6 +618,7 @@ export const NewSessionModal: React.FC = () => {
                     <span>{t('ssh_compression')}</span>
                   </label>
                 </div>
+                <div className="ssh-form-group" />
               </div>
 
               {/* Jump host section */}

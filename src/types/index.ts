@@ -38,6 +38,7 @@ export interface SessionConfig {
   keepalive_interval?: number;
   connection_timeout?: number;
   server_alive_count_max?: number;
+  idle_disconnect_minutes?: number;
   compression?: boolean;
   // Docker-specific
   docker_protocol?: 'unix' | 'tcp' | 'http' | 'https';
@@ -78,3 +79,59 @@ export interface TabInfo {
 
 export type ThemeMode = 'dark' | 'light';
 export type MainView = 'asset-list' | 'terminal';
+
+// ─── Auto Mode ───────────────────────────────────────────────
+export interface AutoModeDetectionContext {
+  /** Rendered visible lines (top→bottom), already stripped of ANSI by xterm */
+  visibleLines: string[];
+  cursorRow: number;
+  cursorCol: number;
+  /** Terminal is in alt-screen mode (alt buffer active) */
+  inAltScreen: boolean;
+  /** ms since last onWriteParsed */
+  idleMs: number;
+  /** ms timestamp of last user keypress (for suppression gate) */
+  lastUserInputAt: number;
+  /** Date.now() at time of detection */
+  now: number;
+}
+
+export interface AutoModeMatchResult {
+  /** Raw bytes to send to the PTY/SSH, e.g. "2\r" or "y\r" */
+  response: string;
+  /** Human-readable label shown in the log panel */
+  label: string;
+  /** Name of the rule that matched */
+  ruleName: string;
+}
+
+export interface AutoModeRule {
+  id: string;
+  name: string;
+  /** Higher priority rules try first; first non-null match wins */
+  priority: number;
+  match: (ctx: AutoModeDetectionContext) => AutoModeMatchResult | null;
+}
+
+export interface AutoModeCustomRule {
+  id: string;
+  enabled: boolean;
+  priority: number;
+  /** regex source string */
+  pattern: string;
+  /** regex flags, e.g. "im" */
+  flags: string;
+  /** raw bytes to send; backslash escapes (\r \n \t \xHH) are decoded at load time */
+  response: string;
+  /** log label */
+  label: string;
+}
+
+export interface AutoModeLogEntry {
+  id: string;
+  time: number;
+  kind: 'info' | 'warning' | 'error';
+  label: string;
+  ruleName?: string;
+  response?: string;
+}

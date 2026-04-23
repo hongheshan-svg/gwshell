@@ -1,5 +1,5 @@
 use parking_lot::Mutex;
-use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -14,6 +14,7 @@ pub struct ShellEntry {
 
 pub struct PtyInstance {
     master: Box<dyn MasterPty + Send>,
+    child: Box<dyn Child + Send + Sync>,
     writer: Box<dyn Write + Send>,
     charset: String,
 }
@@ -87,8 +88,14 @@ pub fn list_available_shells() -> Vec<ShellEntry> {
     #[cfg(target_os = "windows")]
     {
         // Always available on Windows
-        shells.push(ShellEntry { id: "cmd".into(), label: "cmd".into() });
-        shells.push(ShellEntry { id: "powershell".into(), label: "powershell".into() });
+        shells.push(ShellEntry {
+            id: "cmd".into(),
+            label: "cmd".into(),
+        });
+        shells.push(ShellEntry {
+            id: "powershell".into(),
+            label: "powershell".into(),
+        });
 
         // PowerShell 7 (pwsh.exe)
         let pwsh_exists = std::process::Command::new("where")
@@ -100,7 +107,10 @@ pub fn list_available_shells() -> Vec<ShellEntry> {
             || std::path::Path::new(r"C:\Program Files\PowerShell\7\pwsh.exe").exists()
             || std::path::Path::new(r"C:\Program Files\PowerShell\pwsh.exe").exists();
         if pwsh_exists {
-            shells.push(ShellEntry { id: "powershell7".into(), label: "powershell7".into() });
+            shells.push(ShellEntry {
+                id: "powershell7".into(),
+                label: "powershell7".into(),
+            });
         }
 
         // WSL distros — output is UTF-16LE on Windows
@@ -135,7 +145,10 @@ pub fn list_available_shells() -> Vec<ShellEntry> {
             r"C:\Program Files (x86)\Git\bin\bash.exe",
         ] {
             if std::path::Path::new(path).exists() {
-                shells.push(ShellEntry { id: "gitbash".into(), label: "gitbash".into() });
+                shells.push(ShellEntry {
+                    id: "gitbash".into(),
+                    label: "gitbash".into(),
+                });
                 break;
             }
         }
@@ -143,21 +156,36 @@ pub fn list_available_shells() -> Vec<ShellEntry> {
 
     #[cfg(not(target_os = "windows"))]
     {
-        shells.push(ShellEntry { id: "bash".into(), label: "bash".into() });
-        shells.push(ShellEntry { id: "zsh".into(), label: "zsh".into() });
-        shells.push(ShellEntry { id: "fish".into(), label: "fish".into() });
+        shells.push(ShellEntry {
+            id: "bash".into(),
+            label: "bash".into(),
+        });
+        shells.push(ShellEntry {
+            id: "zsh".into(),
+            label: "zsh".into(),
+        });
+        shells.push(ShellEntry {
+            id: "fish".into(),
+            label: "fish".into(),
+        });
         if std::process::Command::new("which")
             .arg("pwsh")
             .status()
             .map(|s| s.success())
             .unwrap_or(false)
         {
-            shells.push(ShellEntry { id: "powershell7".into(), label: "powershell7".into() });
+            shells.push(ShellEntry {
+                id: "powershell7".into(),
+                label: "powershell7".into(),
+            });
         }
     }
 
     // Always last: custom
-    shells.push(ShellEntry { id: "custom".into(), label: "Custom".into() });
+    shells.push(ShellEntry {
+        id: "custom".into(),
+        label: "Custom".into(),
+    });
 
     shells
 }
@@ -218,7 +246,8 @@ impl PtyManager {
             cmd.cwd(home);
         }
 
-        pair.slave
+        let child = pair
+            .slave
             .spawn_command(cmd)
             .map_err(|e| format!("Failed to spawn shell: {}", e))?;
 
@@ -234,6 +263,7 @@ impl PtyManager {
 
         let instance = Arc::new(Mutex::new(PtyInstance {
             master: pair.master,
+            child,
             writer,
             charset: charset_str.clone(),
         }));
@@ -325,8 +355,19 @@ impl PtyManager {
     }
 
     pub fn close_pty(&self, session_id: &str) {
-        self.instances.lock().remove(session_id);
+        if let Some(instance) = self.instances.lock().remove(session_id) {
+            let mut inst = instance.lock();
+            let _ = inst.child.kill();
+            let _ = inst.child.wait();
+        }
+    }
+
+    pub fn close_all(&self) {
+        let instances: Vec<_> = self.instances.lock().drain().map(|(_, v)| v).collect();
+        for instance in instances {
+            let mut inst = instance.lock();
+            let _ = inst.child.kill();
+            let _ = inst.child.wait();
+        }
     }
 }
-
-

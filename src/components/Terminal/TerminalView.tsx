@@ -12,6 +12,8 @@ import type { TabInfo, ThemeMode } from "../../types";
 import { useAppStore } from "../../stores/appStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { terminalInstances } from "./terminalRegistry";
+import { AutoModeWatcher } from "./AutoModeWatcher";
+import { useAutoModeStore } from "../../stores/autoModeStore";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalViewProps {
@@ -174,6 +176,9 @@ const terminalInteractionCleanups = new Map<string, () => void>();
 const fitFrameIds = new Map<string, number>();
 const settleTimerIds = new Map<string, ReturnType<typeof setTimeout>>();
 
+/** One AutoModeWatcher per tab, lifecycle-bound to the xterm instance. */
+const autoModeWatchers = new Map<string, AutoModeWatcher>();
+
 /** Remove event listeners for a tab (idempotent). */
 function cleanupTabListeners(tabId: string): void {
   const fn = tabListenerCleanups.get(tabId);
@@ -187,6 +192,11 @@ function cleanupTerminalInteractions(tabId: string): void {
 
 /** Destroy a terminal instance associated with a tab (called when the tab closes). */
 export function destroyTerminal(tabId: string): void {
+  const watcher = autoModeWatchers.get(tabId);
+  if (watcher) {
+    try { watcher.dispose(); } catch {}
+    autoModeWatchers.delete(tabId);
+  }
   cleanupTabListeners(tabId);
   cleanupTerminalInteractions(tabId);
   const frameId = fitFrameIds.get(tabId);
@@ -198,6 +208,7 @@ export function destroyTerminal(tabId: string): void {
   connectedTabs.delete(tabId);
   const inst = terminalInstances.get(tabId);
   if (inst) {
+    try { inst.rendererAddon?.dispose(); } catch {}
     inst.terminal.dispose();
     terminalInstances.delete(tabId);
   }
@@ -370,6 +381,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           letterSpacing: parseFloat(s.terminalLetterSpacing) || 0,
           cursorBlink: true,
           cursorStyle: "bar",
+          cursorInactiveStyle: "none",
           theme: getTerminalThemeColors(useAppStore.getState().theme),
           allowProposedApi: true,
           scrollback: parseInt(s.terminalMaxScrollback) || 10000,
@@ -627,18 +639,42 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         });
       }
 
-      // Attach the GPU-accelerated renderer once the terminal is in the DOM.
-      // WebGL preferred; falls back to Canvas if WebGL context creation fails
-      // (e.g. headless test envs, restrictive GPU driver). Falling back to the
-      // default DOM renderer is what causes the "jitter / overlapping glyphs"
-      // visible during high-throughput output.
+      // Attach a canvas renderer once the terminal is in the DOM.
+      // WebGL is fast, but it is more prone to stale cells in full-screen TUIs
+      // during reparent/focus/resize cycles. Canvas is still accelerated enough
+      // for normal shell output and clears Codex/Claude status rows reliably.
       if (wasFreshlyOpened) {
         try {
-          const webgl = new WebglAddon();
-          webgl.onContextLoss(() => { try { webgl.dispose(); } catch {} });
-          instance.terminal.loadAddon(webgl);
+          const canvas = new CanvasAddon();
+          instance.terminal.loadAddon(canvas);
+          instance.rendererAddon = canvas;
         } catch {
-          try { instance.terminal.loadAddon(new CanvasAddon()); } catch {}
+          try {
+            const webgl = new WebglAddon();
+            webgl.onContextLoss(() => { try { webgl.dispose(); } catch {} });
+            instance.terminal.loadAddon(webgl);
+            instance.rendererAddon = webgl;
+          } catch {}
+        }
+      }
+
+      // ── Auto Mode Watcher ──────────────────────────────
+      // Only create for terminal tabs where Auto Mode is meaningful.
+      if ((tab.type === 'ssh' || tab.type === 'localshell') && !autoModeWatchers.has(tab.id)) {
+        const watcher = new AutoModeWatcher({
+          tabId: tab.id,
+          sessionId: tab.sessionId,
+          tabType: tab.type,
+          terminal: instance.terminal,
+        });
+        autoModeWatchers.set(tab.id, watcher);
+        watcher.start();
+
+        // Initialize enabled flag from user's default setting (only once per tab).
+        const amStore = useAutoModeStore.getState();
+        if (amStore.enabled[tab.id] === undefined) {
+          const s = useSettingsStore.getState().settings;
+          amStore.setEnabled(tab.id, s.autoModeDefaultEnabled);
         }
       }
 
@@ -695,7 +731,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
 
       const unlistenExit = await listen(
         `${eventPrefix}-exit-${tab.sessionId}`,
-        () => { instance?.terminal.write(`\r\n\x1b[33m${t('term_session_ended')}\x1b[0m\r\n`); }
+        () => {
+          instance?.terminal.write(`\r\n\x1b[33m${t('term_session_ended')}\x1b[0m\r\n`);
+          useAppStore.getState().updateTabConnected(tab.id, false);
+        }
       );
       if (cancelled) { unlistenData(); unlistenExit(); return; }
 
@@ -753,6 +792,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         proxyUsername: sess?.proxy_username ?? null,
         proxyPassword: sess?.proxy_password ?? null,
         connectionTimeout: sess?.connection_timeout ?? 30,
+        idleDisconnectMinutes: sess?.idle_disconnect_minutes ?? null,
         rows: instance!.terminal.rows,
         cols: instance!.terminal.cols,
       });
@@ -949,13 +989,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
     const inst = terminalInstances.get(tab.id);
     if (inst) {
       inst.terminal.options.theme = getTerminalThemeColors(theme);
+      inst.terminal.options.cursorBlink = true;
+      inst.terminal.options.cursorInactiveStyle = "none";
     }
   }, [theme, tab.id]);
 
   useEffect(() => {
+    const inst = terminalInstances.get(tab.id);
+    if (!inst) return;
+
+    inst.terminal.options.cursorBlink = isActive;
+    inst.terminal.options.cursorInactiveStyle = "none";
+
     if (isActive) {
-      const inst = terminalInstances.get(tab.id);
-      if (inst) {
         // Double-RAF: wait for layout to settle (especially after
         // display:none → block). Going from hidden → visible may leave the
         // glyph atlas stale and the cached TUI state out of sync, so do a
@@ -966,7 +1012,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
             try { inst.terminal.focus(); } catch {}
           });
         });
-      }
+    } else {
+      try { inst.terminal.blur(); } catch {}
     }
   }, [isActive, tab.id, tab.sessionId, tab.type]);
 

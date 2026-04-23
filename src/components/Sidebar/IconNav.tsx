@@ -57,8 +57,7 @@ export const Sidebar: React.FC = () => {
         setShowNewSession(true);
         break;
       case 'sessions':
-        // Expand sidebar to show session panel
-        if (sidebarCollapsed) toggleSidebar();
+        toggleSidebar();
         break;
       case 'assetlist':
         // Switch to asset-list tab

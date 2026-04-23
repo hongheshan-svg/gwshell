@@ -1,7 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { TitleBar } from './components/TitleBar/TitleBar';
 import { Sidebar } from './components/Sidebar/IconNav';
 import { SessionPanel } from './components/Sidebar/SessionPanel';
@@ -28,10 +27,12 @@ const SerialPortModal = lazy(() => import('./components/Modals/SerialPortModal')
 const SettingsModal = lazy(() => import('./components/Settings/SettingsModal').then((m) => ({ default: m.SettingsModal })));
 const AppMenu = lazy(() => import('./components/AppMenu/AppMenu').then((m) => ({ default: m.AppMenu })));
 const UpdateChecker = lazy(() => import('./components/UpdateChecker/UpdateChecker').then((m) => ({ default: m.UpdateChecker })));
+const AutoModeLogPanel = lazy(() => import('./components/Terminal/AutoModeLogPanel').then((m) => ({ default: m.AutoModeLogPanel })));
+const ServerPanel = lazy(() => import('./components/ServerPanel').then((m) => ({ default: m.ServerPanel })));
 
 function App() {
   useSettingsEffects();
-  const { theme, setSessions, sidebarCollapsed, toggleSidebar, tabs, activeTabId, sftpPanelOpen, sessions,
+  const { theme, setSessions, tabs, activeTabId, sftpPanelOpen, sessions,
     showNewSession, showDockerModal, showLocalTerminalModal, showSerialModal, showSettings, showAppMenu,
     mainView, splitCount } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
@@ -94,13 +95,6 @@ function App() {
         <div className="app-layout">
           <Sidebar />
           <SessionPanel />
-          <button
-            className="sidebar-collapse-toggle"
-            onClick={toggleSidebar}
-            title={sidebarCollapsed ? '展开面板' : '折叠面板'}
-          >
-            {sidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-          </button>
           <div className="main-content">
             <TabBar />
             <div className="terminal-sftp-wrapper">
@@ -134,6 +128,8 @@ function App() {
           {showSettings && <SettingsModal />}
           {showAppMenu && <AppMenu />}
           <UpdateChecker />
+          <AutoModeLogPanel />
+          <ServerPanel />
         </Suspense>
       </div>
     </I18nextProvider>

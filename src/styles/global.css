@@ -1,3 +1,5 @@
+@import './auto-mode.css';
+
 :root {
   /* Dark theme (default) — modern terminal style */
   --bg-primary: #0c0c14;
@@ -168,6 +170,8 @@ input, select, textarea, button {
 .titlebar-controls {
   display: flex;
   height: 100%;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .titlebar-btn {
@@ -192,6 +196,12 @@ input, select, textarea, button {
   background: #e81123;
   color: #fff;
 }
+
+.titlebar-btn--active {
+  background: var(--accent-subtle, rgba(59, 130, 246, 0.15));
+  color: var(--accent, #60a5fa);
+}
+.titlebar-btn:disabled { opacity: 0.4; cursor: default; }
 
 /* ========== Icon Navbar ========== */
 
@@ -255,28 +265,6 @@ input, select, textarea, button {
 .sidebar-panel.collapsed {
   width: 0;
   border-right: none;
-}
-
-/* Sidebar collapse/expand toggle button */
-.sidebar-collapse-toggle {
-  width: 16px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-secondary);
-  border: none;
-  border-right: 1px solid var(--border-color);
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 0;
-  transition: color 0.1s linear, background 0.1s linear;
-  z-index: 5;
-}
-
-.sidebar-collapse-toggle:hover {
-  background: var(--bg-hover);
-  color: var(--accent-primary);
 }
 
 .sidebar-header {
@@ -682,6 +670,11 @@ input, select, textarea, button {
   display: block;
 }
 
+.terminal-pane .xterm:not(.focus) .xterm-cursor,
+.terminal-pane .xterm .xterm-cursor.xterm-cursor-hidden {
+  display: none !important;
+}
+
 /* ---- xterm scrollbar: thin by default, expands on hover (Windows CMD style) ---- */
 
 .xterm .xterm-viewport {
@@ -1024,7 +1017,7 @@ input, select, textarea, button {
   color: var(--text-primary);
   padding: 4px 7px;
   border-radius: 3px;
-  cursor: text;
+  cursor: default;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1046,6 +1039,7 @@ input, select, textarea, button {
   padding: 3px 6px;
   outline: none;
   box-sizing: border-box;
+  caret-color: transparent;
 }
 
 .sftp-error {
@@ -1809,6 +1803,26 @@ input, select, textarea, button {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.asset-session-toggle {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: var(--bg-tertiary);
+  color: var(--accent-primary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color 0.1s linear, background 0.1s linear, box-shadow 0.1s linear;
+}
+
+.asset-session-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--border-light);
 }
 
 .asset-toolbar-icon {

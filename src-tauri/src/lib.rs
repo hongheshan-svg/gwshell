@@ -1,4 +1,5 @@
 mod database;
+mod metrics;
 mod pty;
 mod serial;
 mod session;
@@ -15,11 +16,12 @@ use tauri::{Manager, State};
 
 pub struct AppState {
     pub pty_manager: PtyManager,
-    pub ssh_manager: SshManager,
+    pub ssh_manager: Arc<SshManager>,
     pub serial_manager: SerialManager,
     pub sessions: Mutex<Vec<SessionConfig>>,
     pub groups: Mutex<Vec<SessionGroup>>,
     pub db: Database,
+    pub metrics: metrics::MetricsManager,
 }
 
 // ---- Platform Info ----
@@ -72,6 +74,12 @@ fn get_os_info() -> serde_json::Value {
 async fn app_ready(window: tauri::WebviewWindow) {
     let _ = window.show();
     let _ = window.set_focus();
+}
+
+#[tauri::command]
+fn quit_app(app_handle: tauri::AppHandle) {
+    app_handle.exit(0);
+    std::process::exit(0);
 }
 
 // ---- PTY Commands ----
@@ -158,6 +166,7 @@ async fn ssh_connect(
     proxy_username: Option<String>,
     proxy_password: Option<String>,
     connection_timeout: Option<u32>,
+    idle_disconnect_minutes: Option<u32>,
     rows: u32,
     cols: u32,
     state: State<'_, Arc<AppState>>,
@@ -185,6 +194,7 @@ async fn ssh_connect(
             proxy_username.as_deref(),
             proxy_password.as_deref(),
             connection_timeout.unwrap_or(30),
+            idle_disconnect_minutes.unwrap_or(0),
             app_handle,
             rows,
             cols,
@@ -205,7 +215,7 @@ async fn ssh_trust_host(host: String, port: u16, fingerprint: String, key_type: 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 async fn start_tunnel(
-    _session_id: String,
+    session_id: String,
     host: String,
     port: u16,
     username: String,
@@ -230,6 +240,7 @@ async fn start_tunnel(
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || -> Result<u16, String> {
         state.ssh_manager.start_local_forward(
+            &session_id,
             &host,
             port,
             &username,
@@ -491,6 +502,42 @@ async fn ssh_exec(
         .map_err(|e| format!("task join: {}", e))?
 }
 
+// ---- Server Panel (Metrics) Commands ----
+
+#[tauri::command]
+fn start_server_metrics(
+    session_id: String,
+    state: State<'_, Arc<AppState>>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let ssh = state.ssh_manager.clone();
+    state.metrics.start(session_id, ssh, app_handle);
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_server_metrics(session_id: String, state: State<'_, Arc<AppState>>) {
+    state.metrics.stop(&session_id);
+}
+
+#[tauri::command]
+async fn kill_remote_process(
+    session_id: String,
+    pid: u32,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let cmd = format!("kill {}", pid);
+        state
+            .ssh_manager
+            .ssh_exec(&session_id, &cmd)
+            .map(|_| ())
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
+}
+
 // ---- Ping Command ----
 
 #[tauri::command]
@@ -718,11 +765,12 @@ pub fn run() {
 
     let app_state = Arc::new(AppState {
         pty_manager: PtyManager::new(),
-        ssh_manager: SshManager::new(),
+        ssh_manager: Arc::new(SshManager::new()),
         serial_manager: SerialManager::new(),
         sessions: Mutex::new(initial_sessions),
         groups: Mutex::new(initial_groups),
         db,
+        metrics: metrics::MetricsManager::new(),
     });
 
     tauri::Builder::default()
@@ -736,12 +784,14 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             app_ready,
+            quit_app,
             get_os_info,
             create_local_shell,
             list_shells,
@@ -768,6 +818,9 @@ pub fn run() {
             sftp_chmod,
             sftp_create_file,
             ssh_exec,
+            start_server_metrics,
+            stop_server_metrics,
+            kill_remote_process,
             ping_host,
             serial_open,
             write_to_serial,
@@ -801,7 +854,18 @@ pub fn run() {
             // Inject sessions AND fire a cheap IPC call to warm up the
             // __TAURI_INTERNALS__ → Rust pipeline before the user clicks anything.
             let init_script = format!(
-                "window.__GWSHELL_SESSIONS__={};try{{window.__TAURI_INTERNALS__.invoke('get_os_info')}}catch(e){{}}",
+                concat!(
+                    "window.__GWSHELL_SESSIONS__={};",
+                    "try{{window.__TAURI_INTERNALS__.invoke('get_os_info')}}catch(e){{}};",
+                    // Native click handler for the close button — fires in capture phase,
+                    // bypasses React entirely. Uses raw Tauri IPC as a guaranteed exit path.
+                    "document.addEventListener('click',function(e){{",
+                      "if(e.target&&e.target.closest&&e.target.closest('[data-gw-action=\"exit\"]')){{",
+                        "try{{window.__TAURI_INTERNALS__.invoke('plugin:process|exit',{{code:0}})}}catch(_){{}}",
+                        "try{{window.__TAURI_INTERNALS__.invoke('quit_app')}}catch(_){{}}",
+                      "}}",
+                    "}},true);"
+                ),
                 sessions_json
             );
 
@@ -809,7 +873,7 @@ pub fn run() {
             // initialization script (not possible via tauri.conf.json).
             // Built AFTER the tray so that show() is the very last thing
             // in setup — the event loop starts immediately after.
-            let _main_window = tauri::WebviewWindowBuilder::new(
+            let main_window = tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
                 tauri::WebviewUrl::App("index.html".into()),
@@ -824,6 +888,12 @@ pub fn run() {
             .visible(false)
             .initialization_script(&init_script)
             .build()?;
+
+            main_window.on_window_event(|event| {
+                if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                    std::process::exit(0);
+                }
+            });
 
             // Window stays hidden until the frontend calls `app_ready`
             // after React has mounted and painted the first frame.

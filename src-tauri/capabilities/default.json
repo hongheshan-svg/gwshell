@@ -14,6 +14,7 @@
     "core:window:allow-maximize",
     "core:window:allow-unmaximize",
     "core:window:allow-close",
+    "core:window:allow-destroy",
     "core:window:allow-toggle-maximize",
     "core:window:allow-is-maximized",
     "core:window:allow-show",
@@ -24,6 +25,7 @@
     "updater:allow-download-and-install",
     "deep-link:default",
     "clipboard-manager:allow-read-text",
-    "clipboard-manager:allow-write-text"
+    "clipboard-manager:allow-write-text",
+    "process:allow-exit"
   ]
 }
