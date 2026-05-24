@@ -929,7 +929,7 @@ pub fn run() {
             // initialization script (not possible via tauri.conf.json).
             // Built AFTER the tray so that show() is the very last thing
             // in setup — the event loop starts immediately after.
-            let main_window = tauri::WebviewWindowBuilder::new(
+            let mut builder = tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
                 tauri::WebviewUrl::App("index.html".into()),
@@ -938,12 +938,29 @@ pub fn run() {
             .inner_size(1280.0, 800.0)
             .min_inner_size(900.0, 600.0)
             .center()
-            .decorations(false)
-            .transparent(true)
             .resizable(true)
             .visible(false)
-            .initialization_script(&init_script)
-            .build()?;
+            .initialization_script(&init_script);
+
+            #[cfg(target_os = "macos")]
+            {
+                // On macOS use the system-drawn title bar with overlaid traffic
+                // lights. Hiding the title text leaves the area available for our
+                // own React content but keeps min/zoom/close in the top-left.
+                builder = builder
+                    .title_bar_style(tauri::TitleBarStyle::Overlay)
+                    .hidden_title(true);
+                // `decorations` defaults to true here; `transparent` is intentionally
+                // NOT set — Overlay + transparent has known compositing artifacts and
+                // the OS already provides rounded corners and drop shadow.
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            {
+                builder = builder.decorations(false).transparent(true);
+            }
+
+            let main_window = builder.build()?;
 
             let cleanup_state = app.state::<Arc<AppState>>().inner().clone();
             main_window.on_window_event(move |event| {
