@@ -1006,14 +1006,19 @@ impl SshManager {
                 let authed = match auth_method.as_str() {
                     "publickey" => {
                         if let Some(ref kp) = private_key_path {
-                            tun_sess
-                                .userauth_pubkey_file(
-                                    &username,
-                                    None,
-                                    Path::new(kp),
-                                    password.as_deref(),
-                                )
-                                .is_ok()
+                            let key_path = expand_tilde(kp);
+                            if !key_path.exists() {
+                                false
+                            } else {
+                                tun_sess
+                                    .userauth_pubkey_file(
+                                        &username,
+                                        None,
+                                        &key_path,
+                                        password.as_deref(),
+                                    )
+                                    .is_ok()
+                            }
                         } else {
                             false
                         }
