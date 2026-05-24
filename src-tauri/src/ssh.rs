@@ -241,10 +241,14 @@ fn tcp_via_jump(
         .handshake()
         .map_err(|e| format!("Jump handshake failed: {}", e))?;
 
-    if let Some(key_path) = jump_private_key_path.filter(|s| !s.is_empty()) {
+    if let Some(key_path_raw) = jump_private_key_path.filter(|s| !s.is_empty()) {
+        let key_path = expand_tilde(key_path_raw);
+        if !key_path.exists() {
+            return Err(format!("Jump host key file not found: {}", key_path.display()));
+        }
         jump_sess
-            .userauth_pubkey_file(jump_username, None, Path::new(key_path), jump_password)
-            .map_err(|e| format!("Jump key auth failed: {}", e))?;
+            .userauth_pubkey_file(jump_username, None, &key_path, jump_password)
+            .map_err(|e| format!("Jump key auth failed ({}): {}", key_path.display(), e))?;
     } else if let Some(pwd) = jump_password.filter(|s| !s.is_empty()) {
         jump_sess
             .userauth_password(jump_username, pwd)
@@ -435,10 +439,14 @@ impl SshManager {
         // == Step 4: authenticate ==
         match auth_method {
             "publickey" => {
-                let key_path = private_key_path.ok_or("Private key path is required")?;
+                let key_path_raw = private_key_path.ok_or("Private key path is required")?;
+                let key_path = expand_tilde(key_path_raw);
+                if !key_path.exists() {
+                    return Err(format!("SSH key file not found: {}", key_path.display()));
+                }
                 session
-                    .userauth_pubkey_file(username, None, Path::new(key_path), password)
-                    .map_err(|e| format!("Public key auth failed: {}", e))?;
+                    .userauth_pubkey_file(username, None, &key_path, password)
+                    .map_err(|e| format!("Public key auth failed ({}): {}", key_path.display(), e))?;
             }
             "keyboardinteractive" => {
                 let mut prompter = KbInteractiveAuth {
