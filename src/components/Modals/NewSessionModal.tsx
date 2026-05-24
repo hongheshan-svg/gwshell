@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Eye, EyeOff } from 'lucide-react';
+import { X, Eye, EyeOff, FolderOpen } from 'lucide-react';
+import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
 import { useAppStore } from '../../stores/appStore';
 import type { SessionConfig } from '../../types';
 import type { TranslationKeys } from '../../i18n';
@@ -167,6 +168,15 @@ export const NewSessionModal: React.FC = () => {
   const nameError = touched.name && !form.name;
   const hostError = touched.host && !form.host;
 
+  const pickKeyFile = async (field: 'private_key_path' | 'jump_private_key_path') => {
+    try {
+      const selected = await dialogOpen({ multiple: false, title: t('ssh_select_key_file') });
+      if (typeof selected === 'string' && selected) {
+        setForm((prev) => ({ ...prev, [field]: selected }));
+      }
+    } catch { /* canceled */ }
+  };
+
   return (
     <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
       <div className="ssh-modal" onClick={(e) => e.stopPropagation()}>
@@ -311,15 +321,48 @@ export const NewSessionModal: React.FC = () => {
 
               {/* Private key */}
               {form.auth_method === 'publickey' && (
-                <div className="ssh-form-group">
-                  <label>{t('ssh_private_key_path')}</label>
-                  <input
-                    type="text"
-                    placeholder="~/.ssh/id_rsa"
-                    value={form.private_key_path || ''}
-                    onChange={(e) => setForm({ ...form, private_key_path: e.target.value })}
-                  />
-                </div>
+                <>
+                  <div className="ssh-form-group">
+                    <label>{t('ssh_private_key_path')}</label>
+                    <div className="ssh-password-wrap">
+                      <input
+                        type="text"
+                        placeholder="~/.ssh/id_rsa"
+                        value={form.private_key_path || ''}
+                        onChange={(e) => setForm({ ...form, private_key_path: e.target.value })}
+                      />
+                      <button
+                        type="button"
+                        className="ssh-password-toggle"
+                        title={t('ssh_select_key_file')}
+                        onClick={() => pickKeyFile('private_key_path')}
+                      >
+                        <FolderOpen size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="ssh-form-group">
+                    <label>{t('ssh_key_passphrase_label')}</label>
+                    <div className="ssh-password-wrap">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder=""
+                        value={form.password || ''}
+                        onChange={(e) => setForm({ ...form, password: e.target.value })}
+                      />
+                      <button
+                        className="ssh-password-toggle"
+                        onClick={() => setShowPassword(!showPassword)}
+                        type="button"
+                      >
+                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                    <div className="ssh-tab-desc" style={{ marginTop: 4 }}>
+                      {t('ssh_key_passphrase_hint')}
+                    </div>
+                  </div>
+                </>
               )}
 
               {/* MFA/2FA */}
@@ -679,12 +722,22 @@ export const NewSessionModal: React.FC = () => {
                   </div>
                   <div className="ssh-form-group">
                     <label>{t('ssh_jump_key_path')}</label>
-                    <input
-                      type="text"
-                      placeholder="~/.ssh/id_rsa"
-                      value={form.jump_private_key_path || ''}
-                      onChange={(e) => setForm({ ...form, jump_private_key_path: e.target.value })}
-                    />
+                    <div className="ssh-password-wrap">
+                      <input
+                        type="text"
+                        placeholder="~/.ssh/id_rsa"
+                        value={form.jump_private_key_path || ''}
+                        onChange={(e) => setForm({ ...form, jump_private_key_path: e.target.value })}
+                      />
+                      <button
+                        type="button"
+                        className="ssh-password-toggle"
+                        title={t('ssh_select_key_file')}
+                        onClick={() => pickKeyFile('jump_private_key_path')}
+                      >
+                        <FolderOpen size={14} />
+                      </button>
+                    </div>
                   </div>
                   <div className="ssh-tab-desc">
                     {t('ssh_jump_desc', { jumpHost: form.jump_host!, jumpPort: form.jump_port || 22, host: form.host || 'target', port: form.port || 22 })}
