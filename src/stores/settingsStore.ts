@@ -116,7 +116,7 @@ export const defaultSettings: AppSettings = {
   renderMode: true,
   autoReconnect: false,
   middleClickAction: 'none',
-  rightClickAction: 'paste',
+  rightClickAction: 'menu',
   terminalSound: false,
   ctrlVPaste: true,
   terminalLineHeight: '1.2',
