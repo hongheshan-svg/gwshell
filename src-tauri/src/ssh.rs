@@ -14,6 +14,22 @@ use std::sync::{
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
+/// Expand a leading `~` or `~/` into the user's home directory.
+/// Other forms (`~user/...`) are returned unchanged — libssh2 doesn't
+/// support them either, so we keep behavior predictable.
+fn expand_tilde(path: &str) -> std::path::PathBuf {
+    use std::path::PathBuf;
+    if path == "~" {
+        return dirs::home_dir().unwrap_or_else(|| PathBuf::from("~"));
+    }
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(rest);
+        }
+    }
+    PathBuf::from(path)
+}
+
 // === Known-hosts storage ===
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -225,10 +241,14 @@ fn tcp_via_jump(
         .handshake()
         .map_err(|e| format!("Jump handshake failed: {}", e))?;
 
-    if let Some(key_path) = jump_private_key_path.filter(|s| !s.is_empty()) {
+    if let Some(key_path_raw) = jump_private_key_path.filter(|s| !s.is_empty()) {
+        let key_path = expand_tilde(key_path_raw);
+        if !key_path.exists() {
+            return Err(format!("Jump host key file not found: {}", key_path.display()));
+        }
         jump_sess
-            .userauth_pubkey_file(jump_username, None, Path::new(key_path), jump_password)
-            .map_err(|e| format!("Jump key auth failed: {}", e))?;
+            .userauth_pubkey_file(jump_username, None, &key_path, jump_password)
+            .map_err(|e| format!("Jump key auth failed ({}): {}", key_path.display(), e))?;
     } else if let Some(pwd) = jump_password.filter(|s| !s.is_empty()) {
         jump_sess
             .userauth_password(jump_username, pwd)
@@ -419,10 +439,14 @@ impl SshManager {
         // == Step 4: authenticate ==
         match auth_method {
             "publickey" => {
-                let key_path = private_key_path.ok_or("Private key path is required")?;
+                let key_path_raw = private_key_path.ok_or("Private key path is required")?;
+                let key_path = expand_tilde(key_path_raw);
+                if !key_path.exists() {
+                    return Err(format!("SSH key file not found: {}", key_path.display()));
+                }
                 session
-                    .userauth_pubkey_file(username, None, Path::new(key_path), password)
-                    .map_err(|e| format!("Public key auth failed: {}", e))?;
+                    .userauth_pubkey_file(username, None, &key_path, password)
+                    .map_err(|e| format!("Public key auth failed ({}): {}", key_path.display(), e))?;
             }
             "keyboardinteractive" => {
                 let mut prompter = KbInteractiveAuth {
@@ -982,14 +1006,19 @@ impl SshManager {
                 let authed = match auth_method.as_str() {
                     "publickey" => {
                         if let Some(ref kp) = private_key_path {
-                            tun_sess
-                                .userauth_pubkey_file(
-                                    &username,
-                                    None,
-                                    Path::new(kp),
-                                    password.as_deref(),
-                                )
-                                .is_ok()
+                            let key_path = expand_tilde(kp);
+                            if !key_path.exists() {
+                                false
+                            } else {
+                                tun_sess
+                                    .userauth_pubkey_file(
+                                        &username,
+                                        None,
+                                        &key_path,
+                                        password.as_deref(),
+                                    )
+                                    .is_ok()
+                            }
                         } else {
                             false
                         }
@@ -1097,5 +1126,40 @@ impl SshManager {
             forward.stop_flag.store(true, Ordering::Relaxed);
             let _ = TcpStream::connect(("127.0.0.1", forward.local_port));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn expand_tilde_leaves_absolute_path_unchanged() {
+        assert_eq!(expand_tilde("/etc/ssh/id_rsa"), PathBuf::from("/etc/ssh/id_rsa"));
+    }
+
+    #[test]
+    fn expand_tilde_leaves_relative_path_unchanged() {
+        assert_eq!(expand_tilde(".ssh/id_rsa"), PathBuf::from(".ssh/id_rsa"));
+    }
+
+    #[test]
+    fn expand_tilde_expands_bare_tilde() {
+        let home = dirs::home_dir().expect("test env should have home dir");
+        assert_eq!(expand_tilde("~"), home);
+    }
+
+    #[test]
+    fn expand_tilde_expands_tilde_slash_prefix() {
+        let home = dirs::home_dir().expect("test env should have home dir");
+        assert_eq!(expand_tilde("~/.ssh/id_rsa"), home.join(".ssh/id_rsa"));
+    }
+
+    #[test]
+    fn expand_tilde_does_not_expand_user_specific_tilde() {
+        // ~root/foo this OpenSSH form is uncommon, libssh2 doesn't support,
+        // we handle literally
+        assert_eq!(expand_tilde("~root/foo"), PathBuf::from("~root/foo"));
     }
 }

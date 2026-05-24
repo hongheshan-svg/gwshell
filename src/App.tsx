@@ -112,7 +112,7 @@ function App() {
                 const sess = sessions.find(s => s.id === activeTab.sessionId);
                 return (
                   <Suspense fallback={null}>
-                    <SftpPanel sessionId={activeTab.sessionId} username={sess?.username} />
+                    <SftpPanel sessionId={activeTab.sessionId} username={sess?.username} connected={activeTab.connected} />
                   </Suspense>
                 );
               })()}

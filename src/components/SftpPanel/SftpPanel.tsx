@@ -42,9 +42,10 @@ interface SftpEntry {
 interface SftpPanelProps {
   sessionId: string;
   username?: string;
+  connected?: boolean;
 }
 
-export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username }) => {
+export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, connected }) => {
   const { t } = useTranslation();
   const toggleSftpPanel = useAppStore((s) => s.toggleSftpPanel);
 
@@ -74,65 +75,44 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username }) => 
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
   const initializedRef = useRef(false);
-  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Detect initial directory with retry: SSH may not be connected yet when SFTP panel mounts
+  // Re-arm detection whenever the session drops its connection, so that a
+  // (re)connect runs the directory detection again instead of staying stuck
+  // on a stale error from before the SSH session was ready.
   useEffect(() => {
-    if (initializedRef.current) return;
+    if (!connected) initializedRef.current = false;
+  }, [connected]);
+
+  // Detect the initial directory once the SSH session is actually connected.
+  // Gating on `connected` (instead of a fixed mount-time retry window) means
+  // the panel loads as soon as auth + handshake finish, however long that
+  // takes — and recovers automatically if the panel mounted before the
+  // connection was ready.
+  useEffect(() => {
+    if (!connected || initializedRef.current) return;
     initializedRef.current = true;
 
-    const tryInit = (retriesLeft: number) => {
-      const homeDir = username ? `/home/${username}` : null;
-      const initWithPath = (dir: string) => {
-        setCurrentPath(dir);
-        setPathInput(dir);
-      };
-      const doFallback = () => {
-        invoke<string>('sftp_realpath', { sessionId, path: '.' })
-          .then((p) => initWithPath(p))
-          .catch(() => initWithPath('/'));
-      };
-      const retryOrFallback = () => {
-        if (retriesLeft > 0) {
-          retryTimerRef.current = setTimeout(() => tryInit(retriesLeft - 1), 1000);
-        } else {
-          initWithPath('/');
-        }
-      };
-
-      if (homeDir) {
-        invoke<unknown[]>('sftp_list', { sessionId, path: homeDir })
-          .then(() => initWithPath(homeDir))
-          .catch((err) => {
-            const errStr = String(err);
-            if (errStr.includes('Session not found') || errStr.includes('not found')) {
-              // SSH not connected yet, retry
-              retryOrFallback();
-            } else {
-              // Home dir doesn't exist, try realpath
-              doFallback();
-            }
-          });
-      } else {
-        invoke<string>('sftp_realpath', { sessionId, path: '.' })
-          .then((p) => initWithPath(p))
-          .catch((err) => {
-            const errStr = String(err);
-            if (errStr.includes('Session not found') || errStr.includes('not found')) {
-              retryOrFallback();
-            } else {
-              initWithPath('/');
-            }
-          });
-      }
+    const homeDir = username ? `/home/${username}` : null;
+    const initWithPath = (dir: string) => {
+      setCurrentPath(dir);
+      setPathInput(dir);
+    };
+    const doFallback = () => {
+      invoke<string>('sftp_realpath', { sessionId, path: '.' })
+        .then((p) => initWithPath(p))
+        .catch(() => initWithPath('/'));
     };
 
-    tryInit(10); // retry up to 10 times (10 seconds)
-
-    return () => {
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-    };
-  }, [sessionId, username]);
+    if (homeDir) {
+      // Home dir is a guess (e.g. /home/root doesn't exist for root); fall
+      // back to the server's resolved cwd when it isn't listable.
+      invoke<unknown[]>('sftp_list', { sessionId, path: homeDir })
+        .then(() => initWithPath(homeDir))
+        .catch(doFallback);
+    } else {
+      doFallback();
+    }
+  }, [connected, sessionId, username]);
 
   const loadDir = useCallback(
     async (path: string) => {

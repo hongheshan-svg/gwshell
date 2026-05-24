@@ -9,6 +9,7 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "security": {
       "csp": null,
       "capabilities": ["default"]
