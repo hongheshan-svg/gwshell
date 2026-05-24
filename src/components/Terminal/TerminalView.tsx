@@ -379,9 +379,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           fontSize: parseInt(s.terminalFontSize) || 13,
           lineHeight: parseFloat(s.terminalLineHeight) || 1.2,
           letterSpacing: parseFloat(s.terminalLetterSpacing) || 0,
+          // Cursor is left to the running program: TUI apps (Claude Code,
+          // Codex, vim) drive shape/blink/visibility via DECSCUSR (`\e[ q`)
+          // and DECTCEM (`\e[?25h/l`). We only set native-feeling defaults
+          // for the bare shell prompt and never re-impose them afterwards,
+          // otherwise focus/theme changes would fight the app's cursor.
           cursorBlink: true,
-          cursorStyle: "bar",
-          cursorInactiveStyle: "none",
+          cursorStyle: "block",
           theme: getTerminalThemeColors(useAppStore.getState().theme),
           allowProposedApi: true,
           scrollback: parseInt(s.terminalMaxScrollback) || 10000,
@@ -538,16 +542,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
                 copyCurrentSelection();
               }
             }, 30);
-            return;
           }
-          if (e.button === 2) {
-            const s = useSettingsStore.getState().settings;
-            if (isPasteAction(s.rightClickAction)) {
-              e.preventDefault();
-              e.stopPropagation();
-              runCmdRightClickAction();
-            }
-          }
+          // Right-click (button 2) is handled solely by the `contextmenu`
+          // event, which fires exactly once per click regardless of how long
+          // the button is held. Triggering paste here too caused a second
+          // paste on slow releases (outside the 120ms guard) — i.e. the
+          // multi-paste bug. Keep mouseup out of the right-click path.
         };
 
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -644,16 +644,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       // during reparent/focus/resize cycles. Canvas is still accelerated enough
       // for normal shell output and clears Codex/Claude status rows reliably.
       if (wasFreshlyOpened) {
+        // WebGL is xterm.js's preferred GPU renderer (fastest, scales best,
+        // and in v6 supports DEC 2026 synchronized output that reduces TUI
+        // tearing). Prefer it; fall back to Canvas, then to xterm's built-in
+        // DOM renderer if neither initializes. On WebGL context loss, dispose
+        // the addon so the terminal drops back to the DOM renderer.
         try {
-          const canvas = new CanvasAddon();
-          instance.terminal.loadAddon(canvas);
-          instance.rendererAddon = canvas;
+          const webgl = new WebglAddon();
+          webgl.onContextLoss(() => { try { webgl.dispose(); } catch {} });
+          instance.terminal.loadAddon(webgl);
+          instance.rendererAddon = webgl;
         } catch {
           try {
-            const webgl = new WebglAddon();
-            webgl.onContextLoss(() => { try { webgl.dispose(); } catch {} });
-            instance.terminal.loadAddon(webgl);
-            instance.rendererAddon = webgl;
+            const canvas = new CanvasAddon();
+            instance.terminal.loadAddon(canvas);
+            instance.rendererAddon = canvas;
           } catch {}
         }
       }
@@ -989,8 +994,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
     const inst = terminalInstances.get(tab.id);
     if (inst) {
       inst.terminal.options.theme = getTerminalThemeColors(theme);
-      inst.terminal.options.cursorBlink = true;
-      inst.terminal.options.cursorInactiveStyle = "none";
     }
   }, [theme, tab.id]);
 
@@ -998,9 +1001,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
     const inst = terminalInstances.get(tab.id);
     if (!inst) return;
 
-    inst.terminal.options.cursorBlink = isActive;
-    inst.terminal.options.cursorInactiveStyle = "none";
-
+    // Focus/blur only. xterm's default cursorInactiveStyle ('outline')
+    // renders a hollow cursor on unfocused panes natively — no need to
+    // force cursorBlink/visibility, which would clobber the running app.
     if (isActive) {
         // Double-RAF: wait for layout to settle (especially after
         // display:none → block). Going from hidden → visible may leave the
