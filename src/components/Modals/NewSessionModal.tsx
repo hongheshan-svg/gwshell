@@ -279,7 +279,7 @@ export const NewSessionModal: React.FC = () => {
                     <button
                       key={btn.id}
                       className={`ssh-auth-btn ${form.auth_method === btn.id ? 'active' : ''}`}
-                      onClick={() => setForm({ ...form, auth_method: btn.id })}
+                      onClick={() => setForm({ ...form, auth_method: btn.id, password: '' })}
                     >
                       {t(btn.labelKey)}
                     </button>
@@ -290,7 +290,7 @@ export const NewSessionModal: React.FC = () => {
                     <button
                       key={btn.id}
                       className={`ssh-auth-btn ${form.auth_method === btn.id ? 'active' : ''}`}
-                      onClick={() => setForm({ ...form, auth_method: btn.id })}
+                      onClick={() => setForm({ ...form, auth_method: btn.id, password: '' })}
                     >
                       {t(btn.labelKey)}
                     </button>
