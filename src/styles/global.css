@@ -201,6 +201,15 @@ input, select, textarea, button {
 }
 .titlebar-btn:disabled { opacity: 0.4; cursor: default; }
 
+/* macOS native title bar: traffic lights occupy the top-left ~72px.
+   We add 6px of breathing room before the title text. */
+.titlebar--macos {
+  padding-left: 78px;
+}
+.titlebar--macos .titlebar-title {
+  margin-left: 4px;
+}
+
 /* ========== Icon Navbar ========== */
 
 .icon-navbar {
