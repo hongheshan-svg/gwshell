@@ -14,6 +14,22 @@ use std::sync::{
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
+/// Expand a leading `~` or `~/` into the user's home directory.
+/// Other forms (`~user/...`) are returned unchanged — libssh2 doesn't
+/// support them either, so we keep behavior predictable.
+fn expand_tilde(path: &str) -> std::path::PathBuf {
+    use std::path::PathBuf;
+    if path == "~" {
+        return dirs::home_dir().unwrap_or_else(|| PathBuf::from("~"));
+    }
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(rest);
+        }
+    }
+    PathBuf::from(path)
+}
+
 // === Known-hosts storage ===
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1097,5 +1113,40 @@ impl SshManager {
             forward.stop_flag.store(true, Ordering::Relaxed);
             let _ = TcpStream::connect(("127.0.0.1", forward.local_port));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn expand_tilde_leaves_absolute_path_unchanged() {
+        assert_eq!(expand_tilde("/etc/ssh/id_rsa"), PathBuf::from("/etc/ssh/id_rsa"));
+    }
+
+    #[test]
+    fn expand_tilde_leaves_relative_path_unchanged() {
+        assert_eq!(expand_tilde(".ssh/id_rsa"), PathBuf::from(".ssh/id_rsa"));
+    }
+
+    #[test]
+    fn expand_tilde_expands_bare_tilde() {
+        let home = dirs::home_dir().expect("test env should have home dir");
+        assert_eq!(expand_tilde("~"), home);
+    }
+
+    #[test]
+    fn expand_tilde_expands_tilde_slash_prefix() {
+        let home = dirs::home_dir().expect("test env should have home dir");
+        assert_eq!(expand_tilde("~/.ssh/id_rsa"), home.join(".ssh/id_rsa"));
+    }
+
+    #[test]
+    fn expand_tilde_does_not_expand_user_specific_tilde() {
+        // ~root/foo this OpenSSH form is uncommon, libssh2 doesn't support,
+        // we handle literally
+        assert_eq!(expand_tilde("~root/foo"), PathBuf::from("~root/foo"));
     }
 }
