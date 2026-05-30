@@ -12,8 +12,6 @@ import type { TabInfo, ThemeMode } from "../../types";
 import { useAppStore } from "../../stores/appStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { terminalInstances } from "./terminalRegistry";
-import { AutoModeWatcher } from "./AutoModeWatcher";
-import { useAutoModeStore } from "../../stores/autoModeStore";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalViewProps {
@@ -176,9 +174,6 @@ const terminalInteractionCleanups = new Map<string, () => void>();
 const fitFrameIds = new Map<string, number>();
 const settleTimerIds = new Map<string, ReturnType<typeof setTimeout>>();
 
-/** One AutoModeWatcher per tab, lifecycle-bound to the xterm instance. */
-const autoModeWatchers = new Map<string, AutoModeWatcher>();
-
 /** Remove event listeners for a tab (idempotent). */
 function cleanupTabListeners(tabId: string): void {
   const fn = tabListenerCleanups.get(tabId);
@@ -192,11 +187,6 @@ function cleanupTerminalInteractions(tabId: string): void {
 
 /** Destroy a terminal instance associated with a tab (called when the tab closes). */
 export function destroyTerminal(tabId: string): void {
-  const watcher = autoModeWatchers.get(tabId);
-  if (watcher) {
-    try { watcher.dispose(); } catch {}
-    autoModeWatchers.delete(tabId);
-  }
   cleanupTabListeners(tabId);
   cleanupTerminalInteractions(tabId);
   const frameId = fitFrameIds.get(tabId);
@@ -663,26 +653,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         }
       }
 
-      // ── Auto Mode Watcher ──────────────────────────────
-      // Only create for terminal tabs where Auto Mode is meaningful.
-      if ((tab.type === 'ssh' || tab.type === 'localshell') && !autoModeWatchers.has(tab.id)) {
-        const watcher = new AutoModeWatcher({
-          tabId: tab.id,
-          sessionId: tab.sessionId,
-          tabType: tab.type,
-          terminal: instance.terminal,
-        });
-        autoModeWatchers.set(tab.id, watcher);
-        watcher.start();
-
-        // Initialize enabled flag from user's default setting (only once per tab).
-        const amStore = useAutoModeStore.getState();
-        if (amStore.enabled[tab.id] === undefined) {
-          const s = useSettingsStore.getState().settings;
-          amStore.setEnabled(tab.id, s.autoModeDefaultEnabled);
-        }
-      }
-
       // Immediate fit attempt — reading offsetWidth triggers a synchronous
       // reflow so dimensions are often already available after open().
       safeFit(tab.id);
@@ -743,8 +713,25 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       );
       if (cancelled) { unlistenData(); unlistenExit(); return; }
 
+      // Coalesce input: many onData events fired within one task (a paste, or
+      // very fast typing) are concatenated and sent as a single invoke on the
+      // next microtask. This adds no perceptible latency for single keystrokes
+      // but collapses bursts from hundreds of IPC calls to one.
+      let writeQueue = "";
+      let writeScheduled = false;
+      const flushWrites = () => {
+        writeScheduled = false;
+        if (!writeQueue) return;
+        const payload = writeQueue;
+        writeQueue = "";
+        invoke(writeCmd, { sessionId: tab.sessionId, data: payload }).catch(() => {});
+      };
       const dataDispose = instance!.terminal.onData((data) => {
-        invoke(writeCmd, { sessionId: tab.sessionId, data }).catch(() => {});
+        writeQueue += data;
+        if (!writeScheduled) {
+          writeScheduled = true;
+          queueMicrotask(flushWrites);
+        }
       });
 
       let resizeDispose: { dispose(): void } | null = null;

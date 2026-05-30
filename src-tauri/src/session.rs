@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+// `#[serde(default)]` makes deserialization forward/backward compatible: a row
+// written by an older or newer build that is missing fields falls back to
+// `Default` instead of failing to load (which would make the session vanish).
+#[serde(default)]
 pub struct SessionConfig {
     pub id: String,
     pub name: String,

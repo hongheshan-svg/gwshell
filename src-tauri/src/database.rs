@@ -50,8 +50,11 @@ impl Database {
     // ---- Sessions ----
 
     pub fn save_session(&self, config: &SessionConfig) -> Result<(), String> {
+        // Encrypt secret fields before they touch disk.
+        let mut config = config.clone();
+        crate::crypto::encrypt_session_secrets(&mut config);
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        let data = serde_json::to_string(config).map_err(|e| e.to_string())?;
+        let data = serde_json::to_string(&config).map_err(|e| e.to_string())?;
         conn.execute(
             "INSERT OR REPLACE INTO sessions (id, data) VALUES (?1, ?2)",
             params![config.id, data],
@@ -74,8 +77,15 @@ impl Database {
         let mut sessions = Vec::new();
         for row in rows {
             let data = row.map_err(|e| e.to_string())?;
-            if let Ok(config) = serde_json::from_str::<SessionConfig>(&data) {
-                sessions.push(config);
+            match serde_json::from_str::<SessionConfig>(&data) {
+                Ok(mut config) => {
+                    // Decrypt secrets so the in-memory cache / frontend / connect
+                    // path see usable plaintext.
+                    crate::crypto::decrypt_session_secrets(&mut config);
+                    sessions.push(config);
+                }
+                // Don't silently drop a corrupt/incompatible row without a trace.
+                Err(e) => eprintln!("[gwshell] skipping unreadable session row: {}", e),
             }
         }
         Ok(sessions)
@@ -91,8 +101,11 @@ impl Database {
     // ---- Groups ----
 
     pub fn save_group(&self, group: &SessionGroup) -> Result<(), String> {
+        // Encrypt secrets of any embedded session configs too.
+        let mut group = group.clone();
+        crate::crypto::encrypt_group_secrets(&mut group);
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        let data = serde_json::to_string(group).map_err(|e| e.to_string())?;
+        let data = serde_json::to_string(&group).map_err(|e| e.to_string())?;
         conn.execute(
             "INSERT OR REPLACE INTO groups (name, data) VALUES (?1, ?2)",
             params![group.name, data],
@@ -115,8 +128,12 @@ impl Database {
         let mut groups = Vec::new();
         for row in rows {
             let data = row.map_err(|e| e.to_string())?;
-            if let Ok(group) = serde_json::from_str::<SessionGroup>(&data) {
-                groups.push(group);
+            match serde_json::from_str::<SessionGroup>(&data) {
+                Ok(mut group) => {
+                    crate::crypto::decrypt_group_secrets(&mut group);
+                    groups.push(group);
+                }
+                Err(e) => eprintln!("[gwshell] skipping unreadable group row: {}", e),
             }
         }
         Ok(groups)
@@ -156,7 +173,15 @@ impl Database {
     // ---- Storage Operations ----
 
     pub fn export_sessions_json(&self) -> Result<String, String> {
-        let sessions = self.get_sessions()?;
+        let mut sessions = self.get_sessions()?;
+        // Never write plaintext secrets to a user-chosen export file. Passwords
+        // and TOTP secrets are stripped; re-enter them after importing.
+        for s in &mut sessions {
+            s.password = None;
+            s.jump_password = None;
+            s.proxy_password = None;
+            s.totp_code = None;
+        }
         serde_json::to_string_pretty(&sessions).map_err(|e| e.to_string())
     }
 

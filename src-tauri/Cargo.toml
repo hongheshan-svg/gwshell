@@ -40,3 +40,8 @@ tauri-plugin-deep-link = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-process = "2"
+# Secret-at-rest encryption: a random master key kept in the OS credential
+# store (Credential Manager / Keychain / Secret Service) encrypts DB secrets.
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+aes-gcm = "0.10"
+getrandom = "0.2"

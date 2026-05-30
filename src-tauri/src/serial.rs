@@ -78,6 +78,11 @@ impl SerialManager {
 
         let sid = session_id.to_string();
         std::thread::spawn(move || {
+            // Streaming decoder so a multi-byte character split across two reads
+            // is not corrupted into replacement characters.
+            let mut decoder = encoding_rs::UTF_8.new_decoder();
+            let data_ev = format!("serial-data-{}", sid);
+            let exit_ev = format!("serial-exit-{}", sid);
             let mut buf = [0u8; 4096];
             loop {
                 if stop_clone.load(Ordering::Relaxed) {
@@ -85,19 +90,22 @@ impl SerialManager {
                 }
                 match reader.read(&mut buf) {
                     Ok(0) => {
-                        let _ = app_handle.emit(&format!("serial-exit-{}", sid), ());
+                        let _ = app_handle.emit(&exit_ev, ());
                         break;
                     }
                     Ok(n) => {
-                        let data = String::from_utf8_lossy(&buf[..n]).to_string();
-                        let _ = app_handle.emit(&format!("serial-data-{}", sid), data);
+                        let mut out = String::with_capacity(n + 16);
+                        let _ = decoder.decode_to_string(&buf[..n], &mut out, false);
+                        if !out.is_empty() {
+                            let _ = app_handle.emit(&data_ev, out);
+                        }
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
                         // Short timeout, keep polling
                     }
                     Err(_) => {
                         if !stop_clone.load(Ordering::Relaxed) {
-                            let _ = app_handle.emit(&format!("serial-exit-{}", sid), ());
+                            let _ = app_handle.emit(&exit_ev, ());
                         }
                         break;
                     }

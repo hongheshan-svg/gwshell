@@ -75,6 +75,22 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
   const initializedRef = useRef(false);
+  // Guards file transfers so overlapping operations (double-click during a
+  // transfer, spammed download/upload) can't run concurrently and corrupt
+  // each other. The ref gives an immediate synchronous gate; `busy` drives UI.
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const runExclusive = useCallback(async (fn: () => Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }, []);
 
   // Re-arm detection whenever the session drops its connection, so that a
   // (re)connect runs the directory detection again instead of staying stuck
@@ -179,49 +195,52 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
     }
   };
 
-  const handleOpenLocal = async (entry: SftpEntry) => {
-    try {
-      const tempPath = await invoke<string>('sftp_open_file', {
-        sessionId,
-        remotePath: entry.path,
-      });
-      await openPath(tempPath);
-    } catch (err) {
-      setError(String(err));
-    }
-  };
-
-  const handleDownload = async (entry: SftpEntry) => {
-    try {
-      const localPath = await save({ defaultPath: entry.name });
-      if (localPath) {
-        await invoke('sftp_download', {
+  const handleOpenLocal = (entry: SftpEntry) =>
+    runExclusive(async () => {
+      try {
+        const tempPath = await invoke<string>('sftp_open_file', {
           sessionId,
           remotePath: entry.path,
-          localPath,
         });
+        await openPath(tempPath);
+      } catch (err) {
+        setError(String(err));
       }
-    } catch (err) {
-      setError(String(err));
-    }
-  };
+    });
 
-  const handleUpload = async () => {
-    try {
-      const selected = await open({ multiple: true });
-      if (!selected) return;
-      const files = Array.isArray(selected) ? selected : [selected];
-      for (const fileEntry of files) {
-        const path = typeof fileEntry === 'string' ? fileEntry : (fileEntry as { path: string }).path;
-        const fileName = path.replace(/\\/g, '/').split('/').pop() || 'file';
-        const remotePath = currentPath === '/' ? `/${fileName}` : `${currentPath}/${fileName}`;
-        await invoke('sftp_upload', { sessionId, remotePath, localPath: path });
+  const handleDownload = (entry: SftpEntry) =>
+    runExclusive(async () => {
+      try {
+        const localPath = await save({ defaultPath: entry.name });
+        if (localPath) {
+          await invoke('sftp_download', {
+            sessionId,
+            remotePath: entry.path,
+            localPath,
+          });
+        }
+      } catch (err) {
+        setError(String(err));
       }
-      loadDir(currentPath);
-    } catch (err) {
-      setError(String(err));
-    }
-  };
+    });
+
+  const handleUpload = () =>
+    runExclusive(async () => {
+      try {
+        const selected = await open({ multiple: true });
+        if (!selected) return;
+        const files = Array.isArray(selected) ? selected : [selected];
+        for (const fileEntry of files) {
+          const path = typeof fileEntry === 'string' ? fileEntry : (fileEntry as { path: string }).path;
+          const fileName = path.replace(/\\/g, '/').split('/').pop() || 'file';
+          const remotePath = currentPath === '/' ? `/${fileName}` : `${currentPath}/${fileName}`;
+          await invoke('sftp_upload', { sessionId, remotePath, localPath: path });
+        }
+        loadDir(currentPath);
+      } catch (err) {
+        setError(String(err));
+      }
+    });
 
   const handleUploadFolder = async () => {
     try {
@@ -410,7 +429,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
           <button className="sftp-tool-btn" onClick={() => { setNewFileMode(true); setNewFileName(''); }} title={t('sftp_new_file')}>
             <FilePlus size={14} />
           </button>
-          <button className="sftp-tool-btn" onClick={handleUpload} title={t('sftp_upload')}>
+          <button className="sftp-tool-btn" onClick={handleUpload} disabled={busy} title={t('sftp_upload')}>
             <Upload size={14} />
           </button>
         </div>

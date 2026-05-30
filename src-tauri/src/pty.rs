@@ -276,29 +276,32 @@ impl PtyManager {
         // charset_str already owned, move into thread
         let thread_charset = charset_str;
         std::thread::spawn(move || {
-            // Resolve the encoding once for the lifetime of the reader thread
+            // Resolve the encoding once for the lifetime of the reader thread.
+            // A streaming Decoder carries incomplete multi-byte sequences across
+            // read boundaries, so a CJK/multibyte character split across a read
+            // no longer corrupts into replacement characters.
             let encoding = encoding_rs::Encoding::for_label(thread_charset.as_bytes())
                 .unwrap_or(encoding_rs::UTF_8);
+            let mut decoder = encoding.new_decoder();
+            let data_ev = format!("pty-data-{}", sid);
+            let exit_ev = format!("pty-exit-{}", sid);
 
-            let mut buf = [0u8; 4096];
+            let mut buf = [0u8; 16384];
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => {
-                        let _ = app_handle.emit(&format!("pty-exit-{}", sid), ());
+                        let _ = app_handle.emit(&exit_ev, ());
                         break;
                     }
                     Ok(n) => {
-                        // Decode bytes to UTF-8 string using configured charset
-                        let data = if encoding == encoding_rs::UTF_8 {
-                            String::from_utf8_lossy(&buf[..n]).to_string()
-                        } else {
-                            let (cow, _enc, _had_errors) = encoding.decode(&buf[..n]);
-                            cow.into_owned()
-                        };
-                        let _ = app_handle.emit(&format!("pty-data-{}", sid), data);
+                        let mut out = String::with_capacity(n + 16);
+                        let _ = decoder.decode_to_string(&buf[..n], &mut out, false);
+                        if !out.is_empty() {
+                            let _ = app_handle.emit(&data_ev, out);
+                        }
                     }
                     Err(_) => {
-                        let _ = app_handle.emit(&format!("pty-exit-{}", sid), ());
+                        let _ = app_handle.emit(&exit_ev, ());
                         break;
                     }
                 }

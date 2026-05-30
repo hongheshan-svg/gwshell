@@ -331,6 +331,29 @@ fn tcp_via_jump(
 
 // === SshInstance / SshManager ===
 
+/// Decode accumulated raw bytes through a streaming decoder and emit them as a
+/// single batched event. The decoder keeps incomplete multi-byte sequences
+/// between calls, so a UTF-8/CJK character split across read boundaries is no
+/// longer corrupted into U+FFFD. Pass `last = true` on EOF/disconnect to flush
+/// any trailing state.
+fn flush_decoded(
+    decoder: &mut encoding_rs::Decoder,
+    pending: &mut Vec<u8>,
+    app: &AppHandle,
+    ev: &str,
+    last: bool,
+) {
+    if pending.is_empty() && !last {
+        return;
+    }
+    let mut out = String::with_capacity(pending.len() + 16);
+    let _ = decoder.decode_to_string(pending.as_slice(), &mut out, last);
+    pending.clear();
+    if !out.is_empty() {
+        let _ = app.emit(ev, out);
+    }
+}
+
 pub struct SshInstance {
     session: Session,
     channel: ssh2::Channel,
@@ -348,8 +371,138 @@ pub struct SftpEntry {
     pub permissions: Option<u32>,
 }
 
+/// Everything needed to (re)establish an authenticated SSH session. Captured at
+/// connect time so an auxiliary connection can be opened lazily for SFTP/metrics.
+#[derive(Clone)]
+struct ConnectParams {
+    host: String,
+    port: u16,
+    username: String,
+    password: Option<String>,
+    private_key_path: Option<String>,
+    auth_method: String,
+    totp_code: Option<String>,
+    jump_host: Option<String>,
+    jump_port: u16,
+    jump_username: Option<String>,
+    jump_password: Option<String>,
+    jump_private_key_path: Option<String>,
+    proxy_type: Option<String>,
+    proxy_host: Option<String>,
+    proxy_port: u16,
+    proxy_username: Option<String>,
+    proxy_password: Option<String>,
+    connection_timeout: u32,
+}
+
+/// An auxiliary SSH connection (its own TCP socket + libssh2 session), used for
+/// SFTP transfers and metrics exec so those long/blocking operations never hold
+/// the interactive shell's lock and freeze the terminal. Always blocking-mode.
+struct AuxSession {
+    session: Session,
+    sftp: Option<ssh2::Sftp>,
+}
+
+/// Connect steps 1-4: raw TCP (optionally via jump host / proxy), SSH handshake,
+/// host-key verification, and authentication. Returns an authenticated, still
+/// blocking-mode session. Shared by the interactive connect path and the lazy
+/// auxiliary connection used for SFTP/metrics.
+fn establish_authenticated_session(p: &ConnectParams) -> Result<Session, String> {
+    // == Step 1: establish raw TCP stream ==
+    let tcp = if let Some(jh) = p.jump_host.as_deref().filter(|h| !h.is_empty()) {
+        tcp_via_jump(
+            jh,
+            p.jump_port,
+            p.jump_username.as_deref().unwrap_or(&p.username),
+            p.jump_password.as_deref().or(p.password.as_deref()),
+            p.jump_private_key_path.as_deref(),
+            &p.host,
+            p.port,
+        )?
+    } else {
+        match p.proxy_type.as_deref().unwrap_or("none") {
+            "socks5" => tcp_socks5(
+                p.proxy_host.as_deref().unwrap_or(""),
+                p.proxy_port,
+                p.proxy_username.as_deref(),
+                p.proxy_password.as_deref(),
+                &p.host,
+                p.port,
+            )?,
+            "http" => tcp_http_connect(
+                p.proxy_host.as_deref().unwrap_or(""),
+                p.proxy_port,
+                p.proxy_username.as_deref(),
+                p.proxy_password.as_deref(),
+                &p.host,
+                p.port,
+            )?,
+            _ => tcp_direct(&p.host, p.port, p.connection_timeout)?,
+        }
+    };
+
+    // == Step 2: SSH handshake ==
+    let mut session = Session::new().map_err(|e| format!("Session creation failed: {}", e))?;
+    session.set_tcp_stream(tcp);
+    session
+        .handshake()
+        .map_err(|e| format!("Handshake failed: {}", e))?;
+
+    // == Step 3: fingerprint verification ==
+    check_fingerprint(&session, &p.host, p.port)?;
+
+    // == Step 4: authenticate ==
+    match p.auth_method.as_str() {
+        "publickey" => {
+            let key_path_raw = p
+                .private_key_path
+                .as_deref()
+                .ok_or("Private key path is required")?;
+            let key_path = expand_tilde(key_path_raw);
+            if !key_path.exists() {
+                return Err(format!("SSH key file not found: {}", key_path.display()));
+            }
+            session
+                .userauth_pubkey_file(&p.username, None, &key_path, p.password.as_deref())
+                .map_err(|e| format!("Public key auth failed ({}): {}", key_path.display(), e))?;
+        }
+        "keyboardinteractive" => {
+            let mut prompter = KbInteractiveAuth {
+                password: p.password.clone(),
+                totp_code: p.totp_code.clone(),
+                call_count: 0,
+            };
+            session
+                .userauth_keyboard_interactive(&p.username, &mut prompter)
+                .map_err(|e| format!("Keyboard-interactive auth failed: {}", e))?;
+        }
+        "agent" => {
+            session
+                .userauth_agent(&p.username)
+                .map_err(|e| format!("SSH Agent auth failed: {}", e))?;
+        }
+        "none" => {
+            let _ = session.userauth_password(&p.username, "");
+        }
+        _ => {
+            let pwd = p.password.as_deref().unwrap_or("");
+            session
+                .userauth_password(&p.username, pwd)
+                .map_err(|e| format!("Password auth failed: {}", e))?;
+        }
+    }
+
+    if !session.authenticated() {
+        return Err("Authentication failed".to_string());
+    }
+
+    Ok(session)
+}
+
 pub struct SshManager {
     instances: Mutex<HashMap<String, Arc<Mutex<SshInstance>>>>,
+    aux: Mutex<HashMap<String, Arc<Mutex<AuxSession>>>>,
+    params: Mutex<HashMap<String, ConnectParams>>,
     forwards: Mutex<HashMap<String, LocalForward>>,
 }
 
@@ -362,6 +515,8 @@ impl SshManager {
     pub fn new() -> Self {
         Self {
             instances: Mutex::new(HashMap::new()),
+            aux: Mutex::new(HashMap::new()),
+            params: Mutex::new(HashMap::new()),
             forwards: Mutex::new(HashMap::new()),
         }
     }
@@ -393,92 +548,29 @@ impl SshManager {
         rows: u32,
         cols: u32,
     ) -> Result<(), String> {
-        // == Step 1: establish raw TCP stream ==
-        let tcp = if let Some(jh) = jump_host.filter(|h| !h.is_empty()) {
-            tcp_via_jump(
-                jh,
-                jump_port,
-                jump_username.unwrap_or(username),
-                jump_password.or(password),
-                jump_private_key_path,
-                host,
-                port,
-            )?
-        } else {
-            match proxy_type.unwrap_or("none") {
-                "socks5" => tcp_socks5(
-                    proxy_host.unwrap_or(""),
-                    proxy_port,
-                    proxy_username,
-                    proxy_password,
-                    host,
-                    port,
-                )?,
-                "http" => tcp_http_connect(
-                    proxy_host.unwrap_or(""),
-                    proxy_port,
-                    proxy_username,
-                    proxy_password,
-                    host,
-                    port,
-                )?,
-                _ => tcp_direct(host, port, connection_timeout)?,
-            }
+        // == Steps 1-4: TCP, handshake, fingerprint, auth (shared helper) ==
+        let params = ConnectParams {
+            host: host.to_string(),
+            port,
+            username: username.to_string(),
+            password: password.map(str::to_string),
+            private_key_path: private_key_path.map(str::to_string),
+            auth_method: auth_method.to_string(),
+            totp_code: totp_code.map(str::to_string),
+            jump_host: jump_host.map(str::to_string),
+            jump_port,
+            jump_username: jump_username.map(str::to_string),
+            jump_password: jump_password.map(str::to_string),
+            jump_private_key_path: jump_private_key_path.map(str::to_string),
+            proxy_type: proxy_type.map(str::to_string),
+            proxy_host: proxy_host.map(str::to_string),
+            proxy_port,
+            proxy_username: proxy_username.map(str::to_string),
+            proxy_password: proxy_password.map(str::to_string),
+            connection_timeout,
         };
 
-        // == Step 2: SSH handshake ==
-        let mut session = Session::new().map_err(|e| format!("Session creation failed: {}", e))?;
-        session.set_tcp_stream(tcp);
-        session
-            .handshake()
-            .map_err(|e| format!("Handshake failed: {}", e))?;
-
-        // == Step 3: fingerprint verification ==
-        check_fingerprint(&session, host, port)?;
-
-        // == Step 4: authenticate ==
-        match auth_method {
-            "publickey" => {
-                let key_path_raw = private_key_path.ok_or("Private key path is required")?;
-                let key_path = expand_tilde(key_path_raw);
-                if !key_path.exists() {
-                    return Err(format!("SSH key file not found: {}", key_path.display()));
-                }
-                session
-                    .userauth_pubkey_file(username, None, &key_path, password)
-                    .map_err(|e| format!("Public key auth failed ({}): {}", key_path.display(), e))?;
-            }
-            "keyboardinteractive" => {
-                let mut prompter = KbInteractiveAuth {
-                    password: password.map(str::to_string),
-                    totp_code: totp_code.map(str::to_string),
-                    call_count: 0,
-                };
-                session
-                    .userauth_keyboard_interactive(username, &mut prompter)
-                    .map_err(|e| format!("Keyboard-interactive auth failed: {}", e))?;
-            }
-            "agent" => {
-                session
-                    .userauth_agent(username)
-                    .map_err(|e| format!("SSH Agent auth failed: {}", e))?;
-            }
-            "none" => {
-                // Attempt password auth with empty credentials; server decides.
-                let _ = session.userauth_password(username, "");
-            }
-            _ => {
-                // Default: password
-                let pwd = password.unwrap_or("");
-                session
-                    .userauth_password(username, pwd)
-                    .map_err(|e| format!("Password auth failed: {}", e))?;
-            }
-        }
-
-        if !session.authenticated() {
-            return Err("Authentication failed".to_string());
-        }
+        let session = establish_authenticated_session(&params)?;
 
         // == Step 5: open PTY + shell channel ==
         let mut channel = session
@@ -509,13 +601,26 @@ impl SshManager {
         self.instances
             .lock()
             .insert(session_id.to_string(), instance);
+        // Remember how to reconnect so SFTP/metrics can open a dedicated
+        // auxiliary connection on demand (see `with_work_session`).
+        self.params.lock().insert(session_id.to_string(), params);
 
         // == Step 6: reader thread ==
         let sid = session_id.to_string();
         std::thread::spawn(move || {
-            let mut buf = [0u8; 4096];
+            let data_ev = format!("ssh-data-{}", sid);
+            let exit_ev = format!("ssh-exit-{}", sid);
+            let mut buf = [0u8; 16384];
+            // Coalesce bursts of output and flush as one batched event. Emitting
+            // one event per 4KB read previously flooded the IPC channel and
+            // froze the UI under heavy output (`cat`, build logs, `top`).
+            let mut pending: Vec<u8> = Vec::with_capacity(64 * 1024);
+            let mut decoder = encoding_rs::UTF_8.new_decoder();
             let mut last_io = Instant::now();
             let mut last_keepalive = Instant::now();
+            let mut last_flush = Instant::now();
+            const MAX_PENDING: usize = 64 * 1024;
+            const FLUSH_INTERVAL: Duration = Duration::from_millis(16);
             loop {
                 let result = {
                     let mut inst = reader_instance.lock();
@@ -527,7 +632,8 @@ impl SshManager {
                         inst.session.set_blocking(true);
                         let _ = inst.channel.close();
                         let _ = inst.channel.wait_close();
-                        let _ = app_handle.emit(&format!("ssh-exit-{}", sid), ());
+                        flush_decoded(&mut decoder, &mut pending, &app_handle, &data_ev, true);
+                        let _ = app_handle.emit(&exit_ev, ());
                         break;
                     }
 
@@ -564,23 +670,30 @@ impl SshManager {
                 };
                 match result {
                     Ok(0) => {
+                        flush_decoded(&mut decoder, &mut pending, &app_handle, &data_ev, false);
                         // Check if channel truly closed (EOF)
                         let eof = {
                             let inst = reader_instance.lock();
                             inst.channel.eof()
                         };
                         if eof {
-                            let _ = app_handle.emit(&format!("ssh-exit-{}", sid), ());
+                            flush_decoded(&mut decoder, &mut pending, &app_handle, &data_ev, true);
+                            let _ = app_handle.emit(&exit_ev, ());
                             break;
                         }
                         std::thread::sleep(Duration::from_millis(10));
                     }
                     Ok(n) => {
                         last_io = Instant::now();
-                        let data = String::from_utf8_lossy(&buf[..n]).to_string();
-                        let _ = app_handle.emit(&format!("ssh-data-{}", sid), data);
+                        pending.extend_from_slice(&buf[..n]);
+                        if pending.len() >= MAX_PENDING || last_flush.elapsed() >= FLUSH_INTERVAL {
+                            flush_decoded(&mut decoder, &mut pending, &app_handle, &data_ev, false);
+                            last_flush = Instant::now();
+                        }
                     }
                     Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        flush_decoded(&mut decoder, &mut pending, &app_handle, &data_ev, false);
+                        last_flush = Instant::now();
                         std::thread::sleep(Duration::from_millis(10));
                     }
                     Err(e) => {
@@ -593,7 +706,8 @@ impl SshManager {
                                 | io::ErrorKind::UnexpectedEof
                         );
                         if fatal {
-                            let _ = app_handle.emit(&format!("ssh-exit-{}", sid), ());
+                            flush_decoded(&mut decoder, &mut pending, &app_handle, &data_ev, true);
+                            let _ = app_handle.emit(&exit_ev, ());
                             break;
                         }
                         std::thread::sleep(Duration::from_millis(50));
@@ -641,6 +755,9 @@ impl SshManager {
 
     pub fn close_ssh(&self, session_id: &str) {
         self.close_local_forward(session_id);
+        self.params.lock().remove(session_id);
+        // Dropping the aux entry drops its Session, closing the auxiliary socket.
+        self.aux.lock().remove(session_id);
         if let Some(instance) = self.instances.lock().remove(session_id) {
             let mut inst = instance.lock();
             inst.session.set_blocking(true);
@@ -651,6 +768,8 @@ impl SshManager {
 
     pub fn close_all(&self) {
         self.close_all_local_forwards();
+        self.params.lock().clear();
+        self.aux.lock().clear();
         let instances: Vec<_> = self.instances.lock().drain().map(|(_, v)| v).collect();
         for instance in instances {
             let mut inst = instance.lock();
@@ -662,11 +781,44 @@ impl SshManager {
 
     // ---- SFTP operations ----
 
-    /// Helper: acquire instance, set blocking, ensure SFTP subsystem, run closure, set non-blocking.
-    fn with_sftp<T, F>(&self, session_id: &str, f: F) -> Result<T, String>
+    /// Lazily get (or open) the auxiliary connection for this session. Returns
+    /// `None` when no stored params exist or a second connection can't be
+    /// established (e.g. the server limits concurrent sessions, or a one-time
+    /// TOTP can't be reused) — callers then fall back to the interactive session.
+    fn get_or_create_aux(&self, session_id: &str) -> Option<Arc<Mutex<AuxSession>>> {
+        if let Some(aux) = self.aux.lock().get(session_id) {
+            return Some(aux.clone());
+        }
+        let params = self.params.lock().get(session_id)?.clone();
+        // Establish WITHOUT holding the aux map lock (network I/O).
+        let session = establish_authenticated_session(&params).ok()?;
+        session.set_blocking(true);
+        let aux = Arc::new(Mutex::new(AuxSession { session, sftp: None }));
+        let mut map = self.aux.lock();
+        if let Some(existing) = map.get(session_id) {
+            // Another thread won the race while we were connecting.
+            return Some(existing.clone());
+        }
+        map.insert(session_id.to_string(), aux.clone());
+        Some(aux)
+    }
+
+    /// Run a blocking SSH operation (SFTP / exec) on a session, preferring a
+    /// dedicated auxiliary connection so it never contends with the interactive
+    /// shell's lock (the old behavior froze the terminal during transfers and
+    /// metrics polls). Falls back to the primary session if no aux is available.
+    fn with_work_session<T, F>(&self, session_id: &str, f: F) -> Result<T, String>
     where
-        F: FnOnce(&ssh2::Sftp) -> Result<T, String>,
+        F: FnOnce(&Session, &mut Option<ssh2::Sftp>) -> Result<T, String>,
     {
+        if let Some(aux) = self.get_or_create_aux(session_id) {
+            let mut guard = aux.lock();
+            let aux_ref = &mut *guard;
+            aux_ref.session.set_blocking(true);
+            return f(&aux_ref.session, &mut aux_ref.sftp);
+        }
+        // Fallback: share the interactive session. Toggle blocking around the op
+        // so the reader thread keeps working in non-blocking mode afterward.
         let instance = {
             let instances = self.instances.lock();
             instances
@@ -674,18 +826,29 @@ impl SshManager {
                 .ok_or_else(|| "Session not found".to_string())?
                 .clone()
         };
-        let mut inst = instance.lock();
-        inst.session.set_blocking(true);
-        if inst.sftp.is_none() {
-            inst.sftp = Some(
-                inst.session
-                    .sftp()
-                    .map_err(|e| format!("SFTP init failed: {}", e))?,
-            );
-        }
-        let result = f(inst.sftp.as_ref().unwrap());
-        inst.session.set_blocking(false);
+        let mut guard = instance.lock();
+        let inst_ref = &mut *guard;
+        inst_ref.session.set_blocking(true);
+        let result = f(&inst_ref.session, &mut inst_ref.sftp);
+        inst_ref.session.set_blocking(false);
         result
+    }
+
+    /// Helper: ensure the SFTP subsystem on the work session, then run closure.
+    fn with_sftp<T, F>(&self, session_id: &str, f: F) -> Result<T, String>
+    where
+        F: FnOnce(&ssh2::Sftp) -> Result<T, String>,
+    {
+        self.with_work_session(session_id, |session, sftp_slot| {
+            if sftp_slot.is_none() {
+                *sftp_slot = Some(
+                    session
+                        .sftp()
+                        .map_err(|e| format!("SFTP init failed: {}", e))?,
+                );
+            }
+            f(sftp_slot.as_ref().unwrap())
+        })
     }
 
     pub fn sftp_list_dir(&self, session_id: &str, path: &str) -> Result<Vec<SftpEntry>, String> {
@@ -775,11 +938,23 @@ impl SshManager {
             let mut remote_file = sftp
                 .open(Path::new(remote_path))
                 .map_err(|e| format!("SFTP open failed: {}", e))?;
-            let mut buf = Vec::new();
-            remote_file
-                .read_to_end(&mut buf)
-                .map_err(|e| format!("SFTP read failed: {}", e))?;
-            fs::write(local_path, &buf).map_err(|e| format!("Local write failed: {}", e))?;
+            let mut local =
+                fs::File::create(local_path).map_err(|e| format!("Local create failed: {}", e))?;
+            // Stream with a fixed buffer instead of read_to_end so a multi-GB
+            // download doesn't allocate the whole file in memory (OOM risk).
+            let mut buf = vec![0u8; 256 * 1024];
+            loop {
+                let n = remote_file
+                    .read(&mut buf)
+                    .map_err(|e| format!("SFTP read failed: {}", e))?;
+                if n == 0 {
+                    break;
+                }
+                local
+                    .write_all(&buf[..n])
+                    .map_err(|e| format!("Local write failed: {}", e))?;
+            }
+            local.flush().map_err(|e| format!("Local flush failed: {}", e))?;
             Ok(())
         })
     }
@@ -804,12 +979,33 @@ impl SshManager {
         content: &str,
     ) -> Result<(), String> {
         self.with_sftp(session_id, |sftp| {
-            let mut remote_file = sftp
-                .create(Path::new(remote_path))
-                .map_err(|e| format!("SFTP create failed: {}", e))?;
-            remote_file
-                .write_all(content.as_bytes())
-                .map_err(|e| format!("SFTP write failed: {}", e))?;
+            let dest = Path::new(remote_path);
+            // Preserve the file's existing permission bits across the save.
+            let existing_perm = sftp.stat(dest).ok().and_then(|s| s.perm);
+            // Write to a temp sibling first; the original is only replaced once
+            // the new content is fully written, so an interrupted save can never
+            // truncate the file to empty / lose data.
+            let tmp_path = format!("{}.gwshell.tmp", remote_path);
+            let tmp = Path::new(&tmp_path);
+            {
+                let mut f = sftp
+                    .create(tmp)
+                    .map_err(|e| format!("SFTP create failed: {}", e))?;
+                f.write_all(content.as_bytes())
+                    .map_err(|e| format!("SFTP write failed: {}", e))?;
+                let _ = f.flush();
+            }
+            if let Some(perm) = existing_perm {
+                if let Ok(mut st) = sftp.stat(tmp) {
+                    st.perm = Some(perm);
+                    let _ = sftp.setstat(tmp, st);
+                }
+            }
+            let _ = sftp.unlink(dest);
+            sftp.rename(tmp, dest, None).map_err(|e| {
+                let _ = sftp.unlink(tmp);
+                format!("SFTP save failed: {}", e)
+            })?;
             Ok(())
         })
     }
@@ -821,13 +1017,39 @@ impl SshManager {
         local_path: &str,
     ) -> Result<(), String> {
         self.with_sftp(session_id, |sftp| {
-            let data = fs::read(local_path).map_err(|e| format!("Local read failed: {}", e))?;
+            let mut local =
+                fs::File::open(local_path).map_err(|e| format!("Local read failed: {}", e))?;
             let mut remote_file = sftp
                 .create(Path::new(remote_path))
                 .map_err(|e| format!("SFTP create failed: {}", e))?;
-            remote_file
-                .write_all(&data)
-                .map_err(|e| format!("SFTP write failed: {}", e))?;
+            // Stream with a fixed buffer instead of reading the whole file into
+            // memory (OOM risk on large uploads).
+            let mut buf = vec![0u8; 256 * 1024];
+            loop {
+                let n = local
+                    .read(&mut buf)
+                    .map_err(|e| format!("Local read failed: {}", e))?;
+                if n == 0 {
+                    break;
+                }
+                remote_file
+                    .write_all(&buf[..n])
+                    .map_err(|e| format!("SFTP write failed: {}", e))?;
+            }
+            let _ = remote_file.flush();
+            // Best-effort: preserve the local file's executable/permission bits.
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if let Ok(meta) = local.metadata() {
+                    let mode = meta.permissions().mode() & 0o777;
+                    drop(remote_file);
+                    if let Ok(mut st) = sftp.stat(Path::new(remote_path)) {
+                        st.perm = Some(mode);
+                        let _ = sftp.setstat(Path::new(remote_path), st);
+                    }
+                }
+            }
             Ok(())
         })
     }
@@ -852,30 +1074,22 @@ impl SshManager {
         })
     }
 
-    /// Execute a command via a new SSH channel and return stdout.
+    /// Execute a command via a new SSH channel and return stdout. Runs on the
+    /// auxiliary connection when available so it never blocks the interactive
+    /// terminal (this is what previously made the metrics poll freeze input).
     pub fn ssh_exec(&self, session_id: &str, command: &str) -> Result<String, String> {
-        let instance = {
-            let instances = self.instances.lock();
-            instances
-                .get(session_id)
-                .ok_or_else(|| "Session not found".to_string())?
-                .clone()
-        };
-        let inst = instance.lock();
-        inst.session.set_blocking(true);
-        let mut ch = inst
-            .session
-            .channel_session()
-            .map_err(|e| format!("Exec channel failed: {}", e))?;
-        ch.exec(command)
-            .map_err(|e| format!("Exec failed: {}", e))?;
-        let mut output = String::new();
-        ch.read_to_string(&mut output)
-            .map_err(|e| format!("Exec read failed: {}", e))?;
-        ch.wait_close()
-            .map_err(|e| format!("Exec close failed: {}", e))?;
-        inst.session.set_blocking(false);
-        Ok(output.trim().to_string())
+        self.with_work_session(session_id, |session, _sftp| {
+            let mut ch = session
+                .channel_session()
+                .map_err(|e| format!("Exec channel failed: {}", e))?;
+            ch.exec(command).map_err(|e| format!("Exec failed: {}", e))?;
+            let mut output = String::new();
+            ch.read_to_string(&mut output)
+                .map_err(|e| format!("Exec read failed: {}", e))?;
+            ch.wait_close()
+                .map_err(|e| format!("Exec close failed: {}", e))?;
+            Ok(output.trim().to_string())
+        })
     }
 
     /// Start a local-forward tunnel: each connection to 127.0.0.1:local_port is

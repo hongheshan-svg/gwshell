@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { X, Plus, Menu, ChevronDown, FolderOpen } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
-import { AutoModeToggle } from '../Terminal/AutoModeToggle';
 
 export const TabBar: React.FC = () => {
   const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, setShowSerialModal, setShowDockerModal, setShowLocalTerminalModal, sftpPanelOpen, toggleSftpPanel } = useAppStore();
@@ -57,9 +56,6 @@ export const TabBar: React.FC = () => {
             <>
               <span className={`tab-dot ${tab.connected ? 'connected' : 'disconnected'}`} />
               <span className="tab-title">{tab.title}</span>
-              {(tab.type === 'ssh' || tab.type === 'localshell') && (
-                <AutoModeToggle tabId={tab.id} />
-              )}
               <button
                 className="tab-close"
                 onClick={(e) => {

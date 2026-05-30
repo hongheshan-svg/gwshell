@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { Wifi, Clock, Monitor, Cloud, LayoutGrid } from 'lucide-react';
 import { getVersion } from '@tauri-apps/api/app';
 import { useAppStore, type SplitCount } from '../../stores/appStore';
-import { AutoModeIndicator } from './AutoModeIndicator';
 
 const SPLIT_OPTIONS: { count: SplitCount; label: string }[] = [
   { count: 1, label: '1' },
@@ -45,8 +44,6 @@ export const StatusBar: React.FC = () => {
       )}
 
       <div className="status-spacer" />
-
-      <AutoModeIndicator />
 
       {/* Split screen picker */}
       <div className="status-item split-picker-wrap" style={{ position: 'relative' }}>

@@ -1,3 +1,4 @@
+mod crypto;
 mod database;
 mod metrics;
 mod pty;
@@ -76,8 +77,19 @@ async fn app_ready(window: tauri::WebviewWindow) {
     let _ = window.set_focus();
 }
 
+/// Best-effort cleanup on shutdown: stop metric pollers and kill local-shell
+/// child processes so they are not orphaned. SSH/serial sockets are reclaimed by
+/// the OS on process exit, so we intentionally do NOT block on network teardown
+/// (a dead connection's `wait_close` could otherwise hang shutdown).
+fn shutdown_cleanup(state: &Arc<AppState>) {
+    state.metrics.stop_all();
+    state.pty_manager.close_all();
+    state.serial_manager.close_all();
+}
+
 #[tauri::command]
-fn quit_app(app_handle: tauri::AppHandle) {
+fn quit_app(app_handle: tauri::AppHandle, state: State<'_, Arc<AppState>>) {
+    shutdown_cleanup(state.inner());
     app_handle.exit(0);
     std::process::exit(0);
 }
@@ -118,28 +130,41 @@ async fn list_shells() -> Vec<pty::ShellEntry> {
         .unwrap_or_default()
 }
 
+// NOTE: write/resize/close are `async` + `spawn_blocking` so they run on a
+// Tokio worker thread, NOT the WebView main thread. A synchronous command would
+// execute on the main thread (per Tauri's command model) and, if it blocked on
+// the per-session mutex or a congested socket, freeze the entire UI. Keeping the
+// input path off the main thread is the core fix for the "freezes on input" bug.
 #[tauri::command]
-fn write_to_pty(
+async fn write_to_pty(
     session_id: String,
     data: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    state.pty_manager.write_to_pty(&session_id, data.as_bytes())
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.pty_manager.write_to_pty(&session_id, data.as_bytes()))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn resize_pty(
+async fn resize_pty(
     session_id: String,
     rows: u16,
     cols: u16,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    state.pty_manager.resize_pty(&session_id, rows, cols)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.pty_manager.resize_pty(&session_id, rows, cols))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn close_pty(session_id: String, state: State<'_, Arc<AppState>>) {
-    state.pty_manager.close_pty(&session_id);
+async fn close_pty(session_id: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let state = state.inner().clone();
+    let _ = tokio::task::spawn_blocking(move || state.pty_manager.close_pty(&session_id)).await;
+    Ok(())
 }
 
 // ---- SSH Commands ----
@@ -268,27 +293,38 @@ async fn start_tunnel(
 
 
 #[tauri::command]
-fn write_to_ssh(
+async fn write_to_ssh(
     session_id: String,
     data: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    state.ssh_manager.write_to_ssh(&session_id, data.as_bytes())
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.ssh_manager.write_to_ssh(&session_id, data.as_bytes()))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn resize_ssh(
+async fn resize_ssh(
     session_id: String,
     cols: u32,
     rows: u32,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    state.ssh_manager.resize_ssh(&session_id, cols, rows)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.ssh_manager.resize_ssh(&session_id, cols, rows))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn close_ssh(session_id: String, state: State<'_, Arc<AppState>>) {
-    state.ssh_manager.close_ssh(&session_id);
+async fn close_ssh(session_id: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let state = state.inner().clone();
+    // Closing also stops the metrics poller bound to this session so it cannot
+    // keep issuing exec probes against a dead connection.
+    state.metrics.stop(&session_id);
+    let _ = tokio::task::spawn_blocking(move || state.ssh_manager.close_ssh(&session_id)).await;
+    Ok(())
 }
 
 // ---- SFTP Commands ----
@@ -417,15 +453,25 @@ async fn sftp_open_file(
 ) -> Result<String, String> {
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || -> Result<String, String> {
-        let file_name = std::path::Path::new(&remote_path)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("file")
-            .to_string();
-        let temp_dir = std::env::temp_dir().join("gwshell_sftp");
+        use std::hash::{Hash, Hasher};
+        // Remote paths are POSIX; derive the basename by splitting on '/' rather
+        // than std::path::Path, which would apply Windows separator rules on a
+        // Windows host (a backslash is a legal char in a Linux filename).
+        let file_name = remote_path
+            .rsplit('/')
+            .find(|s| !s.is_empty())
+            .unwrap_or("file");
+        // Namespace by a hash of session + full remote path so two different
+        // remote files that share a basename don't clobber the same temp file.
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        session_id.hash(&mut hasher);
+        remote_path.hash(&mut hasher);
+        let temp_dir = std::env::temp_dir()
+            .join("gwshell_sftp")
+            .join(format!("{:016x}", hasher.finish()));
         std::fs::create_dir_all(&temp_dir)
             .map_err(|e| format!("Create temp dir failed: {}", e))?;
-        let local_path = temp_dir.join(&file_name);
+        let local_path = temp_dir.join(file_name);
         let local_str = local_path.to_string_lossy().to_string();
         state
             .ssh_manager
@@ -588,19 +634,26 @@ async fn serial_open(
 }
 
 #[tauri::command]
-fn write_to_serial(
+async fn write_to_serial(
     session_id: String,
     data: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    state
-        .serial_manager
-        .write_to_serial(&session_id, data.as_bytes())
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        state
+            .serial_manager
+            .write_to_serial(&session_id, data.as_bytes())
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
-fn close_serial(session_id: String, state: State<'_, Arc<AppState>>) {
-    state.serial_manager.close_serial(&session_id);
+async fn close_serial(session_id: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let state = state.inner().clone();
+    let _ = tokio::task::spawn_blocking(move || state.serial_manager.close_serial(&session_id)).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -727,12 +780,15 @@ async fn delete_session(
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
     let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        let _ = state.db.delete_session(&session_id);
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        // Only drop from the in-memory cache if the DB delete actually succeeded,
+        // otherwise the session reappears on next launch (cache/DB divergence).
+        state.db.delete_session(&session_id)?;
         state.sessions.lock().retain(|s| s.id != session_id);
+        Ok(())
     })
     .await
-    .map_err(|e| format!("task join: {}", e))
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
@@ -889,8 +945,10 @@ pub fn run() {
             .initialization_script(&init_script)
             .build()?;
 
-            main_window.on_window_event(|event| {
+            let cleanup_state = app.state::<Arc<AppState>>().inner().clone();
+            main_window.on_window_event(move |event| {
                 if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                    shutdown_cleanup(&cleanup_state);
                     std::process::exit(0);
                 }
             });

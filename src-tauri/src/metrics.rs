@@ -192,7 +192,9 @@ pub fn parse_net_dev(text: &str) -> HashMap<String, (u64, u64)> {
     out
 }
 
-/// Parse output of `ps -eo pid,comm,%cpu,%mem,rss --sort=-%cpu | head -21`.
+/// Parse output of `ps -eo pid,%cpu,%mem,rss,comm --sort=-%cpu | head -21`.
+/// `comm` is placed LAST so process names containing spaces are captured intact
+/// (the old `comm` second-column layout dropped/misaligned such rows).
 /// Skips the header line. Returns up to 20 rows.
 pub fn parse_ps(text: &str) -> Vec<ProcInfo> {
     text.lines()
@@ -200,10 +202,14 @@ pub fn parse_ps(text: &str) -> Vec<ProcInfo> {
         .filter_map(|line| {
             let mut parts = line.split_ascii_whitespace();
             let pid: u32 = parts.next()?.parse().ok()?;
-            let comm: String = parts.next()?.to_string();
             let cpu: f64 = parts.next()?.parse().ok()?;
             let mem: f64 = parts.next()?.parse().ok()?;
             let rss: u64 = parts.next()?.parse().ok()?;
+            // comm is the trailing field and may contain whitespace.
+            let comm: String = parts.collect::<Vec<_>>().join(" ");
+            if comm.is_empty() {
+                return None;
+            }
             Some(ProcInfo {
                 pid,
                 comm,
@@ -342,12 +348,20 @@ mod tests {
 
     #[test]
     fn parses_ps_output() {
-        let text = "    PID COMMAND         %CPU %MEM   RSS\n   1234 bash             5.0  1.2  20480\n   5678 sshd             2.0  0.5  10240\n";
+        let text = "    PID %CPU %MEM   RSS COMMAND\n   1234  5.0  1.2 20480 bash\n   5678  2.0  0.5 10240 sshd\n";
         let v = parse_ps(text);
         assert_eq!(v.len(), 2);
         assert_eq!(v[0].pid, 1234);
         assert_eq!(v[0].comm, "bash");
         assert!((v[0].cpu_percent - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn parses_ps_comm_with_spaces() {
+        let text = "    PID %CPU %MEM   RSS COMMAND\n   42  1.0  0.1  2048 my worker\n";
+        let v = parse_ps(text);
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].comm, "my worker");
     }
 
     #[test]
@@ -486,7 +500,7 @@ echo '---MEM---';    cat /proc/meminfo
 echo '---NET---';    cat /proc/net/dev
 echo '---UPT---';    cat /proc/uptime
 echo '---LOAD---';   cat /proc/loadavg
-echo '---PROC---';   ps -eo pid,comm,%cpu,%mem,rss --sort=-%cpu 2>/dev/null | head -21
+echo '---PROC---';   ps -eo pid,%cpu,%mem,rss,comm --sort=-%cpu 2>/dev/null | head -21
 echo '---NIC4---';   ip -o -4 addr show 2>/dev/null
 echo '---NICLINK---';ip -o link show 2>/dev/null
 echo '---END---'
