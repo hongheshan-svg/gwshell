@@ -117,8 +117,9 @@ impl SerialManager {
     }
 
     pub fn write_to_serial(&self, session_id: &str, data: &[u8]) -> Result<(), String> {
-        let instances = self.instances.lock();
-        if let Some(instance) = instances.get(session_id) {
+        // Clone the Arc under a brief map lock, then write off the global lock.
+        let instance = self.instances.lock().get(session_id).cloned();
+        if let Some(instance) = instance {
             let mut inst = instance.lock();
             inst.writer
                 .write_all(data)

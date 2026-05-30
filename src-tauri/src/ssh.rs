@@ -7,6 +7,7 @@ use std::fs;
 use std::io::{self, ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
+use std::sync::mpsc;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -358,7 +359,16 @@ pub struct SshInstance {
     session: Session,
     channel: ssh2::Channel,
     sftp: Option<ssh2::Sftp>,
-    last_user_input: Instant,
+}
+
+/// Commands sent to a session's owner thread. The owner thread is the *sole*
+/// thread that reads from and writes to the interactive channel, so input,
+/// resize and teardown never contend with the read loop for a lock and never
+/// hold the global instance map lock across blocking network I/O.
+enum SshCmd {
+    Data(Vec<u8>),
+    Resize { cols: u32, rows: u32 },
+    Close,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -501,6 +511,8 @@ fn establish_authenticated_session(p: &ConnectParams) -> Result<Session, String>
 
 pub struct SshManager {
     instances: Mutex<HashMap<String, Arc<Mutex<SshInstance>>>>,
+    // Per-session command channel to the owner thread (input/resize/close).
+    writers: Mutex<HashMap<String, mpsc::Sender<SshCmd>>>,
     aux: Mutex<HashMap<String, Arc<Mutex<AuxSession>>>>,
     params: Mutex<HashMap<String, ConnectParams>>,
     forwards: Mutex<HashMap<String, LocalForward>>,
@@ -515,6 +527,7 @@ impl SshManager {
     pub fn new() -> Self {
         Self {
             instances: Mutex::new(HashMap::new()),
+            writers: Mutex::new(HashMap::new()),
             aux: Mutex::new(HashMap::new()),
             params: Mutex::new(HashMap::new()),
             forwards: Mutex::new(HashMap::new()),
@@ -594,18 +607,24 @@ impl SshManager {
             session,
             channel,
             sftp: None,
-            last_user_input: Instant::now(),
         }));
         let reader_instance = instance.clone();
+
+        // mpsc command channel: the owner thread is the sole writer of the
+        // channel, so input/resize never contend with reads for a lock.
+        let (write_tx, write_rx) = mpsc::channel::<SshCmd>();
 
         self.instances
             .lock()
             .insert(session_id.to_string(), instance);
+        self.writers
+            .lock()
+            .insert(session_id.to_string(), write_tx);
         // Remember how to reconnect so SFTP/metrics can open a dedicated
         // auxiliary connection on demand (see `with_work_session`).
         self.params.lock().insert(session_id.to_string(), params);
 
-        // == Step 6: reader thread ==
+        // == Step 6: owner thread (reads + writes + resize + teardown) ==
         let sid = session_id.to_string();
         std::thread::spawn(move || {
             let data_ev = format!("ssh-data-{}", sid);
@@ -619,14 +638,60 @@ impl SshManager {
             let mut last_io = Instant::now();
             let mut last_keepalive = Instant::now();
             let mut last_flush = Instant::now();
+            let mut last_input = Instant::now();
             const MAX_PENDING: usize = 64 * 1024;
             const FLUSH_INTERVAL: Duration = Duration::from_millis(16);
-            loop {
-                let result = {
+            'outer: loop {
+                let read_result = {
                     let mut inst = reader_instance.lock();
 
+                    // --- Drain queued input/resize/close. This thread is the
+                    // sole writer, so a keystroke is just a non-blocking,
+                    // bounded write that can never hang the session forever. ---
+                    loop {
+                        match write_rx.try_recv() {
+                            Ok(SshCmd::Data(bytes)) => {
+                                last_input = Instant::now();
+                                inst.session.set_blocking(false);
+                                let mut off = 0;
+                                let start = Instant::now();
+                                while off < bytes.len() {
+                                    match inst.channel.write(&bytes[off..]) {
+                                        Ok(0) => break,
+                                        Ok(n) => off += n,
+                                        Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                                            if start.elapsed() > Duration::from_secs(5) {
+                                                break;
+                                            }
+                                            std::thread::sleep(Duration::from_millis(1));
+                                        }
+                                        Err(_) => break,
+                                    }
+                                }
+                                let _ = inst.channel.flush();
+                                last_io = Instant::now();
+                            }
+                            Ok(SshCmd::Resize { cols, rows }) => {
+                                inst.session.set_blocking(true);
+                                let _ = inst.channel.request_pty_size(cols, rows, None, None);
+                                inst.session.set_blocking(false);
+                            }
+                            Ok(SshCmd::Close) => {
+                                inst.session.set_blocking(false);
+                                let _ = inst.channel.close();
+                                break 'outer;
+                            }
+                            Err(mpsc::TryRecvError::Empty) => break,
+                            Err(mpsc::TryRecvError::Disconnected) => {
+                                inst.session.set_blocking(false);
+                                let _ = inst.channel.close();
+                                break 'outer;
+                            }
+                        }
+                    }
+
                     if idle_disconnect_minutes > 0
-                        && inst.last_user_input.elapsed()
+                        && last_input.elapsed()
                             >= Duration::from_secs(idle_disconnect_minutes as u64 * 60)
                     {
                         inst.session.set_blocking(true);
@@ -634,7 +699,7 @@ impl SshManager {
                         let _ = inst.channel.wait_close();
                         flush_decoded(&mut decoder, &mut pending, &app_handle, &data_ev, true);
                         let _ = app_handle.emit(&exit_ev, ());
-                        break;
+                        break 'outer;
                     }
 
                     // Keep idle sessions alive. libssh2 keepalive packets are
@@ -668,7 +733,7 @@ impl SshManager {
                         inst.channel.read(&mut buf)
                     }
                 };
-                match result {
+                match read_result {
                     Ok(0) => {
                         flush_decoded(&mut decoder, &mut pending, &app_handle, &data_ev, false);
                         // Check if channel truly closed (EOF)
@@ -679,9 +744,9 @@ impl SshManager {
                         if eof {
                             flush_decoded(&mut decoder, &mut pending, &app_handle, &data_ev, true);
                             let _ = app_handle.emit(&exit_ev, ());
-                            break;
+                            break 'outer;
                         }
-                        std::thread::sleep(Duration::from_millis(10));
+                        std::thread::sleep(Duration::from_millis(5));
                     }
                     Ok(n) => {
                         last_io = Instant::now();
@@ -694,7 +759,7 @@ impl SshManager {
                     Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                         flush_decoded(&mut decoder, &mut pending, &app_handle, &data_ev, false);
                         last_flush = Instant::now();
-                        std::thread::sleep(Duration::from_millis(10));
+                        std::thread::sleep(Duration::from_millis(5));
                     }
                     Err(e) => {
                         // For connection-reset type errors, exit; for others, retry briefly
@@ -708,7 +773,7 @@ impl SshManager {
                         if fatal {
                             flush_decoded(&mut decoder, &mut pending, &app_handle, &data_ev, true);
                             let _ = app_handle.emit(&exit_ev, ());
-                            break;
+                            break 'outer;
                         }
                         std::thread::sleep(Duration::from_millis(50));
                     }
@@ -720,36 +785,27 @@ impl SshManager {
     }
 
     pub fn write_to_ssh(&self, session_id: &str, data: &[u8]) -> Result<(), String> {
-        let instances = self.instances.lock();
-        if let Some(instance) = instances.get(session_id) {
-            let mut inst = instance.lock();
-            inst.last_user_input = Instant::now();
-            inst.session.set_blocking(true);
-            let result = inst
-                .channel
-                .write_all(data)
-                .map_err(|e| format!("Write failed: {}", e));
-            let _ = inst.channel.flush();
-            inst.session.set_blocking(false);
-            result
-        } else {
-            Err("Session not found".to_string())
+        // Hot path: only briefly lock the map to clone the sender, then enqueue.
+        // The owner thread performs the actual (non-blocking) channel write, so
+        // a keystroke never blocks and never holds a lock across network I/O.
+        let tx = self.writers.lock().get(session_id).cloned();
+        match tx {
+            Some(tx) => {
+                let _ = tx.send(SshCmd::Data(data.to_vec()));
+                Ok(())
+            }
+            None => Err("Session not found".to_string()),
         }
     }
 
     pub fn resize_ssh(&self, session_id: &str, cols: u32, rows: u32) -> Result<(), String> {
-        let instances = self.instances.lock();
-        if let Some(instance) = instances.get(session_id) {
-            let mut inst = instance.lock();
-            inst.session.set_blocking(true);
-            let result = inst
-                .channel
-                .request_pty_size(cols, rows, None, None)
-                .map_err(|e| format!("Resize failed: {}", e));
-            inst.session.set_blocking(false);
-            result
-        } else {
-            Err("Session not found".to_string())
+        let tx = self.writers.lock().get(session_id).cloned();
+        match tx {
+            Some(tx) => {
+                let _ = tx.send(SshCmd::Resize { cols, rows });
+                Ok(())
+            }
+            None => Err("Session not found".to_string()),
         }
     }
 
@@ -758,25 +814,23 @@ impl SshManager {
         self.params.lock().remove(session_id);
         // Dropping the aux entry drops its Session, closing the auxiliary socket.
         self.aux.lock().remove(session_id);
-        if let Some(instance) = self.instances.lock().remove(session_id) {
-            let mut inst = instance.lock();
-            inst.session.set_blocking(true);
-            let _ = inst.channel.close();
-            let _ = inst.channel.wait_close();
+        // Signal the owner thread to tear down its channel off-lock — we never
+        // hold the global map lock across a blocking wait_close().
+        if let Some(tx) = self.writers.lock().remove(session_id) {
+            let _ = tx.send(SshCmd::Close);
         }
+        self.instances.lock().remove(session_id);
     }
 
     pub fn close_all(&self) {
         self.close_all_local_forwards();
         self.params.lock().clear();
         self.aux.lock().clear();
-        let instances: Vec<_> = self.instances.lock().drain().map(|(_, v)| v).collect();
-        for instance in instances {
-            let mut inst = instance.lock();
-            inst.session.set_blocking(true);
-            let _ = inst.channel.close();
-            let _ = inst.channel.wait_close();
+        let txs: Vec<_> = self.writers.lock().drain().map(|(_, v)| v).collect();
+        for tx in txs {
+            let _ = tx.send(SshCmd::Close);
         }
+        self.instances.lock().clear();
     }
 
     // ---- SFTP operations ----
