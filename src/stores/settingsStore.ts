@@ -40,7 +40,6 @@ export interface AppSettings {
   sshHistoryCmdLoadCount: string;
   terminalStripeBackground: boolean;
   renderMode: boolean;
-  autoReconnect: boolean;
   middleClickAction: string;
   rightClickAction: string;
   terminalSound: boolean;
@@ -108,7 +107,6 @@ export const defaultSettings: AppSettings = {
   sshHistoryCmdLoadCount: '100',
   terminalStripeBackground: true,
   renderMode: true,
-  autoReconnect: false,
   middleClickAction: 'none',
   rightClickAction: 'menu',
   terminalSound: false,

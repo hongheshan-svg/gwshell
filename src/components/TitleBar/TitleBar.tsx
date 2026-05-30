@@ -7,6 +7,13 @@ import { useAppStore } from '../../stores/appStore';
 
 const appWindow = getCurrentWindow();
 
+// macOS is detected from the user agent (Tauri's WebView reports the
+// host OS reliably). We avoid an async @tauri-apps/api/os import to keep
+// the title bar a synchronous render — UA detection has been stable for
+// macOS for many years.
+const IS_MACOS = typeof navigator !== 'undefined'
+  && /Mac OS X|Macintosh/.test(navigator.userAgent);
+
 export const TitleBar: React.FC = () => {
   const { t } = useTranslation();
   const { tabs, activeTabId, serverPanelOpen, toggleServerPanel } = useAppStore();
@@ -27,7 +34,7 @@ export const TitleBar: React.FC = () => {
   };
 
   return (
-    <div className="titlebar">
+    <div className={`titlebar${IS_MACOS ? ' titlebar--macos' : ''}`}>
       <div className="titlebar-title" data-tauri-drag-region>
         GWShell
       </div>
@@ -42,15 +49,19 @@ export const TitleBar: React.FC = () => {
         >
           <Activity size={14} />
         </button>
-        <button className="titlebar-btn" onClick={handleMinimize} data-gw-action="minimize" title={t('titlebar_minimize')}>
-          <Minus size={14} />
-        </button>
-        <button className="titlebar-btn" onClick={handleMaximize} data-gw-action="toggle_maximize" title={t('titlebar_maximize')}>
-          <Square size={10} />
-        </button>
-        <button className="titlebar-btn titlebar-close" onClick={handleClose} data-gw-action="exit" title={t('titlebar_close')}>
-          <X size={14} />
-        </button>
+        {!IS_MACOS && (
+          <>
+            <button className="titlebar-btn" onClick={handleMinimize} data-gw-action="minimize" title={t('titlebar_minimize')}>
+              <Minus size={14} />
+            </button>
+            <button className="titlebar-btn" onClick={handleMaximize} data-gw-action="toggle_maximize" title={t('titlebar_maximize')}>
+              <Square size={10} />
+            </button>
+            <button className="titlebar-btn titlebar-close" onClick={handleClose} data-gw-action="exit" title={t('titlebar_close')}>
+              <X size={14} />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

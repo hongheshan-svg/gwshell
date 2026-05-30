@@ -174,10 +174,17 @@ const terminalInteractionCleanups = new Map<string, () => void>();
 const fitFrameIds = new Map<string, number>();
 const settleTimerIds = new Map<string, ReturnType<typeof setTimeout>>();
 
+/** Tabs whose connection just dropped. When a tab is in this set, the next
+ *  keystroke triggers a reconnect instead of being sent to the (now dead)
+ *  backend channel. Cleared on reconnect attempt, on tab destroy, and on
+ *  listener cleanup. Only SSH and serial sessions are ever armed. */
+const reconnectableTabs = new Set<string>();
+
 /** Remove event listeners for a tab (idempotent). */
 function cleanupTabListeners(tabId: string): void {
   const fn = tabListenerCleanups.get(tabId);
   if (fn) { fn(); tabListenerCleanups.delete(tabId); }
+  reconnectableTabs.delete(tabId);
 }
 
 function cleanupTerminalInteractions(tabId: string): void {
@@ -196,6 +203,7 @@ export function destroyTerminal(tabId: string): void {
   if (settleTimerId) clearTimeout(settleTimerId);
   settleTimerIds.delete(tabId);
   connectedTabs.delete(tabId);
+  reconnectableTabs.delete(tabId);
   const inst = terminalInstances.get(tabId);
   if (inst) {
     try { inst.rendererAddon?.dispose(); } catch {}
@@ -735,6 +743,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           flushRender();
           instance?.terminal.write(`\r\n\x1b[33m${t('term_session_ended')}\x1b[0m\r\n`);
           useAppStore.getState().updateTabConnected(tab.id, false);
+
+          // Only SSH and serial offer press-any-key reconnect. Local shell
+          // exit is user-driven; SFTP has no onData handler.
+          if (tab.type === 'ssh' || tab.type === 'serial') {
+            instance?.terminal.write(
+              `\x1b[33m${t('term_press_any_key_to_reconnect')}\x1b[0m\r\n`
+            );
+            reconnectableTabs.add(tab.id);
+          }
         }
       );
       if (cancelled) { unlistenData(); unlistenExit(); return; }
@@ -753,6 +770,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         invoke(writeCmd, { sessionId: tab.sessionId, data: payload }).catch(() => {});
       };
       const dataDispose = instance!.terminal.onData((data) => {
+        if (reconnectableTabs.has(tab.id)) {
+          // Connection is dead — swallow this keystroke and reconnect instead.
+          // The keystroke could not have reached the server anyway.
+          reconnectableTabs.delete(tab.id);
+          void reconnect();
+          return;
+        }
         writeQueue += data;
         if (!writeScheduled) {
           writeScheduled = true;
@@ -850,6 +874,47 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
             return;
           }
           throw rawErr;
+        }
+      };
+
+      // Press-any-key reconnect (SSH/serial). Closes any backend residue from
+      // the dead session, then re-runs the connect path with the freshest
+      // session config from the store (user may have edited host/port/creds
+      // between disconnect and now). Failure re-arms so another keypress retries.
+      const reconnect = async (): Promise<void> => {
+        instance?.terminal.write(`\r\n\x1b[90m${t('term_reconnecting')}\x1b[0m\r\n`);
+        const freshSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
+        if (tab.type === 'ssh') {
+          await invoke('close_ssh', { sessionId: tab.sessionId }).catch(() => {});
+        } else if (tab.type === 'serial') {
+          await invoke('close_serial', { sessionId: tab.sessionId }).catch(() => {});
+        }
+
+        try {
+          if (!freshSession) throw new Error('session not found in store');
+          if (tab.type === 'ssh') {
+            await doSshConnect(freshSession);
+          } else if (tab.type === 'serial') {
+            if (!freshSession.serial_port) throw new Error('serial port not configured');
+            await invoke('serial_open', {
+              sessionId: freshSession.id,
+              portName: freshSession.serial_port,
+              baudRate: parseInt(freshSession.serial_baud_rate || '115200', 10),
+              dataBits: freshSession.serial_data_bits || '8',
+              stopBits: freshSession.serial_stop_bits || '1',
+              parity: freshSession.serial_parity || 'None',
+            });
+          }
+          connectedTabs.add(tab.id);
+          useAppStore.getState().updateTabConnected(tab.id, true);
+          reconnectableTabs.delete(tab.id);
+        } catch (err) {
+          instance?.terminal.write(
+            `\r\n\x1b[31m${String(err)}\x1b[0m\r\n` +
+            `\x1b[33m${t('term_press_any_key_to_reconnect')}\x1b[0m\r\n`
+          );
+          // Re-arm so a second keypress tries again.
+          reconnectableTabs.add(tab.id);
         }
       };
 

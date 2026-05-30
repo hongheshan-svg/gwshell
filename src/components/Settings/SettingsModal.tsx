@@ -67,7 +67,6 @@ export interface AppSettings {
   sshHistoryCmdLoadCount: string;
   terminalStripeBackground: boolean;
   renderMode: boolean;
-  autoReconnect: boolean;
   middleClickAction: string;
   rightClickAction: string;
   terminalSound: boolean;
@@ -140,7 +139,6 @@ const defaultSettings: AppSettings = {
   sshHistoryCmdLoadCount: '100',
   terminalStripeBackground: true,
   renderMode: true,
-  autoReconnect: false,
   middleClickAction: 'none',
   rightClickAction: 'menu',
   terminalSound: false,
@@ -442,7 +440,6 @@ export const SettingsModal: React.FC = () => {
                   </div>
                   <div className="settings-col">
                     <Row label={t('settings_terminal_fontsize')}><Sel value={settings.terminalFontSize} options={['10px', '11px', '12px', '13px', '14px', '16px', '18px']} onChange={(v) => u('terminalFontSize', v)} /></Row>
-                    <Row label={t('settings_auto_reconnect')}><Toggle value={settings.autoReconnect} onChange={(v) => u('autoReconnect', v)} /></Row>
                     <Row label={t('settings_middle_click')}><Sel value={settings.middleClickAction} options={[{ value: 'none', label: t('settings_middle_none') }, { value: 'paste', label: t('settings_middle_paste') }]} onChange={(v) => u('middleClickAction', v)} /></Row>
                     <Row label={t('settings_right_click')}><Sel value={settings.rightClickAction} options={[{ value: 'menu', label: t('settings_right_menu') }, { value: 'paste', label: t('settings_right_paste') }]} onChange={(v) => u('rightClickAction', v)} /></Row>
                     <Row label={t('settings_terminal_sound')}><Toggle value={settings.terminalSound} onChange={(v) => u('terminalSound', v)} /></Row>
