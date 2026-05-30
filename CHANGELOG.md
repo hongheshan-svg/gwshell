@@ -6,6 +6,18 @@
 发布说明由 CI（`.github/workflows/build.yml`）按标签版本号自动从本文件提取，
 因此每个版本的小节标题必须形如 `## vX.Y.Z - YYYY-MM-DD`。
 
+## v0.2.1 - 2026-05-30
+
+### 🔧 CI / 构建修复
+- 修复 macOS 发布构建失败（`tauri: command not found`，退出码 127）：`npm ci` 偶发产生不完整安装（npm/cli#4769「Exit handler never called!」会以退出码 0 结束却未链接 bin，并可能跳过可选的原生 CLI 二进制）。安装步骤改为重试，并以 `tauri --version` 真正可运行作为成功判定，而非仅检查 bin 文件存在
+- 锁文件（`package-lock.json`）全部依赖改为从官方源 `registry.npmjs.org` 解析，不再指向第三方镜像 —— 消除美区 runner 从远端镜像拉取超时 / 不完整导致的偶发失败；`.npmrc` 固定 registry 防止重新生成时回流
+- Linux 构建显式安装 `libdbus-1-dev`（keyring / secret-service 的 dbus 链接），不再依赖 runner 镜像隐式提供
+
+### 🧹 清理
+- 移除未使用的 `lucide-ai` 依赖别名（指向 lucide-react 的重复拷贝，无任何源码引用）
+
+> 本版本仅涉及 CI / 构建与依赖维护，应用功能与 v0.2.0 完全相同。
+
 ## v0.2.0 - 2026-05-30
 
 ### 🚀 重大修复：SSH 输入卡死（架构层面）
