@@ -70,6 +70,33 @@ jobs:
         run: |
           brew install openssl libssh2 pkg-config
 
+      # Extract this version's section from CHANGELOG.md so the GitHub Release
+      # body is version-specific (matched by the pushed tag, e.g. v0.2.0 ->
+      # the "## v0.2.0 - ..." section). Falls back to a generic line if absent.
+      - name: Release notes from CHANGELOG
+        id: notes
+        shell: bash
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          BODY=""
+          if [ -f CHANGELOG.md ]; then
+            BODY="$(awk -v ver="v$VER" '
+              $0 ~ ("^## " ver "([^0-9]|$)") { cap = 1; next }
+              cap && /^## v/ { exit }
+              cap { print }
+            ' CHANGELOG.md)"
+          fi
+          # Drop leading blank lines.
+          BODY="$(printf '%s\n' "$BODY" | sed -e '/./,$!d')"
+          if [ -z "$BODY" ]; then
+            BODY="See the assets to download this version and install."
+          fi
+          {
+            echo "body<<CHANGELOG_EOF"
+            printf '%s\n' "$BODY"
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
@@ -80,7 +107,7 @@ jobs:
           args: --target ${{ matrix.target }}
           tagName: v__VERSION__
           releaseName: 'GWShell v__VERSION__'
-          releaseBody: 'See the assets to download this version and install.'
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
