@@ -46,8 +46,42 @@ jobs:
         with:
           node-version: 20
 
+      # `npm ci` on the macOS runner has produced flaky/incomplete installs:
+      #   * The committed lockfile must resolve tarballs from registry.npmjs.org
+      #     (a prior lockfile pinned everything to a distant mirror, which made
+      #     the US-based runners' fetches slow and unreliable). Guard against a
+      #     regression of that.
+      #   * npm 10.x can abort mid-install with "Exit handler never called!"
+      #     (npm/cli#4769) yet still exit 0, leaving an INCOMPLETE install, and
+      #     it can silently skip the platform-specific @tauri-apps/cli native
+      #     binary (an OPTIONAL dep) while still linking the `tauri` .bin shim.
+      #     Either way the build later dies with `tauri: command not found`
+      #     (exit 127) or "Failed to load native binding".
+      # So: retry `npm ci`, and gate success on the tauri CLI actually RUNNING
+      # (which loads the native binary), not merely on the shim file existing.
       - name: Install npm dependencies
-        run: npm ci
+        shell: bash
+        run: |
+          set +e
+          if grep -q 'registry\.npmmirror\.com' package-lock.json; then
+            echo "::error::package-lock.json resolves tarballs from registry.npmmirror.com; regenerate it against registry.npmjs.org"
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            echo "::group::npm ci (attempt $attempt)"
+            npm ci
+            status=$?
+            echo "::endgroup::"
+            if [ $status -eq 0 ] && node_modules/.bin/tauri --version >/dev/null 2>&1; then
+              echo "npm ci succeeded and the tauri CLI is runnable."
+              exit 0
+            fi
+            echo "::warning::npm ci attempt $attempt failed (exit $status) or produced an unrunnable tauri CLI; cleaning and retrying"
+            rm -rf node_modules
+            sleep 5
+          done
+          echo "::error::npm ci failed to produce a runnable tauri CLI after 3 attempts"
+          exit 1
 
       # Linux-specific system dependencies
       - name: Install Linux dependencies
@@ -62,7 +96,8 @@ jobs:
             libssl-dev \
             pkg-config \
             libssh2-1-dev \
-            libudev-dev
+            libudev-dev \
+            libdbus-1-dev
 
       # macOS: install dependencies for native compilation
       - name: Install macOS dependencies
