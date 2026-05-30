@@ -698,15 +698,41 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         resizeCmd = "resize_pty";
       }
 
+      // Render flow control: coalesce incoming data events and flush to xterm
+      // once per animation frame. Under heavy output (cat, build logs, top) this
+      // caps xterm parsing to one write per frame so the WebView main thread
+      // never saturates and input stays responsive. A byte cap forces an
+      // immediate flush if a single frame accumulates a very large burst.
+      let renderQueue = "";
+      let renderRaf = 0;
+      const RENDER_CAP = 1 << 18; // 256 KB
+      const flushRender = () => {
+        renderRaf = 0;
+        if (!renderQueue) return;
+        const chunk = renderQueue;
+        renderQueue = "";
+        instance?.terminal.write(chunk);
+      };
+      const enqueueRender = (payload: string) => {
+        renderQueue += payload;
+        if (renderQueue.length >= RENDER_CAP) {
+          if (renderRaf) { cancelAnimationFrame(renderRaf); renderRaf = 0; }
+          flushRender();
+          return;
+        }
+        if (!renderRaf) renderRaf = requestAnimationFrame(flushRender);
+      };
+
       const unlistenData = await listen<string>(
         `${eventPrefix}-data-${tab.sessionId}`,
-        (event) => { instance?.terminal.write(event.payload); }
+        (event) => { enqueueRender(event.payload); }
       );
       if (cancelled) { unlistenData(); return; }
 
       const unlistenExit = await listen(
         `${eventPrefix}-exit-${tab.sessionId}`,
         () => {
+          flushRender();
           instance?.terminal.write(`\r\n\x1b[33m${t('term_session_ended')}\x1b[0m\r\n`);
           useAppStore.getState().updateTabConnected(tab.id, false);
         }
@@ -758,6 +784,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       tabListenerCleanups.set(tab.id, () => {
         unlistenData();
         unlistenExit();
+        if (renderRaf) { cancelAnimationFrame(renderRaf); renderRaf = 0; }
         try { dataDispose.dispose(); } catch {}
         try { resizeDispose?.dispose(); } catch {}
       });

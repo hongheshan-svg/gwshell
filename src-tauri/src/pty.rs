@@ -312,8 +312,11 @@ impl PtyManager {
     }
 
     pub fn write_to_pty(&self, session_id: &str, data: &[u8]) -> Result<(), String> {
-        let instances = self.instances.lock();
-        if let Some(instance) = instances.get(session_id) {
+        // Clone the Arc under a brief map lock, then release it before doing the
+        // (potentially blocking) write+flush — never hold the global map lock
+        // across I/O, or one stalled shell freezes input to every other session.
+        let instance = self.instances.lock().get(session_id).cloned();
+        if let Some(instance) = instance {
             let mut inst = instance.lock();
             // Encode UTF-8 input to the session's target charset before writing
             let bytes: std::borrow::Cow<[u8]> = {
@@ -340,8 +343,8 @@ impl PtyManager {
     }
 
     pub fn resize_pty(&self, session_id: &str, rows: u16, cols: u16) -> Result<(), String> {
-        let instances = self.instances.lock();
-        if let Some(instance) = instances.get(session_id) {
+        let instance = self.instances.lock().get(session_id).cloned();
+        if let Some(instance) = instance {
             let inst = instance.lock();
             inst.master
                 .resize(PtySize {
@@ -358,7 +361,11 @@ impl PtyManager {
     }
 
     pub fn close_pty(&self, session_id: &str) {
-        if let Some(instance) = self.instances.lock().remove(session_id) {
+        // Remove under a brief lock, then kill+wait off-lock: child.wait() blocks
+        // until the process exits and must never be held under the global map
+        // mutex, or a slow-dying shell freezes input to every other session.
+        let instance = self.instances.lock().remove(session_id);
+        if let Some(instance) = instance {
             let mut inst = instance.lock();
             let _ = inst.child.kill();
             let _ = inst.child.wait();
