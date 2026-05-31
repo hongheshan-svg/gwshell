@@ -140,8 +140,13 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: --target ${{ matrix.target }}
-          tagName: v__VERSION__
-          releaseName: 'GWShell v__VERSION__'
+          # Only create/upload a GitHub Release on tag pushes (v*). On PRs and
+          # main pushes tagName/releaseName are empty, so tauri-action just
+          # builds — the binaries are still kept via the upload-artifact step
+          # below. This stops concurrent PR/main builds from colliding while
+          # uploading identically-named assets to the same shared draft release.
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && 'v__VERSION__' || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && 'GWShell v__VERSION__' || '' }}
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
