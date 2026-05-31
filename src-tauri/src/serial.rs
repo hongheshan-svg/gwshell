@@ -12,6 +12,9 @@ use tauri::{AppHandle, Emitter};
 pub struct SerialInstance {
     writer: Box<dyn serialport::SerialPort>,
     stop_flag: Arc<AtomicBool>,
+    // Joined on close so the reader releases its cloned port handle before a
+    // subsequent open() of the same port runs.
+    reader_thread: Option<std::thread::JoinHandle<()>>,
 }
 
 pub struct SerialManager {
@@ -35,6 +38,13 @@ impl SerialManager {
         parity: &str,
         app_handle: AppHandle,
     ) -> Result<(), String> {
+        // Make open idempotent. Without this, a second open() for the same
+        // session_id would overwrite the map entry and orphan the previous
+        // reader thread — which still holds a clone of the old port and an
+        // out-of-map stop_flag that close_serial can never flip, leaking the
+        // thread and keeping the OS serial port locked.
+        self.close_serial(session_id);
+
         let db = match data_bits {
             "5" => DataBits::Five,
             "6" => DataBits::Six,
@@ -56,7 +66,11 @@ impl SerialManager {
             .stop_bits(sb)
             .parity(par)
             .flow_control(FlowControl::None)
-            .timeout(Duration::from_millis(10))
+            // Read timeout doubles as the stop-flag poll interval. 150ms keeps
+            // shutdown prompt while cutting idle wakeups from ~100/s to ~7/s;
+            // reads still return the instant bytes arrive, so RX latency is
+            // unaffected.
+            .timeout(Duration::from_millis(150))
             .open()
             .map_err(|e| format!("Failed to open serial port {}: {}", port_name, e))?;
 
@@ -67,17 +81,8 @@ impl SerialManager {
         let stop_flag = Arc::new(AtomicBool::new(false));
         let stop_clone = stop_flag.clone();
 
-        let instance = Arc::new(Mutex::new(SerialInstance {
-            writer: port,
-            stop_flag,
-        }));
-
-        self.instances
-            .lock()
-            .insert(session_id.to_string(), instance);
-
         let sid = session_id.to_string();
-        std::thread::spawn(move || {
+        let reader_thread = std::thread::spawn(move || {
             // Streaming decoder so a multi-byte character split across two reads
             // is not corrupted into replacement characters.
             let mut decoder = encoding_rs::UTF_8.new_decoder();
@@ -113,6 +118,16 @@ impl SerialManager {
             }
         });
 
+        let instance = Arc::new(Mutex::new(SerialInstance {
+            writer: port,
+            stop_flag,
+            reader_thread: Some(reader_thread),
+        }));
+
+        self.instances
+            .lock()
+            .insert(session_id.to_string(), instance);
+
         Ok(())
     }
 
@@ -132,17 +147,35 @@ impl SerialManager {
     }
 
     pub fn close_serial(&self, session_id: &str) {
-        if let Some(instance) = self.instances.lock().remove(session_id) {
-            let inst = instance.lock();
-            inst.stop_flag.store(true, Ordering::Relaxed);
+        // Remove from the map first, then signal + join the reader OFF the map
+        // lock so the join (up to one read timeout) doesn't stall other ops.
+        let instance = self.instances.lock().remove(session_id);
+        if let Some(instance) = instance {
+            let handle = {
+                let mut inst = instance.lock();
+                inst.stop_flag.store(true, Ordering::Relaxed);
+                inst.reader_thread.take()
+            };
+            if let Some(h) = handle {
+                let _ = h.join();
+            }
         }
     }
 
     pub fn close_all(&self) {
         let instances: Vec<_> = self.instances.lock().drain().map(|(_, v)| v).collect();
-        for instance in instances {
-            let inst = instance.lock();
+        // Signal every reader to stop first, then join — their read timeouts
+        // elapse concurrently instead of serially.
+        let mut handles = Vec::new();
+        for instance in &instances {
+            let mut inst = instance.lock();
             inst.stop_flag.store(true, Ordering::Relaxed);
+            if let Some(h) = inst.reader_thread.take() {
+                handles.push(h);
+            }
+        }
+        for h in handles {
+            let _ = h.join();
         }
     }
 }

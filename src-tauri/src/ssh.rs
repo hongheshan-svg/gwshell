@@ -15,6 +15,12 @@ use std::sync::{
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
+/// Per-blocking-call timeout (ms) for the auxiliary SSH connection that serves
+/// SFTP and metrics/exec. Bounds a single stalled read so it can never park the
+/// thread (and the aux mutex) indefinitely. Generous enough that healthy SFTP
+/// transfers — which make progress every call — never hit it.
+const AUX_SESSION_TIMEOUT_MS: u32 = 10_000;
+
 /// Expand a leading `~` or `~/` into the user's home directory.
 /// Other forms (`~user/...`) are returned unchanged — libssh2 doesn't
 /// support them either, so we keep behavior predictable.
@@ -509,11 +515,31 @@ fn establish_authenticated_session(p: &ConnectParams) -> Result<Session, String>
     Ok(session)
 }
 
+/// Open a one-off channel, run `command`, and return its trimmed stdout. The
+/// caller is responsible for holding the session's lock for the duration.
+fn exec_on_session(session: &Session, command: &str) -> Result<String, String> {
+    let mut ch = session
+        .channel_session()
+        .map_err(|e| format!("Exec channel failed: {}", e))?;
+    ch.exec(command).map_err(|e| format!("Exec failed: {}", e))?;
+    let mut output = String::new();
+    ch.read_to_string(&mut output)
+        .map_err(|e| format!("Exec read failed: {}", e))?;
+    ch.wait_close()
+        .map_err(|e| format!("Exec close failed: {}", e))?;
+    Ok(output.trim().to_string())
+}
+
 pub struct SshManager {
     instances: Mutex<HashMap<String, Arc<Mutex<SshInstance>>>>,
     // Per-session command channel to the owner thread (input/resize/close).
     writers: Mutex<HashMap<String, mpsc::Sender<SshCmd>>>,
     aux: Mutex<HashMap<String, Arc<Mutex<AuxSession>>>>,
+    // Dedicated connection for metrics polling so it never contends with SFTP on
+    // the shared aux mutex. `Some` = a separate connection was established;
+    // `None` = it couldn't be (e.g. one-time TOTP can't re-auth) and the caller
+    // falls back to the shared aux. The cached entry avoids reconnecting per tick.
+    metrics_aux: Mutex<HashMap<String, Option<Arc<Mutex<AuxSession>>>>>,
     params: Mutex<HashMap<String, ConnectParams>>,
     forwards: Mutex<HashMap<String, LocalForward>>,
 }
@@ -529,6 +555,7 @@ impl SshManager {
             instances: Mutex::new(HashMap::new()),
             writers: Mutex::new(HashMap::new()),
             aux: Mutex::new(HashMap::new()),
+            metrics_aux: Mutex::new(HashMap::new()),
             params: Mutex::new(HashMap::new()),
             forwards: Mutex::new(HashMap::new()),
         }
@@ -812,8 +839,9 @@ impl SshManager {
     pub fn close_ssh(&self, session_id: &str) {
         self.close_local_forward(session_id);
         self.params.lock().remove(session_id);
-        // Dropping the aux entry drops its Session, closing the auxiliary socket.
+        // Dropping the aux entries drops their Sessions, closing the sockets.
         self.aux.lock().remove(session_id);
+        self.metrics_aux.lock().remove(session_id);
         // Signal the owner thread to tear down its channel off-lock — we never
         // hold the global map lock across a blocking wait_close().
         if let Some(tx) = self.writers.lock().remove(session_id) {
@@ -826,6 +854,7 @@ impl SshManager {
         self.close_all_local_forwards();
         self.params.lock().clear();
         self.aux.lock().clear();
+        self.metrics_aux.lock().clear();
         let txs: Vec<_> = self.writers.lock().drain().map(|(_, v)| v).collect();
         for tx in txs {
             let _ = tx.send(SshCmd::Close);
@@ -847,6 +876,15 @@ impl SshManager {
         // Establish WITHOUT holding the aux map lock (network I/O).
         let session = establish_authenticated_session(&params).ok()?;
         session.set_blocking(true);
+        // Bound every blocking call on this connection. Without a timeout a
+        // stalled/half-open socket parks the calling thread forever inside
+        // read_to_string/sftp_read while it holds `aux.lock()`, which then
+        // deadlocks every later SFTP/exec on this session (and, since metrics
+        // polls on this same aux, leaks the thread until process exit). libssh2
+        // applies the timeout per blocking call and resets it each call, so it
+        // does NOT abort healthy multi-chunk SFTP transfers — only genuinely
+        // stalled reads error out with LIBSSH2_ERROR_TIMEOUT, freeing the lock.
+        session.set_timeout(AUX_SESSION_TIMEOUT_MS);
         let aux = Arc::new(Mutex::new(AuxSession { session, sftp: None }));
         let mut map = self.aux.lock();
         if let Some(existing) = map.get(session_id) {
@@ -855,6 +893,30 @@ impl SshManager {
         }
         map.insert(session_id.to_string(), aux.clone());
         Some(aux)
+    }
+
+    /// Lazily get (or open) the dedicated metrics connection for this session.
+    /// The cached entry stores `None` when a separate connection can't be
+    /// established (e.g. one-time TOTP), so we don't reattempt every 2s tick;
+    /// the caller then falls back to the shared work session.
+    fn get_or_create_metrics_aux(&self, session_id: &str) -> Option<Arc<Mutex<AuxSession>>> {
+        if let Some(slot) = self.metrics_aux.lock().get(session_id) {
+            return slot.clone();
+        }
+        let params = self.params.lock().get(session_id)?.clone();
+        // Establish WITHOUT holding the metrics map lock (network I/O).
+        let established = establish_authenticated_session(&params).ok().map(|session| {
+            session.set_blocking(true);
+            session.set_timeout(AUX_SESSION_TIMEOUT_MS);
+            Arc::new(Mutex::new(AuxSession { session, sftp: None }))
+        });
+        // Cache the outcome (Some or None). entry().or_insert lets a racing
+        // creator win without overwriting an already-stored connection.
+        self.metrics_aux
+            .lock()
+            .entry(session_id.to_string())
+            .or_insert(established)
+            .clone()
     }
 
     /// Run a blocking SSH operation (SFTP / exec) on a session, preferring a
@@ -1132,18 +1194,27 @@ impl SshManager {
     /// auxiliary connection when available so it never blocks the interactive
     /// terminal (this is what previously made the metrics poll freeze input).
     pub fn ssh_exec(&self, session_id: &str, command: &str) -> Result<String, String> {
-        self.with_work_session(session_id, |session, _sftp| {
-            let mut ch = session
-                .channel_session()
-                .map_err(|e| format!("Exec channel failed: {}", e))?;
-            ch.exec(command).map_err(|e| format!("Exec failed: {}", e))?;
-            let mut output = String::new();
-            ch.read_to_string(&mut output)
-                .map_err(|e| format!("Exec read failed: {}", e))?;
-            ch.wait_close()
-                .map_err(|e| format!("Exec close failed: {}", e))?;
-            Ok(output.trim().to_string())
-        })
+        self.with_work_session(session_id, |session, _sftp| exec_on_session(session, command))
+    }
+
+    /// Run a metrics-probe command on a connection dedicated to metrics so a 2s
+    /// poll never blocks SFTP browsing on the shared aux mutex. Falls back to the
+    /// shared work session when a dedicated connection can't be established.
+    pub fn metrics_exec(&self, session_id: &str, command: &str) -> Result<String, String> {
+        let Some(aux) = self.get_or_create_metrics_aux(session_id) else {
+            return self.ssh_exec(session_id, command);
+        };
+        let result = {
+            let guard = aux.lock();
+            guard.session.set_blocking(true);
+            exec_on_session(&guard.session, command)
+        };
+        // Drop a dead dedicated connection so the next poll can reconnect after a
+        // transient blip instead of being wedged on a stale socket.
+        if result.is_err() {
+            self.metrics_aux.lock().remove(session_id);
+        }
+        result
     }
 
     /// Start a local-forward tunnel: each connection to 127.0.0.1:local_port is

@@ -460,21 +460,38 @@ whoami
 hostname
 uname -sr
 cat /etc/os-release 2>/dev/null
-nproc
+nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 1
 grep '^model name' /proc/cpuinfo | head -1
 echo '---HOSTEND---'
 "#;
             let ssh_static = ssh.clone();
             let sid_static = sid.clone();
-            let static_out = tokio::task::spawn_blocking(move || {
-                ssh_static.ssh_exec(&sid_static, static_cmd)
-            })
-            .await;
+            let static_fut = tokio::task::spawn_blocking(move || {
+                ssh_static.metrics_exec(&sid_static, static_cmd)
+            });
+            // Bound the very first probe too. Without this, an early half-open
+            // connection hangs the poller forever — the per-tick timeout in the
+            // loop below never gets a chance to run, and the Server panel shows
+            // neither data nor an error.
+            let static_out = match timeout(Duration::from_secs(8), static_fut).await {
+                Ok(joined) => joined,
+                Err(_) => {
+                    let _ = app.emit(
+                        &format!("server-metrics-error-{}", sid),
+                        serde_json::json!({ "reason": "timeout" }),
+                    );
+                    return;
+                }
+            };
 
             match static_out {
                 Ok(Ok(text)) => {
                     let host = parse_static_host(&text);
-                    if host.cpu_cores == 0 {
+                    // Metrics read from /proc, which only exists on Linux. Detect a
+                    // genuinely unsupported host from the kernel string rather than
+                    // cpu_cores==0 — the latter wrongly rejected minimal Linux boxes
+                    // that lack the `nproc` binary.
+                    if !host.kernel.to_lowercase().contains("linux") {
                         let _ = app.emit(
                             &format!("server-metrics-error-{}", sid),
                             serde_json::json!({ "reason": "unsupported" }),
@@ -508,7 +525,7 @@ echo '---END---'
                 let ssh_tick = ssh.clone();
                 let sid_tick = sid.clone();
                 let exec_fut = tokio::task::spawn_blocking(move || {
-                    ssh_tick.ssh_exec(&sid_tick, probe)
+                    ssh_tick.metrics_exec(&sid_tick, probe)
                 });
 
                 let out = match timeout(Duration::from_secs(5), exec_fut).await {
@@ -615,7 +632,9 @@ fn parse_static_host(text: &str) -> HostInfo {
         os_lines.push(line.to_string());
     }
     host.os_pretty = parse_os_pretty(&os_lines.join("\n"));
-    host.cpu_cores = cores;
+    // Floor to 1 so downstream per-core math never divides by zero, even if the
+    // remote couldn't report a core count.
+    host.cpu_cores = cores.max(1);
 
     if let Some(line) = iter.next() {
         if let Some(after) = line.split_once(':') {

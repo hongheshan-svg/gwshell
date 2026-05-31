@@ -3434,3 +3434,16 @@ input, select, textarea, button {
   border-radius: 0;
   transition: width 0.1s linear;
 }
+
+/* Credential-storage warning toast: sits above the update toast (so the two
+   never overlap) and carries a distinct warning accent. */
+.security-notice {
+  bottom: 76px;
+  border-color: #d08b27;
+  max-width: 360px;
+}
+
+.security-notice-icon {
+  color: #d08b27;
+  flex-shrink: 0;
+}

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useAppStore, type SplitCount } from '../../stores/appStore';
 import { TerminalView, scheduleTerminalFit } from './TerminalView';
 import { AssetTable } from '../AssetTable/AssetTable';
@@ -14,10 +15,23 @@ const GRID_TEMPLATES: Record<SplitCount, { cols: string; rows: string }> = {
 };
 
 export const TerminalContainer: React.FC = () => {
+  // Select only the slices this component reads (shallow-compared) so unrelated
+  // store mutations — theme/locale toggles, the 60s latency ping that rewrites
+  // `sessions`, modal open/close — don't re-render the whole terminal tree.
   const {
     tabs, activeTabId, mainView,
     splitCount, splitPanes, assignPane, focusedPane, setFocusedPane, setActiveTab,
-  } = useAppStore();
+  } = useAppStore(useShallow((s) => ({
+    tabs: s.tabs,
+    activeTabId: s.activeTabId,
+    mainView: s.mainView,
+    splitCount: s.splitCount,
+    splitPanes: s.splitPanes,
+    assignPane: s.assignPane,
+    focusedPane: s.focusedPane,
+    setFocusedPane: s.setFocusedPane,
+    setActiveTab: s.setActiveTab,
+  })));
 
   // Show asset table when the active tab is the asset-list tab (but not in split mode)
   if (splitCount <= 1 && (activeTabId === 'asset-list' || mainView === 'asset-list')) {

@@ -28,6 +28,12 @@ function pushHistory(arr: number[], v: number): number[] {
 
 export const ServerPanel: React.FC = () => {
   const { t } = useTranslation();
+  // Keep the latest `t` without letting the metrics subscription depend on it.
+  // i18next hands back a new `t` reference on every language switch; if the
+  // effect below depended on `t`, toggling en/zh would tear down the backend
+  // metrics task, restart it (a fresh SSH probe), and discard sparkline history.
+  const tRef = useRef(t);
+  tRef.current = t;
   const { serverPanelOpen, toggleServerPanel, tabs, activeTabId, sessions } = useAppStore();
 
   const activeTab = tabs.find((tt) => tt.id === activeTabId);
@@ -102,9 +108,9 @@ export const ServerPanel: React.FC = () => {
         (evt) => {
           const p = evt.payload;
           setStatus('error');
-          if (p.reason === 'unsupported') setErrorBanner(t('serverPanel_status_unsupported'));
-          else if (p.reason === 'timeout') setErrorBanner(t('serverPanel_status_timeout'));
-          else setErrorBanner(t('serverPanel_status_disconnected'));
+          if (p.reason === 'unsupported') setErrorBanner(tRef.current('serverPanel_status_unsupported'));
+          else if (p.reason === 'timeout') setErrorBanner(tRef.current('serverPanel_status_timeout'));
+          else setErrorBanner(tRef.current('serverPanel_status_disconnected'));
         }
       );
     })();
@@ -115,7 +121,7 @@ export const ServerPanel: React.FC = () => {
       if (errUnlisten) errUnlisten();
       invoke('stop_server_metrics', { sessionId }).catch(() => {});
     };
-  }, [serverPanelOpen, sessionId, t]);
+  }, [serverPanelOpen, sessionId]);
 
   if (!serverPanelOpen) return null;
 
