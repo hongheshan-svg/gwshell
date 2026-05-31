@@ -813,8 +813,23 @@ fn get_groups(state: State<'_, Arc<AppState>>) -> Vec<SessionGroup> {
     state.groups.lock().clone()
 }
 
+/// Whether credentials can be encrypted at rest on this machine. When false, the
+/// frontend warns the user that saved passwords/TOTP secrets are stored
+/// unencrypted (no OS keyring backend is available).
+#[tauri::command]
+fn secret_storage_available() -> bool {
+    crypto::secret_storage_available()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Warm the keyring master key off the main thread so the synchronous session
+    // decrypt below overlaps Database::new()'s file I/O instead of blocking cold
+    // start on a (one-time, memoized) keychain lookup.
+    std::thread::spawn(|| {
+        let _ = crypto::secret_storage_available();
+    });
+
     let db = Database::new().expect("Failed to initialize database");
     let initial_sessions = db.get_sessions().unwrap_or_default();
     let initial_groups = db.get_groups().unwrap_or_default();
@@ -893,6 +908,7 @@ pub fn run() {
             delete_session,
             save_group,
             get_groups,
+            secret_storage_available,
         ])
         .setup(|app| {
             // Pre-warm OS info cache in a background thread so the first

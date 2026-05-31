@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { check } from '@tauri-apps/plugin-updater';
+import { check, type Update } from '@tauri-apps/plugin-updater';
 import { Download, X } from 'lucide-react';
 
 type UpdateState = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error';
@@ -11,12 +11,17 @@ export const UpdateChecker: React.FC = () => {
   const [newVersion, setNewVersion] = useState('');
   const [dismissed, setDismissed] = useState(false);
   const [progress, setProgress] = useState(0);
+  // Hold the Update handle from the initial check so Download reuses it instead
+  // of issuing a second check() — that second call could return null (manifest
+  // flake / already-applied) and leave the toast stuck forever on "Downloading".
+  const updateRef = useRef<Update | null>(null);
 
   const checkForUpdate = async () => {
     setState('checking');
     try {
       const update = await check();
       if (update) {
+        updateRef.current = update;
         setNewVersion(update.version);
         setState('available');
       } else {
@@ -28,11 +33,15 @@ export const UpdateChecker: React.FC = () => {
   };
 
   const downloadAndInstall = async () => {
+    const update = updateRef.current;
+    if (!update) {
+      // No handle to install (shouldn't happen from the 'available' toast) —
+      // surface the dismissible error state rather than hanging on 'downloading'.
+      setState('error');
+      return;
+    }
     setState('downloading');
     try {
-      const update = await check();
-      if (!update) return;
-
       let totalLen = 0;
       let downloaded = 0;
 

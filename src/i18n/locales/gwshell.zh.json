@@ -457,6 +457,8 @@
   "update_downloading": "正在下载更新...",
   "update_restart": "更新已下载，重启以应用。",
   "update_error": "检查更新失败",
+  "secret_storage_warning_title": "凭据未加密",
+  "secret_storage_warning_body": "系统未提供密钥环服务，已保存的密码和 TOTP 密钥以明文形式存储在本地数据库中。",
   "serverPanel_toggle_title": "显示服务器面板",
   "serverPanel_ssh_only": "仅 SSH 会话支持",
   "serverPanel_close": "关闭服务器面板",

@@ -457,6 +457,8 @@
   "update_downloading": "Downloading update...",
   "update_restart": "Update downloaded. Restart to apply.",
   "update_error": "Update check failed",
+  "secret_storage_warning_title": "Credentials are not encrypted",
+  "secret_storage_warning_body": "No OS keyring is available, so saved passwords and TOTP secrets are stored unencrypted in the local database.",
   "serverPanel_toggle_title": "Show server panel",
   "serverPanel_ssh_only": "SSH sessions only",
   "serverPanel_close": "Close server panel",

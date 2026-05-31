@@ -911,6 +911,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
               fingerprintResolveRef.current = resolve;
               setFingerprintInfo({ fingerprint, keyType, host, port });
             });
+            // Reset to a no-op so a later teardown can't re-resolve this promise.
+            fingerprintResolveRef.current = () => {};
+            // If the tab was closed/relocated while the prompt was open, the
+            // cleanup resolved us with `false`; bail before touching the
+            // (possibly disposed) terminal.
+            if (cancelled) return;
             setFingerprintInfo(null);
 
             if (accepted && !isMismatch) {
@@ -1108,6 +1114,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
 
     return () => {
       cancelled = true;
+      // Unstick a pending fingerprint-confirm prompt so its awaiting async frame
+      // (which captures `instance`/`session`) completes instead of leaking.
+      fingerprintResolveRef.current(false);
       cleanupTabListeners(tab.id);
       cleanupTerminalInteractions(tab.id);
       // Only close backend connection if tab is being removed (not just relocated to split pane)
@@ -1259,7 +1268,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         </div>
       )}
 
-      {fingerprintInfo && isActive && (
+      {fingerprintInfo && (forceVisible || isActive) && (
         <div className="fingerprint-overlay">
           <div className="fingerprint-dialog">
             <div className="fingerprint-dialog-title">🔒 {t('fp_title')}</div>

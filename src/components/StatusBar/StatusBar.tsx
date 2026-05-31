@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Wifi, Clock, Monitor, Cloud, LayoutGrid } from 'lucide-react';
+import { Wifi, Clock, Monitor, LayoutGrid } from 'lucide-react';
 import { getVersion } from '@tauri-apps/api/app';
 import { useAppStore, type SplitCount } from '../../stores/appStore';
 
@@ -18,9 +18,18 @@ export const StatusBar: React.FC = () => {
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const [showSplitMenu, setShowSplitMenu] = useState(false);
   const [version, setVersion] = useState('0.1.0');
+  const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => {});
+  }, []);
+
+  // Keep the clock current. Without a timer the displayed time freezes until an
+  // unrelated state change happens to re-render the bar. 30s is enough since
+  // only hour:minute is shown.
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(id);
   }, []);
 
   return (
@@ -72,15 +81,11 @@ export const StatusBar: React.FC = () => {
       </div>
 
       <div className="status-item">
-        <Cloud size={11} />
-        <span>25°C</span>
-      </div>
-      <div className="status-item">
         <span>{t('status_assets')}: {sessions.length}</span>
       </div>
       <div className="status-item">
         <Clock size={11} />
-        <span>{new Date().toLocaleTimeString(locale === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' })}</span>
+        <span>{now.toLocaleTimeString(locale === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' })}</span>
       </div>
     </div>
   );

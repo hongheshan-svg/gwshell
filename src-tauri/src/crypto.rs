@@ -42,6 +42,28 @@ fn master_key() -> Option<[u8; 32]> {
     *KEY.get_or_init(load_or_create_key)
 }
 
+/// Whether secrets can actually be encrypted at rest (i.e. an OS keyring backend
+/// is available). When false, `encrypt_secret` degrades to plaintext storage —
+/// the frontend queries this to warn the user that saved credentials are not
+/// protected on this machine.
+pub fn secret_storage_available() -> bool {
+    master_key().is_some()
+}
+
+/// Log one prominent warning the first time a secret is persisted without
+/// encryption, so the degradation is never completely silent.
+fn warn_plaintext_once() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static WARNED: AtomicBool = AtomicBool::new(false);
+    if !WARNED.swap(true, Ordering::Relaxed) {
+        eprintln!(
+            "[gwshell] WARNING: no OS keyring backend available — SSH/proxy \
+             passwords and TOTP secrets are being stored UNENCRYPTED in the \
+             local database."
+        );
+    }
+}
+
 fn load_or_create_key() -> Option<[u8; 32]> {
     let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER).ok()?;
 
@@ -70,6 +92,7 @@ pub fn encrypt_secret(plaintext: &str) -> String {
         return plaintext.to_string();
     }
     let Some(key) = master_key() else {
+        warn_plaintext_once();
         return plaintext.to_string();
     };
     let Some(nonce_bytes) = random_bytes::<NONCE_LEN>() else {
@@ -89,27 +112,35 @@ pub fn encrypt_secret(plaintext: &str) -> String {
 }
 
 /// Decrypt a stored secret. Legacy plaintext (no `enc:v1:` prefix) is returned
-/// unchanged. Any decode/decrypt failure falls back to returning the stored
-/// string verbatim so the user still sees *something* rather than an error.
+/// unchanged so existing databases keep working.
+///
+/// Once a value carries the `enc:v1:` prefix it was genuinely encrypted, so a
+/// decode/decrypt failure (missing keyring, wrong/rotated key after a machine
+/// migration or keychain reset) means we cannot recover the secret. In that
+/// case we return an EMPTY string rather than the `enc:v1:<base64>` ciphertext:
+/// the ciphertext would otherwise be handed to ssh as a literal password,
+/// producing an opaque auth failure. Returning empty makes the credential read
+/// as "missing" so the user re-enters it; the encrypted DB value is untouched
+/// and recovers automatically once the correct key is available again.
 pub fn decrypt_secret(stored: &str) -> String {
     let Some(rest) = stored.strip_prefix(ENC_PREFIX) else {
         return stored.to_string();
     };
     let Some(key) = master_key() else {
-        return stored.to_string();
+        return String::new();
     };
     let Ok(blob) = BASE64.decode(rest.as_bytes()) else {
-        return stored.to_string();
+        return String::new();
     };
     if blob.len() <= NONCE_LEN {
-        return stored.to_string();
+        return String::new();
     }
     let (nonce_bytes, ciphertext) = blob.split_at(NONCE_LEN);
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key));
     let nonce = Nonce::from_slice(nonce_bytes);
     match cipher.decrypt(nonce, ciphertext) {
         Ok(plaintext) => String::from_utf8_lossy(&plaintext).to_string(),
-        Err(_) => stored.to_string(),
+        Err(_) => String::new(),
     }
 }
 
@@ -175,5 +206,14 @@ mod tests {
         let enc = encrypt_secret("s3cr3t");
         let dec = decrypt_secret(&enc);
         assert_eq!(dec, "s3cr3t");
+    }
+
+    #[test]
+    fn corrupt_encrypted_value_decrypts_to_empty_not_ciphertext() {
+        // A value that carries the enc:v1: prefix but cannot be decoded/decrypted
+        // (corruption, missing/rotated key) must NEVER be returned verbatim — it
+        // would otherwise be handed to ssh as a literal password. Holds whether
+        // or not a keyring backend is present on the test machine.
+        assert_eq!(decrypt_secret("enc:v1:not-valid-base64!!!"), "");
     }
 }

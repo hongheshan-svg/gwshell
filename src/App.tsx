@@ -27,6 +27,7 @@ const SerialPortModal = lazy(() => import('./components/Modals/SerialPortModal')
 const SettingsModal = lazy(() => import('./components/Settings/SettingsModal').then((m) => ({ default: m.SettingsModal })));
 const AppMenu = lazy(() => import('./components/AppMenu/AppMenu').then((m) => ({ default: m.AppMenu })));
 const UpdateChecker = lazy(() => import('./components/UpdateChecker/UpdateChecker').then((m) => ({ default: m.UpdateChecker })));
+const SecurityNotice = lazy(() => import('./components/SecurityNotice/SecurityNotice').then((m) => ({ default: m.SecurityNotice })));
 const ServerPanel = lazy(() => import('./components/ServerPanel').then((m) => ({ default: m.ServerPanel })));
 
 function App() {
@@ -127,6 +128,7 @@ function App() {
           {showSettings && <SettingsModal />}
           {showAppMenu && <AppMenu />}
           <UpdateChecker />
+          <SecurityNotice />
           <ServerPanel />
         </Suspense>
       </div>
