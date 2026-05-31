@@ -188,5 +188,9 @@ jobs:
         with:
           files: src-tauri/target/${{ matrix.target }}/release/GWShell-portable-${{ matrix.label }}.zip
           tag_name: ${{ github.ref_name }}
+          # Keep the release a draft (tauri-action created it with releaseDraft:
+          # true). Without this, action-gh-release defaults to draft:false and
+          # would publish the release before it can be reviewed.
+          draft: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
