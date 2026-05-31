@@ -174,6 +174,13 @@ const terminalInteractionCleanups = new Map<string, () => void>();
 const fitFrameIds = new Map<string, number>();
 const settleTimerIds = new Map<string, ReturnType<typeof setTimeout>>();
 
+/** Trailing-edge 40ms debounce for backend resize invokes, keyed by tab.id.
+ *  Window drag fires xterm onResize at frame rate; the backend
+ *  resize_ssh/resize_pty (→ SIGWINCH) doesn't need that granularity. The
+ *  first resize per tab still fires immediately so initial mount is unaffected. */
+const pendingBackendResize = new Map<string, ReturnType<typeof setTimeout>>();
+const sentFirstResize = new Set<string>();
+
 /** Tabs whose connection just dropped. When a tab is in this set, the next
  *  keystroke triggers a reconnect instead of being sent to the (now dead)
  *  backend channel. Cleared on reconnect attempt, on tab destroy, and on
@@ -202,6 +209,10 @@ export function destroyTerminal(tabId: string): void {
   const settleTimerId = settleTimerIds.get(tabId);
   if (settleTimerId) clearTimeout(settleTimerId);
   settleTimerIds.delete(tabId);
+  const pendingResize = pendingBackendResize.get(tabId);
+  if (pendingResize) clearTimeout(pendingResize);
+  pendingBackendResize.delete(tabId);
+  sentFirstResize.delete(tabId);
   connectedTabs.delete(tabId);
   reconnectableTabs.delete(tabId);
   const inst = terminalInstances.get(tabId);
@@ -396,6 +407,26 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
             buildNumber: osInfo.windowsBuild ?? 0,
           };
         }
+
+        // Wait for the configured terminal font to load before constructing the
+        // terminal. xterm measures character cell width once, on construction;
+        // if the font hasn't loaded yet the fallback font's metrics are baked in
+        // and every render misaligns (column drift / overlap) until something
+        // forces a re-measure. Race against a 600ms cap because document.fonts
+        // .load hangs indefinitely for a missing/404'd font.
+        try {
+          if (typeof document !== "undefined" && document.fonts?.load) {
+            const fs = parseInt(s.terminalFontSize) || 13;
+            const family = (s.terminalFont || "monospace").trim();
+            await Promise.race([
+              document.fonts.load(`${fs}px "${family}"`),
+              new Promise<void>((resolve) => setTimeout(resolve, 600)),
+            ]);
+          }
+        } catch {
+          // Non-fatal — construct with whatever metrics the browser has.
+        }
+        if (cancelled) return;
 
         const terminal = new Terminal(termOpts as ConstructorParameters<typeof Terminal>[0]);
 
@@ -787,12 +818,33 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       let resizeDispose: { dispose(): void } | null = null;
       if (resizeCmd) {
         const cmd = resizeCmd;
+        const tabId = tab.id;
+        const sessionId = tab.sessionId;
+        const isSsh = tab.type === "ssh";
         resizeDispose = instance!.terminal.onResize(({ rows, cols }) => {
-          if (tab.type === "ssh") {
-            invoke(cmd, { sessionId: tab.sessionId, cols, rows }).catch(() => {});
-          } else {
-            invoke(cmd, { sessionId: tab.sessionId, rows, cols }).catch(() => {});
+          const fire = () => {
+            if (isSsh) {
+              invoke(cmd, { sessionId, cols, rows }).catch(() => {});
+            } else {
+              invoke(cmd, { sessionId, rows, cols }).catch(() => {});
+            }
+          };
+          // First resize per tab fires immediately — the terminal needs its
+          // real size before the first paint and the user isn't dragging yet.
+          if (!sentFirstResize.has(tabId)) {
+            sentFirstResize.add(tabId);
+            fire();
+            return;
           }
+          // Subsequent resizes (window drag fires onResize at frame rate) are
+          // debounced 40ms trailing so we don't flood the backend with
+          // resize_*/SIGWINCH on every frame.
+          const existing = pendingBackendResize.get(tabId);
+          if (existing) clearTimeout(existing);
+          pendingBackendResize.set(tabId, setTimeout(() => {
+            pendingBackendResize.delete(tabId);
+            fire();
+          }, 40));
         });
       }
 
@@ -809,6 +861,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         unlistenData();
         unlistenExit();
         if (renderRaf) { cancelAnimationFrame(renderRaf); renderRaf = 0; }
+        const pendingResize = pendingBackendResize.get(tab.id);
+        if (pendingResize) { clearTimeout(pendingResize); pendingBackendResize.delete(tab.id); }
         try { dataDispose.dispose(); } catch {}
         try { resizeDispose?.dispose(); } catch {}
       });
