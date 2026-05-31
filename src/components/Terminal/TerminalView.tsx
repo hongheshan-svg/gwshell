@@ -40,9 +40,9 @@ const getTerminalThemeColors = (theme: ThemeMode) => {
     ? {
         background: "#0c0c14",
         foreground: "#d4d4d8",
-        cursor: "#5ac8fa",
+        cursor: "#a0a0b0",
         cursorAccent: "#0c0c14",
-        selectionBackground: "rgba(90, 200, 250, 0.3)",
+        selectionBackground: "rgba(160, 160, 176, 0.3)",
         black: "#1a1a28",
         red: "#ff5555",
         green: "#50fa7b",
@@ -66,9 +66,9 @@ const getTerminalThemeColors = (theme: ThemeMode) => {
     : {
         background: "#f0f0f4",
         foreground: "#1a1a2e",
-        cursor: "#0078d4",
+        cursor: "#6e6e7a",
         cursorAccent: "#f0f0f4",
-        selectionBackground: "rgba(0, 120, 212, 0.2)",
+        selectionBackground: "rgba(110, 110, 122, 0.25)",
         black: "#1a1a2e",
         red: "#dc2626",
         green: "#16a34a",
