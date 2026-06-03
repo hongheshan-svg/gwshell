@@ -8,10 +8,12 @@ mod handler;
 mod known_hosts;
 mod params;
 mod session;
+mod sftp;
 mod transport;
 
 pub use known_hosts::trust_host;
 pub use params::ConnectParams;
+pub use sftp::SftpEntry;
 
 use crate::ssh_next::handler::Client;
 use russh::client::Handle;
@@ -123,5 +125,195 @@ impl SshManager {
 
     pub async fn metrics_exec(&self, session_id: &str, command: &str) -> Result<String, String> {
         self.ssh_exec(session_id, command).await
+    }
+
+    // --- SFTP ---
+    // Each op opens a fresh SFTP subsystem channel on the session's shared
+    // connection. They are deliberately repeated (one method per op) so the
+    // command layer can call them directly; the shape is identical.
+
+    pub async fn sftp_list_dir(
+        &self,
+        session_id: &str,
+        path: &str,
+    ) -> Result<Vec<SftpEntry>, String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone());
+        match conn {
+            Some(c) => sftp::list_dir(&c, path).await,
+            None => Err("Session not found".into()),
+        }
+    }
+
+    pub async fn sftp_realpath(&self, session_id: &str, path: &str) -> Result<String, String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone());
+        match conn {
+            Some(c) => sftp::realpath(&c, path).await,
+            None => Err("Session not found".into()),
+        }
+    }
+
+    pub async fn sftp_mkdir(&self, session_id: &str, path: &str) -> Result<(), String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone());
+        match conn {
+            Some(c) => sftp::mkdir(&c, path).await,
+            None => Err("Session not found".into()),
+        }
+    }
+
+    pub async fn sftp_rmdir(&self, session_id: &str, path: &str) -> Result<(), String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone());
+        match conn {
+            Some(c) => sftp::rmdir(&c, path).await,
+            None => Err("Session not found".into()),
+        }
+    }
+
+    pub async fn sftp_delete_file(&self, session_id: &str, path: &str) -> Result<(), String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone());
+        match conn {
+            Some(c) => sftp::delete_file(&c, path).await,
+            None => Err("Session not found".into()),
+        }
+    }
+
+    pub async fn sftp_rename(
+        &self,
+        session_id: &str,
+        old: &str,
+        new: &str,
+    ) -> Result<(), String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone());
+        match conn {
+            Some(c) => sftp::rename(&c, old, new).await,
+            None => Err("Session not found".into()),
+        }
+    }
+
+    pub async fn sftp_read_text(&self, session_id: &str, path: &str) -> Result<String, String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone());
+        match conn {
+            Some(c) => sftp::read_text(&c, path).await,
+            None => Err("Session not found".into()),
+        }
+    }
+
+    pub async fn sftp_write_text(
+        &self,
+        session_id: &str,
+        path: &str,
+        content: &str,
+    ) -> Result<(), String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone());
+        match conn {
+            Some(c) => sftp::write_text(&c, path, content).await,
+            None => Err("Session not found".into()),
+        }
+    }
+
+    pub async fn sftp_download(
+        &self,
+        session_id: &str,
+        remote: &str,
+        local: &str,
+    ) -> Result<(), String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone());
+        match conn {
+            Some(c) => sftp::download(&c, remote, local).await,
+            None => Err("Session not found".into()),
+        }
+    }
+
+    pub async fn sftp_upload(
+        &self,
+        session_id: &str,
+        remote: &str,
+        local: &str,
+    ) -> Result<(), String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone());
+        match conn {
+            Some(c) => sftp::upload(&c, remote, local).await,
+            None => Err("Session not found".into()),
+        }
+    }
+
+    pub async fn sftp_chmod(
+        &self,
+        session_id: &str,
+        path: &str,
+        mode: u32,
+    ) -> Result<(), String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone());
+        match conn {
+            Some(c) => sftp::chmod(&c, path, mode).await,
+            None => Err("Session not found".into()),
+        }
+    }
+
+    pub async fn sftp_create_file(&self, session_id: &str, path: &str) -> Result<(), String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone());
+        match conn {
+            Some(c) => sftp::create_file(&c, path).await,
+            None => Err("Session not found".into()),
+        }
     }
 }
