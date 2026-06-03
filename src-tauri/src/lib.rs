@@ -4,7 +4,10 @@ mod metrics;
 mod pty;
 mod serial;
 mod session;
-mod ssh;
+#[path = "ssh.rs"]
+mod ssh; // legacy libssh2 (removed at cutover)
+#[path = "ssh/mod.rs"]
+mod ssh_next;
 
 use database::Database;
 use parking_lot::Mutex;
