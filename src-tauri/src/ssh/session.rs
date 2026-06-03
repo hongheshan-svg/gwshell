@@ -1,6 +1,9 @@
 use crate::ssh_next::connect;
+use crate::ssh_next::handler::Client;
 use crate::ssh_next::params::ConnectParams;
+use russh::client::Handle;
 use russh::ChannelMsg;
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
 
@@ -19,8 +22,12 @@ pub async fn spawn(
     cols: u32,
     rows: u32,
     app: AppHandle,
-) -> Result<mpsc::Sender<ShellCmd>, String> {
-    let session = connect::establish(&params).await?;
+) -> Result<(mpsc::Sender<ShellCmd>, Arc<Handle<Client>>), String> {
+    // russh 0.61's `Handle` is not `Clone`, so the connection is shared as an
+    // `Arc`: the shell task keeps one clone (for the final disconnect) and the
+    // manager keeps another to open exec/sftp/forward channels on the same
+    // connection. All of those methods take `&self`, so `Arc` is sufficient.
+    let session = Arc::new(connect::establish(&params).await?);
     let channel = session
         .channel_open_session()
         .await
@@ -38,7 +45,9 @@ pub async fn spawn(
     let data_ev = format!("ssh-data-{}", session_id);
     let exit_ev = format!("ssh-exit-{}", session_id);
 
+    let task_session = session.clone();
     tokio::spawn(async move {
+        let session = task_session;
         let mut channel = channel;
         let mut decoder = encoding_rs::UTF_8.new_decoder();
         loop {
@@ -68,7 +77,7 @@ pub async fn spawn(
             .await;
     });
 
-    Ok(tx)
+    Ok((tx, session))
 }
 
 /// Decode bytes through a streaming UTF-8 decoder and emit a batched event.
