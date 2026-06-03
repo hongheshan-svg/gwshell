@@ -4,6 +4,7 @@
 mod auth;
 mod connect;
 mod exec;
+mod forward;
 mod handler;
 mod known_hosts;
 mod params;
@@ -21,7 +22,7 @@ use session::ShellCmd;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::AppHandle;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex, Notify};
 
 /// One live SSH connection plus the channel that drives its interactive shell.
 /// `conn` is shared (`Arc`) so exec/metrics/sftp/forward can open their own
@@ -35,6 +36,8 @@ struct SessionHandle {
 #[derive(Default)]
 pub struct SshManager {
     sessions: Mutex<HashMap<String, SessionHandle>>,
+    /// Active local port-forward stop signals, keyed by session id.
+    forwards: Mutex<HashMap<String, Arc<Notify>>>,
 }
 
 impl SshManager {
@@ -92,12 +95,23 @@ impl SshManager {
     }
 
     pub async fn close_ssh(&self, session_id: &str) {
+        self.close_local_forward(session_id).await;
         if let Some(s) = self.sessions.lock().await.remove(session_id) {
             let _ = s.shell.send(ShellCmd::Close).await;
         }
     }
 
     pub async fn close_all(&self) {
+        let stops: Vec<_> = self
+            .forwards
+            .lock()
+            .await
+            .drain()
+            .map(|(_, v)| v)
+            .collect();
+        for stop in stops {
+            stop.notify_waiters();
+        }
         let sessions: Vec<_> = self
             .sessions
             .lock()
@@ -125,6 +139,45 @@ impl SshManager {
 
     pub async fn metrics_exec(&self, session_id: &str, command: &str) -> Result<String, String> {
         self.ssh_exec(session_id, command).await
+    }
+
+    // --- Local port forwarding ---
+
+    pub async fn start_local_forward(
+        &self,
+        session_id: &str,
+        local_port: u16,
+        remote_host: &str,
+        remote_port: u16,
+    ) -> Result<u16, String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone())
+            .ok_or("Session not found")?;
+        self.close_local_forward(session_id).await;
+        let stop = Arc::new(Notify::new());
+        let port = forward::start_local(
+            conn,
+            local_port,
+            remote_host.to_string(),
+            remote_port,
+            stop.clone(),
+        )
+        .await?;
+        self.forwards
+            .lock()
+            .await
+            .insert(session_id.to_string(), stop);
+        Ok(port)
+    }
+
+    pub async fn close_local_forward(&self, session_id: &str) {
+        if let Some(stop) = self.forwards.lock().await.remove(session_id) {
+            stop.notify_waiters();
+        }
     }
 
     // --- SFTP ---
