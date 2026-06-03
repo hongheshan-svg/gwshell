@@ -2,6 +2,7 @@
 #![allow(dead_code)] // until cutover (Task 12)
 
 mod auth;
+mod connect;
 mod handler;
 mod known_hosts;
 mod params;
