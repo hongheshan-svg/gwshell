@@ -1,7 +1,7 @@
 {
   "name": "gwshell",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "A modern cross-platform SSH/Shell terminal manager",
   "repository": {
     "type": "git",
