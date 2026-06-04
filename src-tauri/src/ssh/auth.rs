@@ -58,13 +58,50 @@ async fn try_pubkey(session: &mut Handle<Client>, p: &ConnectParams) -> Result<b
 }
 
 async fn try_agent(session: &mut Handle<Client>, user: &str) -> Result<bool, String> {
-    // russh 0.61: connect to the agent, list identities, then call
-    // authenticate_publickey_with for each public key until one succeeds. The
-    // AgentClient itself acts as the Signer. request_identities returns
-    // AgentIdentity values, so we extract the owned PublicKey for each.
-    let mut agent = russh::keys::agent::client::AgentClient::connect_env()
-        .await
-        .map_err(|e| format!("SSH agent unavailable: {}", e))?;
+    // Connecting to the agent is OS-specific: `connect_env` (via $SSH_AUTH_SOCK)
+    // is `#[cfg(unix)]`-only in russh, while Windows exposes the OpenSSH agent's
+    // named pipe and Pageant. Each yields a different transport type, so the
+    // shared identity-iteration logic lives in the generic `auth_with_agent`.
+    #[cfg(unix)]
+    {
+        let agent = russh::keys::agent::client::AgentClient::connect_env()
+            .await
+            .map_err(|e| format!("SSH agent unavailable: {}", e))?;
+        auth_with_agent(session, user, agent).await
+    }
+    #[cfg(windows)]
+    {
+        use russh::keys::agent::client::AgentClient;
+        // Prefer the OpenSSH for Windows agent (named pipe); fall back to Pageant.
+        match AgentClient::connect_named_pipe(r"\\.\pipe\openssh-ssh-agent").await {
+            Ok(agent) => auth_with_agent(session, user, agent).await,
+            Err(_) => {
+                let agent = AgentClient::connect_pageant()
+                    .await
+                    .map_err(|e| format!("SSH agent unavailable: {}", e))?;
+                auth_with_agent(session, user, agent).await
+            }
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = (session, user);
+        Err("SSH agent is not supported on this platform".to_string())
+    }
+}
+
+/// Try each identity offered by a connected agent until one authenticates.
+/// Generic over the agent transport so it serves the Unix socket, the Windows
+/// named pipe, and Pageant alike. The bound mirrors russh's
+/// `impl<R: AsyncRead + AsyncWrite + Unpin + Send + 'static> Signer for AgentClient<R>`.
+async fn auth_with_agent<S>(
+    session: &mut Handle<Client>,
+    user: &str,
+    mut agent: russh::keys::agent::client::AgentClient<S>,
+) -> Result<bool, String>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
     let identities = agent
         .request_identities()
         .await
