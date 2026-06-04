@@ -92,11 +92,21 @@ async fn try_keyboard_interactive(
         .authenticate_keyboard_interactive_start(p.username.clone(), None)
         .await
         .map_err(|e| format!("Keyboard-interactive start failed: {}", e))?;
+    // Cap the prompt rounds: a misconfigured or hostile server can send
+    // InfoRequest indefinitely (russh notes "any number ... including empty"),
+    // which would otherwise spin forever resubmitting the same answers.
+    let mut rounds = 0u32;
     loop {
         match resp {
             R::Success => return Ok(true),
             R::Failure { .. } => return Ok(false),
             R::InfoRequest { prompts, .. } => {
+                rounds += 1;
+                if rounds > 10 {
+                    return Err(
+                        "Keyboard-interactive auth exceeded the prompt-round limit".to_string()
+                    );
+                }
                 // Auto-fill password for the first prompt, TOTP for any extra prompt.
                 let answers: Vec<String> = prompts
                     .iter()

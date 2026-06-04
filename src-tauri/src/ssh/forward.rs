@@ -32,6 +32,10 @@ pub async fn start_local(
             let Ok((mut socket, _)) = accept else { break };
             let conn = conn.clone();
             let rhost = remote_host.clone();
+            // Teardown signal for THIS bridge: without it, an in-flight bridge
+            // outlives close_local_forward/close_ssh and keeps a clone of the
+            // shared connection Handle alive, preventing socket reclamation.
+            let stop_inner = stop.clone();
             tokio::spawn(async move {
                 let Ok(channel) = conn
                     .channel_open_direct_tcpip(rhost, remote_port as u32, "127.0.0.1".to_string(), 0)
@@ -44,6 +48,7 @@ pub async fn start_local(
                 let mut buf_b = vec![0u8; 8192];
                 loop {
                     tokio::select! {
+                        _ = stop_inner.notified() => break,
                         r = socket.read(&mut buf_a) => match r {
                             Ok(0) | Err(_) => break,
                             Ok(n) => { if stream.write_all(&buf_a[..n]).await.is_err() { break; } }
