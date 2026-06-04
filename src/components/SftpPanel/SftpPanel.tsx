@@ -51,6 +51,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
 
   const [currentPath, setCurrentPath] = useState('');
   const [entries, setEntries] = useState<SftpEntry[]>([]);
+  const [selectedEntry, setSelectedEntry] = useState<SftpEntry | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingPath, setEditingPath] = useState(false);
@@ -75,6 +76,8 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
   const initializedRef = useRef(false);
+  const homePathRef = useRef<string | null>(null);
+  const initRunRef = useRef(0);
   // Guards file transfers so overlapping operations (double-click during a
   // transfer, spammed download/upload) can't run concurrently and corrupt
   // each other. The ref gives an immediate synchronous gate; `busy` drives UI.
@@ -99,6 +102,63 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
     if (!connected) initializedRef.current = false;
   }, [connected]);
 
+  useEffect(() => {
+    initializedRef.current = false;
+    homePathRef.current = null;
+    initRunRef.current += 1;
+    setSelectedEntry(null);
+    setError(null);
+  }, [sessionId, username]);
+
+  const resolveReadableDir = useCallback(
+    async (path: string): Promise<string | null> => {
+      let resolvedPath = path;
+      try {
+        resolvedPath = await invoke<string>('sftp_realpath', { sessionId, path });
+      } catch {
+        // Some SFTP servers don't expand "~"; verify the original candidate below.
+      }
+
+      const candidates = resolvedPath === path ? [path] : [resolvedPath, path];
+      for (const candidate of candidates) {
+        if (!candidate) continue;
+        try {
+          await invoke<unknown[]>('sftp_list', { sessionId, path: candidate });
+          return candidate;
+        } catch {
+          // Try the next candidate.
+        }
+      }
+      return null;
+    },
+    [sessionId],
+  );
+
+  const resolveHomePath = useCallback(async (): Promise<string> => {
+    if (homePathRef.current) return homePathRef.current;
+
+    const candidates = username === 'root'
+      ? ['/root', '~']
+      : username
+        ? [`/home/${username}`, '~']
+        : ['~'];
+    candidates.push('.', '/');
+
+    const seen = new Set<string>();
+    for (const candidate of candidates) {
+      if (seen.has(candidate)) continue;
+      seen.add(candidate);
+      const readable = await resolveReadableDir(candidate);
+      if (readable) {
+        homePathRef.current = readable;
+        return readable;
+      }
+    }
+
+    homePathRef.current = '/';
+    return '/';
+  }, [resolveReadableDir, username]);
+
   // Detect the initial directory once the SSH session is actually connected.
   // Gating on `connected` (instead of a fixed mount-time retry window) means
   // the panel loads as soon as auth + handshake finish, however long that
@@ -108,27 +168,21 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
     if (!connected || initializedRef.current) return;
     initializedRef.current = true;
 
-    const homeDir = username ? `/home/${username}` : null;
+    let cancelled = false;
+    const runId = ++initRunRef.current;
     const initWithPath = (dir: string) => {
-      setCurrentPath(dir);
+      if (cancelled || runId !== initRunRef.current) return;
+      setCurrentPath((prev) => (prev === dir ? prev : dir));
       setPathInput(dir);
     };
-    const doFallback = () => {
-      invoke<string>('sftp_realpath', { sessionId, path: '.' })
-        .then((p) => initWithPath(p))
-        .catch(() => initWithPath('/'));
-    };
+    resolveHomePath()
+      .then(initWithPath)
+      .catch(() => initWithPath('/'));
 
-    if (homeDir) {
-      // Home dir is a guess (e.g. /home/root doesn't exist for root); fall
-      // back to the server's resolved cwd when it isn't listable.
-      invoke<unknown[]>('sftp_list', { sessionId, path: homeDir })
-        .then(() => initWithPath(homeDir))
-        .catch(doFallback);
-    } else {
-      doFallback();
-    }
-  }, [connected, sessionId, username]);
+    return () => {
+      cancelled = true;
+    };
+  }, [connected, resolveHomePath]);
 
   const loadDir = useCallback(
     async (path: string) => {
@@ -137,7 +191,10 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
       try {
         const items = await invoke<SftpEntry[]>('sftp_list', { sessionId, path });
         setEntries(items);
-        setCurrentPath(path);
+        setSelectedEntry((selected) => {
+          if (!selected) return null;
+          return items.find((item) => item.path === selected.path) ?? null;
+        });
         setPathInput(path);
       } catch (err) {
         setError(String(err));
@@ -156,7 +213,9 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
   }, [currentPath, loadDir]);
 
   const navigateTo = (path: string) => {
-    setCurrentPath(path);
+    const next = path || '/';
+    setCurrentPath((prev) => (prev === next ? prev : next));
+    setPathInput(next);
   };
 
   const goUp = () => {
@@ -165,13 +224,9 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
   };
 
   const goHome = () => {
-    if (username) {
-      navigateTo(`/home/${username}`);
-    } else {
-      invoke<string>('sftp_realpath', { sessionId, path: '.' })
-        .then((p) => navigateTo(p))
-        .catch(() => navigateTo('/'));
-    }
+    resolveHomePath()
+      .then((path) => navigateTo(path))
+      .catch(() => navigateTo('/'));
   };
 
   const handlePathSubmit = () => {
@@ -181,11 +236,12 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
     }
   };
 
-  const handleEntryClick = (_entry: SftpEntry) => {
-    // Single click: select only, no navigation
+  const handleEntryClick = (entry: SftpEntry) => {
+    setSelectedEntry(entry);
   };
 
   const handleEntryDoubleClick = async (entry: SftpEntry) => {
+    setSelectedEntry(entry);
     if (entry.is_dir) {
       navigateTo(entry.path);
     } else if (isTextFile(entry.name)) {
@@ -344,10 +400,52 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
     }
   };
 
+  const startRename = (entry: SftpEntry) => {
+    setSelectedEntry(entry);
+    setRenamingEntry(entry.path);
+    setRenameValue(entry.name);
+  };
+
+  const startChmod = (entry: SftpEntry) => {
+    setSelectedEntry(entry);
+    setChmodEntry(entry);
+    setChmodValue(formatPermissions(entry.permissions));
+  };
+
+  const openSelected = () => {
+    if (!selectedEntry) return;
+    if (selectedEntry.is_dir) {
+      navigateTo(selectedEntry.path);
+    } else {
+      handleOpenLocal(selectedEntry);
+    }
+  };
+
+  const editSelected = () => {
+    if (!selectedEntry || selectedEntry.is_dir || !isTextFile(selectedEntry.name)) return;
+    setEditingFile(selectedEntry);
+  };
+
+  const downloadSelected = () => {
+    if (!selectedEntry || selectedEntry.is_dir) return;
+    handleDownload(selectedEntry);
+  };
+
+  const copySelectedPath = () => {
+    if (!selectedEntry) return;
+    handleCopyPath(selectedEntry.path);
+  };
+
+  const deleteSelected = () => {
+    if (!selectedEntry) return;
+    handleDelete(selectedEntry);
+  };
+
   // Right-click on entry or blank area
   const handleContextMenu = (e: React.MouseEvent, entry: SftpEntry | null) => {
     e.preventDefault();
     e.stopPropagation();
+    setSelectedEntry(entry);
     setContextMenu({ x: e.clientX, y: e.clientY, entry });
   };
 
@@ -398,6 +496,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
 
   const fileCount = entries.filter((e) => !e.is_dir).length;
   const folderCount = entries.filter((e) => e.is_dir).length;
+  const canEditSelected = !!selectedEntry && !selectedEntry.is_dir && isTextFile(selectedEntry.name);
 
   return (
     <>
@@ -431,6 +530,28 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
           </button>
           <button className="sftp-tool-btn" onClick={handleUpload} disabled={busy} title={t('sftp_upload')}>
             <Upload size={14} />
+          </button>
+          <div className="sftp-toolbar-sep" />
+          <button className="sftp-tool-btn" onClick={openSelected} disabled={!selectedEntry || busy} title={t('sftp_open_file')}>
+            <ExternalLink size={14} />
+          </button>
+          <button className="sftp-tool-btn" onClick={editSelected} disabled={!canEditSelected} title={t('sftp_edit_online')}>
+            <FileEdit size={14} />
+          </button>
+          <button className="sftp-tool-btn" onClick={downloadSelected} disabled={!selectedEntry || selectedEntry.is_dir || busy} title={t('sftp_download')}>
+            <Download size={14} />
+          </button>
+          <button className="sftp-tool-btn" onClick={copySelectedPath} disabled={!selectedEntry} title={t('sftp_copy_path')}>
+            <Copy size={14} />
+          </button>
+          <button className="sftp-tool-btn" onClick={() => { if (selectedEntry) startRename(selectedEntry); }} disabled={!selectedEntry} title={t('sftp_rename')}>
+            <Edit3 size={14} />
+          </button>
+          <button className="sftp-tool-btn" onClick={() => { if (selectedEntry) startChmod(selectedEntry); }} disabled={!selectedEntry} title={t('sftp_chmod')}>
+            <Shield size={14} />
+          </button>
+          <button className="sftp-tool-btn sftp-tool-btn-danger" onClick={deleteSelected} disabled={!selectedEntry || busy} title={t('sftp_delete')}>
+            <Trash2 size={14} />
           </button>
         </div>
 
@@ -512,7 +633,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
           {currentPath !== '/' && (
             <div
               className="sftp-file-item sftp-file-dir"
-              onClick={goUp}
+              onClick={() => { setSelectedEntry(null); goUp(); }}
             >
               <FolderUp size={18} className="sftp-icon sftp-icon-folder" />
               <span className="sftp-file-name">..</span>
@@ -524,7 +645,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
           {entries.map((entry) => (
             <div
               key={entry.path}
-              className={`sftp-file-item ${entry.is_dir ? 'sftp-file-dir' : ''}`}
+              className={`sftp-file-item ${entry.is_dir ? 'sftp-file-dir' : ''} ${selectedEntry?.path === entry.path ? 'sftp-file-item-selected' : ''}`}
               onClick={() => handleEntryClick(entry)}
               onDoubleClick={() => handleEntryDoubleClick(entry)}
               onContextMenu={(e) => handleContextMenu(e, entry)}

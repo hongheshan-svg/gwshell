@@ -74,45 +74,52 @@ export const ServerPanel: React.FC = () => {
 
     (async () => {
       try {
+        dataUnlisten = await listen<MetricsSnapshot>(
+          `server-metrics-${sessionId}`,
+          (evt) => {
+            const snap = evt.payload;
+            setSnapshot(snap);
+            setStatus('ok');
+            if (snap.cpu) {
+              cpuHistoryRef.current = pushHistory(cpuHistoryRef.current, snap.cpu.total_percent);
+            }
+            if (snap.mem && snap.mem.mem_total_bytes > 0) {
+              const pct = (snap.mem.mem_used_bytes / snap.mem.mem_total_bytes) * 100;
+              memHistoryRef.current = pushHistory(memHistoryRef.current, pct);
+            }
+            if (snap.net) {
+              rxHistoryRef.current = pushHistory(rxHistoryRef.current, snap.net.rx_bytes_per_sec);
+              txHistoryRef.current = pushHistory(txHistoryRef.current, snap.net.tx_bytes_per_sec);
+            }
+            forceRender((n) => n + 1);
+          }
+        );
+
+        errUnlisten = await listen<MetricsErrorPayload>(
+          `server-metrics-error-${sessionId}`,
+          (evt) => {
+            const p = evt.payload;
+            setStatus('error');
+            if (p.reason === 'unsupported') setErrorBanner(tRef.current('serverPanel_status_unsupported'));
+            else if (p.reason === 'timeout') setErrorBanner(tRef.current('serverPanel_status_timeout'));
+            else setErrorBanner(tRef.current('serverPanel_status_disconnected'));
+          }
+        );
+
+        if (cancelled) {
+          dataUnlisten();
+          errUnlisten();
+          dataUnlisten = null;
+          errUnlisten = null;
+          return;
+        }
+
         await invoke('start_server_metrics', { sessionId });
       } catch (e) {
         if (cancelled) return;
         setStatus('error');
         setErrorBanner(String(e));
-        return;
       }
-
-      dataUnlisten = await listen<MetricsSnapshot>(
-        `server-metrics-${sessionId}`,
-        (evt) => {
-          const snap = evt.payload;
-          setSnapshot(snap);
-          setStatus('ok');
-          if (snap.cpu) {
-            cpuHistoryRef.current = pushHistory(cpuHistoryRef.current, snap.cpu.total_percent);
-          }
-          if (snap.mem && snap.mem.mem_total_bytes > 0) {
-            const pct = (snap.mem.mem_used_bytes / snap.mem.mem_total_bytes) * 100;
-            memHistoryRef.current = pushHistory(memHistoryRef.current, pct);
-          }
-          if (snap.net) {
-            rxHistoryRef.current = pushHistory(rxHistoryRef.current, snap.net.rx_bytes_per_sec);
-            txHistoryRef.current = pushHistory(txHistoryRef.current, snap.net.tx_bytes_per_sec);
-          }
-          forceRender((n) => n + 1);
-        }
-      );
-
-      errUnlisten = await listen<MetricsErrorPayload>(
-        `server-metrics-error-${sessionId}`,
-        (evt) => {
-          const p = evt.payload;
-          setStatus('error');
-          if (p.reason === 'unsupported') setErrorBanner(tRef.current('serverPanel_status_unsupported'));
-          else if (p.reason === 'timeout') setErrorBanner(tRef.current('serverPanel_status_timeout'));
-          else setErrorBanner(tRef.current('serverPanel_status_disconnected'));
-        }
-      );
     })();
 
     return () => {

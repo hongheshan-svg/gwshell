@@ -33,10 +33,10 @@ static OS_INFO: OnceLock<serde_json::Value> = OnceLock::new();
 
 fn compute_os_info() -> serde_json::Value {
     let os = std::env::consts::OS;
-    let mut info = serde_json::json!({ "os": os });
 
     #[cfg(target_os = "windows")]
     {
+        let mut info = serde_json::json!({ "os": os });
         // Parse the Windows build number from `cmd /c ver`
         // e.g. "Microsoft Windows [Version 10.0.22631.4780]"
         #[allow(unused_imports)]
@@ -57,9 +57,13 @@ fn compute_os_info() -> serde_json::Value {
             })
             .unwrap_or(0);
         info["windowsBuild"] = serde_json::json!(build);
+        info
     }
 
-    info
+    #[cfg(not(target_os = "windows"))]
+    {
+        serde_json::json!({ "os": os })
+    }
 }
 
 #[tauri::command]
@@ -130,21 +134,16 @@ async fn list_shells() -> Vec<pty::ShellEntry> {
         .unwrap_or_default()
 }
 
-// NOTE: write/resize/close are `async` + `spawn_blocking` so they run on a
-// Tokio worker thread, NOT the WebView main thread. A synchronous command would
-// execute on the main thread (per Tauri's command model) and, if it blocked on
-// the per-session mutex or a congested socket, freeze the entire UI. Keeping the
-// input path off the main thread is the core fix for the "freezes on input" bug.
+// Terminal input commands only enqueue data/control messages to per-session
+// owner threads. The owner threads perform the actual PTY/SSH/serial I/O, so
+// these IPC calls return quickly and never wait on a congested socket/device.
 #[tauri::command]
 async fn write_to_pty(
     session_id: String,
     data: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || state.pty_manager.write_to_pty(&session_id, data.as_bytes()))
-        .await
-        .map_err(|e| format!("task join: {}", e))?
+    state.pty_manager.write_to_pty(&session_id, data.as_bytes())
 }
 
 #[tauri::command]
@@ -154,16 +153,12 @@ async fn resize_pty(
     cols: u16,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || state.pty_manager.resize_pty(&session_id, rows, cols))
-        .await
-        .map_err(|e| format!("task join: {}", e))?
+    state.pty_manager.resize_pty(&session_id, rows, cols)
 }
 
 #[tauri::command]
 async fn close_pty(session_id: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
-    let state = state.inner().clone();
-    let _ = tokio::task::spawn_blocking(move || state.pty_manager.close_pty(&session_id)).await;
+    state.pty_manager.close_pty(&session_id);
     Ok(())
 }
 
@@ -197,36 +192,31 @@ async fn ssh_connect(
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || -> Result<(), String> {
-        state.ssh_manager.connect(
-            &session_id,
-            &host,
-            port,
-            &username,
-            password.as_deref(),
-            private_key_path.as_deref(),
-            auth_method.as_deref().unwrap_or("password"),
-            totp_code.as_deref(),
-            jump_host.as_deref(),
-            jump_port.unwrap_or(22),
-            jump_username.as_deref(),
-            jump_password.as_deref(),
-            jump_private_key_path.as_deref(),
-            proxy_type.as_deref(),
-            proxy_host.as_deref(),
-            proxy_port.unwrap_or(1080),
-            proxy_username.as_deref(),
-            proxy_password.as_deref(),
-            connection_timeout.unwrap_or(30),
-            idle_disconnect_minutes.unwrap_or(0),
-            app_handle,
-            rows,
-            cols,
-        )
-    })
-    .await
-    .map_err(|e| format!("task join: {}", e))?
+    let params = ssh::ConnectParams {
+        host,
+        port,
+        username,
+        password,
+        private_key_path,
+        auth_method: auth_method.unwrap_or_else(|| "password".to_string()),
+        totp_code,
+        jump_host,
+        jump_port: jump_port.unwrap_or(22),
+        jump_username,
+        jump_password,
+        jump_private_key_path,
+        proxy_type,
+        proxy_host,
+        proxy_port: proxy_port.unwrap_or(1080),
+        proxy_username,
+        proxy_password,
+        connection_timeout: connection_timeout.unwrap_or(30),
+        idle_disconnect_minutes: idle_disconnect_minutes.unwrap_or(0),
+    };
+    state
+        .ssh_manager
+        .connect(&session_id, params, rows, cols, app_handle)
+        .await
 }
 
 #[tauri::command]
@@ -239,8 +229,12 @@ async fn ssh_trust_host(host: String, port: u16, fingerprint: String, key_type: 
 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
+#[allow(unused_variables)]
 async fn start_tunnel(
     session_id: String,
+    // Connection params are retained in the IPC contract for backwards
+    // compatibility with the frontend, but the russh backend forwards over the
+    // already-established session connection rather than dialing a new one.
     host: String,
     port: u16,
     username: String,
@@ -262,35 +256,11 @@ async fn start_tunnel(
     remote_port: u16,
     state: State<'_, Arc<AppState>>,
 ) -> Result<u16, String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || -> Result<u16, String> {
-        state.ssh_manager.start_local_forward(
-            &session_id,
-            &host,
-            port,
-            &username,
-            password.as_deref(),
-            private_key_path.as_deref(),
-            auth_method.as_deref().unwrap_or("password"),
-            jump_host.as_deref(),
-            jump_port.unwrap_or(22),
-            jump_username.as_deref(),
-            jump_password.as_deref(),
-            jump_private_key_path.as_deref(),
-            proxy_type.as_deref(),
-            proxy_host.as_deref(),
-            proxy_port.unwrap_or(1080),
-            proxy_username.as_deref(),
-            proxy_password.as_deref(),
-            local_port,
-            &remote_host,
-            remote_port,
-        )
-    })
-    .await
-    .map_err(|e| format!("task join: {}", e))?
+    state
+        .ssh_manager
+        .start_local_forward(&session_id, local_port, &remote_host, remote_port)
+        .await
 }
-
 
 #[tauri::command]
 async fn write_to_ssh(
@@ -298,10 +268,10 @@ async fn write_to_ssh(
     data: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || state.ssh_manager.write_to_ssh(&session_id, data.as_bytes()))
+    state
+        .ssh_manager
+        .write_to_ssh(&session_id, data.as_bytes())
         .await
-        .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
@@ -311,10 +281,7 @@ async fn resize_ssh(
     rows: u32,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || state.ssh_manager.resize_ssh(&session_id, cols, rows))
-        .await
-        .map_err(|e| format!("task join: {}", e))?
+    state.ssh_manager.resize_ssh(&session_id, cols, rows).await
 }
 
 #[tauri::command]
@@ -323,16 +290,15 @@ async fn close_ssh(session_id: String, state: State<'_, Arc<AppState>>) -> Resul
     // Closing also stops the metrics poller bound to this session so it cannot
     // keep issuing exec probes against a dead connection.
     state.metrics.stop(&session_id);
-    let _ = tokio::task::spawn_blocking(move || state.ssh_manager.close_ssh(&session_id)).await;
+    state.ssh_manager.close_ssh(&session_id).await;
     Ok(())
 }
 
 // ---- SFTP Commands ----
 //
-// All SFTP/SSH operations are network I/O. They MUST run off the main thread or
-// they will block the WebView's IPC and freeze the UI. Each command extracts an
-// owned `Arc<AppState>` and dispatches the synchronous libssh2 work onto a
-// `tokio::task::spawn_blocking` worker.
+// All SFTP/SSH operations are network I/O. The russh backend is fully async, so
+// each command simply awaits the manager method on the Tokio runtime — the work
+// never blocks the WebView's IPC thread.
 
 #[tauri::command]
 async fn sftp_list(
@@ -340,10 +306,7 @@ async fn sftp_list(
     path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<ssh::SftpEntry>, String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || state.ssh_manager.sftp_list_dir(&session_id, &path))
-        .await
-        .map_err(|e| format!("task join: {}", e))?
+    state.ssh_manager.sftp_list_dir(&session_id, &path).await
 }
 
 #[tauri::command]
@@ -352,10 +315,7 @@ async fn sftp_realpath(
     path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || state.ssh_manager.sftp_realpath(&session_id, &path))
-        .await
-        .map_err(|e| format!("task join: {}", e))?
+    state.ssh_manager.sftp_realpath(&session_id, &path).await
 }
 
 #[tauri::command]
@@ -364,10 +324,7 @@ async fn sftp_mkdir(
     path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || state.ssh_manager.sftp_mkdir(&session_id, &path))
-        .await
-        .map_err(|e| format!("task join: {}", e))?
+    state.ssh_manager.sftp_mkdir(&session_id, &path).await
 }
 
 #[tauri::command]
@@ -376,10 +333,7 @@ async fn sftp_rmdir(
     path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || state.ssh_manager.sftp_rmdir(&session_id, &path))
-        .await
-        .map_err(|e| format!("task join: {}", e))?
+    state.ssh_manager.sftp_rmdir(&session_id, &path).await
 }
 
 #[tauri::command]
@@ -388,10 +342,7 @@ async fn sftp_delete_file(
     path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || state.ssh_manager.sftp_delete_file(&session_id, &path))
-        .await
-        .map_err(|e| format!("task join: {}", e))?
+    state.ssh_manager.sftp_delete_file(&session_id, &path).await
 }
 
 #[tauri::command]
@@ -401,14 +352,10 @@ async fn sftp_rename(
     new_path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        state
-            .ssh_manager
-            .sftp_rename(&session_id, &old_path, &new_path)
-    })
-    .await
-    .map_err(|e| format!("task join: {}", e))?
+    state
+        .ssh_manager
+        .sftp_rename(&session_id, &old_path, &new_path)
+        .await
 }
 
 #[tauri::command]
@@ -418,14 +365,10 @@ async fn sftp_download(
     local_path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        state
-            .ssh_manager
-            .sftp_download(&session_id, &remote_path, &local_path)
-    })
-    .await
-    .map_err(|e| format!("task join: {}", e))?
+    state
+        .ssh_manager
+        .sftp_download(&session_id, &remote_path, &local_path)
+        .await
 }
 
 #[tauri::command]
@@ -435,14 +378,10 @@ async fn sftp_upload(
     local_path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        state
-            .ssh_manager
-            .sftp_upload(&session_id, &remote_path, &local_path)
-    })
-    .await
-    .map_err(|e| format!("task join: {}", e))?
+    state
+        .ssh_manager
+        .sftp_upload(&session_id, &remote_path, &local_path)
+        .await
 }
 
 #[tauri::command]
@@ -451,35 +390,30 @@ async fn sftp_open_file(
     remote_path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || -> Result<String, String> {
-        use std::hash::{Hash, Hasher};
-        // Remote paths are POSIX; derive the basename by splitting on '/' rather
-        // than std::path::Path, which would apply Windows separator rules on a
-        // Windows host (a backslash is a legal char in a Linux filename).
-        let file_name = remote_path
-            .rsplit('/')
-            .find(|s| !s.is_empty())
-            .unwrap_or("file");
-        // Namespace by a hash of session + full remote path so two different
-        // remote files that share a basename don't clobber the same temp file.
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        session_id.hash(&mut hasher);
-        remote_path.hash(&mut hasher);
-        let temp_dir = std::env::temp_dir()
-            .join("gwshell_sftp")
-            .join(format!("{:016x}", hasher.finish()));
-        std::fs::create_dir_all(&temp_dir)
-            .map_err(|e| format!("Create temp dir failed: {}", e))?;
-        let local_path = temp_dir.join(file_name);
-        let local_str = local_path.to_string_lossy().to_string();
-        state
-            .ssh_manager
-            .sftp_download(&session_id, &remote_path, &local_str)?;
-        Ok(local_str)
-    })
-    .await
-    .map_err(|e| format!("task join: {}", e))?
+    use std::hash::{Hash, Hasher};
+    // Remote paths are POSIX; derive the basename by splitting on '/' rather
+    // than std::path::Path, which would apply Windows separator rules on a
+    // Windows host (a backslash is a legal char in a Linux filename).
+    let file_name = remote_path
+        .rsplit('/')
+        .find(|s| !s.is_empty())
+        .unwrap_or("file");
+    // Namespace by a hash of session + full remote path so two different
+    // remote files that share a basename don't clobber the same temp file.
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    session_id.hash(&mut hasher);
+    remote_path.hash(&mut hasher);
+    let temp_dir = std::env::temp_dir()
+        .join("gwshell_sftp")
+        .join(format!("{:016x}", hasher.finish()));
+    std::fs::create_dir_all(&temp_dir).map_err(|e| format!("Create temp dir failed: {}", e))?;
+    let local_path = temp_dir.join(file_name);
+    let local_str = local_path.to_string_lossy().to_string();
+    state
+        .ssh_manager
+        .sftp_download(&session_id, &remote_path, &local_str)
+        .await?;
+    Ok(local_str)
 }
 
 #[tauri::command]
@@ -488,10 +422,10 @@ async fn sftp_read_text(
     remote_path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || state.ssh_manager.sftp_read_text(&session_id, &remote_path))
+    state
+        .ssh_manager
+        .sftp_read_text(&session_id, &remote_path)
         .await
-        .map_err(|e| format!("task join: {}", e))?
 }
 
 #[tauri::command]
@@ -501,14 +435,10 @@ async fn sftp_write_text(
     content: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        state
-            .ssh_manager
-            .sftp_write_text(&session_id, &remote_path, &content)
-    })
-    .await
-    .map_err(|e| format!("task join: {}", e))?
+    state
+        .ssh_manager
+        .sftp_write_text(&session_id, &remote_path, &content)
+        .await
 }
 
 #[tauri::command]
@@ -518,10 +448,7 @@ async fn sftp_chmod(
     mode: u32,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || state.ssh_manager.sftp_chmod(&session_id, &path, mode))
-        .await
-        .map_err(|e| format!("task join: {}", e))?
+    state.ssh_manager.sftp_chmod(&session_id, &path, mode).await
 }
 
 #[tauri::command]
@@ -530,10 +457,7 @@ async fn sftp_create_file(
     path: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || state.ssh_manager.sftp_create_file(&session_id, &path))
-        .await
-        .map_err(|e| format!("task join: {}", e))?
+    state.ssh_manager.sftp_create_file(&session_id, &path).await
 }
 
 #[tauri::command]
@@ -542,10 +466,7 @@ async fn ssh_exec(
     command: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || state.ssh_manager.ssh_exec(&session_id, &command))
-        .await
-        .map_err(|e| format!("task join: {}", e))?
+    state.ssh_manager.ssh_exec(&session_id, &command).await
 }
 
 // ---- Server Panel (Metrics) Commands ----
@@ -572,16 +493,8 @@ async fn kill_remote_process(
     pid: u32,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        let cmd = format!("kill {}", pid);
-        state
-            .ssh_manager
-            .ssh_exec(&session_id, &cmd)
-            .map(|_| ())
-    })
-    .await
-    .map_err(|e| format!("task join: {}", e))?
+    let cmd = format!("kill {}", pid);
+    state.ssh_manager.ssh_exec(&session_id, &cmd).await.map(|_| ())
 }
 
 // ---- Ping Command ----
@@ -639,20 +552,14 @@ async fn write_to_serial(
     data: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        state
-            .serial_manager
-            .write_to_serial(&session_id, data.as_bytes())
-    })
-    .await
-    .map_err(|e| format!("task join: {}", e))?
+    state
+        .serial_manager
+        .write_to_serial(&session_id, data.as_bytes())
 }
 
 #[tauri::command]
 async fn close_serial(session_id: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
-    let state = state.inner().clone();
-    let _ = tokio::task::spawn_blocking(move || state.serial_manager.close_serial(&session_id)).await;
+    state.serial_manager.close_serial(&session_id);
     Ok(())
 }
 
@@ -700,10 +607,7 @@ async fn pick_directory(app: tauri::AppHandle) -> Result<Option<String>, String>
 // ---- Storage Operations ----
 
 #[tauri::command]
-async fn export_sessions_data(
-    path: String,
-    state: State<'_, Arc<AppState>>,
-) -> Result<(), String> {
+async fn export_sessions_data(path: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || -> Result<(), String> {
         let json = state.db.export_sessions_json()?;
@@ -775,10 +679,7 @@ fn get_sessions(state: State<'_, Arc<AppState>>) -> Vec<SessionConfig> {
 }
 
 #[tauri::command]
-async fn delete_session(
-    session_id: String,
-    state: State<'_, Arc<AppState>>,
-) -> Result<(), String> {
+async fn delete_session(session_id: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || -> Result<(), String> {
         // Only drop from the in-memory cache if the DB delete actually succeeded,

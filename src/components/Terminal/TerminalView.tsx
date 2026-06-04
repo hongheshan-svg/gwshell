@@ -787,18 +787,56 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       );
       if (cancelled) { unlistenData(); unlistenExit(); return; }
 
-      // Coalesce input: many onData events fired within one task (a paste, or
-      // very fast typing) are concatenated and sent as a single invoke on the
-      // next microtask. This adds no perceptible latency for single keystrokes
-      // but collapses bursts from hundreds of IPC calls to one.
+      // Coalesce input: normal typing flushes after a tiny delay, while paste
+      // bursts are sliced into bounded IPC payloads. Backend terminal commands
+      // only enqueue to per-session owner threads, so keep a few writes in
+      // flight instead of letting one slow IPC promise stall later keystrokes.
       let writeQueue = "";
-      let writeScheduled = false;
+      let writeTimer: ReturnType<typeof setTimeout> | null = null;
+      let writesInFlight = 0;
+      let writeDisposed = false;
+      const WRITE_FLUSH_MS = 8;
+      const WRITE_RETRY_MS = 24;
+      const WRITE_CHUNK_SIZE = 16 * 1024;
+      const WRITE_INVOKE_TIMEOUT_MS = 1500;
+      const WRITE_MAX_IN_FLIGHT = 4;
+      const scheduleWriteFlush = (delayMs = WRITE_FLUSH_MS) => {
+        if (writeTimer || writeDisposed) return;
+        writeTimer = setTimeout(flushWrites, delayMs);
+      };
+      const invokeWrite = (payload: string) =>
+        new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error("terminal write timeout")),
+            WRITE_INVOKE_TIMEOUT_MS,
+          );
+          invoke(writeCmd, { sessionId: tab.sessionId, data: payload })
+            .then(() => resolve())
+            .catch(reject)
+            .finally(() => clearTimeout(timeout));
+        });
       const flushWrites = () => {
-        writeScheduled = false;
-        if (!writeQueue) return;
-        const payload = writeQueue;
-        writeQueue = "";
-        invoke(writeCmd, { sessionId: tab.sessionId, data: payload }).catch(() => {});
+        writeTimer = null;
+        if (!writeQueue || writeDisposed) return;
+        while (writeQueue && writesInFlight < WRITE_MAX_IN_FLIGHT && !writeDisposed) {
+          const payload = writeQueue.length > WRITE_CHUNK_SIZE
+            ? writeQueue.slice(0, WRITE_CHUNK_SIZE)
+            : writeQueue;
+          writeQueue = writeQueue.slice(payload.length);
+          writesInFlight += 1;
+          invokeWrite(payload)
+            .catch((err) => {
+              if (tab.type === "ssh" && String(err).includes("input buffer full")) {
+                writeQueue = payload + writeQueue;
+                scheduleWriteFlush(WRITE_RETRY_MS);
+              }
+            })
+            .finally(() => {
+              writesInFlight -= 1;
+              if (writeQueue) scheduleWriteFlush(0);
+            });
+        }
+        if (writeQueue) scheduleWriteFlush(WRITE_RETRY_MS);
       };
       const dataDispose = instance!.terminal.onData((data) => {
         if (reconnectableTabs.has(tab.id)) {
@@ -809,9 +847,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           return;
         }
         writeQueue += data;
-        if (!writeScheduled) {
-          writeScheduled = true;
-          queueMicrotask(flushWrites);
+        if (writeQueue.length >= WRITE_CHUNK_SIZE) {
+          if (writeTimer) {
+            clearTimeout(writeTimer);
+            writeTimer = null;
+          }
+          flushWrites();
+        } else {
+          scheduleWriteFlush();
         }
       });
 
@@ -861,6 +904,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         unlistenData();
         unlistenExit();
         if (renderRaf) { cancelAnimationFrame(renderRaf); renderRaf = 0; }
+        writeDisposed = true;
+        if (writeTimer) { clearTimeout(writeTimer); writeTimer = null; }
+        writeQueue = "";
         const pendingResize = pendingBackendResize.get(tab.id);
         if (pendingResize) { clearTimeout(pendingResize); pendingBackendResize.delete(tab.id); }
         try { dataDispose.dispose(); } catch {}

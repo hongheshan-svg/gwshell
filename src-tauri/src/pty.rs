@@ -1,10 +1,21 @@
 use parking_lot::Mutex;
-use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
-use std::sync::Arc;
+use std::sync::mpsc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
+
+const PTY_INPUT_BUFFER_LIMIT: usize = 1024 * 1024;
+const PTY_CMD_QUEUE_LIMIT: usize = 64;
+const PTY_WRITE_CHUNK_SIZE: usize = 16 * 1024;
+const PTY_WRITE_BUDGET_TIME: Duration = Duration::from_millis(8);
+const PTY_CMD_DRAIN_LIMIT: usize = 256;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ShellEntry {
@@ -12,15 +23,42 @@ pub struct ShellEntry {
     pub label: String,
 }
 
-pub struct PtyInstance {
-    master: Box<dyn MasterPty + Send>,
-    child: Box<dyn Child + Send + Sync>,
-    writer: Box<dyn Write + Send>,
+enum PtyCmd {
+    WakeInput,
+    Resize { rows: u16, cols: u16 },
+    Close,
+}
+
+#[derive(Default)]
+struct PtyInputBuffer {
+    bytes: VecDeque<u8>,
+}
+
+impl PtyInputBuffer {
+    fn push(&mut self, data: &[u8]) -> Result<(), String> {
+        if self.bytes.len().saturating_add(data.len()) > PTY_INPUT_BUFFER_LIMIT {
+            return Err("PTY input buffer full".to_string());
+        }
+        self.bytes.extend(data);
+        Ok(())
+    }
+
+    fn pop_chunk(&mut self, max_len: usize) -> Vec<u8> {
+        let n = self.bytes.len().min(max_len);
+        self.bytes.drain(..n).collect()
+    }
+}
+
+#[derive(Clone)]
+struct PtyHandle {
+    tx: mpsc::SyncSender<PtyCmd>,
+    input: Arc<Mutex<PtyInputBuffer>>,
+    wake_pending: Arc<AtomicBool>,
     charset: String,
 }
 
 pub struct PtyManager {
-    instances: Mutex<HashMap<String, Arc<Mutex<PtyInstance>>>>,
+    sessions: Mutex<HashMap<String, PtyHandle>>,
 }
 
 #[cfg(target_os = "windows")]
@@ -193,7 +231,7 @@ pub fn list_available_shells() -> Vec<ShellEntry> {
 impl PtyManager {
     pub fn new() -> Self {
         Self {
-            instances: Mutex::new(HashMap::new()),
+            sessions: Mutex::new(HashMap::new()),
         }
     }
 
@@ -207,6 +245,8 @@ impl PtyManager {
         working_dir: Option<String>,
         charset: Option<String>,
     ) -> Result<(), String> {
+        self.close_pty(session_id);
+
         let pty_system = native_pty_system();
         let pair = pty_system
             .openpty(PtySize {
@@ -261,16 +301,19 @@ impl PtyManager {
             .try_clone_reader()
             .map_err(|e| format!("Failed to get reader: {}", e))?;
 
-        let instance = Arc::new(Mutex::new(PtyInstance {
-            master: pair.master,
-            child,
-            writer,
+        let input_buffer = Arc::new(Mutex::new(PtyInputBuffer::default()));
+        let owner_input = input_buffer.clone();
+        let wake_pending = Arc::new(AtomicBool::new(false));
+        let owner_wake_pending = wake_pending.clone();
+        let (tx, rx) = mpsc::sync_channel::<PtyCmd>(PTY_CMD_QUEUE_LIMIT);
+        let handle = PtyHandle {
+            tx,
+            input: input_buffer,
+            wake_pending,
             charset: charset_str.clone(),
-        }));
+        };
 
-        self.instances
-            .lock()
-            .insert(session_id.to_string(), instance);
+        self.sessions.lock().insert(session_id.to_string(), handle);
 
         let sid = session_id.to_string();
         // charset_str already owned, move into thread
@@ -308,76 +351,147 @@ impl PtyManager {
             }
         });
 
+        std::thread::spawn(move || {
+            let master = pair.master;
+            let mut child = child;
+            let mut writer = writer;
+            let mut write_buf: Vec<u8> = Vec::new();
+            let mut write_off = 0usize;
+
+            let mut close_requested = false;
+            while !close_requested {
+                for _ in 0..PTY_CMD_DRAIN_LIMIT {
+                    match rx.try_recv() {
+                        Ok(PtyCmd::WakeInput) => {
+                            owner_wake_pending.store(false, Ordering::Release);
+                        }
+                        Ok(PtyCmd::Resize { rows, cols }) => {
+                            let _ = master.resize(PtySize {
+                                rows,
+                                cols,
+                                pixel_width: 0,
+                                pixel_height: 0,
+                            });
+                        }
+                        Ok(PtyCmd::Close) | Err(mpsc::TryRecvError::Disconnected) => {
+                            close_requested = true;
+                            break;
+                        }
+                        Err(mpsc::TryRecvError::Empty) => break,
+                    }
+                }
+
+                let mut wrote_bytes = 0usize;
+                let write_started = Instant::now();
+                while wrote_bytes < PTY_WRITE_CHUNK_SIZE
+                    && write_started.elapsed() < PTY_WRITE_BUDGET_TIME
+                    && !close_requested
+                {
+                    if write_off >= write_buf.len() {
+                        write_buf = owner_input.lock().pop_chunk(PTY_WRITE_CHUNK_SIZE);
+                        write_off = 0;
+                        if write_buf.is_empty() {
+                            break;
+                        }
+                    }
+
+                    match writer.write(&write_buf[write_off..]) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            write_off += n;
+                            wrote_bytes += n;
+                        }
+                        Err(_) => {
+                            close_requested = true;
+                            break;
+                        }
+                    }
+                }
+                if write_off >= write_buf.len() {
+                    write_buf.clear();
+                    write_off = 0;
+                }
+                if wrote_bytes > 0 {
+                    let _ = writer.flush();
+                }
+
+                if !close_requested && write_buf.is_empty() && owner_input.lock().bytes.is_empty() {
+                    match rx.recv_timeout(Duration::from_millis(8)) {
+                        Ok(PtyCmd::WakeInput) => {
+                            owner_wake_pending.store(false, Ordering::Release);
+                        }
+                        Ok(PtyCmd::Resize { rows, cols }) => {
+                            let _ = master.resize(PtySize {
+                                rows,
+                                cols,
+                                pixel_width: 0,
+                                pixel_height: 0,
+                            });
+                        }
+                        Ok(PtyCmd::Close) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                            close_requested = true;
+                        }
+                        Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    }
+                }
+            }
+
+            let _ = child.kill();
+            let _ = child.wait();
+        });
+
         Ok(())
     }
 
     pub fn write_to_pty(&self, session_id: &str, data: &[u8]) -> Result<(), String> {
-        // Clone the Arc under a brief map lock, then release it before doing the
-        // (potentially blocking) write+flush — never hold the global map lock
-        // across I/O, or one stalled shell freezes input to every other session.
-        let instance = self.instances.lock().get(session_id).cloned();
-        if let Some(instance) = instance {
-            let mut inst = instance.lock();
-            // Encode UTF-8 input to the session's target charset before writing
-            let bytes: std::borrow::Cow<[u8]> = {
-                let enc = encoding_rs::Encoding::for_label(inst.charset.as_bytes())
-                    .unwrap_or(encoding_rs::UTF_8);
-                if enc == encoding_rs::UTF_8 {
-                    std::borrow::Cow::Borrowed(data)
-                } else {
-                    let text = std::str::from_utf8(data).map_err(|e| e.to_string())?;
-                    let (encoded, _enc, _had_unmappable) = enc.encode(text);
-                    std::borrow::Cow::Owned(encoded.into_owned())
-                }
-            };
-            inst.writer
-                .write_all(&bytes)
-                .map_err(|e| format!("Write failed: {}", e))?;
-            inst.writer
-                .flush()
-                .map_err(|e| format!("Flush failed: {}", e))?;
-            Ok(())
+        let handle = self.sessions.lock().get(session_id).cloned();
+        let Some(handle) = handle else {
+            return Err("Session not found".to_string());
+        };
+
+        let enc = encoding_rs::Encoding::for_label(handle.charset.as_bytes())
+            .unwrap_or(encoding_rs::UTF_8);
+        let bytes: std::borrow::Cow<[u8]> = if enc == encoding_rs::UTF_8 {
+            std::borrow::Cow::Borrowed(data)
         } else {
-            Err("Session not found".to_string())
+            let text = std::str::from_utf8(data).map_err(|e| e.to_string())?;
+            let (encoded, _enc, _had_unmappable) = enc.encode(text);
+            std::borrow::Cow::Owned(encoded.into_owned())
+        };
+
+        handle.input.lock().push(&bytes)?;
+        if !handle.wake_pending.swap(true, Ordering::AcqRel) {
+            if handle.tx.try_send(PtyCmd::WakeInput).is_err() {
+                handle.wake_pending.store(false, Ordering::Release);
+            }
         }
+        Ok(())
     }
 
     pub fn resize_pty(&self, session_id: &str, rows: u16, cols: u16) -> Result<(), String> {
-        let instance = self.instances.lock().get(session_id).cloned();
-        if let Some(instance) = instance {
-            let inst = instance.lock();
-            inst.master
-                .resize(PtySize {
-                    rows,
-                    cols,
-                    pixel_width: 0,
-                    pixel_height: 0,
-                })
-                .map_err(|e| format!("Resize failed: {}", e))?;
-            Ok(())
-        } else {
-            Err("Session not found".to_string())
-        }
+        let handle = self.sessions.lock().get(session_id).cloned();
+        let Some(handle) = handle else {
+            return Err("Session not found".to_string());
+        };
+        handle
+            .tx
+            .try_send(PtyCmd::Resize { rows, cols })
+            .map_err(|e| match e {
+                mpsc::TrySendError::Full(_) => "PTY command queue full".to_string(),
+                mpsc::TrySendError::Disconnected(_) => "Session closed".to_string(),
+            })
     }
 
     pub fn close_pty(&self, session_id: &str) {
-        // Remove under a brief lock, then kill+wait off-lock: child.wait() blocks
-        // until the process exits and must never be held under the global map
-        // mutex, or a slow-dying shell freezes input to every other session.
-        let instance = self.instances.lock().remove(session_id);
-        if let Some(instance) = instance {
-            let mut inst = instance.lock();
-            let _ = inst.child.kill();
-            let _ = inst.child.wait();
+        if let Some(handle) = self.sessions.lock().remove(session_id) {
+            let _ = handle.tx.try_send(PtyCmd::Close);
         }
     }
 
     pub fn close_all(&self) {
-        let instances: Vec<_> = self.instances.lock().drain().map(|(_, v)| v).collect();
-        for instance in instances {
-            let mut inst = instance.lock();
-            let _ = inst.child.kill();
-            let _ = inst.child.wait();
+        let handles: Vec<_> = self.sessions.lock().drain().map(|(_, v)| v).collect();
+        for handle in handles {
+            let _ = handle.tx.try_send(PtyCmd::Close);
         }
     }
 }
