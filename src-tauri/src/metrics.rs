@@ -93,10 +93,19 @@ pub struct CpuTimes {
 
 impl CpuTimes {
     pub fn total(&self) -> u64 {
-        self.user + self.nice + self.system + self.idle + self.iowait + self.irq + self.softirq + self.steal
+        self.user
+            + self.nice
+            + self.system
+            + self.idle
+            + self.iowait
+            + self.irq
+            + self.softirq
+            + self.steal
     }
     pub fn active(&self) -> u64 {
-        self.total().saturating_sub(self.idle).saturating_sub(self.iowait)
+        self.total()
+            .saturating_sub(self.idle)
+            .saturating_sub(self.iowait)
     }
 }
 
@@ -134,7 +143,13 @@ pub fn parse_proc_stat(text: &str) -> Option<(CpuTimes, Vec<CpuTimes>)> {
     for line in text.lines() {
         if line.starts_with("cpu ") {
             total = parse_cpu_line(line);
-        } else if line.starts_with("cpu") && line.chars().nth(3).map(|c| c.is_ascii_digit()).unwrap_or(false) {
+        } else if line.starts_with("cpu")
+            && line
+                .chars()
+                .nth(3)
+                .map(|c| c.is_ascii_digit())
+                .unwrap_or(false)
+        {
             if let Some(t) = parse_cpu_line(line) {
                 cores.push(t);
             }
@@ -154,10 +169,10 @@ pub fn parse_meminfo(text: &str) -> MemStats {
         let key = parts.next().unwrap_or("");
         let val: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
         match key {
-            "MemTotal:"     => total_kb = val,
+            "MemTotal:" => total_kb = val,
             "MemAvailable:" => avail_kb = val,
-            "SwapTotal:"    => swap_total_kb = val,
-            "SwapFree:"     => swap_free_kb = val,
+            "SwapTotal:" => swap_total_kb = val,
+            "SwapFree:" => swap_free_kb = val,
             _ => {}
         }
     }
@@ -234,7 +249,8 @@ pub fn parse_os_pretty(text: &str) -> String {
 
 /// Parse /proc/loadavg. Returns (1m, 5m, 15m).
 pub fn parse_loadavg(text: &str) -> (f64, f64, f64) {
-    let nums: Vec<f64> = text.split_ascii_whitespace()
+    let nums: Vec<f64> = text
+        .split_ascii_whitespace()
         .take(3)
         .filter_map(|s| s.parse().ok())
         .collect();
@@ -249,7 +265,9 @@ pub fn parse_ip_addr(text: &str) -> HashMap<String, String> {
     let mut out = HashMap::new();
     for line in text.lines() {
         let parts: Vec<&str> = line.split_ascii_whitespace().collect();
-        if parts.len() < 4 { continue; }
+        if parts.len() < 4 {
+            continue;
+        }
         let iface = parts[1].trim_end_matches(':').to_string();
         if let Some(idx) = parts.iter().position(|p| *p == "inet") {
             if let Some(cidr) = parts.get(idx + 1) {
@@ -268,7 +286,9 @@ pub fn parse_ip_link(text: &str) -> HashMap<String, String> {
     let mut out = HashMap::new();
     for line in text.lines() {
         let parts: Vec<&str> = line.split_ascii_whitespace().collect();
-        if parts.len() < 2 { continue; }
+        if parts.len() < 2 {
+            continue;
+        }
         let iface = parts[1].trim_end_matches(':').to_string();
         if let Some(idx) = parts.iter().position(|p| *p == "link/ether") {
             if let Some(mac) = parts.get(idx + 1) {
@@ -284,7 +304,11 @@ pub fn parse_ip_link(text: &str) -> HashMap<String, String> {
 pub fn cpu_percent(prev: CpuTimes, cur: CpuTimes) -> f64 {
     let total_d = cur.total().saturating_sub(prev.total()) as f64;
     let active_d = cur.active().saturating_sub(prev.active()) as f64;
-    if total_d <= 0.0 { 0.0 } else { (100.0 * active_d / total_d).clamp(0.0, 100.0) }
+    if total_d <= 0.0 {
+        0.0
+    } else {
+        (100.0 * active_d / total_d).clamp(0.0, 100.0)
+    }
 }
 
 pub fn cpu_breakdown(prev: CpuTimes, cur: CpuTimes) -> (f64, f64, f64) {
@@ -295,7 +319,11 @@ pub fn cpu_breakdown(prev: CpuTimes, cur: CpuTimes) -> (f64, f64, f64) {
     let u = (cur.user.saturating_sub(prev.user) + cur.nice.saturating_sub(prev.nice)) as f64;
     let s = cur.system.saturating_sub(prev.system) as f64;
     let w = cur.iowait.saturating_sub(prev.iowait) as f64;
-    (100.0 * u / total_d, 100.0 * s / total_d, 100.0 * w / total_d)
+    (
+        100.0 * u / total_d,
+        100.0 * s / total_d,
+        100.0 * w / total_d,
+    )
 }
 
 // ---- Tests ----
@@ -372,7 +400,10 @@ mod tests {
 
     #[test]
     fn parses_loadavg_triple() {
-        assert_eq!(parse_loadavg("0.12 0.34 0.56 1/123 4567\n"), (0.12, 0.34, 0.56));
+        assert_eq!(
+            parse_loadavg("0.12 0.34 0.56 1/123 4567\n"),
+            (0.12, 0.34, 0.56)
+        );
     }
 
     #[test]
@@ -392,15 +423,29 @@ mod tests {
 
     #[test]
     fn cpu_percent_is_zero_on_idle() {
-        let prev = CpuTimes { idle: 100, ..Default::default() };
-        let cur  = CpuTimes { idle: 200, ..Default::default() };
+        let prev = CpuTimes {
+            idle: 100,
+            ..Default::default()
+        };
+        let cur = CpuTimes {
+            idle: 200,
+            ..Default::default()
+        };
         assert_eq!(cpu_percent(prev, cur), 0.0);
     }
 
     #[test]
     fn cpu_percent_is_hundred_on_full_load() {
-        let prev = CpuTimes { user: 0, idle: 100, ..Default::default() };
-        let cur  = CpuTimes { user: 100, idle: 100, ..Default::default() };
+        let prev = CpuTimes {
+            user: 0,
+            idle: 100,
+            ..Default::default()
+        };
+        let cur = CpuTimes {
+            user: 100,
+            idle: 100,
+            ..Default::default()
+        };
         assert_eq!(cpu_percent(prev, cur), 100.0);
     }
 }
@@ -439,13 +484,14 @@ impl MetricsManager {
     }
 
     /// Idempotent. If a task already exists for this session_id, returns early.
-    pub fn start(
-        &self,
-        session_id: String,
-        ssh: Arc<SshManager>,
-        app: AppHandle,
-    ) {
+    pub fn start(&self, session_id: String, ssh: Arc<SshManager>, app: AppHandle) {
         let mut tasks = self.tasks.lock();
+        if tasks
+            .get(&session_id)
+            .is_some_and(|handle| handle.is_finished())
+        {
+            tasks.remove(&session_id);
+        }
         if tasks.contains_key(&session_id) {
             return;
         }
@@ -464,28 +510,24 @@ nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || grep -c '^processo
 grep '^model name' /proc/cpuinfo | head -1
 echo '---HOSTEND---'
 "#;
-            let ssh_static = ssh.clone();
-            let sid_static = sid.clone();
-            let static_fut = tokio::task::spawn_blocking(move || {
-                ssh_static.metrics_exec(&sid_static, static_cmd)
-            });
             // Bound the very first probe too. Without this, an early half-open
             // connection hangs the poller forever — the per-tick timeout in the
             // loop below never gets a chance to run, and the Server panel shows
             // neither data nor an error.
-            let static_out = match timeout(Duration::from_secs(8), static_fut).await {
-                Ok(joined) => joined,
-                Err(_) => {
-                    let _ = app.emit(
-                        &format!("server-metrics-error-{}", sid),
-                        serde_json::json!({ "reason": "timeout" }),
-                    );
-                    return;
-                }
-            };
+            let static_out =
+                match timeout(Duration::from_secs(8), ssh.metrics_exec(&sid, static_cmd)).await {
+                    Ok(result) => result,
+                    Err(_) => {
+                        let _ = app.emit(
+                            &format!("server-metrics-error-{}", sid),
+                            serde_json::json!({ "reason": "timeout" }),
+                        );
+                        return;
+                    }
+                };
 
             match static_out {
-                Ok(Ok(text)) => {
+                Ok(text) => {
                     let host = parse_static_host(&text);
                     // Metrics read from /proc, which only exists on Linux. Detect a
                     // genuinely unsupported host from the kernel string rather than
@@ -522,23 +564,11 @@ echo '---NIC4---';   ip -o -4 addr show 2>/dev/null
 echo '---NICLINK---';ip -o link show 2>/dev/null
 echo '---END---'
 "#;
-                let ssh_tick = ssh.clone();
-                let sid_tick = sid.clone();
-                let exec_fut = tokio::task::spawn_blocking(move || {
-                    ssh_tick.metrics_exec(&sid_tick, probe)
-                });
-
-                let out = match timeout(Duration::from_secs(5), exec_fut).await {
-                    Ok(Ok(Ok(text))) => {
+                let out = match timeout(Duration::from_secs(5), ssh.metrics_exec(&sid, probe)).await
+                {
+                    Ok(Ok(text)) => {
                         consecutive_timeouts = 0;
                         text
-                    }
-                    Ok(Ok(Err(_))) => {
-                        let _ = app.emit(
-                            &format!("server-metrics-error-{}", sid),
-                            serde_json::json!({ "reason": "disconnected" }),
-                        );
-                        break;
                     }
                     Ok(Err(_)) => {
                         let _ = app.emit(
@@ -744,7 +774,10 @@ pub fn build_snapshot(
         }
         let (rx_rate, tx_rate) = match &prev {
             Some(p) => {
-                let dt = now.saturating_duration_since(p.taken_at).as_secs_f64().max(0.001);
+                let dt = now
+                    .saturating_duration_since(p.taken_at)
+                    .as_secs_f64()
+                    .max(0.001);
                 let mut prx: u64 = 0;
                 let mut ptx: u64 = 0;
                 for (_, (rx, tx)) in &p.net_bytes {
@@ -784,8 +817,14 @@ pub fn build_snapshot(
             None
         } else {
             let mut names: std::collections::BTreeSet<String> = Default::default();
-            for n in ipv4.keys() { names.insert(n.clone()); }
-            for n in macs.keys() { if n != "lo" { names.insert(n.clone()); } }
+            for n in ipv4.keys() {
+                names.insert(n.clone());
+            }
+            for n in macs.keys() {
+                if n != "lo" {
+                    names.insert(n.clone());
+                }
+            }
             Some(
                 names
                     .into_iter()

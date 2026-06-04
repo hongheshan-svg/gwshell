@@ -1,7 +1,7 @@
-use crate::ssh_next::auth;
-use crate::ssh_next::handler::{Client, HostKeyError};
-use crate::ssh_next::params::ConnectParams;
-use crate::ssh_next::transport::{self, expand_tilde, SshStream};
+use crate::ssh::auth;
+use crate::ssh::handler::{Client, HostKeyError};
+use crate::ssh::params::ConnectParams;
+use crate::ssh::transport::{self, expand_tilde, SshStream};
 use russh::client::{self, Handle};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

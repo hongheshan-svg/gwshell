@@ -1,6 +1,6 @@
-use crate::ssh_next::connect;
-use crate::ssh_next::handler::Client;
-use crate::ssh_next::params::ConnectParams;
+use crate::ssh::connect;
+use crate::ssh::handler::Client;
+use crate::ssh::params::ConnectParams;
 use russh::client::Handle;
 use russh::ChannelMsg;
 use std::sync::Arc;

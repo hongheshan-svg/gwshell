@@ -1,5 +1,4 @@
 //! Async SSH backend on russh.
-#![allow(dead_code)] // until cutover (Task 12)
 
 mod auth;
 mod connect;
@@ -16,7 +15,7 @@ pub use known_hosts::trust_host;
 pub use params::ConnectParams;
 pub use sftp::SftpEntry;
 
-use crate::ssh_next::handler::Client;
+use crate::ssh::handler::Client;
 use russh::client::Handle;
 use session::ShellCmd;
 use std::collections::HashMap;

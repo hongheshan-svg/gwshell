@@ -1,6 +1,6 @@
-use crate::ssh_next::handler::Client;
-use crate::ssh_next::params::ConnectParams;
-use crate::ssh_next::transport::expand_tilde;
+use crate::ssh::handler::Client;
+use crate::ssh::params::ConnectParams;
+use crate::ssh::transport::expand_tilde;
 use russh::client::Handle;
 use std::sync::Arc;
 

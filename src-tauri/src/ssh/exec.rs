@@ -1,4 +1,4 @@
-use crate::ssh_next::handler::Client;
+use crate::ssh::handler::Client;
 use russh::client::Handle;
 use russh::ChannelMsg;
 

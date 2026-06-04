@@ -1,4 +1,4 @@
-use crate::ssh_next::known_hosts::{self, HostKeyVerdict};
+use crate::ssh::known_hosts::{self, HostKeyVerdict};
 use russh::client;
 
 /// Carries a host-key rejection reason out of the handshake so connect.rs can
@@ -25,7 +25,11 @@ impl client::Handler for Client {
         server_public_key: &russh::keys::ssh_key::PublicKey,
     ) -> Result<bool, Self::Error> {
         // SHA-256 fingerprint string "SHA256:<base64-no-pad>". The ssh_key
-        // `Fingerprint` Display impl already emits the "SHA256:..." form.
+        // `Fingerprint` Display impl emits the "SHA256:..." form with UNPADDED
+        // base64 (`Base64Unpadded`). `known_hosts::format_fingerprint` is
+        // aligned to the same unpadded encoding, and `known_hosts::verify`
+        // normalizes away padding, so this matches both new (unpadded) and
+        // legacy (padded `STANDARD`) entries in the shared known_hosts store.
         let fp = server_public_key
             .fingerprint(russh::keys::ssh_key::HashAlg::Sha256)
             .to_string();

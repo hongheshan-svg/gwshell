@@ -1,4 +1,4 @@
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use base64::{engine::general_purpose::STANDARD_NO_PAD as BASE64, Engine};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -18,8 +18,23 @@ pub enum HostKeyVerdict {
 }
 
 /// Format a raw SHA-256 host-key hash as the `SHA256:<base64>` string the UI shows.
+///
+/// Uses UNPADDED base64 to match russh/ssh-key's `Fingerprint` Display impl
+/// (`Base64Unpadded`), which is what `handler::check_server_key` feeds into the
+/// store. Keeping both producers on the same encoding is what makes the
+/// trust-then-verify round trip work within this module.
 pub fn format_fingerprint(sha256: &[u8]) -> String {
     format!("SHA256:{}", BASE64.encode(sha256))
+}
+
+/// Normalize a `SHA256:<base64>` fingerprint for comparison by dropping any
+/// trailing base64 padding. The legacy `ssh.rs` store (and any pre-cutover
+/// `known_hosts.json` it wrote) used PADDED `STANDARD` base64, whereas the
+/// russh handler produces UNPADDED fingerprints. Comparing on the normalized
+/// (padding-stripped) form lets a host trusted under either encoding verify as
+/// Trusted, avoiding spurious FINGERPRINT_MISMATCH after the Task 12 cutover.
+fn normalize_fingerprint(fp: &str) -> &str {
+    fp.trim_end_matches('=')
 }
 
 pub fn verify(
@@ -31,7 +46,9 @@ pub fn verify(
 ) -> HostKeyVerdict {
     let key = format!("{}:{}", host, port);
     match hosts.get(&key) {
-        Some(e) if e.fingerprint == fingerprint => HostKeyVerdict::Trusted,
+        Some(e) if normalize_fingerprint(&e.fingerprint) == normalize_fingerprint(fingerprint) => {
+            HostKeyVerdict::Trusted
+        }
         Some(_) => HostKeyVerdict::Mismatch {
             fingerprint: fingerprint.to_string(),
             key_type: key_type.to_string(),
@@ -120,5 +137,41 @@ mod tests {
             verify(&store(), "other", 22, "SHA256:CCC", "RSA"),
             HostKeyVerdict::Unknown { .. }
         ));
+    }
+
+    /// A 32-byte SHA-256 hash differs between PADDED (legacy `ssh.rs` / old
+    /// store) and UNPADDED (russh handler) base64 only by a trailing `=`.
+    /// `format_fingerprint` now emits the unpadded form, and `verify`
+    /// normalizes away padding, so a host trusted under the legacy padded
+    /// encoding still verifies as Trusted against the handler's unpadded
+    /// fingerprint (and vice versa). This guards the Task 12 cutover.
+    #[test]
+    fn verify_normalizes_padding_across_encodings() {
+        let hash = [0u8; 32];
+        // What the russh handler / new module produces (unpadded).
+        let unpadded = format_fingerprint(&hash);
+        assert!(!unpadded.ends_with('='), "format_fingerprint must be unpadded");
+        // What the legacy ssh.rs STANDARD encoder wrote to the shared store.
+        let padded = format!(
+            "SHA256:{}",
+            base64::engine::general_purpose::STANDARD.encode(hash)
+        );
+        assert!(padded.ends_with('='), "legacy fixture should be padded");
+
+        // Store holds the legacy PADDED entry; handler presents UNPADDED.
+        let mut store = HashMap::new();
+        store.insert(
+            "h:22".to_string(),
+            KnownHostEntry { fingerprint: padded.clone(), key_type: "Ed25519".into() },
+        );
+        assert_eq!(verify(&store, "h", 22, &unpadded, "Ed25519"), HostKeyVerdict::Trusted);
+
+        // And the reverse: store holds UNPADDED, handler presents PADDED.
+        let mut store2 = HashMap::new();
+        store2.insert(
+            "h:22".to_string(),
+            KnownHostEntry { fingerprint: unpadded, key_type: "Ed25519".into() },
+        );
+        assert_eq!(verify(&store2, "h", 22, &padded, "Ed25519"), HostKeyVerdict::Trusted);
     }
 }
