@@ -26,6 +26,25 @@ fn normalize_fingerprint(fp: &str) -> &str {
     fp.trim_end_matches('=')
 }
 
+/// Reduce a host-key type label to a coarse algorithm family so labels written
+/// by different SSH stacks compare equal. The legacy libssh2 `ssh.rs` stored
+/// Debug-style names ("Ecdsa256", "Ed25519", "Rsa"); the russh handler stores
+/// ssh-key's wire names ("ecdsa-sha2-nistp256", "ssh-ed25519", "ssh-rsa").
+fn key_family(key_type: &str) -> &'static str {
+    let k = key_type.to_ascii_lowercase();
+    if k.contains("ed25519") {
+        "ed25519"
+    } else if k.contains("ecdsa") || k.contains("nistp") {
+        "ecdsa"
+    } else if k.contains("rsa") {
+        "rsa"
+    } else if k.contains("dss") || k.contains("dsa") {
+        "dsa"
+    } else {
+        "other"
+    }
+}
+
 pub fn verify(
     hosts: &HashMap<String, KnownHostEntry>,
     host: &str,
@@ -38,7 +57,18 @@ pub fn verify(
         Some(e) if normalize_fingerprint(&e.fingerprint) == normalize_fingerprint(fingerprint) => {
             HostKeyVerdict::Trusted
         }
-        Some(_) => HostKeyVerdict::Mismatch {
+        // Same algorithm family but a different key: the strong tamper signal.
+        // Raise the red mismatch warning so the user must intervene.
+        Some(e) if key_family(&e.key_type) == key_family(key_type) => HostKeyVerdict::Mismatch {
+            fingerprint: fingerprint.to_string(),
+            key_type: key_type.to_string(),
+        },
+        // Different algorithm family: the server simply offered another host-key
+        // type (e.g. the old libssh2 backend negotiated ECDSA, russh negotiates
+        // Ed25519). This is NOT evidence of MITM — OpenSSH treats an unseen key
+        // type as new rather than "identification changed" — so prompt to accept
+        // like a first connection instead of the dead-end mismatch warning.
+        Some(_) => HostKeyVerdict::Unknown {
             fingerprint: fingerprint.to_string(),
             key_type: key_type.to_string(),
         },
@@ -134,6 +164,38 @@ mod tests {
         assert!(matches!(
             verify(&store(), "other", 22, "SHA256:CCC", "RSA"),
             HostKeyVerdict::Unknown { .. }
+        ));
+    }
+
+    #[test]
+    fn verify_unknown_when_key_type_differs() {
+        // libssh2 stored an ECDSA key; russh now presents an Ed25519 key for the
+        // same host — a different algorithm, not tampering. Must prompt as
+        // Unknown (acceptable in the UI), not the dead-end Mismatch warning.
+        let mut store = HashMap::new();
+        store.insert(
+            "h:22".to_string(),
+            KnownHostEntry { fingerprint: "SHA256:OLD".into(), key_type: "Ecdsa256".into() },
+        );
+        assert!(matches!(
+            verify(&store, "h", 22, "SHA256:NEW", "ssh-ed25519"),
+            HostKeyVerdict::Unknown { .. }
+        ));
+    }
+
+    #[test]
+    fn verify_mismatch_when_same_family_key_changes() {
+        // Same algorithm family (ECDSA, even across libssh2 "Ecdsa256" vs russh
+        // "ecdsa-sha2-nistp256" naming) but a different fingerprint = a real key
+        // change → the MITM warning must still fire.
+        let mut store = HashMap::new();
+        store.insert(
+            "h:22".to_string(),
+            KnownHostEntry { fingerprint: "SHA256:OLD".into(), key_type: "Ecdsa256".into() },
+        );
+        assert!(matches!(
+            verify(&store, "h", 22, "SHA256:NEW", "ecdsa-sha2-nistp256"),
+            HostKeyVerdict::Mismatch { .. }
         ));
     }
 
