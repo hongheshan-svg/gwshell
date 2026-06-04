@@ -650,86 +650,13 @@ input, select, textarea, button {
   background: var(--border-color);
 }
 
-.terminal-view-shell {
-  flex: 1;
-  position: relative;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
 .terminal-pane {
-  width: 100%;
-  height: 100%;
+  flex: 1;
   overflow: hidden;
   min-width: 0;
   min-height: 0;
   position: relative;
   contain: layout paint;
-}
-
-.terminal-completion {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 10px;
-  z-index: 8;
-  display: flex;
-  pointer-events: none;
-}
-
-.terminal-completion-btn {
-  max-width: min(720px, 100%);
-  min-height: 30px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
-  color: var(--text-primary);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
-  pointer-events: auto;
-  cursor: pointer;
-}
-
-.terminal-completion-btn:hover {
-  border-color: var(--accent-primary);
-  background: color-mix(in srgb, var(--bg-hover) 88%, var(--bg-secondary));
-}
-
-.terminal-completion-label,
-.terminal-completion-hint {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-.terminal-completion-label {
-  padding: 2px 5px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
-  color: var(--accent-primary);
-}
-
-.terminal-completion-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.terminal-completion-prefix {
-  color: var(--text-secondary);
-}
-
-.terminal-completion-suffix {
-  color: var(--text-primary);
-  font-weight: 600;
 }
 
 .terminal-pane .xterm {

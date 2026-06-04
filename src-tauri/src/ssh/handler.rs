@@ -26,10 +26,9 @@ impl client::Handler for Client {
     ) -> Result<bool, Self::Error> {
         // SHA-256 fingerprint string "SHA256:<base64-no-pad>". The ssh_key
         // `Fingerprint` Display impl emits the "SHA256:..." form with UNPADDED
-        // base64 (`Base64Unpadded`). `known_hosts::format_fingerprint` is
-        // aligned to the same unpadded encoding, and `known_hosts::verify`
-        // normalizes away padding, so this matches both new (unpadded) and
-        // legacy (padded `STANDARD`) entries in the shared known_hosts store.
+        // base64 (`Base64Unpadded`), and `known_hosts::verify` normalizes away
+        // padding, so this matches both new (unpadded) and legacy (padded
+        // `STANDARD`) entries in the shared known_hosts store.
         let fp = server_public_key
             .fingerprint(russh::keys::ssh_key::HashAlg::Sha256)
             .to_string();

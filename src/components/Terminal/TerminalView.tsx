@@ -34,54 +34,6 @@ interface TerminalContextMenu {
   canCopy: boolean;
 }
 
-interface CommandSuggestion {
-  completion: string;
-  suffix: string;
-  source: "history" | "common";
-}
-
-const COMMAND_HISTORY_KEY = "gwshell.terminalCommandHistory.v1";
-const MAX_COMMAND_HISTORY = 160;
-const MIN_COMPLETION_PREFIX = 2;
-const MAX_TRACKED_LINE_LENGTH = 500;
-const SENSITIVE_COMMAND_PATTERN =
-  /(^|\s)(?:export\s+)?(?:[A-Z_]*(?:PASS|PASSWORD|TOKEN|SECRET|API_KEY|ACCESS_KEY|PRIVATE_KEY)[A-Z_]*\s*=|--?(?:password|passwd|token|secret|api-key|apikey|private-key)(?:=|\s+)|Bearer\s+\S+)/i;
-const COMMON_COMMAND_SUGGESTIONS = [
-  "ls -la",
-  "pwd",
-  "cd ..",
-  "clear",
-  "history",
-  "df -h",
-  "du -sh *",
-  "free -h",
-  "top",
-  "htop",
-  "ps aux",
-  "ps aux | grep ",
-  "journalctl -xe",
-  "systemctl status ",
-  "systemctl restart ",
-  "docker ps",
-  "docker logs ",
-  "docker compose up -d",
-  "docker compose logs -f",
-  "git status",
-  "git pull",
-  "git log --oneline -20",
-  "tail -f ",
-  "cat ",
-  "vim ",
-  "nano ",
-  "ssh ",
-  "scp ",
-  "tar -czf ",
-  "grep -R ",
-  "find . -name ",
-  "chmod +x ",
-  "sudo systemctl status ",
-];
-
 const getTerminalThemeColors = (theme: ThemeMode) => {
   const isDark = theme === "dark";
   return isDark
@@ -140,81 +92,6 @@ const getTerminalThemeColors = (theme: ThemeMode) => {
 };
 
 const isPasteAction = (value: string) => value === "paste" || value === "Paste" || value === "\u7c98\u8d34";
-
-const canUseCommandCompletion = (tabType: TabInfo["type"]) =>
-  tabType === "ssh" || tabType === "localshell";
-
-const isAcceptCompletionShortcut = (e: KeyboardEvent) => {
-  if (e.key === "ArrowRight" && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) return true;
-  return (e.code === "Space" || e.key === " ") && e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey;
-};
-
-const loadCommandHistory = (): string[] => {
-  try {
-    const raw = localStorage.getItem(COMMAND_HISTORY_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
-  } catch {
-    return [];
-  }
-};
-
-const saveCommandHistory = (history: string[]) => {
-  try {
-    localStorage.setItem(COMMAND_HISTORY_KEY, JSON.stringify(history.slice(0, MAX_COMMAND_HISTORY)));
-  } catch {}
-};
-
-const cleanCommandLine = (line: string) => line.trim();
-
-const isRecordableCommand = (command: string) =>
-  command.length >= MIN_COMPLETION_PREFIX &&
-  command.length <= MAX_TRACKED_LINE_LENGTH &&
-  !SENSITIVE_COMMAND_PATTERN.test(command) &&
-  !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(command);
-
-const recordCommandHistory = (line: string, currentHistory: string[]) => {
-  const command = cleanCommandLine(line);
-  if (!isRecordableCommand(command)) return currentHistory;
-  const next = [command, ...currentHistory.filter((item) => item !== command)].slice(0, MAX_COMMAND_HISTORY);
-  saveCommandHistory(next);
-  return next;
-};
-
-const buildCommandSuggestion = (line: string, history: string[]): CommandSuggestion | null => {
-  const typed = line.trimStart();
-  const leading = line.slice(0, line.length - typed.length);
-  if (typed.length < MIN_COMPLETION_PREFIX || typed.length >= MAX_TRACKED_LINE_LENGTH) return null;
-
-  const prefix = typed.toLowerCase();
-  const seen = new Set<string>();
-  const candidates: Array<{ value: string; source: CommandSuggestion["source"] }> = [];
-  for (const value of history) {
-    if (!seen.has(value)) {
-      seen.add(value);
-      candidates.push({ value, source: "history" });
-    }
-  }
-  for (const value of COMMON_COMMAND_SUGGESTIONS) {
-    if (!seen.has(value)) {
-      seen.add(value);
-      candidates.push({ value, source: "common" });
-    }
-  }
-
-  const match = candidates.find(({ value }) => {
-    const lower = value.toLowerCase();
-    return lower.startsWith(prefix) && value.length > typed.length;
-  });
-  if (!match) return null;
-
-  const completion = `${leading}${match.value}`;
-  return {
-    completion,
-    suffix: match.value.slice(typed.length),
-    source: match.source,
-  };
-};
 
 const writeClipboardText = async (text: string) => {
   const browserWrite = navigator.clipboard?.writeText(text).catch(() => {});
@@ -443,47 +320,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
 
   const [fingerprintInfo, setFingerprintInfo] = useState<FingerprintInfo | null>(null);
   const [contextMenu, setContextMenu] = useState<TerminalContextMenu | null>(null);
-  const [commandSuggestion, setCommandSuggestion] = useState<CommandSuggestion | null>(null);
   const fingerprintResolveRef = useRef<(accepted: boolean) => void>(() => {});
-  const commandLineRef = useRef("");
-  const commandHistoryRef = useRef<string[]>([]);
-  const commandSuggestionRef = useRef<CommandSuggestion | null>(null);
-
-  const updateCommandSuggestion = useCallback((line: string) => {
-    if (!canUseCommandCompletion(tab.type)) {
-      commandSuggestionRef.current = null;
-      setCommandSuggestion(null);
-      return;
-    }
-    const next = buildCommandSuggestion(line, commandHistoryRef.current);
-    commandSuggestionRef.current = next;
-    setCommandSuggestion(next);
-  }, [tab.type]);
-
-  const hideCommandSuggestion = useCallback(() => {
-    commandSuggestionRef.current = null;
-    setCommandSuggestion(null);
-  }, []);
-
-  const acceptCommandSuggestion = useCallback(() => {
-    const suggestion = commandSuggestionRef.current;
-    if (!suggestion) return false;
-    const inst = terminalInstances.get(tab.id);
-    if (!inst) return false;
-    inst.terminal.paste(suggestion.suffix);
-    commandSuggestionRef.current = null;
-    setCommandSuggestion(null);
-    inst.terminal.focus();
-    return true;
-  }, [tab.id]);
-
-  useEffect(() => {
-    commandSuggestionRef.current = commandSuggestion;
-  }, [commandSuggestion]);
-
-  useEffect(() => {
-    commandHistoryRef.current = loadCommandHistory();
-  }, []);
 
   const copySelection = useCallback(() => {
     const inst = terminalInstances.get(tab.id);
@@ -746,20 +583,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           if (e.defaultPrevented) return;
           const s = useSettingsStore.getState().settings;
 
-          if (commandSuggestionRef.current && isAcceptCompletionShortcut(e)) {
-            e.preventDefault();
-            e.stopPropagation();
-            acceptCommandSuggestion();
-            return;
-          }
-
-          if (commandSuggestionRef.current && e.key === "Escape") {
-            e.preventDefault();
-            e.stopPropagation();
-            hideCommandSuggestion();
-            return;
-          }
-
           if (isPasteShortcut(e, s.ctrlVPaste)) {
             e.preventDefault();
             e.stopPropagation();
@@ -776,18 +599,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
 
         termRef.attachCustomKeyEventHandler((e) => {
           if (e.type !== "keydown") return true;
-
-          if (commandSuggestionRef.current && isAcceptCompletionShortcut(e)) {
-            e.preventDefault();
-            acceptCommandSuggestion();
-            return false;
-          }
-
-          if (commandSuggestionRef.current && e.key === "Escape") {
-            e.preventDefault();
-            hideCommandSuggestion();
-            return false;
-          }
 
           if (isCopyShortcut(e)) {
             const selection = readTerminalSelection(termRef) || selectionSnapshotRef.current;
@@ -1027,57 +838,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         }
         if (writeQueue) scheduleWriteFlush(WRITE_RETRY_MS);
       };
-      const refreshTrackedLine = (line: string, showSuggestion: boolean) => {
-        if (line.length > MAX_TRACKED_LINE_LENGTH) {
-          commandLineRef.current = "";
-          hideCommandSuggestion();
-          return;
-        }
-        commandLineRef.current = line;
-        if (showSuggestion) {
-          updateCommandSuggestion(line);
-        } else {
-          hideCommandSuggestion();
-        }
-      };
-      const removeLastWord = (line: string) => line.replace(/\s*\S+\s*$/, "");
-      const trackCommandInput = (data: string) => {
-        if (!canUseCommandCompletion(tab.type)) return;
-        if (data.includes("\x1b")) {
-          refreshTrackedLine("", false);
-          return;
-        }
-
-        let line = commandLineRef.current;
-        let showSuggestion = true;
-        for (const ch of Array.from(data)) {
-          if (ch === "\r" || ch === "\n") {
-            commandHistoryRef.current = recordCommandHistory(line, commandHistoryRef.current);
-            line = "";
-            showSuggestion = false;
-            continue;
-          }
-          if (ch === "\x7f" || ch === "\b") {
-            line = line.slice(0, -1);
-            continue;
-          }
-          if (ch === "\x15" || ch === "\x03" || ch === "\x04") {
-            line = "";
-            showSuggestion = false;
-            continue;
-          }
-          if (ch === "\x17") {
-            line = removeLastWord(line);
-            continue;
-          }
-          if (ch === "\t" || /[\x00-\x1f\x7f]/.test(ch)) {
-            showSuggestion = false;
-            continue;
-          }
-          line += ch;
-        }
-        refreshTrackedLine(line, showSuggestion);
-      };
       const dataDispose = instance!.terminal.onData((data) => {
         if (reconnectableTabs.has(tab.id)) {
           // Connection is dead — swallow this keystroke and reconnect instead.
@@ -1086,7 +846,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
           void reconnect();
           return;
         }
-        trackCommandInput(data);
         writeQueue += data;
         if (writeQueue.length >= WRITE_CHUNK_SIZE) {
           if (writeTimer) {
@@ -1148,8 +907,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         writeDisposed = true;
         if (writeTimer) { clearTimeout(writeTimer); writeTimer = null; }
         writeQueue = "";
-        commandLineRef.current = "";
-        hideCommandSuggestion();
         const pendingResize = pendingBackendResize.get(tab.id);
         if (pendingResize) { clearTimeout(pendingResize); pendingBackendResize.delete(tab.id); }
         try { dataDispose.dispose(); } catch {}
@@ -1418,7 +1175,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         invoke(closeCmd, { sessionId: tab.sessionId }).catch(() => {});
       }
     };
-  }, [acceptCommandSuggestion, hideCommandSuggestion, tab.id, tab.sessionId, tab.type, updateCommandSuggestion]);
+  }, [tab.id, tab.sessionId, tab.type]);
 
   // Update terminal theme when app theme changes
   useEffect(() => {
@@ -1517,32 +1274,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
   return (
     <>
       <div
-        className="terminal-view-shell"
+        ref={containerRef}
+        className="terminal-pane"
         style={{ display: (forceVisible || isActive) ? "block" : "none" }}
-      >
-        <div ref={containerRef} className="terminal-pane" />
-        {commandSuggestion && isActive && (
-          <div className="terminal-completion" onMouseDown={(e) => e.preventDefault()}>
-            <button
-              type="button"
-              className="terminal-completion-btn"
-              onClick={acceptCommandSuggestion}
-              title={t('term_completion_hint')}
-            >
-              <span className="terminal-completion-label">
-                {commandSuggestion.source === "history" ? t('term_completion_history') : t('term_completion_common')}
-              </span>
-              <span className="terminal-completion-text">
-                <span className="terminal-completion-prefix">
-                  {commandSuggestion.completion.slice(0, commandSuggestion.completion.length - commandSuggestion.suffix.length)}
-                </span>
-                <span className="terminal-completion-suffix">{commandSuggestion.suffix}</span>
-              </span>
-              <span className="terminal-completion-hint">{t('term_completion_hint')}</span>
-            </button>
-          </div>
-        )}
-      </div>
+      />
 
       {contextMenu && (forceVisible || isActive) && (
         <div className="context-menu terminal-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>

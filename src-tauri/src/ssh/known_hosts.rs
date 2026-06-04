@@ -1,4 +1,3 @@
-use base64::{engine::general_purpose::STANDARD_NO_PAD as BASE64, Engine};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -15,16 +14,6 @@ pub enum HostKeyVerdict {
     Trusted,
     Unknown { fingerprint: String, key_type: String },
     Mismatch { fingerprint: String, key_type: String },
-}
-
-/// Format a raw SHA-256 host-key hash as the `SHA256:<base64>` string the UI shows.
-///
-/// Uses UNPADDED base64 to match russh/ssh-key's `Fingerprint` Display impl
-/// (`Base64Unpadded`), which is what `handler::check_server_key` feeds into the
-/// store. Keeping both producers on the same encoding is what makes the
-/// trust-then-verify round trip work within this module.
-pub fn format_fingerprint(sha256: &[u8]) -> String {
-    format!("SHA256:{}", BASE64.encode(sha256))
 }
 
 /// Normalize a `SHA256:<base64>` fingerprint for comparison by dropping any
@@ -97,6 +86,7 @@ pub fn trust_host(host: &str, port: u16, fingerprint: &str, key_type: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::{engine::general_purpose::STANDARD_NO_PAD as BASE64, Engine};
 
     fn store() -> HashMap<String, KnownHostEntry> {
         let mut m = HashMap::new();
@@ -110,9 +100,17 @@ mod tests {
         m
     }
 
+    /// Helper mirroring the `SHA256:<base64-no-pad>` form the russh handler
+    /// feeds into `verify` (ssh_key's `Fingerprint` Display uses unpadded
+    /// base64). Kept test-local since nothing in the live path formats raw
+    /// hashes — the handler hands `verify` an already-formatted string.
+    fn sha256_fp(hash: &[u8]) -> String {
+        format!("SHA256:{}", BASE64.encode(hash))
+    }
+
     #[test]
-    fn format_fingerprint_prefixes_sha256() {
-        assert_eq!(format_fingerprint(&[0, 0, 0]), "SHA256:AAAA");
+    fn sha256_fp_prefixes_sha256() {
+        assert_eq!(sha256_fp(&[0, 0, 0]), "SHA256:AAAA");
     }
 
     #[test]
@@ -141,16 +139,16 @@ mod tests {
 
     /// A 32-byte SHA-256 hash differs between PADDED (legacy `ssh.rs` / old
     /// store) and UNPADDED (russh handler) base64 only by a trailing `=`.
-    /// `format_fingerprint` now emits the unpadded form, and `verify`
-    /// normalizes away padding, so a host trusted under the legacy padded
-    /// encoding still verifies as Trusted against the handler's unpadded
-    /// fingerprint (and vice versa). This guards the Task 12 cutover.
+    /// The handler presents the unpadded form, and `verify` normalizes away
+    /// padding, so a host trusted under the legacy padded encoding still
+    /// verifies as Trusted against the handler's unpadded fingerprint (and
+    /// vice versa). This guards the Task 12 cutover.
     #[test]
     fn verify_normalizes_padding_across_encodings() {
         let hash = [0u8; 32];
-        // What the russh handler / new module produces (unpadded).
-        let unpadded = format_fingerprint(&hash);
-        assert!(!unpadded.ends_with('='), "format_fingerprint must be unpadded");
+        // What the russh handler / ssh_key Display produces (unpadded).
+        let unpadded = sha256_fp(&hash);
+        assert!(!unpadded.ends_with('='), "handler fingerprint must be unpadded");
         // What the legacy ssh.rs STANDARD encoder wrote to the shared store.
         let padded = format!(
             "SHA256:{}",

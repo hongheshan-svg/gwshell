@@ -19,9 +19,6 @@ export const TitleBar: React.FC = () => {
   const { tabs, activeTabId, serverPanelOpen, toggleServerPanel } = useAppStore();
   const activeTab = tabs.find((tt) => tt.id === activeTabId);
   const sshActive = activeTab?.type === 'ssh';
-  const monitorTitle = sshActive || serverPanelOpen
-    ? t('serverPanel_toggle_title')
-    : t('serverPanel_ssh_only');
 
   const handleMinimize = () => {
     appWindow.minimize();
@@ -45,8 +42,9 @@ export const TitleBar: React.FC = () => {
       <div className="titlebar-controls">
         <button
           className={`titlebar-btn${serverPanelOpen ? ' titlebar-btn--active' : ''}`}
-          onClick={toggleServerPanel}
-          title={monitorTitle}
+          onClick={() => { if (sshActive) toggleServerPanel(); }}
+          disabled={!sshActive}
+          title={sshActive ? t('serverPanel_toggle_title') : t('serverPanel_ssh_only')}
           data-gw-action="toggle_server_panel"
         >
           <Activity size={14} />
