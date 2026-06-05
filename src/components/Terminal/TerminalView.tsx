@@ -185,6 +185,12 @@ const sentFirstResize = new Set<string>();
  *  listener cleanup. Only SSH and serial sessions are ever armed. */
 const reconnectableTabs = new Set<string>();
 
+// Command history: per-tab line buffer, ghost text state, and callbacks.
+const inputBuffers         = new Map<string, string>();
+const ghostTextState       = new Map<string, string>();
+const ghostTextSetters     = new Map<string, (text: string, x: number, y: number) => void>();
+const ghostAcceptCallbacks = new Map<string, (suffix: string) => void>();
+
 /** Remove event listeners for a tab (idempotent). */
 function cleanupTabListeners(tabId: string): void {
   const fn = tabListenerCleanups.get(tabId);
@@ -213,6 +219,10 @@ export function destroyTerminal(tabId: string): void {
   sentFirstResize.delete(tabId);
   connectedTabs.delete(tabId);
   reconnectableTabs.delete(tabId);
+  inputBuffers.delete(tabId);
+  ghostTextState.delete(tabId);
+  ghostTextSetters.delete(tabId);
+  ghostAcceptCallbacks.delete(tabId);
   const inst = terminalInstances.get(tabId);
   if (inst) {
     try { inst.rendererAddon?.dispose(); } catch {}
