@@ -595,7 +595,7 @@ async fn load_app_settings(state: State<'_, Arc<AppState>>) -> Result<Option<Str
 async fn get_command_history(
     limit: u32,
     state: State<'_, Arc<AppState>>,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<crate::history::HistoryEntry>, String> {
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || Ok(state.db.load_command_history(limit)))
         .await
@@ -605,11 +605,17 @@ async fn get_command_history(
 #[tauri::command]
 async fn save_command_history(
     command: String,
+    cwd: Option<String>,
+    scope: Option<String>,
+    session_type: Option<String>,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
     let state = state.inner().clone();
+    let cwd = cwd.unwrap_or_default();
+    let scope = scope.unwrap_or_default();
+    let session_type = session_type.unwrap_or_default();
     tokio::task::spawn_blocking(move || {
-        state.db.save_command_history(&command);
+        state.db.save_command_history(&command, &cwd, &scope, &session_type);
         Ok(())
     })
     .await
