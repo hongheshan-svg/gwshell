@@ -18,6 +18,7 @@ import { useSettingsStore } from './stores/settingsStore';
 import { useSettingsEffects } from './hooks/useSettingsEffects';
 import i18n from './i18n';
 import type { SessionConfig } from './types';
+import * as commandHistory from './lib/commandHistory';
 import './styles/global.css';
 
 const NewSessionModal = lazy(() => import('./components/Modals/NewSessionModal').then((m) => ({ default: m.NewSessionModal })));
@@ -36,6 +37,9 @@ function App() {
     showNewSession, showDockerModal, showLocalTerminalModal, showSerialModal, showSettings, showAppMenu,
     mainView } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
+  const settingsLoaded = useSettingsStore((s) => s.loaded);
+  const sshHistoryCmd = useSettingsStore((s) => s.settings.sshHistoryCmd);
+  const sshHistoryCmdLoadCount = useSettingsStore((s) => s.settings.sshHistoryCmdLoadCount);
 
   // Show asset table directly (synchronous) when no terminal is active.
   // TerminalContainer is lazy-loaded with xterm.js (344KB); showing AssetTable
@@ -51,6 +55,13 @@ function App() {
   useEffect(() => {
     void loadSettings();
   }, [loadSettings]);
+
+  useEffect(() => {
+    if (!settingsLoaded) return;
+    if (sshHistoryCmd) {
+      commandHistory.init(parseInt(sshHistoryCmdLoadCount) || 100);
+    }
+  }, [settingsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Boot sequence: show only the splash card for 2s, then crossfade to the app.
   // 1. Show the window immediately (transparent — only the card is visible).

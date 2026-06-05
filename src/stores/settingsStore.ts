@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import * as commandHistory from '../lib/commandHistory';
 
 const LEGACY_TERMINAL_FONT = 'JetBrainsMono, NotoSansSC';
 const CMD_TERMINAL_FONT = 'Consolas, "Cascadia Mono", "Courier New", monospace';
@@ -195,5 +196,8 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     const normalized = normalizeSettings(settings);
     set({ settings: normalized, hasSaved: true });
     await invoke('save_app_settings', { value: JSON.stringify(normalized) });
+    if (normalized.sshHistoryCmd) {
+      commandHistory.init(parseInt(normalized.sshHistoryCmdLoadCount) || 100);
+    }
   },
 }));
