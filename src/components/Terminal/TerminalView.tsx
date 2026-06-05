@@ -12,6 +12,7 @@ import type { TabInfo, ThemeMode } from "../../types";
 import { useAppStore } from "../../stores/appStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { terminalInstances } from "./terminalRegistry";
+import * as commandHistory from '../../lib/commandHistory';
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalViewProps {
@@ -854,6 +855,46 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
           void reconnect();
           return;
         }
+
+        // SSH command history: intercept keystrokes to track input and compute ghost text.
+        if (tab.type === 'ssh' && useSettingsStore.getState().settings.sshHistoryCmd) {
+          let buf = inputBuffers.get(tab.id) ?? '';
+          const setter = ghostTextSetters.get(tab.id);
+          const inst = terminalInstances.get(tab.id);
+          const cursorX = inst?.terminal.buffer.active.cursorX ?? 0;
+          const cursorY = inst?.terminal.buffer.active.cursorY ?? 0;
+
+          if (data === '\r' || data === '\n') {
+            const trimmed = buf.trim();
+            if (trimmed.length > 0) commandHistory.record(trimmed);
+            buf = '';
+            ghostTextState.set(tab.id, '');
+            setter?.('', 0, 0);
+          } else if (data === '\x7f') {
+            // Backspace
+            buf = buf.slice(0, -1);
+            const suffix = buf.length > 0 ? commandHistory.getSuggestion(buf) : '';
+            ghostTextState.set(tab.id, suffix);
+            setter?.(suffix, cursorX, cursorY);
+          } else if (data === '\x15') {
+            // Ctrl+U — clear line
+            buf = '';
+            ghostTextState.set(tab.id, '');
+            setter?.('', 0, 0);
+          } else if (data.startsWith('\x1b') || data === '\x01' || data === '\x05') {
+            // ESC sequences (arrow keys, etc.) and Ctrl+A/E — clear ghost text only
+            ghostTextState.set(tab.id, '');
+            setter?.('', 0, 0);
+          } else if (data.length === 1 && data.charCodeAt(0) >= 0x20) {
+            // Printable ASCII
+            buf += data;
+            const suffix = commandHistory.getSuggestion(buf);
+            ghostTextState.set(tab.id, suffix);
+            setter?.(suffix, cursorX, cursorY);
+          }
+          inputBuffers.set(tab.id, buf);
+        }
+
         writeQueue += data;
         if (writeQueue.length >= WRITE_CHUNK_SIZE) {
           if (writeTimer) {
@@ -865,6 +906,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
           scheduleWriteFlush();
         }
       });
+
+      // Register the ghost accept callback so the key handler can send completion text.
+      if (tab.type === 'ssh') {
+        ghostAcceptCallbacks.set(tab.id, (suffix: string) => {
+          const buf = (inputBuffers.get(tab.id) ?? '') + suffix;
+          inputBuffers.set(tab.id, buf);
+          ghostTextState.set(tab.id, '');
+          ghostTextSetters.get(tab.id)?.('', 0, 0);
+          writeQueue += suffix;
+          if (writeQueue.length >= WRITE_CHUNK_SIZE) {
+            if (writeTimer) { clearTimeout(writeTimer); writeTimer = null; }
+            flushWrites();
+          } else {
+            scheduleWriteFlush();
+          }
+        });
+      }
 
       let resizeDispose: { dispose(): void } | null = null;
       if (resizeCmd) {
@@ -919,6 +977,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         if (pendingResize) { clearTimeout(pendingResize); pendingBackendResize.delete(tab.id); }
         try { dataDispose.dispose(); } catch {}
         try { resizeDispose?.dispose(); } catch {}
+        ghostAcceptCallbacks.delete(tab.id);
       });
 
       const session = sessionsRef.current.find((s) => s.id === tab.sessionId);
