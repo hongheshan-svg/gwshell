@@ -1,30 +1,76 @@
 import { invoke } from '@tauri-apps/api/core';
 
-// Ordered oldest→newest. Index 0 = oldest, last = newest.
-let history: string[] = [];
+export interface HistoryEntry {
+  command: string;
+  cwd: string;
+  scope: string;
+  session_type: string;
+  count: number;
+  last_used: number; // unix seconds
+}
+
+export interface SuggestCtx {
+  scope?: string;
+  cwd?: string;
+  sessionType?: string;
+}
+
+// Aggregated entries loaded from the backend, plus in-session appends.
+let entries: HistoryEntry[] = [];
 
 export async function init(limit: number): Promise<void> {
   try {
-    // Backend returns newest-first; reverse so newest is at array end.
-    const newest = await invoke<string[]>('get_command_history', { limit });
-    history = [...newest].reverse();
+    entries = await invoke<HistoryEntry[]>('get_command_history', { limit });
   } catch {
-    history = [];
+    entries = [];
   }
 }
 
-export function record(command: string): void {
-  history.push(command);
-  invoke('save_command_history', { command }).catch(() => {});
+export function record(command: string, ctx: SuggestCtx = {}): void {
+  const now = Math.floor(Date.now() / 1000);
+  entries.push({
+    command,
+    cwd: ctx.cwd ?? '',
+    scope: ctx.scope ?? '',
+    session_type: ctx.sessionType ?? '',
+    count: 1,
+    last_used: now,
+  });
+  invoke('save_command_history', {
+    command,
+    cwd: ctx.cwd ?? '',
+    scope: ctx.scope ?? '',
+    sessionType: ctx.sessionType ?? '',
+  }).catch(() => {});
 }
 
-// Returns the suffix to append (everything after prefix) for the most recent match.
-// Returns '' when there is no match.
-export function getSuggestion(prefix: string): string {
-  for (let i = history.length - 1; i >= 0; i--) {
-    if (history[i].startsWith(prefix) && history[i].length > prefix.length) {
-      return history[i].slice(prefix.length);
-    }
+const DAY = 86400;
+// 1.0 right now, ~0.5 after a week, asymptotes toward 0.
+function recencyDecay(ageSec: number): number {
+  return 1 / (1 + Math.max(0, ageSec) / (7 * DAY));
+}
+
+// Returns ranked full-command candidates (highest score first), max 8.
+export function getSuggestions(prefix: string, ctx: SuggestCtx = {}): string[] {
+  if (!prefix) return [];
+  const now = Math.floor(Date.now() / 1000);
+  const best = new Map<string, number>(); // command -> best score
+  for (const e of entries) {
+    if (!e.command.startsWith(prefix) || e.command.length <= prefix.length) continue;
+    let score = Math.log2(e.count + 1) * recencyDecay(now - e.last_used);
+    if (ctx.scope && e.scope === ctx.scope) score += 2;
+    if (ctx.cwd && e.cwd === ctx.cwd) score += 1;
+    const prev = best.get(e.command);
+    if (prev === undefined || score > prev) best.set(e.command, score);
   }
-  return '';
+  return [...best.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([cmd]) => cmd);
+}
+
+// Back-compat single-suffix helper.
+export function getSuggestion(prefix: string, ctx: SuggestCtx = {}): string {
+  const best = getSuggestions(prefix, ctx)[0];
+  return best ? best.slice(prefix.length) : '';
 }
