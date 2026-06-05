@@ -207,4 +207,19 @@ impl Database {
             .map_err(|e| e.to_string())?;
         Ok(())
     }
+
+    // ---- Command History ----
+
+    pub fn load_command_history(&self, limit: u32) -> Vec<String> {
+        match self.conn.lock() {
+            Ok(conn) => crate::history::load_history(&conn, limit),
+            Err(_) => vec![],
+        }
+    }
+
+    pub fn save_command_history(&self, command: &str) {
+        if let Ok(conn) = self.conn.lock() {
+            crate::history::save_command(&conn, command);
+        }
+    }
 }
