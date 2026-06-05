@@ -196,7 +196,7 @@ const tabCwd            = new Map<string, string>();
 const tabHasOsc133      = new Map<string, boolean>();
 const tabCandidates     = new Map<string, string[]>();
 const candidateIndex    = new Map<string, number>();
-const tabInputSenders   = new Map<string, (data: string) => void>();
+const tabInputSenders   = new Map<string, (data: string) => void>(); // populated by the snippet input-sender task
 const bracketedPaste    = new Map<string, boolean>();
 
 function isInteractiveTerminal(type: string): boolean {
@@ -909,6 +909,43 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         }
         if (writeQueue) scheduleWriteFlush(WRITE_RETRY_MS);
       };
+      // Hybrid capture: OSC 7 (cwd) + OSC 133 (prompt/command boundaries).
+      // When present, OSC 133 gives authoritative command capture; we still keep
+      // the heuristic onData buffer as the universal fallback.
+      const term133 = instance!.terminal;
+      const osc7Dispose = term133.parser.registerOscHandler(7, (payload) => {
+        // payload like file://host/abs/path
+        const m = /^file:\/\/[^/]*(\/.*)$/.exec(payload);
+        if (m) tabCwd.set(tab.id, decodeURIComponent(m[1]));
+        return false; // let other handlers run
+      });
+      const osc133Dispose = term133.parser.registerOscHandler(133, (payload) => {
+        // FinalTerm/iTerm2: A=prompt-start, B=command-start, C=pre-exec, D=done
+        const kind = payload.charAt(0);
+        tabHasOsc133.set(tab.id, true);
+        if (kind === 'A' || kind === 'B') {
+          // New prompt / command start — reset the heuristic buffer & ghost.
+          inputBuffers.set(tab.id, '');
+          tabCandidates.set(tab.id, []);
+          candidateIndex.set(tab.id, 0);
+          ghostTextState.set(tab.id, '');
+          ghostTextSetters.get(tab.id)?.('', 0, 0);
+        } else if (kind === 'C') {
+          // Command submitted: record the authoritative line (heuristic buffer).
+          const sess = sessionsRef.current.find((s) => s.id === tab.sessionId);
+          const st = useSettingsStore.getState().settings;
+          const scope = st.cmdHintScopeByHost ? tabScope(tab.type, sess) : '';
+          const cwd = st.cmdHintScopeByHost ? (tabCwd.get(tab.id) ?? '') : '';
+          const line = (inputBuffers.get(tab.id) ?? '').trim();
+          if (st.sshHistoryCmd && line.length > 0) {
+            commandHistory.record(line, { scope, cwd, sessionType: tab.type });
+          }
+          inputBuffers.set(tab.id, '');
+        }
+        // kind 'D' (command-done / exit-status) and others: no history action needed.
+        return false;
+      });
+
       const dataDispose = instance!.terminal.onData((data) => {
         if (reconnectableTabs.has(tab.id)) {
           // Connection is dead — swallow this keystroke and reconnect instead.
@@ -939,6 +976,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
             const cursorY = inst?.terminal.buffer.active.cursorY ?? 0;
 
             const showGhost = () => {
+              if (st.cmdHintDeferToRemote && tabHasOsc133.get(tab.id)) {
+                clearGhost();
+                return;
+              }
               const cands = commandHistory.getSuggestions(buf, { scope, cwd, sessionType });
               tabCandidates.set(tab.id, cands);
               candidateIndex.set(tab.id, 0);
@@ -958,13 +999,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
             if (bracketedPaste.get(tab.id)) {
               const end = data.indexOf('\x1b[201~');
               const chunk = (end >= 0 ? data.slice(0, end) : data)
-                .replace('\x1b[200~', '');
+                .replace(/\x1b\[200~/g, '');
               buf += chunk;
               if (end >= 0) bracketedPaste.set(tab.id, false);
               clearGhost();
             } else if (data === '\r' || data === '\n') {
               const trimmed = buf.trim();
-              if (trimmed.length > 0) commandHistory.record(trimmed, { scope, cwd, sessionType });
+              if (trimmed.length > 0 && !tabHasOsc133.get(tab.id)) {
+                commandHistory.record(trimmed, { scope, cwd, sessionType });
+              }
               buf = '';
               clearGhost();
             } else if (data === '\x7f' || data === '\b') {
@@ -1066,6 +1109,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         unlistenData(); unlistenExit();
         try { dataDispose.dispose(); } catch {}
         try { resizeDispose?.dispose(); } catch {}
+        try { osc7Dispose.dispose(); } catch {}
+        try { osc133Dispose.dispose(); } catch {}
         return;
       }
 
@@ -1082,10 +1127,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         if (pendingResize) { clearTimeout(pendingResize); pendingBackendResize.delete(tab.id); }
         try { dataDispose.dispose(); } catch {}
         try { resizeDispose?.dispose(); } catch {}
+        try { osc7Dispose.dispose(); } catch {}
+        try { osc133Dispose.dispose(); } catch {}
         ghostAcceptCallbacks.delete(tab.id);
         tabCandidates.delete(tab.id);
         candidateIndex.delete(tab.id);
         bracketedPaste.delete(tab.id);
+        tabHasOsc133.delete(tab.id);
       });
 
       const session = sessionsRef.current.find((s) => s.id === tab.sessionId);
