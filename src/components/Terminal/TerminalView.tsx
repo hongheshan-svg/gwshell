@@ -359,6 +359,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
     setContextMenu(null);
   }, [tab.id]);
 
+  const maybePasteText = useCallback((text: string) => {
+    if (!text) return;
+    if (useSettingsStore.getState().settings.pasteWarnMultiline && text.includes('\n')) {
+      setPasteConfirm(text);
+    } else {
+      terminalInstances.get(tab.id)?.terminal.paste(text);
+    }
+  }, [tab.id]);
+
   const pasteClipboard = useCallback(() => {
     const inst = terminalInstances.get(tab.id);
     const terminal = inst?.terminal;
@@ -366,12 +375,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
 
     readClipboardText()
       .then((text) => {
-        if (text) terminal.paste(text);
+        if (text) maybePasteText(text);
       })
       .catch(() => {});
     terminal.focus();
     setContextMenu(null);
-  }, [tab.id]);
+  }, [tab.id, maybePasteText]);
 
   const selectAllTerminal = useCallback(() => {
     const inst = terminalInstances.get(tab.id);
@@ -487,12 +496,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
 
         const doPaste = () => {
           readClipboardText().then((text) => {
-            if (!text) return;
-            if (useSettingsStore.getState().settings.pasteWarnMultiline && text.includes('\n')) {
-              setPasteConfirm(text);
-            } else {
-              termRef.paste(text);
-            }
+            if (text) maybePasteText(text);
           }).catch(() => {});
         };
 
@@ -695,7 +699,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
           e.preventDefault();
           const text = e.clipboardData?.getData("text/plain");
           if (text) {
-            termRef.paste(text);
+            maybePasteText(text);
           } else {
             doPaste();
           }
