@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Returns commands ordered oldest-first (caller reverses if needed).
+/// Returns commands ordered newest-first (most recent at index 0).
 /// Deduplicates by keeping only the most-recent occurrence of each command.
 pub fn load_history(conn: &Connection, limit: u32) -> Vec<String> {
     let sql = "SELECT command FROM command_history \
@@ -11,11 +11,7 @@ pub fn load_history(conn: &Connection, limit: u32) -> Vec<String> {
         Err(_) => return vec![],
     };
     let result = match stmt.query_map(params![limit], |row| row.get::<_, String>(0)) {
-        Ok(iter) => {
-            let mut v: Vec<String> = iter.filter_map(|r| r.ok()).collect();
-            v.reverse(); // newest-first from DB → oldest-first for the caller
-            v
-        }
+        Ok(iter) => iter.filter_map(|r| r.ok()).collect(),
         Err(_) => vec![],
     };
     result
