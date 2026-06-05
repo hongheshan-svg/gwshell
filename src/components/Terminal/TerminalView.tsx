@@ -192,6 +192,29 @@ const ghostTextState       = new Map<string, string>();
 const ghostTextSetters     = new Map<string, (text: string, x: number, y: number) => void>();
 const ghostAcceptCallbacks = new Map<string, (suffix: string) => void>();
 
+const tabCwd            = new Map<string, string>();
+const tabHasOsc133      = new Map<string, boolean>();
+const tabCandidates     = new Map<string, string[]>();
+const candidateIndex    = new Map<string, number>();
+const tabInputSenders   = new Map<string, (data: string) => void>();
+const bracketedPaste    = new Map<string, boolean>();
+
+function isInteractiveTerminal(type: string): boolean {
+  return type === 'ssh' || type === 'localshell' || type === 'serial' || type === 'docker';
+}
+
+// Per-tab scope key for history ranking.
+function tabScope(
+  type: string,
+  session: { host?: string; serial_port?: string; name?: string } | undefined,
+): string {
+  if (type === 'ssh') return session?.host ?? '';
+  if (type === 'localshell') return 'local';
+  if (type === 'serial') return session?.serial_port ?? 'serial';
+  if (type === 'docker') return session?.name ?? 'docker';
+  return '';
+}
+
 /** Remove event listeners for a tab (idempotent). */
 function cleanupTabListeners(tabId: string): void {
   const fn = tabListenerCleanups.get(tabId);
@@ -224,6 +247,12 @@ export function destroyTerminal(tabId: string): void {
   ghostTextState.delete(tabId);
   ghostTextSetters.delete(tabId);
   ghostAcceptCallbacks.delete(tabId);
+  tabCwd.delete(tabId);
+  tabHasOsc133.delete(tabId);
+  tabCandidates.delete(tabId);
+  candidateIndex.delete(tabId);
+  tabInputSenders.delete(tabId);
+  bracketedPaste.delete(tabId);
   const inst = terminalInstances.get(tabId);
   if (inst) {
     try { inst.rendererAddon?.dispose(); } catch {}
@@ -889,44 +918,85 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
           return;
         }
 
-        // SSH command history: intercept keystrokes to track input and compute ghost text.
-        if (tab.type === 'ssh' && useSettingsStore.getState().settings.sshHistoryCmd) {
-          let buf = inputBuffers.get(tab.id) ?? '';
-          const setter = ghostTextSetters.get(tab.id);
-          const inst = terminalInstances.get(tab.id);
-          const cursorX = inst?.terminal.buffer.active.cursorX ?? 0;
-          const cursorY = inst?.terminal.buffer.active.cursorY ?? 0;
+        // Command history: track input line and compute ghost text.
+        // Generalized beyond SSH; gated by sshHistoryCmd (capture) + cmdHintAllSessions.
+        {
+          const st = useSettingsStore.getState().settings;
+          const captureOn =
+            st.sshHistoryCmd &&
+            isInteractiveTerminal(tab.type) &&
+            (tab.type === 'ssh' || st.cmdHintAllSessions);
+          if (captureOn) {
+            const sess = sessionsRef.current.find((s) => s.id === tab.sessionId);
+            const scope = st.cmdHintScopeByHost ? tabScope(tab.type, sess) : '';
+            const cwd = st.cmdHintScopeByHost ? (tabCwd.get(tab.id) ?? '') : '';
+            const sessionType = tab.type;
 
-          if (data === '\r' || data === '\n') {
-            const trimmed = buf.trim();
-            if (trimmed.length > 0) commandHistory.record(trimmed);
-            buf = '';
-            ghostTextState.set(tab.id, '');
-            setter?.('', 0, 0);
-          } else if (data === '\x7f') {
-            // Backspace
-            buf = buf.slice(0, -1);
-            const suffix = buf.length > 0 ? commandHistory.getSuggestion(buf) : '';
-            ghostTextState.set(tab.id, suffix);
-            setter?.(suffix, cursorX, cursorY);
-          } else if (data === '\x15') {
-            // Ctrl+U — clear line
-            buf = '';
-            ghostTextState.set(tab.id, '');
-            setter?.('', 0, 0);
-          } else if (data.startsWith('\x1b') || data === '\x01' || data === '\x05' ||
-                     data === '\x0b' || data === '\x17' || data === '\x0c') {
-            // ESC sequences, Ctrl+A/E (cursor move), Ctrl+K/W/L (line edit) — clear ghost text only
-            ghostTextState.set(tab.id, '');
-            setter?.('', 0, 0);
-          } else if (data.length === 1 && data.charCodeAt(0) >= 0x20) {
-            // Printable ASCII
-            buf += data;
-            const suffix = commandHistory.getSuggestion(buf);
-            ghostTextState.set(tab.id, suffix);
-            setter?.(suffix, cursorX, cursorY);
+            let buf = inputBuffers.get(tab.id) ?? '';
+            const setter = ghostTextSetters.get(tab.id);
+            const inst = terminalInstances.get(tab.id);
+            const cursorX = inst?.terminal.buffer.active.cursorX ?? 0;
+            const cursorY = inst?.terminal.buffer.active.cursorY ?? 0;
+
+            const showGhost = () => {
+              const cands = commandHistory.getSuggestions(buf, { scope, cwd, sessionType });
+              tabCandidates.set(tab.id, cands);
+              candidateIndex.set(tab.id, 0);
+              const suffix = cands[0] ? cands[0].slice(buf.length) : '';
+              ghostTextState.set(tab.id, suffix);
+              setter?.(suffix, cursorX, cursorY);
+            };
+            const clearGhost = () => {
+              tabCandidates.set(tab.id, []);
+              candidateIndex.set(tab.id, 0);
+              ghostTextState.set(tab.id, '');
+              setter?.('', 0, 0);
+            };
+
+            // Bracketed paste: buffer the pasted content into the line, no ghost.
+            if (data.includes('\x1b[200~')) bracketedPaste.set(tab.id, true);
+            if (bracketedPaste.get(tab.id)) {
+              const end = data.indexOf('\x1b[201~');
+              const chunk = (end >= 0 ? data.slice(0, end) : data)
+                .replace('\x1b[200~', '');
+              buf += chunk;
+              if (end >= 0) bracketedPaste.set(tab.id, false);
+              clearGhost();
+            } else if (data === '\r' || data === '\n') {
+              const trimmed = buf.trim();
+              if (trimmed.length > 0) commandHistory.record(trimmed, { scope, cwd, sessionType });
+              buf = '';
+              clearGhost();
+            } else if (data === '\x7f' || data === '\b') {
+              // Backspace
+              buf = buf.slice(0, -1);
+              if (buf.length > 0) showGhost();
+              else clearGhost();
+            } else if (data === '\x17') {
+              // Ctrl+W — delete the previous word
+              buf = buf.replace(/\s*\S+\s*$/, '');
+              if (buf.length > 0) showGhost();
+              else clearGhost();
+            } else if (data === '\x15' || data === '\x0b' || data === '\x0c') {
+              // Ctrl+U / Ctrl+K / Ctrl+L — clear line / kill / clear screen
+              if (data === '\x15') buf = '';
+              clearGhost();
+            } else if (
+              data === '\x1b[A' || data === '\x1b[B' || data === '\x1b[C' || data === '\x1b[D' ||
+              data === '\x1b[H' || data === '\x1b[F' || data === '\x01' || data === '\x05'
+            ) {
+              // Arrows / Home / End / Ctrl-A / Ctrl-E — cursor moves: clear ghost only.
+              clearGhost();
+            } else if (data.startsWith('\x1b')) {
+              // Other escape sequences — clear ghost only.
+              clearGhost();
+            } else if (data.length >= 1 && data.charCodeAt(0) >= 0x20) {
+              // Printable text (single char or multi-char without bracketed markers).
+              buf += data;
+              showGhost();
+            }
+            inputBuffers.set(tab.id, buf);
           }
-          inputBuffers.set(tab.id, buf);
         }
 
         writeQueue += data;
@@ -942,7 +1012,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
       });
 
       // Register the ghost accept callback so the key handler can send completion text.
-      if (tab.type === 'ssh') {
+      if (isInteractiveTerminal(tab.type)) {
         ghostAcceptCallbacks.set(tab.id, (suffix: string) => {
           if (writeDisposed) return;
           const buf = (inputBuffers.get(tab.id) ?? '') + suffix;
@@ -1013,6 +1083,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         try { dataDispose.dispose(); } catch {}
         try { resizeDispose?.dispose(); } catch {}
         ghostAcceptCallbacks.delete(tab.id);
+        tabCandidates.delete(tab.id);
+        candidateIndex.delete(tab.id);
+        bracketedPaste.delete(tab.id);
       });
 
       const session = sessionsRef.current.find((s) => s.id === tab.sessionId);
@@ -1388,7 +1461,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         style={{ display: isActive ? "block" : "none" }}
       />
 
-      {ghostText && isActive && terminalCmdHint && (
+      {ghostText && isActive && terminalCmdHint && isInteractiveTerminal(tab.type) && (
         <div
           className="terminal-ghost-text"
           style={{
