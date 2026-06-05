@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Zap,
+  Plus,
   FolderTree,
   List,
   FileText,
@@ -19,7 +20,7 @@ import { useAppStore } from '../../stores/appStore';
 import type { TranslationKeys } from '../../i18n';
 
 const navItems: { id: string; icon: typeof Zap; labelKey: TranslationKeys }[] = [
-  { id: 'quickconnect', icon: Zap, labelKey: 'nav_quickconnect' },
+  { id: 'quickconnect', icon: Plus, labelKey: 'nav_quickconnect' },
   { id: 'sessions', icon: FolderTree, labelKey: 'nav_sessions' },
   { id: 'assetlist', icon: List, labelKey: 'nav_assetlist' },
   { id: 'files', icon: FileText, labelKey: 'nav_files' },

@@ -525,30 +525,12 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
           <button className="sftp-tool-btn" onClick={() => { setNewFolderMode(true); setNewFolderName(''); }} title={t('sftp_new_folder')}>
             <FolderPlus size={14} />
           </button>
-          <button className="sftp-tool-btn" onClick={() => { setNewFileMode(true); setNewFileName(''); }} title={t('sftp_new_file')}>
-            <FilePlus size={14} />
-          </button>
           <button className="sftp-tool-btn" onClick={handleUpload} disabled={busy} title={t('sftp_upload')}>
             <Upload size={14} />
           </button>
           <div className="sftp-toolbar-sep" />
-          <button className="sftp-tool-btn" onClick={openSelected} disabled={!selectedEntry || busy} title={t('sftp_open_file')}>
-            <ExternalLink size={14} />
-          </button>
-          <button className="sftp-tool-btn" onClick={editSelected} disabled={!canEditSelected} title={t('sftp_edit_online')}>
-            <FileEdit size={14} />
-          </button>
           <button className="sftp-tool-btn" onClick={downloadSelected} disabled={!selectedEntry || selectedEntry.is_dir || busy} title={t('sftp_download')}>
             <Download size={14} />
-          </button>
-          <button className="sftp-tool-btn" onClick={copySelectedPath} disabled={!selectedEntry} title={t('sftp_copy_path')}>
-            <Copy size={14} />
-          </button>
-          <button className="sftp-tool-btn" onClick={() => { if (selectedEntry) startRename(selectedEntry); }} disabled={!selectedEntry} title={t('sftp_rename')}>
-            <Edit3 size={14} />
-          </button>
-          <button className="sftp-tool-btn" onClick={() => { if (selectedEntry) startChmod(selectedEntry); }} disabled={!selectedEntry} title={t('sftp_chmod')}>
-            <Shield size={14} />
           </button>
           <button className="sftp-tool-btn sftp-tool-btn-danger" onClick={deleteSelected} disabled={!selectedEntry || busy} title={t('sftp_delete')}>
             <Trash2 size={14} />

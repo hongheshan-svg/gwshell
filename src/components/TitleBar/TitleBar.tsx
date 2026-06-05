@@ -16,9 +16,7 @@ const IS_MACOS = typeof navigator !== 'undefined'
 
 export const TitleBar: React.FC = () => {
   const { t } = useTranslation();
-  const { tabs, activeTabId, serverPanelOpen, toggleServerPanel } = useAppStore();
-  const activeTab = tabs.find((tt) => tt.id === activeTabId);
-  const sshActive = activeTab?.type === 'ssh';
+  const { serverPanelOpen, toggleServerPanel } = useAppStore();
 
   const handleMinimize = () => {
     appWindow.minimize();
@@ -42,9 +40,8 @@ export const TitleBar: React.FC = () => {
       <div className="titlebar-controls">
         <button
           className={`titlebar-btn${serverPanelOpen ? ' titlebar-btn--active' : ''}`}
-          onClick={() => { if (sshActive) toggleServerPanel(); }}
-          disabled={!sshActive}
-          title={sshActive ? t('serverPanel_toggle_title') : t('serverPanel_ssh_only')}
+          onClick={toggleServerPanel}
+          title={t('serverPanel_toggle_title')}
           data-gw-action="toggle_server_panel"
         >
           <Activity size={14} />
