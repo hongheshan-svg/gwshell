@@ -730,6 +730,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
       // reflow so dimensions are often already available after open().
       safeFit(tab.id);
 
+      // Set initial cell-size CSS variables for ghost text overlay.
+      const el2 = containerRef.current;
+      const inst2 = terminalInstances.get(tab.id);
+      if (el2 && inst2 && el2.clientWidth > 0 && inst2.terminal.cols > 0) {
+        el2.style.setProperty('--cell-w', `${el2.clientWidth / inst2.terminal.cols}px`);
+        el2.style.setProperty('--cell-h', `${el2.clientHeight / inst2.terminal.rows}px`);
+      }
+
       // Deferred fit as safety-net (covers edge-cases where layout isn't
       // settled on the first synchronous reflow). When we just reparented
       // the xterm element, do a full renderer reset instead of a plain fit
@@ -1323,6 +1331,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
       lastH = h;
       scheduleTerminalFit(tab.id);
       scheduleTerminalResizeSettle(tab.id, tab.sessionId, tab.type);
+
+      // Update cell-size CSS variables used by the ghost text overlay.
+      const inst = terminalInstances.get(tab.id);
+      if (inst && w > 0 && inst.terminal.cols > 0) {
+        el.style.setProperty('--cell-w', `${w / inst.terminal.cols}px`);
+        el.style.setProperty('--cell-h', `${h / inst.terminal.rows}px`);
+      }
     });
     observer.observe(el);
 
