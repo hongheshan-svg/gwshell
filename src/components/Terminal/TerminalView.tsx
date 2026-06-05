@@ -653,12 +653,36 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         termRef.attachCustomKeyEventHandler((e) => {
           if (e.type !== "keydown") return true;
 
-          // Ghost text acceptance: Tab or → when SSH and ghost text is active.
-          if (tab.type === 'ssh') {
+          // Ghost text: accept (Tab / →) or cycle candidates (↓ Ctrl-N / ↑ Ctrl-P).
+          if (isInteractiveTerminal(tab.type)) {
             const ghost = ghostTextState.get(tab.id) ?? '';
-            if (ghost && (e.key === 'Tab' || (e.key === 'ArrowRight' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey))) {
+            const cands = tabCandidates.get(tab.id) ?? [];
+            const plainArrow = !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
+
+            if (ghost && (e.key === 'Tab' || (e.key === 'ArrowRight' && plainArrow))) {
               e.preventDefault();
               ghostAcceptCallbacks.get(tab.id)?.(ghost);
+              return false;
+            }
+
+            const cycleNext =
+              (e.key === 'ArrowDown' && plainArrow) || (e.key === 'n' && e.ctrlKey);
+            const cyclePrev =
+              (e.key === 'ArrowUp' && plainArrow) || (e.key === 'p' && e.ctrlKey);
+            if ((cycleNext || cyclePrev) && cands.length > 1) {
+              e.preventDefault();
+              const buf = inputBuffers.get(tab.id) ?? '';
+              let idx = candidateIndex.get(tab.id) ?? 0;
+              idx = cycleNext
+                ? (idx + 1) % cands.length
+                : (idx - 1 + cands.length) % cands.length;
+              candidateIndex.set(tab.id, idx);
+              const suffix = cands[idx].slice(buf.length);
+              ghostTextState.set(tab.id, suffix);
+              const inst = terminalInstances.get(tab.id);
+              const cx = inst?.terminal.buffer.active.cursorX ?? 0;
+              const cy = inst?.terminal.buffer.active.cursorY ?? 0;
+              ghostTextSetters.get(tab.id)?.(suffix, cx, cy);
               return false;
             }
           }
