@@ -622,6 +622,36 @@ async fn save_command_history(
     .map_err(|e| format!("task join: {}", e))?
 }
 
+// ---- Snippet Commands ----
+
+#[tauri::command]
+async fn save_snippet(
+    id: String,
+    data: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.db.save_snippet(&id, &data))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
+}
+
+#[tauri::command]
+async fn get_snippets(state: State<'_, Arc<AppState>>) -> Result<Vec<String>, String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.db.get_snippets())
+        .await
+        .map_err(|e| format!("task join: {}", e))?
+}
+
+#[tauri::command]
+async fn delete_snippet(id: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || state.db.delete_snippet(&id))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
+}
+
 // ---- Directory Picker ----
 
 #[tauri::command]
@@ -846,6 +876,9 @@ pub fn run() {
             secret_storage_available,
             get_command_history,
             save_command_history,
+            save_snippet,
+            get_snippets,
+            delete_snippet,
         ])
         .setup(|app| {
             // Pre-warm OS info cache in a background thread so the first

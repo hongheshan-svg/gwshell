@@ -239,4 +239,44 @@ impl Database {
             crate::history::save_command(&conn, command, cwd, scope, session_type);
         }
     }
+
+    // ---- Snippets ----
+
+    pub fn save_snippet(&self, id: &str, data: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT OR REPLACE INTO snippets (id, data) VALUES (?1, ?2)",
+            params![id, data],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn get_snippets(&self) -> Result<Vec<String>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare("SELECT data FROM snippets")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                let data: String = row.get(0)?;
+                Ok(data)
+            })
+            .map_err(|e| e.to_string())?;
+        let mut snippets = Vec::new();
+        for row in rows {
+            match row {
+                Ok(data) => snippets.push(data),
+                Err(e) => eprintln!("[gwshell] skipping unreadable snippet row: {}", e),
+            }
+        }
+        Ok(snippets)
+    }
+
+    pub fn delete_snippet(&self, id: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM snippets WHERE id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
 }
