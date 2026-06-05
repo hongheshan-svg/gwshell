@@ -1,5 +1,6 @@
 mod crypto;
 mod database;
+mod history;
 mod metrics;
 mod pty;
 mod serial;
@@ -588,6 +589,33 @@ async fn load_app_settings(state: State<'_, Arc<AppState>>) -> Result<Option<Str
         .map_err(|e| format!("task join: {}", e))?
 }
 
+// ---- Command History Commands ----
+
+#[tauri::command]
+async fn get_command_history(
+    limit: u32,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<String>, String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || Ok(state.db.load_command_history(limit)))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
+}
+
+#[tauri::command]
+async fn save_command_history(
+    command: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        state.db.save_command_history(&command);
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
+}
+
 // ---- Directory Picker ----
 
 #[tauri::command]
@@ -810,6 +838,8 @@ pub fn run() {
             save_group,
             get_groups,
             secret_storage_available,
+            get_command_history,
+            save_command_history,
         ])
         .setup(|app| {
             // Pre-warm OS info cache in a background thread so the first
