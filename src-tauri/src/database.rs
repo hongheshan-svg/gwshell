@@ -42,7 +42,13 @@ impl Database {
             CREATE TABLE IF NOT EXISTS app_settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
-            );",
+            );
+            CREATE TABLE IF NOT EXISTS command_history (
+                id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                command TEXT NOT NULL,
+                ts      INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_cmd_ts ON command_history(ts DESC);",
         )
         .map_err(|e| e.to_string())
     }
