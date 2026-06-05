@@ -5,6 +5,7 @@ import { useAppStore } from '../../stores/appStore';
 import { useSettingsStore, defaultSettings as persistedDefaultSettings } from '../../stores/settingsStore';
 import i18n from '../../i18n';
 import type { TranslationKeys } from '../../i18n';
+import { TERMINAL_SCHEME_OPTIONS } from '../../lib/terminalThemes';
 
 /* ---- Nav categories ---- */
 const navCategories: { title?: TranslationKeys; items: { id: string; labelKey: TranslationKeys }[] }[] = [
@@ -65,6 +66,8 @@ export interface AppSettings {
   sshHistoryCmd: boolean;
   sshHistoryCmdStorage: string;
   sshHistoryCmdLoadCount: string;
+  pasteWarnMultiline: boolean;
+  terminalColorScheme: string;
   cmdHintAllSessions: boolean;
   cmdHintShellIntegration: boolean;
   cmdHintDeferToRemote: boolean;
@@ -141,6 +144,8 @@ const defaultSettings: AppSettings = {
   sshHistoryCmd: true,
   sshHistoryCmdStorage: _t('settings_ssh_history_local'),
   sshHistoryCmdLoadCount: '100',
+  pasteWarnMultiline: true,
+  terminalColorScheme: 'auto',
   cmdHintAllSessions: true,
   cmdHintShellIntegration: false,
   cmdHintDeferToRemote: false,
@@ -447,6 +452,8 @@ export const SettingsModal: React.FC = () => {
                     <Row label={t('settings_cmd_hint_scope_host')}><Toggle value={settings.cmdHintScopeByHost} onChange={(v) => u('cmdHintScopeByHost', v)} /></Row>
                     <Row label={t('settings_cmd_hint_shell_integration')}><Toggle value={settings.cmdHintShellIntegration} onChange={(v) => u('cmdHintShellIntegration', v)} /></Row>
                     <Row label={t('settings_cmd_hint_defer_remote')}><Toggle value={settings.cmdHintDeferToRemote} onChange={(v) => u('cmdHintDeferToRemote', v)} /></Row>
+                    <Row label={t('settings_paste_warn_multiline')}><Toggle value={settings.pasteWarnMultiline} onChange={(v) => u('pasteWarnMultiline', v)} /></Row>
+                    <Row label={t('settings_terminal_color_scheme')}><Sel value={settings.terminalColorScheme} options={TERMINAL_SCHEME_OPTIONS} onChange={(v) => u('terminalColorScheme', v)} /></Row>
                     <Row label={t('settings_stripe_bg')}><Toggle value={settings.terminalStripeBackground} onChange={(v) => u('terminalStripeBackground', v)} /></Row>
                     <Row label={t('settings_render_mode')} desc={t('settings_render_mode_desc')}><Toggle value={settings.renderMode} onChange={(v) => u('renderMode', v)} /></Row>
                   </div>

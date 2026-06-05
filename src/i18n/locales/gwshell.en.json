@@ -521,5 +521,17 @@
   "serverPanel_nic_title": "Network Interfaces",
   "serverPanel_nic_name": "Name",
   "serverPanel_nic_ipv4": "IPv4",
-  "serverPanel_nic_mac": "MAC"
+  "serverPanel_nic_mac": "MAC",
+  "settings_paste_warn_multiline": "Confirm before pasting multiple lines",
+  "settings_terminal_color_scheme": "Terminal color scheme",
+  "paste_confirm_title": "Paste multiple lines?",
+  "paste_confirm_lines": "This will paste {{count}} lines into the terminal.",
+  "paste_confirm_paste": "Paste",
+  "paste_confirm_cancel": "Cancel",
+  "quickconnect_title": "Quick Connect",
+  "quickconnect_placeholder": "user@host:port",
+  "quickconnect_password": "Password (optional)",
+  "quickconnect_connect": "Connect",
+  "quickconnect_cancel": "Cancel",
+  "quickconnect_invalid": "Enter a target like user@host:port"
 }
