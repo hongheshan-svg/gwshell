@@ -4,6 +4,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { TitleBar } from './components/TitleBar/TitleBar';
 import { Sidebar } from './components/Sidebar/IconNav';
 import { SessionPanel } from './components/Sidebar/SessionPanel';
+import { SnippetPanel } from './components/Sidebar/SnippetPanel';
+import { useSnippetStore } from './stores/snippetStore';
 import { TabBar } from './components/TabBar/TabBar';
 import { AssetTable } from './components/AssetTable/AssetTable';
 import { StatusBar } from './components/StatusBar/StatusBar';
@@ -35,7 +37,7 @@ function App() {
   useSettingsEffects();
   const { theme, setSessions, tabs, activeTabId, sftpPanelOpen, sessions,
     showNewSession, showDockerModal, showLocalTerminalModal, showSerialModal, showSettings, showAppMenu,
-    mainView } = useAppStore();
+    mainView, activeNavItem } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
   const settingsLoaded = useSettingsStore((s) => s.loaded);
   const sshHistoryCmd = useSettingsStore((s) => s.settings.sshHistoryCmd);
@@ -102,13 +104,18 @@ function App() {
     }
   }, []);
 
+  const loadSnippets = useSnippetStore((s) => s.load);
+  useEffect(() => {
+    void loadSnippets();
+  }, [loadSnippets]);
+
   return (
     <I18nextProvider i18n={i18n}>
       <div className="app-root">
         <TitleBar />
         <div className="app-layout">
           <Sidebar />
-          <SessionPanel />
+          {activeNavItem === 'snippets' ? <SnippetPanel /> : <SessionPanel />}
           <div className="main-content">
             <TabBar />
             <div className="terminal-sftp-wrapper">

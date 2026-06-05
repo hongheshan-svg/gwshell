@@ -65,6 +65,10 @@ export interface AppSettings {
   sshHistoryCmd: boolean;
   sshHistoryCmdStorage: string;
   sshHistoryCmdLoadCount: string;
+  cmdHintAllSessions: boolean;
+  cmdHintShellIntegration: boolean;
+  cmdHintDeferToRemote: boolean;
+  cmdHintScopeByHost: boolean;
   terminalStripeBackground: boolean;
   renderMode: boolean;
   middleClickAction: string;
@@ -137,6 +141,10 @@ const defaultSettings: AppSettings = {
   sshHistoryCmd: true,
   sshHistoryCmdStorage: _t('settings_ssh_history_local'),
   sshHistoryCmdLoadCount: '100',
+  cmdHintAllSessions: true,
+  cmdHintShellIntegration: false,
+  cmdHintDeferToRemote: false,
+  cmdHintScopeByHost: true,
   terminalStripeBackground: true,
   renderMode: true,
   middleClickAction: 'none',
@@ -435,6 +443,10 @@ export const SettingsModal: React.FC = () => {
                     <Row label={t('settings_ssh_history')}><Toggle value={settings.sshHistoryCmd} onChange={(v) => u('sshHistoryCmd', v)} /></Row>
                     <Row label={t('settings_ssh_history_storage')}><Sel value={settings.sshHistoryCmdStorage} options={[t('settings_ssh_history_local'), t('settings_ssh_history_cloud')]} onChange={(v) => u('sshHistoryCmdStorage', v)} /></Row>
                     <Row label={t('settings_ssh_history_count')}><NumInput value={settings.sshHistoryCmdLoadCount} onChange={(v) => u('sshHistoryCmdLoadCount', v)} /></Row>
+                    <Row label={t('settings_cmd_hint_all_sessions')}><Toggle value={settings.cmdHintAllSessions} onChange={(v) => u('cmdHintAllSessions', v)} /></Row>
+                    <Row label={t('settings_cmd_hint_scope_host')}><Toggle value={settings.cmdHintScopeByHost} onChange={(v) => u('cmdHintScopeByHost', v)} /></Row>
+                    <Row label={t('settings_cmd_hint_shell_integration')}><Toggle value={settings.cmdHintShellIntegration} onChange={(v) => u('cmdHintShellIntegration', v)} /></Row>
+                    <Row label={t('settings_cmd_hint_defer_remote')}><Toggle value={settings.cmdHintDeferToRemote} onChange={(v) => u('cmdHintDeferToRemote', v)} /></Row>
                     <Row label={t('settings_stripe_bg')}><Toggle value={settings.terminalStripeBackground} onChange={(v) => u('terminalStripeBackground', v)} /></Row>
                     <Row label={t('settings_render_mode')} desc={t('settings_render_mode_desc')}><Toggle value={settings.renderMode} onChange={(v) => u('renderMode', v)} /></Row>
                   </div>

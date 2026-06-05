@@ -48,9 +48,26 @@ impl Database {
                 command TEXT NOT NULL,
                 ts      INTEGER NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_cmd_ts ON command_history(ts DESC);",
+            CREATE INDEX IF NOT EXISTS idx_cmd_ts ON command_history(ts DESC);
+            CREATE TABLE IF NOT EXISTS snippets (
+                id   TEXT PRIMARY KEY,
+                data TEXT NOT NULL
+            );",
         )
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+        // Idempotent migration: add scoping columns to command_history if absent.
+        // ALTER errors with "duplicate column name" on later runs — ignored.
+        for col in ["cwd", "scope", "session_type"] {
+            let _ = conn.execute(
+                &format!(
+                    "ALTER TABLE command_history ADD COLUMN {} TEXT NOT NULL DEFAULT ''",
+                    col
+                ),
+                [],
+            );
+        }
+        Ok(())
     }
 
     // ---- Sessions ----
@@ -210,16 +227,56 @@ impl Database {
 
     // ---- Command History ----
 
-    pub fn load_command_history(&self, limit: u32) -> Vec<String> {
+    pub fn load_command_history(&self, limit: u32) -> Vec<crate::history::HistoryEntry> {
         match self.conn.lock() {
             Ok(conn) => crate::history::load_history(&conn, limit),
             Err(_) => vec![],
         }
     }
 
-    pub fn save_command_history(&self, command: &str) {
+    pub fn save_command_history(&self, command: &str, cwd: &str, scope: &str, session_type: &str) {
         if let Ok(conn) = self.conn.lock() {
-            crate::history::save_command(&conn, command);
+            crate::history::save_command(&conn, command, cwd, scope, session_type);
         }
+    }
+
+    // ---- Snippets ----
+
+    pub fn save_snippet(&self, id: &str, data: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT OR REPLACE INTO snippets (id, data) VALUES (?1, ?2)",
+            params![id, data],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn get_snippets(&self) -> Result<Vec<String>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare("SELECT data FROM snippets")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                let data: String = row.get(0)?;
+                Ok(data)
+            })
+            .map_err(|e| e.to_string())?;
+        let mut snippets = Vec::new();
+        for row in rows {
+            match row {
+                Ok(data) => snippets.push(data),
+                Err(e) => eprintln!("[gwshell] skipping unreadable snippet row: {}", e),
+            }
+        }
+        Ok(snippets)
+    }
+
+    pub fn delete_snippet(&self, id: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM snippets WHERE id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
+        Ok(())
     }
 }
