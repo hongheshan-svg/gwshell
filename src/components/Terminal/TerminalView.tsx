@@ -881,8 +881,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
             buf = '';
             ghostTextState.set(tab.id, '');
             setter?.('', 0, 0);
-          } else if (data.startsWith('\x1b') || data === '\x01' || data === '\x05') {
-            // ESC sequences (arrow keys, etc.) and Ctrl+A/E — clear ghost text only
+          } else if (data.startsWith('\x1b') || data === '\x01' || data === '\x05' ||
+                     data === '\x0b' || data === '\x17' || data === '\x0c') {
+            // ESC sequences, Ctrl+A/E (cursor move), Ctrl+K/W/L (line edit) — clear ghost text only
             ghostTextState.set(tab.id, '');
             setter?.('', 0, 0);
           } else if (data.length === 1 && data.charCodeAt(0) >= 0x20) {
@@ -910,6 +911,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
       // Register the ghost accept callback so the key handler can send completion text.
       if (tab.type === 'ssh') {
         ghostAcceptCallbacks.set(tab.id, (suffix: string) => {
+          if (writeDisposed) return;
           const buf = (inputBuffers.get(tab.id) ?? '') + suffix;
           inputBuffers.set(tab.id, buf);
           ghostTextState.set(tab.id, '');
