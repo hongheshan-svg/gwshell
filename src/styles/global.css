@@ -3360,3 +3360,39 @@ input, select, textarea, button {
   color: #d08b27;
   flex-shrink: 0;
 }
+
+.snippet-panel {
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+  min-width: 240px;
+  height: 100%;
+  border-right: 1px solid var(--border-color, #2a2a2a);
+  background: var(--panel-bg, #1a1a1a);
+  overflow: hidden;
+}
+.snippet-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-color, #2a2a2a);
+}
+.snippet-error { padding: 6px 12px; color: #e06c75; font-size: 12px; }
+.snippet-form { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border-color, #2a2a2a); }
+.snippet-input { background: var(--input-bg, #111); border: 1px solid var(--border-color, #333); color: inherit; border-radius: 4px; padding: 6px 8px; font-size: 12px; font-family: inherit; }
+.snippet-textarea { resize: vertical; }
+.snippet-form-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.snippet-list { flex: 1; overflow-y: auto; }
+.snippet-empty { padding: 16px 12px; color: var(--text-muted, #888); font-size: 12px; }
+.snippet-item { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-bottom: 1px solid var(--border-color, #232323); }
+.snippet-item:hover { background: var(--hover-bg, #232323); }
+.snippet-item-main { flex: 1; min-width: 0; }
+.snippet-item-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.snippet-item-cmd { font-size: 11px; color: var(--text-muted, #888); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: monospace; }
+.snippet-item-actions { display: flex; gap: 2px; }
+.snippet-icon-btn { background: none; border: none; color: var(--text-muted, #aaa); cursor: pointer; padding: 4px; border-radius: 4px; display: inline-flex; }
+.snippet-icon-btn:hover:not(:disabled) { background: var(--hover-bg, #333); color: inherit; }
+.snippet-icon-btn:disabled { opacity: 0.4; cursor: default; }

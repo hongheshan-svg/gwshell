@@ -8,6 +8,7 @@ import {
   FileText,
   Key,
   Box,
+  Code,
   Globe,
   TerminalSquare,
   Moon,
@@ -28,6 +29,7 @@ const navItems: { id: string; icon: typeof Zap; labelKey: TranslationKeys }[] = 
   { id: 'docker', icon: Box, labelKey: 'nav_docker' },
   { id: 'services', icon: Globe, labelKey: 'nav_services' },
   { id: 'terminal', icon: TerminalSquare, labelKey: 'nav_terminal' },
+  { id: 'snippets', icon: Code, labelKey: 'nav_snippets' },
 ];
 
 export const Sidebar: React.FC = () => {
@@ -83,6 +85,10 @@ export const Sidebar: React.FC = () => {
         break;
       case 'terminal':
         setShowLocalTerminalModal(true);
+        break;
+      case 'snippets':
+        // activeNavItem is already set above; App renders SnippetPanel for it.
+        if (sidebarCollapsed) toggleSidebar();
         break;
     }
   };
