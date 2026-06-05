@@ -227,6 +227,14 @@ function cleanupTerminalInteractions(tabId: string): void {
   if (fn) { fn(); terminalInteractionCleanups.delete(tabId); }
 }
 
+// Returns true if input could be queued for the given tab.
+export function sendInputToTab(tabId: string, data: string): boolean {
+  const sender = tabInputSenders.get(tabId);
+  if (!sender) return false;
+  sender(data);
+  return true;
+}
+
 /** Destroy a terminal instance associated with a tab (called when the tab closes). */
 export function destroyTerminal(tabId: string): void {
   cleanupTabListeners(tabId);
@@ -669,7 +677,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
               (e.key === 'ArrowDown' && plainArrow) || (e.key === 'n' && e.ctrlKey);
             const cyclePrev =
               (e.key === 'ArrowUp' && plainArrow) || (e.key === 'p' && e.ctrlKey);
-            if ((cycleNext || cyclePrev) && cands.length > 1) {
+            if (ghost && (cycleNext || cyclePrev) && cands.length > 1) {
               e.preventDefault();
               const buf = inputBuffers.get(tab.id) ?? '';
               let idx = candidateIndex.get(tab.id) ?? 0;
@@ -1096,6 +1104,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         });
       }
 
+      // Generic external input injection (used by the snippet panel). Reuses the
+      // same writeQueue/flush path as keystrokes, so backpressure & retry apply.
+      tabInputSenders.set(tab.id, (payload: string) => {
+        if (writeDisposed || !payload) return;
+        writeQueue += payload;
+        if (writeQueue.length >= WRITE_CHUNK_SIZE) {
+          if (writeTimer) { clearTimeout(writeTimer); writeTimer = null; }
+          flushWrites();
+        } else {
+          scheduleWriteFlush();
+        }
+      });
+
       let resizeDispose: { dispose(): void } | null = null;
       if (resizeCmd) {
         const cmd = resizeCmd;
@@ -1154,6 +1175,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         try { osc7Dispose.dispose(); } catch {}
         try { osc133Dispose.dispose(); } catch {}
         ghostAcceptCallbacks.delete(tab.id);
+        tabInputSenders.delete(tab.id);
         tabCandidates.delete(tab.id);
         candidateIndex.delete(tab.id);
         bracketedPaste.delete(tab.id);
