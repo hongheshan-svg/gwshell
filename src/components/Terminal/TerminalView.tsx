@@ -325,7 +325,24 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
   const [contextMenu, setContextMenu] = useState<TerminalContextMenu | null>(null);
   const [ghostText, setGhostText] = useState('');
   const [ghostCursor, setGhostCursor] = useState({ x: 0, y: 0 });
+  const [pasteConfirm, setPasteConfirm] = useState<string | null>(null);
   const fingerprintResolveRef = useRef<(accepted: boolean) => void>(() => {});
+
+  useEffect(() => {
+    if (pasteConfirm === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setPasteConfirm(null);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        terminalInstances.get(tab.id)?.terminal.paste(pasteConfirm);
+        setPasteConfirm(null);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [pasteConfirm, tab.id]);
 
   const copySelection = useCallback(() => {
     const inst = terminalInstances.get(tab.id);
@@ -470,7 +487,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
 
         const doPaste = () => {
           readClipboardText().then((text) => {
-            if (text) termRef.paste(text);
+            if (!text) return;
+            if (useSettingsStore.getState().settings.pasteWarnMultiline && text.includes('\n')) {
+              setPasteConfirm(text);
+            } else {
+              termRef.paste(text);
+            }
           }).catch(() => {});
         };
 
@@ -1588,6 +1610,32 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
                 onClick={() => fingerprintResolveRef.current(true)}
               >
                 {t('fp_accept')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pasteConfirm !== null && isActive && (
+        <div className="paste-confirm-overlay" onMouseDown={() => setPasteConfirm(null)}>
+          <div className="paste-confirm-card" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="paste-confirm-title">{t('paste_confirm_title')}</div>
+            <div className="paste-confirm-lines">
+              {t('paste_confirm_lines', { count: pasteConfirm.split('\n').length })}
+            </div>
+            <pre className="paste-confirm-preview">
+              {pasteConfirm.split('\n').slice(0, 8).join('\n')}
+              {pasteConfirm.split('\n').length > 8 ? '\n…' : ''}
+            </pre>
+            <div className="paste-confirm-actions">
+              <button className="paste-confirm-btn" onClick={() => setPasteConfirm(null)}>
+                {t('paste_confirm_cancel')}
+              </button>
+              <button
+                className="paste-confirm-btn primary"
+                onClick={() => { terminalInstances.get(tab.id)?.terminal.paste(pasteConfirm); setPasteConfirm(null); }}
+              >
+                {t('paste_confirm_paste')}
               </button>
             </div>
           </div>
