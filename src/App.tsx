@@ -61,7 +61,10 @@ function App() {
     if (sshHistoryCmd) {
       commandHistory.init(parseInt(sshHistoryCmdLoadCount) || 100);
     }
-  }, [settingsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+    // sshHistoryCmd/Count intentionally omitted: setting changes go through
+    // settingsStore.save() which re-calls init() directly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsLoaded]);
 
   // Boot sequence: show only the splash card for 2s, then crossfade to the app.
   // 1. Show the window immediately (transparent — only the card is visible).
