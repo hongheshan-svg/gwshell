@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAppStore } from '../stores/appStore';
 import { terminalInstances } from '../components/Terminal/terminalRegistry';
+import { resolveTerminalTheme } from '../lib/terminalThemes';
 
 const LANG_MAP: Record<string, 'zh' | 'en'> = {
   zh: 'zh',
@@ -82,6 +83,16 @@ export function useSettingsEffects() {
     settings.terminalLetterSpacing,
     settings.terminalMaxScrollback,
   ]);
+
+  useEffect(() => {
+    const theme = resolveTerminalTheme(settings.terminalColorScheme, settings.theme);
+    terminalInstances.forEach(({ terminal }) => {
+      terminal.options.theme = theme;
+      requestAnimationFrame(() => {
+        try { terminal.refresh(0, terminal.rows - 1); } catch {}
+      });
+    });
+  }, [settings.terminalColorScheme, settings.theme]);
 
   useEffect(() => {
     terminalInstances.forEach(({ terminal }) => {
