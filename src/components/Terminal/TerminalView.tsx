@@ -797,6 +797,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
       if (el2 && inst2 && el2.clientWidth > 0 && inst2.terminal.cols > 0) {
         el2.style.setProperty('--cell-w', `${el2.clientWidth / inst2.terminal.cols}px`);
         el2.style.setProperty('--cell-h', `${el2.clientHeight / inst2.terminal.rows}px`);
+        // The ghost-text overlay is a SIBLING of the pane, so it can't inherit
+        // these vars from the pane. Also set them on the shared parent
+        // (.terminal-container) so the sibling overlay can read them.
+        const parent2 = el2.parentElement;
+        if (parent2) {
+          parent2.style.setProperty('--cell-w', `${el2.clientWidth / inst2.terminal.cols}px`);
+          parent2.style.setProperty('--cell-h', `${el2.clientHeight / inst2.terminal.rows}px`);
+        }
       }
 
       // Deferred fit as safety-net (covers edge-cases where layout isn't
@@ -1504,6 +1512,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
       if (inst && w > 0 && inst.terminal.cols > 0) {
         el.style.setProperty('--cell-w', `${w / inst.terminal.cols}px`);
         el.style.setProperty('--cell-h', `${h / inst.terminal.rows}px`);
+        const parent = el.parentElement;
+        if (parent) {
+          parent.style.setProperty('--cell-w', `${w / inst.terminal.cols}px`);
+          parent.style.setProperty('--cell-h', `${h / inst.terminal.rows}px`);
+        }
       }
     });
     observer.observe(el);
