@@ -609,6 +609,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         termRef.attachCustomKeyEventHandler((e) => {
           if (e.type !== "keydown") return true;
 
+          // Ghost text acceptance: Tab or → when SSH and ghost text is active.
+          if (tab.type === 'ssh') {
+            const ghost = ghostTextState.get(tab.id) ?? '';
+            if (ghost && (e.key === 'Tab' || (e.key === 'ArrowRight' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey))) {
+              e.preventDefault();
+              ghostAcceptCallbacks.get(tab.id)?.(ghost);
+              return false;
+            }
+          }
+
           if (isCopyShortcut(e)) {
             const selection = readTerminalSelection(termRef) || selectionSnapshotRef.current;
             if (selection) {
