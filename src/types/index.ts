@@ -77,5 +77,13 @@ export interface TabInfo {
   connected: boolean;
 }
 
+export interface Snippet {
+  id: string;
+  name: string;
+  command: string;
+  group?: string;
+  createdAt: number;
+}
+
 export type ThemeMode = 'dark' | 'light';
 export type MainView = 'asset-list' | 'terminal';
