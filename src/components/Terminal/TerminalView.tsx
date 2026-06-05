@@ -322,13 +322,28 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
   const containerRef = useRef<HTMLDivElement>(null);
   const sessions = useAppStore((s) => s.sessions);
   const theme = useAppStore((s) => s.theme);
+  const terminalCmdHint = useSettingsStore((s) => s.settings.terminalCmdHint);
+  const terminalFont = useSettingsStore((s) => s.settings.terminalFont);
+  const terminalFontSize = useSettingsStore((s) => s.settings.terminalFontSize);
   const { t } = useTranslation();
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const selectionSnapshotRef = useRef("");
 
+  useEffect(() => {
+    ghostTextSetters.set(tab.id, (text, x, y) => {
+      setGhostText(text);
+      setGhostCursor({ x, y });
+    });
+    return () => {
+      ghostTextSetters.delete(tab.id);
+    };
+  }, [tab.id]);
+
   const [fingerprintInfo, setFingerprintInfo] = useState<FingerprintInfo | null>(null);
   const [contextMenu, setContextMenu] = useState<TerminalContextMenu | null>(null);
+  const [ghostText, setGhostText] = useState('');
+  const [ghostCursor, setGhostCursor] = useState({ x: 0, y: 0 });
   const fingerprintResolveRef = useRef<(accepted: boolean) => void>(() => {});
 
   const copySelection = useCallback(() => {
@@ -1357,6 +1372,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         className="terminal-pane"
         style={{ display: isActive ? "block" : "none" }}
       />
+
+      {ghostText && isActive && terminalCmdHint && (
+        <div
+          className="terminal-ghost-text"
+          style={{
+            left: `calc(${ghostCursor.x} * var(--cell-w))`,
+            top: `calc(${ghostCursor.y} * var(--cell-h))`,
+            fontFamily: terminalFont,
+            fontSize: terminalFontSize,
+          }}
+        >
+          {ghostText}
+        </div>
+      )}
 
       {contextMenu && isActive && (
         <div className="context-menu terminal-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
