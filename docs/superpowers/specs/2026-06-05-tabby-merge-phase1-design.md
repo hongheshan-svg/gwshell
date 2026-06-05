@@ -132,7 +132,7 @@
 - `cmdHintScopeByHost: boolean`(默认 true)——作用域加权(A2)。
 
 > 设计取舍:键名保持新增,绝不重命名旧键,避免设置迁移。
-> 待实现时确认:现有 `terminalCmdHint`(默认 false)当前未被 `onData` 读取,用途存疑——实现阶段先查清它的真实消费点,**不**擅自重新定义其语义(若确为无用旧旗,单列处理,不在本 spec 顺带改)。
+> 已查清的现有双开关语义(实现时保留):`sshHistoryCmd`(默认 true)= 在 `onData`(893 行)门控**捕获/计算** ghost;`terminalCmdHint`(默认 false)= 在叠层 JSX(1391 行)门控**渲染** ghost。即默认仅捕获不显示,需用户开 `terminalCmdHint` 才看到灰字。本阶段保留这两者语义,只把它们的作用域从"仅 SSH"泛化到所有会话类型(受 `cmdHintAllSessions` 控制),不改默认值。
 
 ### B. 快捷命令片段库
 
