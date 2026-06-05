@@ -39,6 +39,10 @@ export interface AppSettings {
   sshHistoryCmd: boolean;
   sshHistoryCmdStorage: string;
   sshHistoryCmdLoadCount: string;
+  cmdHintAllSessions: boolean;
+  cmdHintShellIntegration: boolean;
+  cmdHintDeferToRemote: boolean;
+  cmdHintScopeByHost: boolean;
   terminalStripeBackground: boolean;
   renderMode: boolean;
   middleClickAction: string;
@@ -106,6 +110,10 @@ export const defaultSettings: AppSettings = {
   sshHistoryCmd: true,
   sshHistoryCmdStorage: 'local',
   sshHistoryCmdLoadCount: '100',
+  cmdHintAllSessions: true,
+  cmdHintShellIntegration: false,
+  cmdHintDeferToRemote: false,
+  cmdHintScopeByHost: true,
   terminalStripeBackground: true,
   renderMode: true,
   middleClickAction: 'none',
