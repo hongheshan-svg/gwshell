@@ -682,6 +682,25 @@ input, select, textarea, button {
   display: none !important;
 }
 
+/* ---- Ghost text inline suggestion overlay ---- */
+.terminal-ghost-text {
+  position: absolute;
+  pointer-events: none;
+  white-space: pre;
+  z-index: 10;
+  opacity: 0.45;
+  line-height: inherit;
+  user-select: none;
+}
+
+[data-theme="dark"] .terminal-ghost-text {
+  color: #d4d4d8;
+}
+
+[data-theme="light"] .terminal-ghost-text {
+  color: #1a1a2e;
+}
+
 /* ---- xterm scrollbar: thin by default, expands on hover (Windows CMD style) ---- */
 
 .xterm .xterm-viewport {
