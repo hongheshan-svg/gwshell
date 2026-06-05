@@ -34,14 +34,14 @@ function App() {
   useSettingsEffects();
   const { theme, setSessions, tabs, activeTabId, sftpPanelOpen, sessions,
     showNewSession, showDockerModal, showLocalTerminalModal, showSerialModal, showSettings, showAppMenu,
-    mainView, splitCount } = useAppStore();
+    mainView } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
 
   // Show asset table directly (synchronous) when no terminal is active.
   // TerminalContainer is lazy-loaded with xterm.js (344KB); showing AssetTable
   // through it would cause the asset list to flash in only after the heavy chunk loads.
-  const showAssetTable = splitCount <= 1 && (activeTabId === 'asset-list' || mainView === 'asset-list'
-    || tabs.filter(t => t.type !== 'asset-list').length === 0);
+  const showAssetTable = activeTabId === 'asset-list' || mainView === 'asset-list'
+    || tabs.filter(t => t.type !== 'asset-list').length === 0;
   const needTerminals = !showAssetTable;
 
   useEffect(() => {

@@ -17,8 +17,6 @@ import "@xterm/xterm/css/xterm.css";
 interface TerminalViewProps {
   tab: TabInfo;
   isActive: boolean;
-  /** When true, always display the terminal (split-pane mode) instead of toggling display:none */
-  forceVisible?: boolean;
 }
 
 interface FingerprintInfo {
@@ -309,7 +307,7 @@ export function forceTerminalRedraw(
   }
 }
 
-export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, forceVisible }) => {
+export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sessions = useAppStore((s) => s.sessions);
   const theme = useAppStore((s) => s.theme);
@@ -1276,10 +1274,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
       <div
         ref={containerRef}
         className="terminal-pane"
-        style={{ display: (forceVisible || isActive) ? "block" : "none" }}
+        style={{ display: isActive ? "block" : "none" }}
       />
 
-      {contextMenu && (forceVisible || isActive) && (
+      {contextMenu && isActive && (
         <div className="context-menu terminal-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
           <button
             type="button"
@@ -1314,7 +1312,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, force
         </div>
       )}
 
-      {fingerprintInfo && (forceVisible || isActive) && (
+      {fingerprintInfo && isActive && (
         <div className="fingerprint-overlay">
           <div className="fingerprint-dialog">
             <div className="fingerprint-dialog-title">🔒 {t('fp_title')}</div>

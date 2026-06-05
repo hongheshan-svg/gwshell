@@ -400,40 +400,9 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
     }
   };
 
-  const startRename = (entry: SftpEntry) => {
-    setSelectedEntry(entry);
-    setRenamingEntry(entry.path);
-    setRenameValue(entry.name);
-  };
-
-  const startChmod = (entry: SftpEntry) => {
-    setSelectedEntry(entry);
-    setChmodEntry(entry);
-    setChmodValue(formatPermissions(entry.permissions));
-  };
-
-  const openSelected = () => {
-    if (!selectedEntry) return;
-    if (selectedEntry.is_dir) {
-      navigateTo(selectedEntry.path);
-    } else {
-      handleOpenLocal(selectedEntry);
-    }
-  };
-
-  const editSelected = () => {
-    if (!selectedEntry || selectedEntry.is_dir || !isTextFile(selectedEntry.name)) return;
-    setEditingFile(selectedEntry);
-  };
-
   const downloadSelected = () => {
     if (!selectedEntry || selectedEntry.is_dir) return;
     handleDownload(selectedEntry);
-  };
-
-  const copySelectedPath = () => {
-    if (!selectedEntry) return;
-    handleCopyPath(selectedEntry.path);
   };
 
   const deleteSelected = () => {
@@ -496,7 +465,6 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
 
   const fileCount = entries.filter((e) => !e.is_dir).length;
   const folderCount = entries.filter((e) => e.is_dir).length;
-  const canEditSelected = !!selectedEntry && !selectedEntry.is_dir && isTextFile(selectedEntry.name);
 
   return (
     <>

@@ -3,9 +3,6 @@ import { invoke } from '@tauri-apps/api/core';
 import type { SessionConfig, TabInfo, ThemeMode, MainView } from '../types';
 import i18n, { detectLocale, type Locale, type TranslationKeys } from '../i18n';
 
-/** Split layout: how many terminal panes to show simultaneously */
-export type SplitCount = 1 | 2 | 4 | 6 | 8;
-
 interface AppStore {
   // Locale
   locale: Locale;
@@ -66,22 +63,6 @@ interface AppStore {
   showSettings: boolean;
   setShowSettings: (show: boolean) => void;
 
-  // Split panes
-  splitCount: SplitCount;
-  setSplitCount: (count: SplitCount) => void;
-  /** Tab IDs pinned to each split pane slot (index 0..splitCount-1). null = show nothing in that slot */
-  splitPanes: (string | null)[];
-  setSplitPanes: (panes: (string | null)[]) => void;
-  /** Assign a tab to a specific pane slot */
-  assignPane: (slotIndex: number, tabId: string | null) => void;
-  /** The pane slot that's currently focused (for keyboard/click focus) */
-  focusedPane: number;
-  setFocusedPane: (index: number) => void;
-
-  // Legacy (kept for compat)
-  splitDirection: 'horizontal' | 'vertical' | null;
-  setSplitDirection: (dir: 'horizontal' | 'vertical' | null) => void;
-
   // SFTP Panel
   sftpPanelOpen: boolean;
   toggleSftpPanel: () => void;
@@ -108,13 +89,6 @@ function popInjectedSessions(): SessionConfig[] {
 
 const _initialSessions = popInjectedSessions();
 
-const randomCloneName = (baseName: string) => {
-  const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `${baseName}-${suffix}`;
-};
-
-const terminalTabExists = (tabs: TabInfo[], tabId: string | null): tabId is string =>
-  !!tabId && tabs.some((t) => t.id === tabId && t.type !== 'asset-list');
 
 export const useAppStore = create<AppStore>((set, _get) => ({
   locale: initialLocale,
@@ -214,15 +188,12 @@ export const useAppStore = create<AppStore>((set, _get) => ({
         }
       }
 
-      // If no more terminal tabs, reset split mode and show asset list
       if (terminalTabs.length === 0) {
         return {
           tabs: newTabs,
           sessions: newSessions,
           activeTabId: 'asset-list',
           mainView: 'asset-list' as MainView,
-          splitCount: 1 as SplitCount,
-          splitPanes: [null],
         };
       }
 
@@ -232,10 +203,7 @@ export const useAppStore = create<AppStore>((set, _get) => ({
           : state.activeTabId;
       const newMainView = newActiveId === 'asset-list' ? 'asset-list' : 'terminal';
 
-      // Also clean up splitPanes: remove references to the closed tab
-      const cleanedPanes = state.splitPanes.map((p) => (p === id ? null : p));
-
-      return { tabs: newTabs, sessions: newSessions, activeTabId: newActiveId, mainView: newMainView as MainView, splitPanes: cleanedPanes };
+      return { tabs: newTabs, sessions: newSessions, activeTabId: newActiveId, mainView: newMainView as MainView };
     }),
   setActiveTab: (id) =>
     set({ activeTabId: id, mainView: id === 'asset-list' ? 'asset-list' : 'terminal' }),
@@ -262,260 +230,6 @@ export const useAppStore = create<AppStore>((set, _get) => ({
 
   showSettings: false,
   setShowSettings: (show) => set({ showSettings: show }),
-
-  splitCount: 1,
-  setSplitCount: (count) => set((state) => {
-    let currentTabs = [...state.tabs];
-    let currentSessions = [...state.sessions];
-    let terminalTabs = currentTabs.filter(t => t.type !== 'asset-list');
-
-    const activeTab = currentTabs.find(t => t.id === state.activeTabId && t.type !== 'asset-list');
-    const isOnAssetList = !activeTab;
-
-    // --- Determine source sessions for split ---
-    // Priority:
-    // 1) If on asset list with selected assets → use those selected assets (each gets a pane)
-    // 2) If in a terminal tab → clone that terminal's session
-    // 3) Fallback to first session
-    let selectedSources: SessionConfig[] = [];
-    if (isOnAssetList && state.selectedSessionIds.length > 0 && count > 1) {
-      // Use selected assets from the asset table (real sessions, not temporary)
-      selectedSources = state.selectedSessionIds
-        .map(id => currentSessions.find(s => s.id === id))
-        .filter((s): s is SessionConfig => !!s && !s._temporary);
-    }
-
-    const sourceSession: SessionConfig | undefined =
-      (activeTab && currentSessions.find(s => s.id === activeTab.sessionId)) ||
-      (terminalTabs[0] && currentSessions.find(s => s.id === terminalTabs[0].sessionId)) ||
-      selectedSources[0] ||
-      currentSessions.find(s => !s._temporary);
-
-    const focusedTabId = state.splitPanes[state.focusedPane] ?? null;
-    const preferredActiveTabId =
-      terminalTabExists(terminalTabs, focusedTabId) ? focusedTabId :
-      terminalTabExists(terminalTabs, state.activeTabId) ? state.activeTabId :
-      terminalTabs[0]?.id ?? null;
-    let preservedPaneIds: string[] | null = null;
-
-    // --- Shrinking: preserve the active terminal, then remove excess temporary tabs/sessions ---
-    if (count < state.splitCount) {
-      const tabsToRemove: string[] = [];
-      const sessionIdsToRemove = new Set<string>();
-
-      if (count <= 1) {
-        // Going back to single: keep the active/focused terminal even if it is a temporary clone.
-        for (const tab of terminalTabs) {
-          if (tab.id === preferredActiveTabId) continue;
-          const sess = currentSessions.find(s => s.id === tab.sessionId);
-          if (sess?._temporary) {
-            tabsToRemove.push(tab.id);
-            sessionIdsToRemove.add(tab.sessionId);
-          }
-        }
-      } else {
-        // Shrinking to fewer panes: keep the leading panes, but make room for
-        // the active/focused terminal if it would otherwise be dropped.
-        const keepPaneIds = state.splitPanes.slice(0, count).filter((id): id is string =>
-          terminalTabExists(terminalTabs, id)
-        );
-        if (
-          preferredActiveTabId &&
-          !keepPaneIds.includes(preferredActiveTabId) &&
-          terminalTabExists(terminalTabs, preferredActiveTabId)
-        ) {
-          if (keepPaneIds.length >= count) {
-            keepPaneIds[count - 1] = preferredActiveTabId;
-          } else {
-            keepPaneIds.push(preferredActiveTabId);
-          }
-        }
-        const keepPaneTabIds = new Set(keepPaneIds);
-        preservedPaneIds = keepPaneIds;
-        for (const tab of terminalTabs) {
-          if (keepPaneTabIds.has(tab.id)) continue;
-          const sess = currentSessions.find(s => s.id === tab.sessionId);
-          if (sess?._temporary) {
-            tabsToRemove.push(tab.id);
-            sessionIdsToRemove.add(tab.sessionId);
-          }
-        }
-      }
-
-      if (tabsToRemove.length > 0) {
-        import('../components/Terminal/TerminalView').then(({ destroyTerminal }) => {
-          tabsToRemove.forEach(id => destroyTerminal(id));
-        });
-      }
-
-      currentTabs = currentTabs.filter(t => !tabsToRemove.includes(t.id));
-      currentSessions = currentSessions.filter(s => !sessionIdsToRemove.has(s.id));
-      terminalTabs = currentTabs.filter(t => t.type !== 'asset-list');
-    }
-
-    // --- Growing: open tabs for selected assets or clone source ---
-    if (count > 1) {
-      if (selectedSources.length > 0) {
-        // Open a tab for each selected asset that doesn't already have one
-        for (const sess of selectedSources) {
-          if (!terminalTabs.some(t => t.sessionId === sess.id)) {
-            const tabId = crypto.randomUUID();
-            const tab: TabInfo = {
-              id: tabId,
-              sessionId: sess.id,
-              title: sess.name,
-              type: sess.session_type as TabInfo['type'],
-              connected: false,
-            };
-            currentTabs = [...currentTabs, tab];
-            terminalTabs = currentTabs.filter(t => t.type !== 'asset-list');
-          }
-        }
-      } else if (sourceSession && !terminalTabs.some(t => t.sessionId === sourceSession.id)) {
-        const tabId = crypto.randomUUID();
-        const tab: TabInfo = {
-          id: tabId,
-          sessionId: sourceSession.id,
-          title: sourceSession.name,
-          type: sourceSession.session_type as TabInfo['type'],
-          connected: false,
-        };
-        currentTabs = [...currentTabs, tab];
-        terminalTabs = currentTabs.filter(t => t.type !== 'asset-list');
-      }
-    }
-
-    // Auto-create temporary clones to fill remaining panes
-    const needed = count > 1 ? count - terminalTabs.length : 0;
-    for (let i = 0; i < needed; i++) {
-      const sessionId = crypto.randomUUID();
-      const tabId = crypto.randomUUID();
-      // Pick a source for the clone: cycle through selected sources, or use single source
-      const cloneFrom = selectedSources.length > 0
-        ? selectedSources[(terminalTabs.length + i) % selectedSources.length]
-        : sourceSession;
-
-      if (cloneFrom) {
-        const cloneName = randomCloneName(cloneFrom.name);
-        const cloned: SessionConfig = {
-          ...cloneFrom,
-          id: sessionId,
-          name: cloneName,
-          created_at: new Date().toISOString().slice(0, 10),
-          _temporary: true,
-        };
-        const tab: TabInfo = {
-          id: tabId,
-          sessionId,
-          title: cloneName,
-          type: cloned.session_type as TabInfo['type'],
-          connected: false,
-        };
-        currentSessions = [...currentSessions, cloned];
-        currentTabs = [...currentTabs, tab];
-        terminalTabs.push(tab);
-      } else {
-        const name = randomCloneName('Terminal');
-        const session: SessionConfig = {
-          id: sessionId,
-          name,
-          session_type: 'localshell',
-          auth_method: 'password',
-          created_at: new Date().toISOString().slice(0, 10),
-          _temporary: true,
-        };
-        const tab: TabInfo = {
-          id: tabId,
-          sessionId,
-          title: name,
-          type: 'localshell',
-          connected: false,
-        };
-        currentSessions = [...currentSessions, session];
-        currentTabs = [...currentTabs, tab];
-        terminalTabs.push(tab);
-      }
-    }
-
-    const panes: (string | null)[] = [];
-    const used = new Set<string>();
-    for (let i = 0; i < count; i++) {
-      const existing = preservedPaneIds?.[i] ?? state.splitPanes[i];
-      if (existing && !used.has(existing) && terminalTabs.some(t => t.id === existing)) {
-        panes.push(existing);
-        used.add(existing);
-      } else {
-        const available = terminalTabs.find(t => !used.has(t.id));
-        if (available) {
-          panes.push(available.id);
-          used.add(available.id);
-        } else {
-          panes.push(null);
-        }
-      }
-    }
-
-    const firstPane = panes.find(p => p !== null);
-    const realTerminalTabs = currentTabs.filter(t => t.type !== 'asset-list');
-    const result: Partial<AppStore> = {
-      splitCount: count,
-      splitPanes: panes,
-      tabs: currentTabs,
-      sessions: currentSessions,
-    };
-    if (count > 1) {
-      result.mainView = 'terminal';
-      if (preferredActiveTabId && panes.includes(preferredActiveTabId)) {
-        result.activeTabId = preferredActiveTabId;
-        result.focusedPane = panes.indexOf(preferredActiveTabId);
-      } else if (firstPane) {
-        result.activeTabId = firstPane;
-        result.focusedPane = panes.indexOf(firstPane);
-      }
-    } else if (count === 1) {
-      // Single pane: keep the active/focused terminal if it still exists.
-      const singleActiveTabId =
-        preferredActiveTabId && realTerminalTabs.some(t => t.id === preferredActiveTabId)
-          ? preferredActiveTabId
-          : realTerminalTabs[0]?.id;
-      if (singleActiveTabId) {
-        result.activeTabId = singleActiveTabId;
-        result.mainView = 'terminal';
-        result.splitPanes = [singleActiveTabId];
-        result.focusedPane = 0;
-      } else {
-        result.activeTabId = 'asset-list';
-        result.mainView = 'asset-list';
-        result.splitPanes = [null];
-        result.focusedPane = 0;
-      }
-    }
-    return result;
-  }),
-  splitPanes: [null],
-  setSplitPanes: (panes) => set({ splitPanes: panes }),
-  assignPane: (slotIndex, tabId) => set((state) => {
-    const panes = [...state.splitPanes];
-    if (slotIndex >= 0 && slotIndex < panes.length) {
-      // Remove the tab from any other pane first to prevent the same
-      // terminal appearing in multiple panes (which causes duplicate
-      // event listeners and double keystrokes).
-      if (tabId) {
-        for (let i = 0; i < panes.length; i++) {
-          if (i !== slotIndex && panes[i] === tabId) {
-            panes[i] = null;
-          }
-        }
-      }
-      panes[slotIndex] = tabId;
-    }
-    return { splitPanes: panes };
-  }),
-  focusedPane: 0,
-  setFocusedPane: (index) => set({ focusedPane: index }),
-
-  splitDirection: null,
-  setSplitDirection: (dir) => set({ splitDirection: dir }),
 
   sftpPanelOpen: true,
   toggleSftpPanel: () => set((state) => ({ sftpPanelOpen: !state.sftpPanelOpen })),
