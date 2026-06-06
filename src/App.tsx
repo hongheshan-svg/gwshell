@@ -9,6 +9,7 @@ import { useSnippetStore } from './stores/snippetStore';
 import { TabBar } from './components/TabBar/TabBar';
 import { AssetTable } from './components/AssetTable/AssetTable';
 import { StatusBar } from './components/StatusBar/StatusBar';
+import { UnlockScreen } from './components/UnlockScreen';
 
 // Heavy / interaction-only chunks: deferred until the user actually needs them.
 // On startup we only render the shell + asset list — every other resource (xterm,
@@ -44,6 +45,7 @@ function App() {
     showNewSession, showQuickConnect, showDockerModal, showLocalTerminalModal, showSerialModal, showSettings, showAppMenu,
     showCommandPalette,
     groupDefaultsTarget,
+    vaultLocked, setVaultLocked,
     mainView, activeNavItem } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
   const settingsLoaded = useSettingsStore((s) => s.loaded);
@@ -101,6 +103,14 @@ function App() {
 
     return () => clearTimeout(timer);
   }, []);
+
+  // Vault gate: if the master-passphrase lock is enabled, cover the app with the
+  // unlock overlay until the user authenticates. Runs once on boot.
+  useEffect(() => {
+    invoke<boolean>('vault_is_enabled')
+      .then((enabled) => { if (enabled) setVaultLocked(true); })
+      .catch(() => {});
+  }, [setVaultLocked]);
 
   // Sessions are pre-loaded via Tauri's initialization_script (window.__GWSHELL_SESSIONS__).
   // Fall back to IPC only when the injection wasn't available (edge cases / dev hot-reload).
@@ -171,6 +181,7 @@ function App() {
 
   return (
     <I18nextProvider i18n={i18n}>
+      {vaultLocked && <UnlockScreen />}
       <div className="app-root">
         <TitleBar />
         <div className="app-layout">
