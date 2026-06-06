@@ -3444,3 +3444,47 @@ input, select, textarea, button {
 }
 .paste-confirm-btn:hover { background: var(--hover-bg, #2a2a33); }
 .paste-confirm-btn.primary { background: var(--accent, #3b78ff); border-color: var(--accent, #3b78ff); color: #fff; }
+
+.quick-connect-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 18vh;
+  background: rgba(0, 0, 0, 0.4);
+}
+.quick-connect-card {
+  width: min(440px, 90%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--bg-secondary, #1b1b24);
+  border: 1px solid var(--border-color, #33333f);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+}
+.quick-connect-title { font-weight: 600; font-size: 15px; }
+.quick-connect-input {
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color, #33333f);
+  background: var(--bg-primary, #0c0c14);
+  color: inherit;
+  font-size: 13px;
+}
+.quick-connect-error { color: #e06c75; font-size: 12px; }
+.quick-connect-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.quick-connect-btn {
+  padding: 6px 14px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color, #33333f);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 13px;
+}
+.quick-connect-btn:hover { background: var(--hover-bg, #2a2a33); }
+.quick-connect-btn.primary { background: var(--accent, #3b78ff); border-color: var(--accent, #3b78ff); color: #fff; }
