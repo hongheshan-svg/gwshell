@@ -15,7 +15,7 @@ pub use known_hosts::trust_host;
 pub use params::ConnectParams;
 pub use sftp::SftpEntry;
 
-use crate::ssh::handler::Client;
+use crate::ssh::handler::{Client, ForwardTargets};
 use russh::client::Handle;
 use session::ShellCmd;
 use std::collections::HashMap;
@@ -30,6 +30,9 @@ use tokio::sync::{mpsc, Mutex, Notify};
 struct SessionHandle {
     shell: mpsc::Sender<ShellCmd>,
     conn: Arc<Handle<Client>>,
+    /// Shared with this session's `Client` handler: remote-forward targets keyed
+    /// by the server-side listen port. `start_remote_forward` registers here.
+    forwarded: ForwardTargets,
 }
 
 #[derive(Default)]
@@ -37,6 +40,8 @@ pub struct SshManager {
     sessions: Mutex<HashMap<String, SessionHandle>>,
     /// Active local port-forward stop signals, keyed by session id.
     forwards: Mutex<HashMap<String, Arc<Notify>>>,
+    /// Active dynamic SOCKS5 proxy stop signals, keyed by session id.
+    socks: Mutex<HashMap<String, Arc<Notify>>>,
 }
 
 impl SshManager {
@@ -53,11 +58,16 @@ impl SshManager {
         cols: u32,
         app: AppHandle,
     ) -> Result<(), String> {
-        let (shell, conn) = session::spawn(session_id.to_string(), params, cols, rows, app).await?;
-        self.sessions
-            .lock()
-            .await
-            .insert(session_id.to_string(), SessionHandle { shell, conn });
+        let (shell, conn, forwarded) =
+            session::spawn(session_id.to_string(), params, cols, rows, app).await?;
+        self.sessions.lock().await.insert(
+            session_id.to_string(),
+            SessionHandle {
+                shell,
+                conn,
+                forwarded,
+            },
+        );
         Ok(())
     }
 
@@ -95,19 +105,21 @@ impl SshManager {
 
     pub async fn close_ssh(&self, session_id: &str) {
         self.close_local_forward(session_id).await;
+        self.close_socks_forward(session_id).await;
         if let Some(s) = self.sessions.lock().await.remove(session_id) {
             let _ = s.shell.send(ShellCmd::Close).await;
         }
     }
 
     pub async fn close_all(&self) {
-        let stops: Vec<_> = self
+        let mut stops: Vec<_> = self
             .forwards
             .lock()
             .await
             .drain()
             .map(|(_, v)| v)
             .collect();
+        stops.extend(self.socks.lock().await.drain().map(|(_, v)| v));
         for stop in stops {
             stop.notify_waiters();
         }
@@ -177,6 +189,82 @@ impl SshManager {
         if let Some(stop) = self.forwards.lock().await.remove(session_id) {
             stop.notify_waiters();
         }
+    }
+
+    // --- Dynamic SOCKS5 forwarding ---
+
+    pub async fn start_socks_forward(
+        &self,
+        session_id: &str,
+        local_port: u16,
+    ) -> Result<u16, String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone())
+            .ok_or("Session not found")?;
+        self.close_socks_forward(session_id).await;
+        let stop = Arc::new(Notify::new());
+        let port = forward::start_socks(conn, local_port, stop.clone()).await?;
+        self.socks.lock().await.insert(session_id.to_string(), stop);
+        Ok(port)
+    }
+
+    pub async fn close_socks_forward(&self, session_id: &str) {
+        if let Some(stop) = self.socks.lock().await.remove(session_id) {
+            stop.notify_waiters();
+        }
+    }
+
+    // --- Remote port forwarding (tcpip_forward) ---
+
+    /// Ask the server to listen on `remote_port` (0 = server-chosen) and bridge
+    /// each inbound connection back to local `local_host:local_port`. The bridge
+    /// itself runs in the session's `Client` handler
+    /// (`server_channel_open_forwarded_tcpip`); here we register the target and
+    /// issue the global `tcpip_forward` request. Returns the actual listen port.
+    ///
+    /// Note: in the existing IPC contract `remote_host`/`remote_port` name the
+    /// local target to forward back to, while `local_port` is the server listen
+    /// port — start_tunnel passes them straight through, so the call site reads
+    /// (session_id, local_port = server listen port, remote_host/remote_port =
+    /// local target).
+    pub async fn start_remote_forward(
+        &self,
+        session_id: &str,
+        remote_port: u16,
+        local_host: &str,
+        local_port: u16,
+    ) -> Result<u16, String> {
+        let (conn, forwarded) = {
+            let sessions = self.sessions.lock().await;
+            let s = sessions.get(session_id).ok_or("Session not found")?;
+            (s.conn.clone(), s.forwarded.clone())
+        };
+
+        // Request the server-side listener. Bind to all interfaces ("").
+        let bound = conn
+            .tcpip_forward("", remote_port as u32)
+            .await
+            .map_err(|e| format!("Remote forward request failed: {}", e))?;
+        // russh returns the chosen port when remote_port == 0, else 0.
+        let actual = if remote_port == 0 {
+            bound as u16
+        } else {
+            remote_port
+        };
+
+        // Register the local target so the handler can bridge inbound channels.
+        // Key under the actual listen port; also under 0 as a wildcard fallback
+        // so the forwarded-tcpip callback can always find the target even when
+        // the server reports a different connected port.
+        let target = (local_host.to_string(), local_port);
+        let mut map = forwarded.lock().unwrap();
+        map.insert(actual as u32, target.clone());
+        map.insert(0, target);
+        Ok(actual)
     }
 
     // --- SFTP ---

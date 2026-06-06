@@ -30,7 +30,7 @@ export interface SessionConfig {
   proxy_password?: string;
   // Tunnel (local/remote port forwarding)
   tunnel_enabled?: boolean;
-  tunnel_type?: 'local' | 'remote';
+  tunnel_type?: 'local' | 'remote' | 'dynamic';
   tunnel_local_port?: number;
   tunnel_remote_host?: string;
   tunnel_remote_port?: number;

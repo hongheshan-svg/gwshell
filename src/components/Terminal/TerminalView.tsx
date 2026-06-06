@@ -1366,7 +1366,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
               }, 300);
             }
 
-            if (session.tunnel_enabled && session.tunnel_local_port && session.tunnel_remote_host && session.tunnel_remote_port) {
+            // Dynamic (SOCKS) only needs a local port; local/remote need the full triple.
+            const tunnelReady = session.tunnel_enabled && (
+              session.tunnel_type === 'dynamic'
+                ? !!session.tunnel_local_port
+                : !!(session.tunnel_local_port && session.tunnel_remote_host && session.tunnel_remote_port)
+            );
+            if (tunnelReady) {
               try {
                 const actualPort = await invoke<number>("start_tunnel", {
                   sessionId: tab.sessionId,
@@ -1386,12 +1392,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
                   proxyPort: session.proxy_port ?? 1080,
                   proxyUsername: session.proxy_username ?? null,
                   proxyPassword: session.proxy_password ?? null,
-                  localPort: session.tunnel_local_port,
-                  remoteHost: session.tunnel_remote_host,
-                  remotePort: session.tunnel_remote_port,
+                  localPort: session.tunnel_local_port ?? 0,
+                  // Backend expects non-null host/port; dynamic (SOCKS) ignores them.
+                  remoteHost: session.tunnel_remote_host ?? "",
+                  remotePort: session.tunnel_remote_port ?? 0,
+                  tunnelType: session.tunnel_type ?? 'local',
                 });
                 instance?.terminal.write(
-                  `\r\n\x1b[90m${t('term_tunnel_ok', { localPort: actualPort, remoteHost: session.tunnel_remote_host!, remotePort: session.tunnel_remote_port! })}\x1b[0m\r\n`
+                  session.tunnel_type === 'dynamic'
+                    ? `\r\n\x1b[90m${t('term_tunnel_socks_ok', { localPort: actualPort })}\x1b[0m\r\n`
+                    : session.tunnel_type === 'remote'
+                    ? `\r\n\x1b[90m${t('term_tunnel_remote_ok', { port: actualPort, host: session.tunnel_remote_host!, localPort: session.tunnel_remote_port! })}\x1b[0m\r\n`
+                    : `\r\n\x1b[90m${t('term_tunnel_ok', { localPort: actualPort, remoteHost: session.tunnel_remote_host!, remotePort: session.tunnel_remote_port! })}\x1b[0m\r\n`
                 );
               } catch (tunnelErr) {
                 instance?.terminal.write(`\r\n\x1b[33m${t('term_tunnel_fail', { error: String(tunnelErr) })}\x1b[0m\r\n`);
