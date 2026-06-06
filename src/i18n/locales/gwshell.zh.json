@@ -521,5 +521,17 @@
   "serverPanel_nic_title": "网卡信息",
   "serverPanel_nic_name": "名称",
   "serverPanel_nic_ipv4": "IPv4",
-  "serverPanel_nic_mac": "MAC"
+  "serverPanel_nic_mac": "MAC",
+  "settings_paste_warn_multiline": "粘贴多行前确认",
+  "settings_terminal_color_scheme": "终端配色方案",
+  "paste_confirm_title": "粘贴多行内容?",
+  "paste_confirm_lines": "将向终端粘贴 {{count}} 行。",
+  "paste_confirm_paste": "粘贴",
+  "paste_confirm_cancel": "取消",
+  "quickconnect_title": "快速连接",
+  "quickconnect_placeholder": "user@host:port",
+  "quickconnect_password": "密码(可选)",
+  "quickconnect_connect": "连接",
+  "quickconnect_cancel": "取消",
+  "quickconnect_invalid": "请输入形如 user@host:port 的目标"
 }

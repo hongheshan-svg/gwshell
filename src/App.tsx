@@ -24,6 +24,7 @@ import * as commandHistory from './lib/commandHistory';
 import './styles/global.css';
 
 const NewSessionModal = lazy(() => import('./components/Modals/NewSessionModal').then((m) => ({ default: m.NewSessionModal })));
+const QuickConnectModal = lazy(() => import('./components/Modals/QuickConnectModal').then((m) => ({ default: m.QuickConnectModal })));
 const DockerModal = lazy(() => import('./components/Modals/DockerModal').then((m) => ({ default: m.DockerModal })));
 const LocalTerminalModal = lazy(() => import('./components/Modals/LocalTerminalModal').then((m) => ({ default: m.LocalTerminalModal })));
 const SerialPortModal = lazy(() => import('./components/Modals/SerialPortModal').then((m) => ({ default: m.SerialPortModal })));
@@ -36,7 +37,7 @@ const ServerPanel = lazy(() => import('./components/ServerPanel').then((m) => ({
 function App() {
   useSettingsEffects();
   const { theme, setSessions, tabs, activeTabId, sftpPanelOpen, sessions,
-    showNewSession, showDockerModal, showLocalTerminalModal, showSerialModal, showSettings, showAppMenu,
+    showNewSession, showQuickConnect, showDockerModal, showLocalTerminalModal, showSerialModal, showSettings, showAppMenu,
     mainView, activeNavItem } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
   const settingsLoaded = useSettingsStore((s) => s.loaded);
@@ -143,6 +144,7 @@ function App() {
         </div>
         <Suspense fallback={null}>
           {showNewSession && <NewSessionModal />}
+          {showQuickConnect && <QuickConnectModal />}
           {showDockerModal && <DockerModal />}
           {showLocalTerminalModal && <LocalTerminalModal />}
           {showSerialModal && <SerialPortModal />}

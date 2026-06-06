@@ -39,6 +39,8 @@ export interface AppSettings {
   sshHistoryCmd: boolean;
   sshHistoryCmdStorage: string;
   sshHistoryCmdLoadCount: string;
+  pasteWarnMultiline: boolean;
+  terminalColorScheme: string;
   cmdHintAllSessions: boolean;
   cmdHintShellIntegration: boolean;
   cmdHintDeferToRemote: boolean;
@@ -110,6 +112,8 @@ export const defaultSettings: AppSettings = {
   sshHistoryCmd: true,
   sshHistoryCmdStorage: 'local',
   sshHistoryCmdLoadCount: '100',
+  pasteWarnMultiline: true,
+  terminalColorScheme: 'auto',
   cmdHintAllSessions: true,
   cmdHintShellIntegration: false,
   cmdHintDeferToRemote: false,

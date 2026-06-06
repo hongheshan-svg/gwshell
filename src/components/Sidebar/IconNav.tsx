@@ -42,7 +42,7 @@ export const Sidebar: React.FC = () => {
     setActiveNavItem,
     showAppMenu,
     setShowAppMenu,
-    setShowNewSession,
+    setShowQuickConnect,
     setShowDockerModal,
     setShowLocalTerminalModal,
     setShowSettings,
@@ -57,7 +57,7 @@ export const Sidebar: React.FC = () => {
     setActiveNavItem(id);
     switch (id) {
       case 'quickconnect':
-        setShowNewSession(true);
+        setShowQuickConnect(true);
         break;
       case 'sessions':
         toggleSidebar();
