@@ -20,7 +20,7 @@ import { useAppStore } from '../../stores/appStore';
 const appWindow = getCurrentWindow();
 
 export const AppMenu: React.FC = () => {
-  const { showAppMenu, setShowAppMenu, setShowSettings, locale, setLocale } = useAppStore();
+  const { showAppMenu, setShowAppMenu, setShowSettings, setShowCommandPalette, locale, setLocale } = useAppStore();
   const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -82,7 +82,7 @@ export const AppMenu: React.FC = () => {
           <Settings size={14} />
           <span>{t('menu_settings')}</span>
         </div>
-        <div className="app-menu-item">
+        <div className="app-menu-item" onClick={() => { setShowAppMenu(false); setShowCommandPalette(true); }}>
           <Search size={14} />
           <span>{t('menu_quick_search')}</span>
           <span className="app-menu-shortcut">Ctrl+Shift+F</span>

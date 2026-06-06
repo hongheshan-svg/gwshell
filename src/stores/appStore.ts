@@ -44,11 +44,17 @@ interface AppStore {
   setActiveTab: (id: string) => void;
   updateTabConnected: (id: string, connected: boolean) => void;
 
+  // Broadcast
+  broadcastInput: boolean;
+  toggleBroadcastInput: () => void;
+
   // Modals
   showNewSession: boolean;
   setShowNewSession: (show: boolean) => void;
   showQuickConnect: boolean;
   setShowQuickConnect: (show: boolean) => void;
+  showCommandPalette: boolean;
+  setShowCommandPalette: (show: boolean) => void;
   editingSession: SessionConfig | null;
   setEditingSession: (session: SessionConfig | null) => void;
   showDockerModal: boolean;
@@ -219,10 +225,15 @@ export const useAppStore = create<AppStore>((set, _get) => ({
       ),
     })),
 
+  broadcastInput: false,
+  toggleBroadcastInput: () => set((s) => ({ broadcastInput: !s.broadcastInput })),
+
   showNewSession: false,
   setShowNewSession: (show) => set({ showNewSession: show }),
   showQuickConnect: false,
   setShowQuickConnect: (show) => set({ showQuickConnect: show }),
+  showCommandPalette: false,
+  setShowCommandPalette: (show) => set({ showCommandPalette: show }),
   editingSession: null,
   setEditingSession: (session) => set({ editingSession: session }),
   showDockerModal: false,

@@ -14,6 +14,7 @@ import { useSettingsStore } from "../../stores/settingsStore";
 import { terminalInstances } from "./terminalRegistry";
 import * as commandHistory from '../../lib/commandHistory';
 import { resolveTerminalTheme } from '../../lib/terminalThemes';
+import { runLoginScript } from '../../lib/sendScript';
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalViewProps {
@@ -306,6 +307,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
   const terminalCmdHint = useSettingsStore((s) => s.settings.terminalCmdHint);
   const terminalFont = useSettingsStore((s) => s.settings.terminalFont);
   const terminalFontSize = useSettingsStore((s) => s.settings.terminalFontSize);
+  const broadcastInput = useAppStore((s) => s.broadcastInput);
   const { t } = useTranslation();
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
@@ -1052,6 +1054,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
           }
         }
 
+        // Input broadcast: fan this keystroke to all OTHER connected interactive
+        // terminals. The focused tab still writes to itself below. No echo loop:
+        // sendInputToTab feeds writeQueue/IPC, it does not trigger onData.
+        {
+          const app = useAppStore.getState();
+          if (app.broadcastInput) {
+            for (const tb of app.tabs) {
+              if (
+                tb.id !== tab.id && tb.connected &&
+                (tb.type === 'ssh' || tb.type === 'localshell' || tb.type === 'serial' || tb.type === 'docker')
+              ) {
+                sendInputToTab(tb.id, data);
+              }
+            }
+          }
+        }
+
         writeQueue += data;
         if (writeQueue.length >= WRITE_CHUNK_SIZE) {
           if (writeTimer) {
@@ -1308,7 +1327,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
           if (session?.init_command) {
             const cmd = session.init_command;
             setTimeout(() => {
-              invoke("write_to_pty", { sessionId: tab.sessionId, data: cmd + "\n" }).catch(() => {});
+              runLoginScript((d) => { invoke("write_to_pty", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
             }, 300);
           }
         } else if (tab.type === "ssh") {
@@ -1337,6 +1356,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
             );
             await doSshConnect(session);
             connectionReady = true;
+            if (session.init_command) {
+              const cmd = session.init_command;
+              setTimeout(() => {
+                runLoginScript((d) => { invoke("write_to_ssh", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
+              }, 300);
+            }
 
             if (session.tunnel_enabled && session.tunnel_local_port && session.tunnel_remote_host && session.tunnel_remote_port) {
               try {
@@ -1386,6 +1411,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
               parity: session.serial_parity || "None",
             });
             connectionReady = true;
+            if (session.serial_init_commands) {
+              const cmd = session.serial_init_commands;
+              setTimeout(() => {
+                runLoginScript((d) => { invoke("write_to_serial", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
+              }, 300);
+            }
           }
         }
         } // end if (!alreadyConnected)
@@ -1534,7 +1565,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
     <>
       <div
         ref={containerRef}
-        className="terminal-pane"
+        className={`terminal-pane${broadcastInput ? ' broadcasting' : ''}`}
         style={{ display: isActive ? "block" : "none" }}
       />
 
