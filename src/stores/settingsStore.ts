@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import * as commandHistory from '../lib/commandHistory';
+import { parseBinding } from '../keymap/match';
+import { KEY_ACTIONS } from '../keymap/actions';
+const ACTION_IDS = new Set(KEY_ACTIONS.map((a) => a.id));
 
 const LEGACY_TERMINAL_FONT = 'JetBrainsMono, NotoSansSC';
 const CMD_TERMINAL_FONT = 'Consolas, "Cascadia Mono", "Courier New", monospace';
@@ -76,6 +79,7 @@ export interface AppSettings {
   redisGroupSeparator: string;
   storageAutoSync: boolean;
   storageSource: string;
+  keymapOverrides: Record<string, string | null>;
 }
 
 export const defaultSettings: AppSettings = {
@@ -149,6 +153,7 @@ export const defaultSettings: AppSettings = {
   redisGroupSeparator: ':',
   storageAutoSync: true,
   storageSource: 'off',
+  keymapOverrides: {},
 };
 
 interface SettingsStore {
@@ -176,6 +181,17 @@ function normalizeSettings(saved: Partial<AppSettings>): AppSettings {
     settings.rightClickAction = 'paste';
   } else if (settings.rightClickAction === 'Show Menu' || settings.rightClickAction === '\u663e\u793a\u83dc\u5355') {
     settings.rightClickAction = 'menu';
+  }
+  if (settings.keymapOverrides && typeof settings.keymapOverrides === 'object') {
+    const valid: Record<string, string | null> = {};
+    for (const [id, binding] of Object.entries(settings.keymapOverrides)) {
+      if (!ACTION_IDS.has(id)) continue;
+      if (binding === null) { valid[id] = null; continue; }
+      if (typeof binding === 'string' && parseBinding(binding)) valid[id] = binding;
+    }
+    settings.keymapOverrides = valid;
+  } else {
+    settings.keymapOverrides = {};
   }
   return settings;
 }

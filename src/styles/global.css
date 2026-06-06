@@ -3554,3 +3554,15 @@ input, select, textarea, button {
 .command-palette-item-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .command-palette-item-sub { font-size: 12px; color: var(--text-muted, #999); white-space: nowrap; }
 .command-palette-item.active .command-palette-item-sub { color: rgba(255, 255, 255, 0.8); }
+
+.shortcut-editor { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.shortcut-editor-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.shortcut-row-label { font-size: 13px; }
+.shortcut-row-keys { display: flex; align-items: center; gap: 6px; }
+.shortcut-chip { background: var(--input-bg, #111); border: 1px solid var(--border-color, #333); border-radius: 4px; padding: 4px 8px; cursor: pointer; color: inherit; display: inline-flex; gap: 4px; }
+.shortcut-chip kbd { background: var(--bg-secondary, #222); border-radius: 3px; padding: 0 4px; font-size: 11px; }
+.shortcut-unbound { color: var(--text-muted, #888); }
+.shortcut-capture { width: 120px; background: var(--accent, #3b78ff); color: #fff; border: none; border-radius: 4px; padding: 4px 8px; text-align: center; }
+.shortcut-mini { background: none; border: none; color: var(--text-muted, #aaa); cursor: pointer; }
+.shortcut-mini:hover { color: inherit; }
+.shortcut-error { color: #e06c75; font-size: 12px; }

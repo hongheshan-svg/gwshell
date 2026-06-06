@@ -536,5 +536,16 @@
   "quickconnect_cancel": "取消",
   "quickconnect_invalid": "请输入形如 user@host:port 的目标",
   "palette_placeholder": "搜索会话和标签…",
-  "palette_no_results": "无匹配"
+  "palette_no_results": "无匹配",
+  "action_broadcast_toggle": "切换输入广播",
+  "action_palette_open": "打开命令面板",
+  "action_tab_next": "下一个标签",
+  "action_tab_prev": "上一个标签",
+  "action_tab_close": "关闭标签",
+  "action_settings_open": "打开设置",
+  "shortcut_press_key": "按下按键…",
+  "shortcut_conflict": "已绑定到其它动作",
+  "shortcut_reset": "恢复默认",
+  "shortcut_unbind": "解绑",
+  "settings_shortcut_editable": "可自定义快捷键"
 }

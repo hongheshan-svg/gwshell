@@ -18,6 +18,7 @@ const SftpPanel = lazy(() => import('./components/SftpPanel/SftpPanel').then(m =
 import { useAppStore } from './stores/appStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { useSettingsEffects } from './hooks/useSettingsEffects';
+import { createKeymapHandler } from './keymap/dispatch';
 import i18n from './i18n';
 import type { SessionConfig } from './types';
 import * as commandHistory from './lib/commandHistory';
@@ -42,8 +43,6 @@ function App() {
     showNewSession, showQuickConnect, showDockerModal, showLocalTerminalModal, showSerialModal, showSettings, showAppMenu,
     showCommandPalette,
     mainView, activeNavItem } = useAppStore();
-  const toggleBroadcastInput = useAppStore((s) => s.toggleBroadcastInput);
-  const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
   const loadSettings = useSettingsStore((s) => s.load);
   const settingsLoaded = useSettingsStore((s) => s.loaded);
   const sessionTabMemory = useSettingsStore((s) => s.settings.sessionTabMemory);
@@ -161,16 +160,12 @@ function App() {
     void loadSnippets();
   }, [loadSnippets]);
 
+  const keymapOverrides = useSettingsStore((s) => s.settings.keymapOverrides);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || !e.shiftKey) return;
-      const k = e.key.toLowerCase();
-      if (k === 'b') { e.preventDefault(); toggleBroadcastInput(); }
-      else if (k === 'f') { e.preventDefault(); setShowCommandPalette(true); }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [toggleBroadcastInput, setShowCommandPalette]);
+    const handler = createKeymapHandler(() => useSettingsStore.getState().settings.keymapOverrides);
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [keymapOverrides]);
 
   return (
     <I18nextProvider i18n={i18n}>

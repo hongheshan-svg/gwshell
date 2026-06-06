@@ -6,6 +6,7 @@ import { useSettingsStore, defaultSettings as persistedDefaultSettings } from '.
 import i18n from '../../i18n';
 import type { TranslationKeys } from '../../i18n';
 import { TERMINAL_SCHEME_OPTIONS } from '../../lib/terminalThemes';
+import { ShortcutEditor } from './ShortcutEditor';
 
 /* ---- Nav categories ---- */
 const navCategories: { title?: TranslationKeys; items: { id: string; labelKey: TranslationKeys }[] }[] = [
@@ -105,6 +106,7 @@ export interface AppSettings {
   // Storage
   storageAutoSync: boolean;
   storageSource: string;
+  keymapOverrides: Record<string, string | null>;
 }
 
 const _t = (key: TranslationKeys) => i18n.t(key);
@@ -181,6 +183,7 @@ const defaultSettings: AppSettings = {
   redisGroupSeparator: ':',
   storageAutoSync: true,
   storageSource: _t('settings_storage_source_off'),
+  keymapOverrides: {},
 };
 void defaultSettings;
 
@@ -531,6 +534,8 @@ export const SettingsModal: React.FC = () => {
             {/* ===== 快捷键-基础 ===== */}
             {activeNav === 'shortcut-basic' && (
               <>
+                <SectionTitle>{t('settings_shortcut_editable')}</SectionTitle>
+                <ShortcutEditor value={settings.keymapOverrides} onChange={(ko) => u('keymapOverrides', ko)} />
                 <SectionTitle>{t('settings_section_basic')}</SectionTitle>
                 <ShortcutTable left={shortcutsBasicLeft} right={shortcutsBasicRight} t={t} />
                 <SectionTitle>{t('settings_sc_other')}</SectionTitle>
