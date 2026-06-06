@@ -79,6 +79,10 @@ interface AppStore {
   // Server Panel (right-side live metrics drawer — SSH only)
   serverPanelOpen: boolean;
   toggleServerPanel: () => void;
+
+  // Group defaults modal
+  groupDefaultsTarget: string | null;
+  setGroupDefaultsTarget: (group: string | null) => void;
 }
 
 const initialLocale = detectLocale();
@@ -254,6 +258,9 @@ export const useAppStore = create<AppStore>((set, _get) => ({
 
   serverPanelOpen: false,
   toggleServerPanel: () => set((state) => ({ serverPanelOpen: !state.serverPanelOpen })),
+
+  groupDefaultsTarget: null,
+  setGroupDefaultsTarget: (group) => set({ groupDefaultsTarget: group }),
 }));
 
 // Keep store in sync if i18next.changeLanguage is called from outside the store.

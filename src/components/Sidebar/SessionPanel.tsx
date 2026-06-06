@@ -22,7 +22,7 @@ import { NewAssetMenu } from './NewAssetMenu';
 import type { SessionConfig } from '../../types';
 
 export const SessionPanel: React.FC = () => {
-  const { sessions, sidebarCollapsed, setShowNewSession, setShowDockerModal, setShowLocalTerminalModal, setShowSerialModal, setEditingSession, addSession, removeSession, tabs, addTab, setActiveTab } = useAppStore();
+  const { sessions, sidebarCollapsed, setShowNewSession, setShowDockerModal, setShowLocalTerminalModal, setShowSerialModal, setEditingSession, addSession, removeSession, tabs, addTab, setActiveTab, setGroupDefaultsTarget } = useAppStore();
   const { t } = useTranslation();
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -196,6 +196,13 @@ export const SessionPanel: React.FC = () => {
                   {expandedGroups[groupName] !== false ? <FolderOpen size={14} /> : <Folder size={14} />}
                 </span>
                 <span>{groupName}</span>
+                <button
+                  className="session-group-defaults-btn"
+                  onClick={(e) => { e.stopPropagation(); setGroupDefaultsTarget(groupName); }}
+                  title={t('group_defaults_title')}
+                >
+                  <Settings size={12} />
+                </button>
                 <span className="session-group-count">
                   {groupSessions.length}
                 </span>

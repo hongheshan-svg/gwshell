@@ -36,12 +36,14 @@ const UpdateChecker = lazy(() => import('./components/UpdateChecker/UpdateChecke
 const SecurityNotice = lazy(() => import('./components/SecurityNotice/SecurityNotice').then((m) => ({ default: m.SecurityNotice })));
 const ServerPanel = lazy(() => import('./components/ServerPanel').then((m) => ({ default: m.ServerPanel })));
 const CommandPalette = lazy(() => import('./components/CommandPalette/CommandPalette').then((m) => ({ default: m.CommandPalette })));
+const GroupDefaultsModal = lazy(() => import('./components/Modals/GroupDefaultsModal').then((m) => ({ default: m.GroupDefaultsModal })));
 
 function App() {
   useSettingsEffects();
   const { theme, setSessions, tabs, activeTabId, sftpPanelOpen, sessions,
     showNewSession, showQuickConnect, showDockerModal, showLocalTerminalModal, showSerialModal, showSettings, showAppMenu,
     showCommandPalette,
+    groupDefaultsTarget,
     mainView, activeNavItem } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
   const settingsLoaded = useSettingsStore((s) => s.loaded);
@@ -208,6 +210,7 @@ function App() {
           {showSettings && <SettingsModal />}
           {showAppMenu && <AppMenu />}
           {showCommandPalette && <CommandPalette />}
+          {groupDefaultsTarget !== null && <GroupDefaultsModal />}
           <UpdateChecker />
           <SecurityNotice />
           <ServerPanel />

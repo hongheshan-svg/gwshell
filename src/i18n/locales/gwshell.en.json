@@ -547,5 +547,10 @@
   "shortcut_conflict": "Already bound to another action",
   "shortcut_reset": "Reset",
   "shortcut_unbind": "Unbind",
-  "settings_shortcut_editable": "Customizable shortcuts"
+  "settings_shortcut_editable": "Customizable shortcuts",
+  "group_defaults_title": "Group defaults",
+  "group_defaults_hint": "Unset session fields inherit these",
+  "group_defaults_save": "Save",
+  "group_defaults_cancel": "Cancel",
+  "group_defaults_username": "Username"
 }
