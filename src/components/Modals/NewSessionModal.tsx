@@ -448,10 +448,11 @@ export const NewSessionModal: React.FC = () => {
                     <label>{t('ssh_tunnel_type')}</label>
                     <select
                       value={form.tunnel_type || 'local'}
-                      onChange={(e) => setForm({ ...form, tunnel_type: e.target.value as 'local' | 'remote' })}
+                      onChange={(e) => setForm({ ...form, tunnel_type: e.target.value as 'local' | 'remote' | 'dynamic' })}
                     >
                       <option value="local">{t('ssh_tunnel_local')}</option>
                       <option value="remote">{t('ssh_tunnel_remote')}</option>
+                      <option value="dynamic">{t('ssh_tunnel_dynamic')}</option>
                     </select>
                   </div>
 

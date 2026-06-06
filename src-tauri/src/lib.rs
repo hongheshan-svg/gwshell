@@ -255,12 +255,28 @@ async fn start_tunnel(
     local_port: u16,
     remote_host: String,
     remote_port: u16,
+    tunnel_type: Option<String>,
     state: State<'_, Arc<AppState>>,
 ) -> Result<u16, String> {
-    state
-        .ssh_manager
-        .start_local_forward(&session_id, local_port, &remote_host, remote_port)
-        .await
+    match tunnel_type.as_deref() {
+        // Remote (-R): server listens on `remote_port`, forwards back to local
+        // `remote_host:remote_port`. local_port is unused for this mode.
+        Some("remote") => {
+            state
+                .ssh_manager
+                .start_remote_forward(&session_id, remote_port, &remote_host, remote_port)
+                .await
+        }
+        // Dynamic (-D): SOCKS5 proxy on local_port; remote_host/remote_port unused.
+        Some("dynamic") => state.ssh_manager.start_socks_forward(&session_id, local_port).await,
+        // Local (-L) — default and any other value.
+        _ => {
+            state
+                .ssh_manager
+                .start_local_forward(&session_id, local_port, &remote_host, remote_port)
+                .await
+        }
+    }
 }
 
 #[tauri::command]
