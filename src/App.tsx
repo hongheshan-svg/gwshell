@@ -33,12 +33,16 @@ const AppMenu = lazy(() => import('./components/AppMenu/AppMenu').then((m) => ({
 const UpdateChecker = lazy(() => import('./components/UpdateChecker/UpdateChecker').then((m) => ({ default: m.UpdateChecker })));
 const SecurityNotice = lazy(() => import('./components/SecurityNotice/SecurityNotice').then((m) => ({ default: m.SecurityNotice })));
 const ServerPanel = lazy(() => import('./components/ServerPanel').then((m) => ({ default: m.ServerPanel })));
+const CommandPalette = lazy(() => import('./components/CommandPalette/CommandPalette').then((m) => ({ default: m.CommandPalette })));
 
 function App() {
   useSettingsEffects();
   const { theme, setSessions, tabs, activeTabId, sftpPanelOpen, sessions,
     showNewSession, showQuickConnect, showDockerModal, showLocalTerminalModal, showSerialModal, showSettings, showAppMenu,
+    showCommandPalette,
     mainView, activeNavItem } = useAppStore();
+  const toggleBroadcastInput = useAppStore((s) => s.toggleBroadcastInput);
+  const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
   const loadSettings = useSettingsStore((s) => s.load);
   const settingsLoaded = useSettingsStore((s) => s.loaded);
   const sshHistoryCmd = useSettingsStore((s) => s.settings.sshHistoryCmd);
@@ -110,6 +114,17 @@ function App() {
     void loadSnippets();
   }, [loadSnippets]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || !e.shiftKey) return;
+      const k = e.key.toLowerCase();
+      if (k === 'b') { e.preventDefault(); toggleBroadcastInput(); }
+      else if (k === 'f') { e.preventDefault(); setShowCommandPalette(true); }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [toggleBroadcastInput, setShowCommandPalette]);
+
   return (
     <I18nextProvider i18n={i18n}>
       <div className="app-root">
@@ -150,6 +165,7 @@ function App() {
           {showSerialModal && <SerialPortModal />}
           {showSettings && <SettingsModal />}
           {showAppMenu && <AppMenu />}
+          {showCommandPalette && <CommandPalette />}
           <UpdateChecker />
           <SecurityNotice />
           <ServerPanel />
