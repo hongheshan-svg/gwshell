@@ -17,7 +17,7 @@ export const KEY_ACTIONS: KeyAction[] = [
   { id: 'palette.open', labelKey: 'action_palette_open', defaultBinding: 'Ctrl+Shift+F', run: () => useAppStore.getState().setShowCommandPalette(true) },
   { id: 'tab.next', labelKey: 'action_tab_next', defaultBinding: 'Ctrl+Tab', run: () => cycleTab(1) },
   { id: 'tab.prev', labelKey: 'action_tab_prev', defaultBinding: 'Ctrl+Shift+Tab', run: () => cycleTab(-1) },
-  { id: 'tab.close', labelKey: 'action_tab_close', defaultBinding: 'Ctrl+W', run: () => { const { activeTabId, removeTab } = useAppStore.getState(); if (activeTabId) removeTab(activeTabId); } },
+  { id: 'tab.close', labelKey: 'action_tab_close', defaultBinding: 'Ctrl+Shift+W', run: () => { const { activeTabId, removeTab } = useAppStore.getState(); if (activeTabId) removeTab(activeTabId); } },
   { id: 'settings.open', labelKey: 'action_settings_open', defaultBinding: 'Ctrl+Comma', run: () => useAppStore.getState().setShowSettings(true) },
 ];
 

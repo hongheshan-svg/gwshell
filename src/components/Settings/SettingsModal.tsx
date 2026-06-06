@@ -535,7 +535,7 @@ export const SettingsModal: React.FC = () => {
             {activeNav === 'shortcut-basic' && (
               <>
                 <SectionTitle>{t('settings_shortcut_editable')}</SectionTitle>
-                <ShortcutEditor />
+                <ShortcutEditor value={settings.keymapOverrides} onChange={(ko) => u('keymapOverrides', ko)} />
                 <SectionTitle>{t('settings_section_basic')}</SectionTitle>
                 <ShortcutTable left={shortcutsBasicLeft} right={shortcutsBasicRight} t={t} />
                 <SectionTitle>{t('settings_sc_other')}</SectionTitle>

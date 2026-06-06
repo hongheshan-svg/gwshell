@@ -1,30 +1,32 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSettingsStore } from '../../stores/settingsStore';
 import { KEY_ACTIONS } from '../../keymap/actions';
 import { eventToStep, stepToBinding, parseBinding } from '../../keymap/match';
 
-export const ShortcutEditor: React.FC = () => {
+interface ShortcutEditorProps {
+  value: Record<string, string | null>;
+  onChange: (next: Record<string, string | null>) => void;
+}
+
+export const ShortcutEditor: React.FC<ShortcutEditorProps> = ({ value, onChange }) => {
   const { t } = useTranslation();
-  const settings = useSettingsStore((s) => s.settings);
-  const save = useSettingsStore((s) => s.save);
   const [capturing, setCapturing] = useState<string | null>(null);
   const [error, setError] = useState('');
 
-  const overrides = settings.keymapOverrides || {};
+  const overrides = value || {};
   const currentBinding = (id: string): string | null => {
     const ov = overrides[id];
     if (ov !== undefined) return ov; // string or null
     return KEY_ACTIONS.find((a) => a.id === id)?.defaultBinding ?? null;
   };
 
-  const setOverride = (id: string, value: string | null) => {
-    void save({ ...settings, keymapOverrides: { ...overrides, [id]: value } });
+  const setOverride = (id: string, v: string | null) => {
+    onChange({ ...overrides, [id]: v });
   };
   const resetOverride = (id: string) => {
     const next = { ...overrides };
     delete next[id];
-    void save({ ...settings, keymapOverrides: next });
+    onChange(next);
   };
 
   const onCaptureKey = (id: string, e: React.KeyboardEvent) => {
@@ -48,7 +50,7 @@ export const ShortcutEditor: React.FC = () => {
       {KEY_ACTIONS.map((a) => {
         const b = currentBinding(a.id);
         return (
-          <div className="shortcut-row" key={a.id}>
+          <div className="shortcut-editor-row" key={a.id}>
             <span className="shortcut-row-label">{t(a.labelKey)}</span>
             <div className="shortcut-row-keys">
               {capturing === a.id ? (
