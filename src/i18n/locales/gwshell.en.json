@@ -536,5 +536,16 @@
   "quickconnect_cancel": "Cancel",
   "quickconnect_invalid": "Enter a target like user@host:port",
   "palette_placeholder": "Search sessions and tabs…",
-  "palette_no_results": "No matches"
+  "palette_no_results": "No matches",
+  "action_broadcast_toggle": "Toggle input broadcast",
+  "action_palette_open": "Open command palette",
+  "action_tab_next": "Next tab",
+  "action_tab_prev": "Previous tab",
+  "action_tab_close": "Close tab",
+  "action_settings_open": "Open settings",
+  "shortcut_press_key": "Press a key…",
+  "shortcut_conflict": "Already bound to another action",
+  "shortcut_reset": "Reset",
+  "shortcut_unbind": "Unbind",
+  "settings_shortcut_editable": "Customizable shortcuts"
 }
