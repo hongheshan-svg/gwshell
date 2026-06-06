@@ -1,11 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Plus, Menu, ChevronDown, FolderOpen } from 'lucide-react';
+import { X, Plus, Menu, ChevronDown, FolderOpen, Columns2 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
 
 export const TabBar: React.FC = () => {
-  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, setShowSerialModal, setShowDockerModal, setShowLocalTerminalModal, sftpPanelOpen, toggleSftpPanel } = useAppStore();
+  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, setShowSerialModal, setShowDockerModal, setShowLocalTerminalModal, sftpPanelOpen, toggleSftpPanel, splitTabId, setSplitTabId } = useAppStore();
   const { t } = useTranslation();
   const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
   const addBtnRef = useRef<HTMLButtonElement>(null);
@@ -23,6 +23,18 @@ export const TabBar: React.FC = () => {
       e.preventDefault();
       handleCloseTab(tabId);
     }
+  };
+
+  const terminalTabs = tabs.filter((tab) => tab.type !== 'asset-list');
+
+  const handleToggleSplit = () => {
+    if (splitTabId) {
+      setSplitTabId(null);
+      return;
+    }
+    // Pick a sensible second pane: the most-recent OTHER terminal tab.
+    const partner = [...terminalTabs].reverse().find((tab) => tab.id !== activeTabId);
+    if (partner) setSplitTabId(partner.id);
   };
 
   const handleNewAssetSelect = (type: string) => {
@@ -79,6 +91,17 @@ export const TabBar: React.FC = () => {
           onSelect={handleNewAssetSelect}
         />
       )}
+      {/* Split toggle - only show when there are >=2 terminal tabs to lay side by side */}
+      {terminalTabs.length >= 2 && (
+        <button
+          className={`tab-add-btn ${(splitTabId != null && splitTabId !== activeTabId) ? 'tab-btn-active' : ''}`}
+          onClick={handleToggleSplit}
+          title={t('split_toggle')}
+          style={{ marginLeft: 'auto' }}
+        >
+          <Columns2 size={14} />
+        </button>
+      )}
       {/* SFTP toggle - only show when active tab is SSH */}
       {(() => {
         const activeTab = tabs.find((t) => t.id === activeTabId);
@@ -87,7 +110,10 @@ export const TabBar: React.FC = () => {
             className={`tab-add-btn ${sftpPanelOpen ? 'tab-btn-active' : ''}`}
             onClick={toggleSftpPanel}
             title={t('sftp_title')}
-            style={{ marginLeft: 'auto' }}
+            // The split button (shown when >=2 terminal tabs) already carries
+            // marginLeft:auto to push the right-aligned group over; avoid a
+            // second auto-margin that would split them apart.
+            style={terminalTabs.length >= 2 ? undefined : { marginLeft: 'auto' }}
           >
             <FolderOpen size={14} />
           </button>
