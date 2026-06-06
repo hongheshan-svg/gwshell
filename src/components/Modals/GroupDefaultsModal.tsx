@@ -62,7 +62,7 @@ export const GroupDefaultsModal: React.FC = () => {
 
         <div className="group-defaults-form">
           {/* Username */}
-          <label className="group-defaults-label">Username</label>
+          <label className="group-defaults-label">{t('group_defaults_username')}</label>
           <input
             className="group-defaults-input"
             type="text"
@@ -93,7 +93,7 @@ export const GroupDefaultsModal: React.FC = () => {
             value={defs.auth_method ?? ''}
             onChange={(e) => set('auth_method', e.target.value as GroupDefaults['auth_method'] || undefined)}
           >
-            <option value="">— {t('group_defaults_hint').split(' ')[0]} —</option>
+            <option value="">—</option>
             <option value="password">password</option>
             <option value="publickey">publickey</option>
             <option value="agent">agent</option>
@@ -147,7 +147,7 @@ export const GroupDefaultsModal: React.FC = () => {
           />
 
           {/* Jump Private Key Path */}
-          <label className="group-defaults-label">Jump Private Key</label>
+          <label className="group-defaults-label">{t('ssh_jump_key_path')}</label>
           <input
             className="group-defaults-input"
             type="text"
@@ -170,7 +170,7 @@ export const GroupDefaultsModal: React.FC = () => {
           </select>
 
           {/* Proxy Host */}
-          <label className="group-defaults-label">Proxy Host</label>
+          <label className="group-defaults-label">{t('ssh_proxy_server')}</label>
           <input
             className="group-defaults-input"
             type="text"

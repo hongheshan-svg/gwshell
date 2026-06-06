@@ -1257,7 +1257,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
       // between disconnect and now). Failure re-arms so another keypress retries.
       const reconnect = async (): Promise<void> => {
         instance?.terminal.write(`\r\n\x1b[90m${t('term_reconnecting')}\x1b[0m\r\n`);
-        const freshSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
+        const rawFreshSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
+        const freshSession = rawFreshSession ? applyGroupDefaults(rawFreshSession, loadGroupDefaults()) : rawFreshSession;
         if (tab.type === 'ssh') {
           await invoke('close_ssh', { sessionId: tab.sessionId }).catch(() => {});
         } else if (tab.type === 'serial') {
