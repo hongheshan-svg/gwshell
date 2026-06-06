@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Plus, Play, Edit, Trash2, Check, X } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { useSnippetStore } from '../../stores/snippetStore';
-import { expandSnippet } from '../../lib/snippetExpand';
+import { runScript } from '../../lib/sendScript';
 import { sendInputToTab } from '../Terminal/TerminalView';
 import type { Snippet } from '../../types';
 
@@ -35,16 +35,7 @@ export const SnippetPanel: React.FC = () => {
       return;
     }
     setError('');
-    let delay = 0;
-    for (const seg of expandSnippet(snippet.command)) {
-      if (seg.kind === 'delay') {
-        delay += seg.delayMs;
-      } else {
-        const text = seg.text;
-        if (delay === 0) sendInputToTab(activeTab.id, text);
-        else setTimeout(() => sendInputToTab(activeTab.id, text), delay);
-      }
-    }
+    runScript((d) => sendInputToTab(activeTab.id, d), snippet.command);
   };
 
   const startCreate = () => {
