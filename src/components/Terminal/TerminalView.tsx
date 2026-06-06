@@ -15,6 +15,7 @@ import { terminalInstances } from "./terminalRegistry";
 import * as commandHistory from '../../lib/commandHistory';
 import { resolveTerminalTheme } from '../../lib/terminalThemes';
 import { runLoginScript } from '../../lib/sendScript';
+import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalViewProps {
@@ -1179,7 +1180,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         tabHasOsc133.delete(tab.id);
       });
 
-      const session = sessionsRef.current.find((s) => s.id === tab.sessionId);
+      const rawSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
+      const session = rawSession ? applyGroupDefaults(rawSession, loadGroupDefaults()) : rawSession;
 
       const buildSshParams = (sess: typeof session) => ({
         sessionId: tab.sessionId,
