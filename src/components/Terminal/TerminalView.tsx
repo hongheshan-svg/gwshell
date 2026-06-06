@@ -14,6 +14,7 @@ import { useSettingsStore } from "../../stores/settingsStore";
 import { terminalInstances } from "./terminalRegistry";
 import * as commandHistory from '../../lib/commandHistory';
 import { resolveTerminalTheme } from '../../lib/terminalThemes';
+import { runScript } from '../../lib/sendScript';
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalViewProps {
@@ -1308,7 +1309,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
           if (session?.init_command) {
             const cmd = session.init_command;
             setTimeout(() => {
-              invoke("write_to_pty", { sessionId: tab.sessionId, data: cmd + "\n" }).catch(() => {});
+              runScript((d) => { invoke("write_to_pty", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
             }, 300);
           }
         } else if (tab.type === "ssh") {
@@ -1337,6 +1338,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
             );
             await doSshConnect(session);
             connectionReady = true;
+            if (session.init_command) {
+              const cmd = session.init_command;
+              setTimeout(() => {
+                runScript((d) => { invoke("write_to_ssh", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
+              }, 300);
+            }
 
             if (session.tunnel_enabled && session.tunnel_local_port && session.tunnel_remote_host && session.tunnel_remote_port) {
               try {
@@ -1386,6 +1393,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
               parity: session.serial_parity || "None",
             });
             connectionReady = true;
+            if (session.serial_init_commands) {
+              const cmd = session.serial_init_commands;
+              setTimeout(() => {
+                runScript((d) => { invoke("write_to_serial", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
+              }, 300);
+            }
           }
         }
         } // end if (!alreadyConnected)
