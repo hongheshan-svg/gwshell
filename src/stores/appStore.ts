@@ -24,6 +24,7 @@ interface AppStore {
   sessions: SessionConfig[];
   setSessions: (sessions: SessionConfig[]) => void;
   addSession: (session: SessionConfig) => void;
+  addTemporarySession: (session: SessionConfig) => void;
   removeSession: (id: string) => void;
   updateSessionLatency: (id: string, latency: number | null) => void;
   batchUpdateLatency: (updates: Map<string, number | null>) => void;
@@ -46,6 +47,8 @@ interface AppStore {
   // Modals
   showNewSession: boolean;
   setShowNewSession: (show: boolean) => void;
+  showQuickConnect: boolean;
+  setShowQuickConnect: (show: boolean) => void;
   editingSession: SessionConfig | null;
   setEditingSession: (session: SessionConfig | null) => void;
   showDockerModal: boolean;
@@ -126,6 +129,8 @@ export const useAppStore = create<AppStore>((set, _get) => ({
     // Persist to backend (fire-and-forget)
     invoke('save_session', { config: session }).catch(() => {});
   },
+  addTemporarySession: (session) =>
+    set((state) => ({ sessions: [...state.sessions, session] })),
   removeSession: (id) => {
     set((state) => ({
       sessions: state.sessions.filter((s) => s.id !== id),
@@ -216,6 +221,8 @@ export const useAppStore = create<AppStore>((set, _get) => ({
 
   showNewSession: false,
   setShowNewSession: (show) => set({ showNewSession: show }),
+  showQuickConnect: false,
+  setShowQuickConnect: (show) => set({ showQuickConnect: show }),
   editingSession: null,
   setEditingSession: (session) => set({ editingSession: session }),
   showDockerModal: false,
