@@ -49,6 +49,10 @@ async fn build_transport_stream(p: &ConnectParams) -> Result<SshStream, String> 
             proxy_port: p.proxy_port,
             proxy_username: p.proxy_username.clone(),
             proxy_password: p.proxy_password.clone(),
+            // Agent forwarding applies to the final target's interactive shell,
+            // not the jump hop (which only opens a direct-tcpip channel), so the
+            // jump session never requests it.
+            agent_forward: false,
             ..p.clone()
         };
         let jump_stream = transport::build_direct_or_proxied(&jump_params).await?;
@@ -122,6 +126,7 @@ async fn connect_over(
         port: p.port,
         rejection: rejection.clone(),
         forwarded: forwarded.clone(),
+        agent_forward: p.agent_forward,
     };
     let config = make_config(p.idle_disconnect_minutes);
 

@@ -132,6 +132,7 @@ export const NewSessionModal: React.FC = () => {
       server_alive_count_max: form.server_alive_count_max || undefined,
       idle_disconnect_minutes: form.idle_disconnect_minutes || undefined,
       compression: form.compression || undefined,
+      agent_forward: form.agent_forward || undefined,
       // Env vars
       env_vars: form.env_vars || undefined,
       created_at: editingSession?.created_at || now,
@@ -662,7 +663,17 @@ export const NewSessionModal: React.FC = () => {
                     <span>{t('ssh_compression')}</span>
                   </label>
                 </div>
-                <div className="ssh-form-group" />
+                <div className="ssh-form-group">
+                  <label style={{ visibility: 'hidden' }}>{t('common_placeholder')}</label>
+                  <label className="ssh-toggle-label">
+                    <input
+                      type="checkbox"
+                      checked={form.agent_forward || false}
+                      onChange={(e) => setForm({ ...form, agent_forward: e.target.checked })}
+                    />
+                    <span>{t('ssh_agent_forward')}</span>
+                  </label>
+                </div>
               </div>
 
               {/* Jump host section */}

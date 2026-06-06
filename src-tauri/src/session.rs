@@ -47,6 +47,10 @@ pub struct SessionConfig {
     pub server_alive_count_max: Option<u32>,
     pub idle_disconnect_minutes: Option<u32>,
     pub compression: Option<bool>,
+    /// SSH agent forwarding (`-A`): allow the remote host to use the local
+    /// agent for onward authentication hops. `#[serde(default)]` on the struct
+    /// makes this load as `None` for rows written before the field existed.
+    pub agent_forward: Option<bool>,
     // Docker-specific
     pub docker_protocol: Option<String>,
     pub docker_unix_path: Option<String>,
@@ -132,6 +136,7 @@ impl Default for SessionConfig {
             server_alive_count_max: None,
             idle_disconnect_minutes: None,
             compression: None,
+            agent_forward: None,
             docker_protocol: None,
             docker_unix_path: None,
             docker_connect_method: None,

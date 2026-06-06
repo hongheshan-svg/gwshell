@@ -40,6 +40,9 @@ export interface SessionConfig {
   server_alive_count_max?: number;
   idle_disconnect_minutes?: number;
   compression?: boolean;
+  // SSH agent forwarding (-A): let the remote host use the local agent for
+  // onward authentication hops.
+  agent_forward?: boolean;
   // Docker-specific
   docker_protocol?: 'unix' | 'tcp' | 'http' | 'https';
   docker_unix_path?: string;

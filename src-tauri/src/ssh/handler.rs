@@ -28,6 +28,11 @@ pub struct Client {
     pub rejection: std::sync::Arc<std::sync::Mutex<Option<HostKeyError>>>,
     /// Remote-forward targets keyed by the server-side listen port.
     pub forwarded: ForwardTargets,
+    /// When true, accept the server-opened `auth-agent@openssh.com` channel and
+    /// proxy it to the local SSH agent (agent forwarding, `ssh -A`). When false
+    /// we never request forwarding, so this channel should not arrive; if it
+    /// does anyway, we drop it (channel closes on handler return).
+    pub agent_forward: bool,
 }
 
 impl client::Handler for Client {
@@ -118,4 +123,118 @@ impl client::Handler for Client {
         });
         Ok(())
     }
+
+    /// Agent forwarding (`ssh -A`): the server opened an `auth-agent@openssh.com`
+    /// channel because we sent the `auth-agent-req@openssh.com` request on the
+    /// shell channel. The channel speaks the raw SSH-agent wire protocol, so we
+    /// act as a transparent pipe: connect to the *local* agent and shuttle bytes
+    /// between it and this channel. We deliberately do NOT use russh's
+    /// `keys::agent::server::serve` (which is a full agent that holds keys
+    /// itself) — OpenSSH-style forwarding just relays frames to the user's real
+    /// agent so onward hops can sign with keys the local agent never exports.
+    ///
+    /// russh 0.61 signature CONFIRMED from the Handler trait at
+    /// `~/.cargo/.../russh-0.61.1/src/client/mod.rs:2232` and its call site at
+    /// `src/client/encrypted.rs:783` (`ChannelType::AgentForward`).
+    async fn server_channel_open_agent_forward(
+        &mut self,
+        channel: Channel<Msg>,
+        _session: &mut Session,
+    ) -> Result<(), Self::Error> {
+        // Defensive: only proxy when the user opted in. If forwarding was never
+        // requested, a server opening this channel is unexpected — drop it.
+        if !self.agent_forward {
+            eprintln!(
+                "[gwshell] received auth-agent channel without agent forwarding enabled; dropping"
+            );
+            return Ok(());
+        }
+
+        tokio::spawn(async move {
+            // Connect to the local agent with the same OS-specific logic used for
+            // agent AUTH (see ssh/auth.rs::try_agent), then take the raw transport
+            // stream via `AgentClient::into_inner()` so we can pipe bytes through
+            // it without interpreting the agent protocol ourselves.
+            //
+            // Bounded by a 5-second timeout: on Windows the named pipe can be
+            // ERROR_PIPE_BUSY indefinitely (all server instances busy), which
+            // would stall this task forever. A stuck agent must not leak the
+            // spawned proxy task — abort and let the forwarded channel close.
+            let agent_stream = match tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                connect_local_agent_stream(),
+            )
+            .await
+            {
+                Ok(Ok(s)) => s,
+                Ok(Err(e)) => {
+                    eprintln!("[gwshell] agent forwarding: local agent unavailable: {}", e);
+                    return;
+                }
+                Err(_) => {
+                    eprintln!(
+                        "[gwshell] agent forwarding: timed out connecting to local agent (5 s); aborting proxy"
+                    );
+                    return;
+                }
+            };
+            let mut agent = agent_stream;
+            let mut stream = channel.into_stream();
+            let mut buf_a = vec![0u8; 8192];
+            let mut buf_b = vec![0u8; 8192];
+            loop {
+                tokio::select! {
+                    r = agent.read(&mut buf_a) => match r {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => { if stream.write_all(&buf_a[..n]).await.is_err() { break; } }
+                    },
+                    r = stream.read(&mut buf_b) => match r {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => { if agent.write_all(&buf_b[..n]).await.is_err() { break; } }
+                    },
+                }
+            }
+        });
+        Ok(())
+    }
+}
+
+/// Connect to the local SSH agent and return its raw transport stream
+/// (`AsyncRead + AsyncWrite`) for transparent agent-forwarding proxying.
+///
+/// Mirrors the platform branches of `ssh/auth.rs::try_agent`: `$SSH_AUTH_SOCK`
+/// on Unix; the OpenSSH-for-Windows named pipe with a Pageant fallback on
+/// Windows. `AgentClient::into_inner()` (russh 0.61
+/// `src/keys/agent/client.rs:38`) yields the boxed underlying stream — a
+/// `UnixStream` / `NamedPipeClient` / `PageantStream`, all of which implement
+/// `AsyncRead + AsyncWrite`.
+#[cfg(any(unix, windows))]
+async fn connect_local_agent_stream(
+) -> Result<Box<dyn russh::keys::agent::client::AgentStream + Send + Unpin + 'static>, String> {
+    use russh::keys::agent::client::AgentClient;
+    #[cfg(unix)]
+    {
+        let agent = AgentClient::connect_env()
+            .await
+            .map_err(|e| format!("SSH agent unavailable: {}", e))?;
+        Ok(agent.into_inner())
+    }
+    #[cfg(windows)]
+    {
+        match AgentClient::connect_named_pipe(r"\\.\pipe\openssh-ssh-agent").await {
+            Ok(agent) => Ok(agent.into_inner()),
+            Err(_) => {
+                let agent = AgentClient::connect_pageant()
+                    .await
+                    .map_err(|e| format!("SSH agent unavailable: {}", e))?;
+                Ok(agent.into_inner())
+            }
+        }
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+async fn connect_local_agent_stream(
+) -> Result<Box<dyn russh::keys::agent::client::AgentStream + Send + Unpin + 'static>, String> {
+    Err("SSH agent forwarding is not supported on this platform".to_string())
 }

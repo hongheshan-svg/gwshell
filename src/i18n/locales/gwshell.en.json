@@ -130,6 +130,7 @@
   "ssh_keepalive": "Keepalive Interval (sec)",
   "ssh_idle_disconnect": "Idle Disconnect (min)",
   "ssh_compression": "Enable Compression",
+  "ssh_agent_forward": "Forward SSH Agent (-A)",
   "ssh_jump_title": "Jump Host (-J)",
   "ssh_jump_host": "Jump Host Address",
   "ssh_jump_port": "Port",

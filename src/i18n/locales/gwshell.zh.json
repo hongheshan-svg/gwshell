@@ -130,6 +130,7 @@
   "ssh_keepalive": "Keepalive 间隔（秒）",
   "ssh_idle_disconnect": "空闲自动断开（分钟）",
   "ssh_compression": "启用数据压缩",
+  "ssh_agent_forward": "转发 SSH 代理（-A）",
   "ssh_jump_title": "跳板机（Jump Host / -J）",
   "ssh_jump_host": "跳板机地址",
   "ssh_jump_port": "端口",

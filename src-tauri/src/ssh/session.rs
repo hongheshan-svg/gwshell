@@ -37,6 +37,25 @@ pub async fn spawn(
         .request_pty(false, "xterm-256color", cols, rows, 0, 0, &[])
         .await
         .map_err(|e| format!("PTY request failed: {}", e))?;
+
+    // Agent forwarding (`ssh -A`): ask the server to enable an agent channel on
+    // this session. `Channel::agent_forward` (russh 0.61
+    // `src/channels/mod.rs:316`) emits the `auth-agent-req@openssh.com` channel
+    // request. We send it with want_reply=false (best-effort, matching OpenSSH):
+    // a server that lacks `AllowAgentForwarding` simply ignores it, and the
+    // shell still works. The actual forwarded-agent channel is later proxied to
+    // the local agent by `Client::server_channel_open_agent_forward`.
+    //
+    // MUST be sent AFTER request_pty and BEFORE request_shell: OpenSSH sshd only
+    // honors `auth-agent-req@openssh.com` before the shell/exec starts; sending
+    // it after request_shell means the server has already set up the environment
+    // without SSH_AUTH_SOCK, so the request is silently ignored.
+    if params.agent_forward {
+        if let Err(e) = channel.agent_forward(false).await {
+            eprintln!("[gwshell] agent-forward request failed (continuing): {}", e);
+        }
+    }
+
     channel
         .request_shell(true)
         .await
