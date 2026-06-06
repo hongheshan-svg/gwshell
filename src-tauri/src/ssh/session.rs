@@ -1,5 +1,5 @@
 use crate::ssh::connect;
-use crate::ssh::handler::Client;
+use crate::ssh::handler::{Client, ForwardTargets};
 use crate::ssh::params::ConnectParams;
 use russh::client::Handle;
 use russh::ChannelMsg;
@@ -22,12 +22,13 @@ pub async fn spawn(
     cols: u32,
     rows: u32,
     app: AppHandle,
-) -> Result<(mpsc::Sender<ShellCmd>, Arc<Handle<Client>>), String> {
+) -> Result<(mpsc::Sender<ShellCmd>, Arc<Handle<Client>>, ForwardTargets), String> {
     // russh 0.61's `Handle` is not `Clone`, so the connection is shared as an
     // `Arc`: the shell task keeps one clone (for the final disconnect) and the
     // manager keeps another to open exec/sftp/forward channels on the same
     // connection. All of those methods take `&self`, so `Arc` is sufficient.
-    let session = Arc::new(connect::establish(&params).await?);
+    let (handle, forwarded) = connect::establish(&params).await?;
+    let session = Arc::new(handle);
     let channel = session
         .channel_open_session()
         .await
@@ -109,7 +110,7 @@ pub async fn spawn(
             .await;
     });
 
-    Ok((tx, session))
+    Ok((tx, session, forwarded))
 }
 
 /// Decode bytes through a streaming UTF-8 decoder and emit a batched event.

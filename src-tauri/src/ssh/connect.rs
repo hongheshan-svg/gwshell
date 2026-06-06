@@ -1,8 +1,9 @@
 use crate::ssh::auth;
-use crate::ssh::handler::{Client, HostKeyError};
+use crate::ssh::handler::{Client, ForwardTargets, HostKeyError};
 use crate::ssh::params::ConnectParams;
 use crate::ssh::transport::{self, expand_tilde, SshStream};
 use russh::client::{self, Handle};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -21,8 +22,9 @@ fn make_config(idle_minutes: u32) -> Arc<client::Config> {
 }
 
 /// Establish an authenticated russh session to the target, honouring jump host
-/// and proxy settings. Returns the live Handle.
-pub async fn establish(p: &ConnectParams) -> Result<Handle<Client>, String> {
+/// and proxy settings. Returns the live Handle plus the target session's
+/// remote-forward target map (shared with that session's `Client` handler).
+pub async fn establish(p: &ConnectParams) -> Result<(Handle<Client>, ForwardTargets), String> {
     let stream = build_transport_stream(p).await?;
     connect_over(stream, p).await
 }
@@ -50,7 +52,9 @@ async fn build_transport_stream(p: &ConnectParams) -> Result<SshStream, String> 
             ..p.clone()
         };
         let jump_stream = transport::build_direct_or_proxied(&jump_params).await?;
-        let jump_session = connect_over(jump_stream, &jump_params).await?;
+        // The jump session never hosts remote forwards, so its target map is
+        // discarded — only the final target session's map is threaded upward.
+        let (jump_session, _jump_forwarded) = connect_over(jump_stream, &jump_params).await?;
         // 2. Open a direct-tcpip channel to the real target through the jump.
         let channel = jump_session
             .channel_open_direct_tcpip(p.host.clone(), p.port as u32, "127.0.0.1".to_string(), 0)
@@ -107,12 +111,17 @@ impl<S: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for JumpStream<S> {
     }
 }
 
-async fn connect_over(stream: SshStream, p: &ConnectParams) -> Result<Handle<Client>, String> {
+async fn connect_over(
+    stream: SshStream,
+    p: &ConnectParams,
+) -> Result<(Handle<Client>, ForwardTargets), String> {
     let rejection = Arc::new(Mutex::new(None));
+    let forwarded: ForwardTargets = Arc::new(Mutex::new(HashMap::new()));
     let handler = Client {
         host: p.host.clone(),
         port: p.port,
         rejection: rejection.clone(),
+        forwarded: forwarded.clone(),
     };
     let config = make_config(p.idle_disconnect_minutes);
 
@@ -136,5 +145,5 @@ async fn connect_over(stream: SshStream, p: &ConnectParams) -> Result<Handle<Cli
 
     auth::authenticate(&mut session, p).await?;
     let _ = expand_tilde; // referenced for re-export consistency
-    Ok(session)
+    Ok((session, forwarded))
 }
