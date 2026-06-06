@@ -1591,6 +1591,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         onMouseDown={() => useAppStore.getState().setActiveTab(tab.id)}
       />
 
+      {/* NOTE: in 2-pane split mode the ghost overlay anchors to the terminal-container, so when the active pane is the right column the hint can be offset. Known limitation (command hints are off by default); proper fix needs a per-pane positioned wrapper. */}
       {ghostText && isActive && terminalCmdHint && isInteractiveTerminal(tab.type) && (
         <div
           className="terminal-ghost-text"

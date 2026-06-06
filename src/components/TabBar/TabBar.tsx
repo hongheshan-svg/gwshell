@@ -94,7 +94,7 @@ export const TabBar: React.FC = () => {
       {/* Split toggle - only show when there are >=2 terminal tabs to lay side by side */}
       {terminalTabs.length >= 2 && (
         <button
-          className={`tab-add-btn ${splitTabId ? 'tab-btn-active' : ''}`}
+          className={`tab-add-btn ${(splitTabId != null && splitTabId !== activeTabId) ? 'tab-btn-active' : ''}`}
           onClick={handleToggleSplit}
           title={t('split_toggle')}
           style={{ marginLeft: 'auto' }}
