@@ -908,6 +908,24 @@ async fn vault_is_enabled(state: State<'_, Arc<AppState>>) -> Result<bool, Strin
         .map_err(|e| format!("task join: {}", e))
 }
 
+/// Atomically verify `current_passphrase` and, if it matches, store a fresh
+/// Argon2id hash of `new_passphrase`. Returns `false` (no error) when the
+/// current passphrase is wrong — eliminates the verify→set TOCTOU race that
+/// the two-call approach exposes.
+#[tauri::command]
+async fn vault_change_passphrase(
+    current_passphrase: String,
+    new_passphrase: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<bool, String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        vault::change_passphrase(&state.db, &current_passphrase, &new_passphrase)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Warm the keyring master key off the main thread so the synchronous session
@@ -1002,6 +1020,7 @@ pub fn run() {
             vault_verify,
             vault_clear,
             vault_is_enabled,
+            vault_change_passphrase,
             get_command_history,
             save_command_history,
             save_snippet,

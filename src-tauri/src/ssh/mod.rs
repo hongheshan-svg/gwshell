@@ -244,9 +244,13 @@ impl SshManager {
             (s.conn.clone(), s.forwarded.clone())
         };
 
-        // Request the server-side listener. Bind to all interfaces ("").
+        // Request the server-side listener. Bind to loopback-only (127.0.0.1)
+        // so the port is not exposed on the server's external interfaces
+        // (avoids GatewayPorts exposure when the server has it disabled or
+        // unset). Use "0.0.0.0" explicitly only when external exposure is
+        // intentional.
         let bound = conn
-            .tcpip_forward("", remote_port as u32)
+            .tcpip_forward("127.0.0.1", remote_port as u32)
             .await
             .map_err(|e| format!("Remote forward request failed: {}", e))?;
         // russh returns the chosen port when remote_port == 0, else 0.

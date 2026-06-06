@@ -55,3 +55,14 @@ pub fn clear(db: &Database) -> Result<(), String> {
 pub fn is_enabled(db: &Database) -> bool {
     db.get_vault_verifier().is_some()
 }
+
+/// Atomically verify `current` then re-hash and store `new`. The two
+/// operations happen within a single call, eliminating the TOCTOU window
+/// that a verify→set two-call sequence would expose. Returns `false` if
+/// `current` does not match the stored verifier (nothing is changed).
+pub fn change_passphrase(db: &Database, current: &str, new: &str) -> bool {
+    if !verify(db, current) {
+        return false;
+    }
+    set_passphrase(db, new).is_ok()
+}

@@ -397,9 +397,9 @@ const VaultSection: React.FC<{ open: boolean }> = ({ open }) => {
     if (!chgNew) { setMsg({ kind: 'err', text: t('vault_err_empty') }); return; }
     if (chgNew !== chgNew2) { setMsg({ kind: 'err', text: t('vault_err_mismatch') }); return; }
     try {
-      const ok = await invoke<boolean>('vault_verify', { passphrase: curPass });
+      // Single atomic call: verify current + set new in one round-trip (eliminates TOCTOU).
+      const ok = await invoke<boolean>('vault_change_passphrase', { currentPassphrase: curPass, newPassphrase: chgNew });
       if (!ok) { setMsg({ kind: 'err', text: t('vault_err_wrong_current') }); return; }
-      await invoke('vault_set_passphrase', { passphrase: chgNew });
       setCurPass(''); setChgNew(''); setChgNew2('');
       setMsg({ kind: 'ok', text: t('vault_changed_ok') });
       refresh();
