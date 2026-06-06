@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { TitleBar } from './components/TitleBar/TitleBar';
@@ -21,7 +21,7 @@ import { useSettingsEffects } from './hooks/useSettingsEffects';
 import i18n from './i18n';
 import type { SessionConfig } from './types';
 import * as commandHistory from './lib/commandHistory';
-import { saveOpenTabs, tabsSignature } from './lib/tabSession';
+import { saveOpenTabs, tabsSignature, loadOpenTabs } from './lib/tabSession';
 import './styles/global.css';
 
 const NewSessionModal = lazy(() => import('./components/Modals/NewSessionModal').then((m) => ({ default: m.NewSessionModal })));
@@ -127,6 +127,34 @@ function App() {
     // restorable signature; the timer reads the latest values when it fires.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabSig, settingsLoaded, sessionTabMemory]);
+
+  // Restore tabs once, after settings load AND sessions hydrate. Auto-reconnect
+  // happens via each restored TerminalView's setupConnection on mount.
+  const restoredRef = useRef(false);
+  const { addTab, setActiveTab } = useAppStore();
+  useEffect(() => {
+    if (restoredRef.current || !settingsLoaded) return;
+    if (!sessionTabMemory) { restoredRef.current = true; return; }
+    // Wait for sessions to hydrate (sync injection or async get_sessions fallback).
+    if (sessions.length === 0) return;
+    restoredRef.current = true;
+
+    const stored = loadOpenTabs();
+    if (!stored) return;
+    const byId = new Map(sessions.map((s) => [s.id, s]));
+    const newIds: string[] = [];
+    for (const pt of stored.tabs) {
+      const s = byId.get(pt.sessionId);
+      if (!s || s._temporary) continue; // session deleted or temporary — skip
+      const id = crypto.randomUUID();
+      addTab({ id, sessionId: pt.sessionId, title: pt.title, type: pt.type, connected: false });
+      newIds.push(id);
+    }
+    if (newIds.length > 0) {
+      const idx = Math.min(Math.max(0, stored.activeTabIndex), newIds.length - 1);
+      setActiveTab(newIds[idx]);
+    }
+  }, [settingsLoaded, sessionTabMemory, sessions, addTab, setActiveTab]);
 
   const loadSnippets = useSnippetStore((s) => s.load);
   useEffect(() => {
