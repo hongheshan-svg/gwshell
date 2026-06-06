@@ -806,6 +806,55 @@ input, select, textarea, button {
   display: flex;
   overflow: hidden;
   min-height: 0;
+  /* Anchor for the absolutely-positioned in-terminal search bar overlay. */
+  position: relative;
+}
+
+/* ========== In-terminal Search Bar ========== */
+
+.terminal-search-bar {
+  position: absolute;
+  top: 6px;
+  right: 16px;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--bg-secondary, #1b1b24);
+  border: 1px solid var(--border-color, #33333f);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.terminal-search-input {
+  background: var(--bg-primary, #0c0c14);
+  border: 1px solid var(--border-color, #333);
+  color: inherit;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+  width: 180px;
+}
+
+.terminal-search-count {
+  font-size: 11px;
+  color: var(--text-muted, #999);
+  min-width: 42px;
+  text-align: center;
+}
+
+.terminal-search-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted, #aaa);
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+}
+
+.terminal-search-btn:hover {
+  color: inherit;
 }
 
 /* ========== SFTP Panel ========== */

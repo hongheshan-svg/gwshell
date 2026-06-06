@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { CanvasAddon } from "@xterm/addon-canvas/lib/xterm-addon-canvas.mjs";
@@ -471,9 +472,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
 
         const fitAddon = new FitAddon();
         terminal.loadAddon(fitAddon);
+        const searchAddon = new SearchAddon();
+        terminal.loadAddon(searchAddon);
         terminal.loadAddon(new WebLinksAddon());
 
-        instance = { terminal, fitAddon };
+        instance = { terminal, fitAddon, searchAddon };
         terminalInstances.set(tab.id, instance);
       }
 

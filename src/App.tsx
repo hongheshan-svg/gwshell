@@ -16,6 +16,7 @@ import { UnlockScreen } from './components/UnlockScreen';
 // SFTP editor, plugin-dialog, plugin-opener, deep-link, modals) loads on demand.
 const TerminalContainer = lazy(() => import('./components/Terminal/TerminalContainer').then(m => ({ default: m.TerminalContainer })));
 const SftpPanel = lazy(() => import('./components/SftpPanel/SftpPanel').then(m => ({ default: m.SftpPanel })));
+const TerminalSearchBar = lazy(() => import('./components/Terminal/TerminalSearchBar').then(m => ({ default: m.TerminalSearchBar })));
 import { useAppStore } from './stores/appStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { useSettingsEffects } from './hooks/useSettingsEffects';
@@ -44,6 +45,7 @@ function App() {
   const { theme, setSessions, tabs, activeTabId, sftpPanelOpen, sessions,
     showNewSession, showQuickConnect, showDockerModal, showLocalTerminalModal, showSerialModal, showSettings, showAppMenu,
     showCommandPalette,
+    showTerminalSearch,
     groupDefaultsTarget,
     vaultLocked, setVaultLocked,
     mainView, activeNavItem } = useAppStore();
@@ -197,6 +199,9 @@ function App() {
               )}
               {needTerminals && (
                 <Suspense fallback={null}><TerminalContainer /></Suspense>
+              )}
+              {needTerminals && showTerminalSearch && (
+                <Suspense fallback={null}><TerminalSearchBar /></Suspense>
               )}
               {sftpPanelOpen && (() => {
                 const activeTab = tabs.find(t => t.id === activeTabId);
