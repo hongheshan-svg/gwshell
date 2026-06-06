@@ -105,6 +105,7 @@ export interface AppSettings {
   // Storage
   storageAutoSync: boolean;
   storageSource: string;
+  keymapOverrides: Record<string, string | null>;
 }
 
 const _t = (key: TranslationKeys) => i18n.t(key);
@@ -181,6 +182,7 @@ const defaultSettings: AppSettings = {
   redisGroupSeparator: ':',
   storageAutoSync: true,
   storageSource: _t('settings_storage_source_off'),
+  keymapOverrides: {},
 };
 void defaultSettings;
 
