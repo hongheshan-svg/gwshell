@@ -59,6 +59,8 @@ interface AppStore {
   setShowQuickConnect: (show: boolean) => void;
   showCommandPalette: boolean;
   setShowCommandPalette: (show: boolean) => void;
+  showTerminalSearch: boolean;
+  setShowTerminalSearch: (show: boolean) => void;
   editingSession: SessionConfig | null;
   setEditingSession: (session: SessionConfig | null) => void;
   showDockerModal: boolean;
@@ -254,6 +256,8 @@ export const useAppStore = create<AppStore>((set, _get) => ({
   setShowQuickConnect: (show) => set({ showQuickConnect: show }),
   showCommandPalette: false,
   setShowCommandPalette: (show) => set({ showCommandPalette: show }),
+  showTerminalSearch: false,
+  setShowTerminalSearch: (show) => set({ showTerminalSearch: show }),
   editingSession: null,
   setEditingSession: (session) => set({ editingSession: session }),
   showDockerModal: false,
