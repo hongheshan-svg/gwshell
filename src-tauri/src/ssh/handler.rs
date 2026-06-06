@@ -155,10 +155,26 @@ impl client::Handler for Client {
             // agent AUTH (see ssh/auth.rs::try_agent), then take the raw transport
             // stream via `AgentClient::into_inner()` so we can pipe bytes through
             // it without interpreting the agent protocol ourselves.
-            let agent_stream = match connect_local_agent_stream().await {
-                Ok(s) => s,
-                Err(e) => {
+            //
+            // Bounded by a 5-second timeout: on Windows the named pipe can be
+            // ERROR_PIPE_BUSY indefinitely (all server instances busy), which
+            // would stall this task forever. A stuck agent must not leak the
+            // spawned proxy task — abort and let the forwarded channel close.
+            let agent_stream = match tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                connect_local_agent_stream(),
+            )
+            .await
+            {
+                Ok(Ok(s)) => s,
+                Ok(Err(e)) => {
                     eprintln!("[gwshell] agent forwarding: local agent unavailable: {}", e);
+                    return;
+                }
+                Err(_) => {
+                    eprintln!(
+                        "[gwshell] agent forwarding: timed out connecting to local agent (5 s); aborting proxy"
+                    );
                     return;
                 }
             };
