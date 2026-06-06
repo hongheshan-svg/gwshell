@@ -6,6 +6,7 @@ import { useSettingsStore, defaultSettings as persistedDefaultSettings } from '.
 import i18n from '../../i18n';
 import type { TranslationKeys } from '../../i18n';
 import { TERMINAL_SCHEME_OPTIONS } from '../../lib/terminalThemes';
+import { ShortcutEditor } from './ShortcutEditor';
 
 /* ---- Nav categories ---- */
 const navCategories: { title?: TranslationKeys; items: { id: string; labelKey: TranslationKeys }[] }[] = [
@@ -533,6 +534,8 @@ export const SettingsModal: React.FC = () => {
             {/* ===== 快捷键-基础 ===== */}
             {activeNav === 'shortcut-basic' && (
               <>
+                <SectionTitle>{t('settings_shortcut_editable')}</SectionTitle>
+                <ShortcutEditor />
                 <SectionTitle>{t('settings_section_basic')}</SectionTitle>
                 <ShortcutTable left={shortcutsBasicLeft} right={shortcutsBasicRight} t={t} />
                 <SectionTitle>{t('settings_sc_other')}</SectionTitle>
