@@ -47,3 +47,6 @@ tauri-plugin-global-shortcut = "2"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 aes-gcm = "0.10"
 getrandom = "0.2"
+# Master-passphrase vault: Argon2id verifier (PHC string) for the app-lock gate.
+# This does NOT encrypt secrets — those stay keyring-encrypted via crypto.rs.
+argon2 = "0.5"

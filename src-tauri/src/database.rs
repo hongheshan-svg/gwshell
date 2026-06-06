@@ -193,6 +193,42 @@ impl Database {
         Ok(result)
     }
 
+    // ---- Vault Verifier (Argon2id PHC string for the app-lock passphrase) ----
+    // Reuses the app_settings key/value table under key 'vault_verifier'. This is
+    // independent of the key='main' settings blob above. Only the Argon2id hash
+    // (a PHC string) is ever stored here — never the plaintext passphrase.
+
+    pub fn set_vault_verifier(&self, phc: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('vault_verifier', ?1)",
+            params![phc],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn get_vault_verifier(&self) -> Option<String> {
+        let conn = self.conn.lock().ok()?;
+        let mut stmt = conn
+            .prepare("SELECT value FROM app_settings WHERE key = 'vault_verifier'")
+            .ok()?;
+        stmt.query_row([], |row| row.get::<_, String>(0))
+            .optional()
+            .ok()
+            .flatten()
+    }
+
+    pub fn clear_vault_verifier(&self) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "DELETE FROM app_settings WHERE key = 'vault_verifier'",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     // ---- Storage Operations ----
 
     pub fn export_sessions_json(&self) -> Result<String, String> {

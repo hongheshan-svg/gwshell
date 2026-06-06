@@ -83,6 +83,11 @@ interface AppStore {
   // Group defaults modal
   groupDefaultsTarget: string | null;
   setGroupDefaultsTarget: (group: string | null) => void;
+
+  // Vault (master-passphrase app lock). When true, a full-screen unlock overlay
+  // covers the app until the correct passphrase is entered.
+  vaultLocked: boolean;
+  setVaultLocked: (locked: boolean) => void;
 }
 
 const initialLocale = detectLocale();
@@ -261,6 +266,9 @@ export const useAppStore = create<AppStore>((set, _get) => ({
 
   groupDefaultsTarget: null,
   setGroupDefaultsTarget: (group) => set({ groupDefaultsTarget: group }),
+
+  vaultLocked: false,
+  setVaultLocked: (locked) => set({ vaultLocked: locked }),
 }));
 
 // Keep store in sync if i18next.changeLanguage is called from outside the store.
