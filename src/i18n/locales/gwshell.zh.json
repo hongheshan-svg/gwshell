@@ -547,5 +547,9 @@
   "shortcut_conflict": "已绑定到其它动作",
   "shortcut_reset": "恢复默认",
   "shortcut_unbind": "解绑",
-  "settings_shortcut_editable": "可自定义快捷键"
+  "settings_shortcut_editable": "可自定义快捷键",
+  "group_defaults_title": "分组默认",
+  "group_defaults_hint": "会话未设字段将继承这些",
+  "group_defaults_save": "保存",
+  "group_defaults_cancel": "取消"
 }
