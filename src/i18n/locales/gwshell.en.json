@@ -182,6 +182,7 @@
   "term_via_jump": " (via {{jumpHost}})",
   "term_via_proxy": " [{{proxyType}} proxy]",
   "term_tunnel_ok": "[Tunnel] 127.0.0.1:{{localPort}} → {{remoteHost}}:{{remotePort}}",
+  "term_tunnel_remote_ok": "[Tunnel] remote :{{port}} → {{host}}:{{localPort}}",
   "term_tunnel_socks_ok": "[Tunnel] SOCKS5 proxy on 127.0.0.1:{{localPort}}",
   "term_tunnel_fail": "[Tunnel] Failed to start: {{error}}",
   "term_serial_not_configured": "Error: Serial port not configured.",

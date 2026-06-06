@@ -182,6 +182,7 @@
   "term_via_jump": "（经由 {{jumpHost}}）",
   "term_via_proxy": "[{{proxyType}} 代理]",
   "term_tunnel_ok": "[隧道] 127.0.0.1:{{localPort}} → {{remoteHost}}:{{remotePort}}",
+  "term_tunnel_remote_ok": "[隧道] 远程 :{{port}} → {{host}}:{{localPort}}",
   "term_tunnel_socks_ok": "[隧道] SOCKS5 代理已启动 127.0.0.1:{{localPort}}",
   "term_tunnel_fail": "[隧道] 启动失败: {{error}}",
   "term_serial_not_configured": "错误：未配置串口",

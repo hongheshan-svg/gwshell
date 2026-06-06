@@ -259,12 +259,12 @@ async fn start_tunnel(
     state: State<'_, Arc<AppState>>,
 ) -> Result<u16, String> {
     match tunnel_type.as_deref() {
-        // Remote (-R): server listens on `remote_port`, forwards back to local
-        // `remote_host:remote_port`. local_port is unused for this mode.
+        // Remote (-R): server listens on `local_port` (server bind port), and
+        // forwards each inbound connection back to `remote_host:remote_port`.
         Some("remote") => {
             state
                 .ssh_manager
-                .start_remote_forward(&session_id, remote_port, &remote_host, remote_port)
+                .start_remote_forward(&session_id, local_port, &remote_host, remote_port)
                 .await
         }
         // Dynamic (-D): SOCKS5 proxy on local_port; remote_host/remote_port unused.

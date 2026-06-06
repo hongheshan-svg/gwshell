@@ -257,12 +257,13 @@ impl SshManager {
         };
 
         // Register the local target so the handler can bridge inbound channels.
-        // Key under the actual listen port; also under the requested port and 0
-        // to tolerate servers that report the connected port differently.
+        // Key under the actual listen port; also under 0 as a wildcard fallback
+        // so the forwarded-tcpip callback can always find the target even when
+        // the server reports a different connected port.
         let target = (local_host.to_string(), local_port);
         let mut map = forwarded.lock().unwrap();
         map.insert(actual as u32, target.clone());
-        map.insert(remote_port as u32, target);
+        map.insert(0, target);
         Ok(actual)
     }
 

@@ -1401,6 +1401,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
                 instance?.terminal.write(
                   session.tunnel_type === 'dynamic'
                     ? `\r\n\x1b[90m${t('term_tunnel_socks_ok', { localPort: actualPort })}\x1b[0m\r\n`
+                    : session.tunnel_type === 'remote'
+                    ? `\r\n\x1b[90m${t('term_tunnel_remote_ok', { port: actualPort, host: session.tunnel_remote_host!, localPort: session.tunnel_remote_port! })}\x1b[0m\r\n`
                     : `\r\n\x1b[90m${t('term_tunnel_ok', { localPort: actualPort, remoteHost: session.tunnel_remote_host!, remotePort: session.tunnel_remote_port! })}\x1b[0m\r\n`
                 );
               } catch (tunnelErr) {
