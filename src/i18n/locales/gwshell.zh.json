@@ -534,5 +534,7 @@
   "quickconnect_password": "密码(可选)",
   "quickconnect_connect": "连接",
   "quickconnect_cancel": "取消",
-  "quickconnect_invalid": "请输入形如 user@host:port 的目标"
+  "quickconnect_invalid": "请输入形如 user@host:port 的目标",
+  "palette_placeholder": "搜索会话和标签…",
+  "palette_no_results": "无匹配"
 }

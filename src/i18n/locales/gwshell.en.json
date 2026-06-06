@@ -534,5 +534,7 @@
   "quickconnect_password": "Password (optional)",
   "quickconnect_connect": "Connect",
   "quickconnect_cancel": "Cancel",
-  "quickconnect_invalid": "Enter a target like user@host:port"
+  "quickconnect_invalid": "Enter a target like user@host:port",
+  "palette_placeholder": "Search sessions and tabs…",
+  "palette_no_results": "No matches"
 }
