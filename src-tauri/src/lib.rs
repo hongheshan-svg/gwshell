@@ -188,6 +188,7 @@ async fn ssh_connect(
     proxy_password: Option<String>,
     connection_timeout: Option<u32>,
     idle_disconnect_minutes: Option<u32>,
+    agent_forward: Option<bool>,
     rows: u32,
     cols: u32,
     state: State<'_, Arc<AppState>>,
@@ -213,6 +214,7 @@ async fn ssh_connect(
         proxy_password,
         connection_timeout: connection_timeout.unwrap_or(30),
         idle_disconnect_minutes: idle_disconnect_minutes.unwrap_or(0),
+        agent_forward: agent_forward.unwrap_or(false),
     };
     state
         .ssh_manager

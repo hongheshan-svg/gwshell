@@ -1204,6 +1204,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
         proxyPassword: sess?.proxy_password ?? null,
         connectionTimeout: sess?.connection_timeout ?? 30,
         idleDisconnectMinutes: sess?.idle_disconnect_minutes ?? null,
+        agentForward: sess?.agent_forward ?? false,
         rows: instance!.terminal.rows,
         cols: instance!.terminal.cols,
       });

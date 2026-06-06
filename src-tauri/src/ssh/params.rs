@@ -19,4 +19,7 @@ pub struct ConnectParams {
     pub proxy_password: Option<String>,
     pub connection_timeout: u32,
     pub idle_disconnect_minutes: u32,
+    /// Enable SSH agent forwarding (`-A`): let the remote host use the local
+    /// agent for onward authentication hops. Off by default.
+    pub agent_forward: bool,
 }

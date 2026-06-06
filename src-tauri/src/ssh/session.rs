@@ -42,6 +42,19 @@ pub async fn spawn(
         .await
         .map_err(|e| format!("Shell request failed: {}", e))?;
 
+    // Agent forwarding (`ssh -A`): ask the server to enable an agent channel on
+    // this session. `Channel::agent_forward` (russh 0.61
+    // `src/channels/mod.rs:316`) emits the `auth-agent-req@openssh.com` channel
+    // request. We send it with want_reply=false (best-effort, matching OpenSSH):
+    // a server that lacks `AllowAgentForwarding` simply ignores it, and the
+    // shell still works. The actual forwarded-agent channel is later proxied to
+    // the local agent by `Client::server_channel_open_agent_forward`.
+    if params.agent_forward {
+        if let Err(e) = channel.agent_forward(false).await {
+            eprintln!("[gwshell] agent-forward request failed (continuing): {}", e);
+        }
+    }
+
     let (tx, mut rx) = mpsc::channel::<ShellCmd>(256);
     let data_ev = format!("ssh-data-{}", session_id);
     let exit_ev = format!("ssh-exit-{}", session_id);
