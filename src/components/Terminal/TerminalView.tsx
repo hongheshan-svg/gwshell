@@ -14,7 +14,7 @@ import { useSettingsStore } from "../../stores/settingsStore";
 import { terminalInstances } from "./terminalRegistry";
 import * as commandHistory from '../../lib/commandHistory';
 import { resolveTerminalTheme } from '../../lib/terminalThemes';
-import { runScript } from '../../lib/sendScript';
+import { runLoginScript } from '../../lib/sendScript';
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalViewProps {
@@ -1309,7 +1309,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
           if (session?.init_command) {
             const cmd = session.init_command;
             setTimeout(() => {
-              runScript((d) => { invoke("write_to_pty", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
+              runLoginScript((d) => { invoke("write_to_pty", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
             }, 300);
           }
         } else if (tab.type === "ssh") {
@@ -1341,7 +1341,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
             if (session.init_command) {
               const cmd = session.init_command;
               setTimeout(() => {
-                runScript((d) => { invoke("write_to_ssh", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
+                runLoginScript((d) => { invoke("write_to_ssh", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
               }, 300);
             }
 
@@ -1396,7 +1396,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
             if (session.serial_init_commands) {
               const cmd = session.serial_init_commands;
               setTimeout(() => {
-                runScript((d) => { invoke("write_to_serial", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
+                runLoginScript((d) => { invoke("write_to_serial", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
               }, 300);
             }
           }

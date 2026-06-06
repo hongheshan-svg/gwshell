@@ -15,3 +15,12 @@ export function runScript(send: (data: string) => void, script: string): void {
     }
   }
 }
+
+// Like runScript, but ensures the script submits its final line: appends a
+// trailing newline unless the script already ends with one (a real newline or
+// the \n escape). Use for login scripts / init commands that run on connect.
+export function runLoginScript(send: (data: string) => void, script: string): void {
+  const withNewline =
+    script.endsWith('\n') || script.endsWith('\\n') ? script : script + '\n';
+  runScript(send, withNewline);
+}
