@@ -3493,3 +3493,20 @@ input, select, textarea, button {
   outline: 2px solid var(--accent, #3b78ff);
   outline-offset: -2px;
 }
+
+.status-broadcast {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.status-broadcast.active {
+  color: #fff;
+  background: var(--accent, #3b78ff);
+  border-radius: 3px;
+  padding: 0 6px;
+}

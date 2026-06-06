@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Wifi, Clock, Monitor } from 'lucide-react';
+import { Wifi, Clock, Monitor, Radio } from 'lucide-react';
 import { getVersion } from '@tauri-apps/api/app';
 import { useAppStore } from '../../stores/appStore';
 
 export const StatusBar: React.FC = () => {
-  const { tabs, activeTabId, sessions, locale } = useAppStore();
+  const { tabs, activeTabId, sessions, locale, broadcastInput, toggleBroadcastInput } = useAppStore();
   const { t } = useTranslation();
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const [version, setVersion] = useState('0.1.0');
@@ -39,6 +39,22 @@ export const StatusBar: React.FC = () => {
           </div>
         </>
       )}
+
+      {(() => {
+        const connectedCount = tabs.filter((tb) => tb.connected && tb.type !== 'asset-list').length;
+        if (connectedCount === 0) return null;
+        return (
+          <button
+            className={`status-item status-broadcast${broadcastInput ? ' active' : ''}`}
+            onClick={toggleBroadcastInput}
+            title={t('status_broadcast')}
+            type="button"
+          >
+            <Radio size={11} />
+            <span>{t('status_broadcast')}{broadcastInput ? ` (${connectedCount})` : ''}</span>
+          </button>
+        );
+      })()}
 
       <div className="status-spacer" />
 
