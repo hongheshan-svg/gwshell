@@ -37,6 +37,8 @@ pub struct SshManager {
     sessions: Mutex<HashMap<String, SessionHandle>>,
     /// Active local port-forward stop signals, keyed by session id.
     forwards: Mutex<HashMap<String, Arc<Notify>>>,
+    /// Active dynamic SOCKS5 proxy stop signals, keyed by session id.
+    socks: Mutex<HashMap<String, Arc<Notify>>>,
 }
 
 impl SshManager {
@@ -95,19 +97,21 @@ impl SshManager {
 
     pub async fn close_ssh(&self, session_id: &str) {
         self.close_local_forward(session_id).await;
+        self.close_socks_forward(session_id).await;
         if let Some(s) = self.sessions.lock().await.remove(session_id) {
             let _ = s.shell.send(ShellCmd::Close).await;
         }
     }
 
     pub async fn close_all(&self) {
-        let stops: Vec<_> = self
+        let mut stops: Vec<_> = self
             .forwards
             .lock()
             .await
             .drain()
             .map(|(_, v)| v)
             .collect();
+        stops.extend(self.socks.lock().await.drain().map(|(_, v)| v));
         for stop in stops {
             stop.notify_waiters();
         }
@@ -175,6 +179,33 @@ impl SshManager {
 
     pub async fn close_local_forward(&self, session_id: &str) {
         if let Some(stop) = self.forwards.lock().await.remove(session_id) {
+            stop.notify_waiters();
+        }
+    }
+
+    // --- Dynamic SOCKS5 forwarding ---
+
+    pub async fn start_socks_forward(
+        &self,
+        session_id: &str,
+        local_port: u16,
+    ) -> Result<u16, String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone())
+            .ok_or("Session not found")?;
+        self.close_socks_forward(session_id).await;
+        let stop = Arc::new(Notify::new());
+        let port = forward::start_socks(conn, local_port, stop.clone()).await?;
+        self.socks.lock().await.insert(session_id.to_string(), stop);
+        Ok(port)
+    }
+
+    pub async fn close_socks_forward(&self, session_id: &str) {
+        if let Some(stop) = self.socks.lock().await.remove(session_id) {
             stop.notify_waiters();
         }
     }
