@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, lazy, useEffect, useMemo } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { TitleBar } from './components/TitleBar/TitleBar';
@@ -21,6 +21,7 @@ import { useSettingsEffects } from './hooks/useSettingsEffects';
 import i18n from './i18n';
 import type { SessionConfig } from './types';
 import * as commandHistory from './lib/commandHistory';
+import { saveOpenTabs, tabsSignature } from './lib/tabSession';
 import './styles/global.css';
 
 const NewSessionModal = lazy(() => import('./components/Modals/NewSessionModal').then((m) => ({ default: m.NewSessionModal })));
@@ -45,6 +46,7 @@ function App() {
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
   const loadSettings = useSettingsStore((s) => s.load);
   const settingsLoaded = useSettingsStore((s) => s.loaded);
+  const sessionTabMemory = useSettingsStore((s) => s.settings.sessionTabMemory);
   const sshHistoryCmd = useSettingsStore((s) => s.settings.sshHistoryCmd);
   const sshHistoryCmdLoadCount = useSettingsStore((s) => s.settings.sshHistoryCmdLoadCount);
 
@@ -108,6 +110,23 @@ function App() {
         .catch(() => {});
     }
   }, []);
+
+  // Persist the open-tab set (debounced) when "remember tabs" is on. Keyed on a
+  // derived signature so connect/disconnect (`connected`) changes don't rewrite.
+  const tabSig = useMemo(
+    () => tabsSignature(tabs, sessions, activeTabId),
+    [tabs, sessions, activeTabId],
+  );
+  useEffect(() => {
+    if (!settingsLoaded || !sessionTabMemory) return;
+    const timer = setTimeout(() => {
+      saveOpenTabs(tabs, sessions, activeTabId);
+    }, 500);
+    return () => clearTimeout(timer);
+    // tabs/sessions/activeTabId intentionally omitted: tabSig captures the
+    // restorable signature; the timer reads the latest values when it fires.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabSig, settingsLoaded, sessionTabMemory]);
 
   const loadSnippets = useSnippetStore((s) => s.load);
   useEffect(() => {
