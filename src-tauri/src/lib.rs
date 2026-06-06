@@ -14,7 +14,7 @@ use serial::SerialManager;
 use session::{SessionConfig, SessionGroup};
 use ssh::SshManager;
 use std::sync::Arc;
-use tauri::{Manager, State};
+use tauri::{AppHandle, Manager, State};
 
 pub struct AppState {
     pub pty_manager: PtyManager,
@@ -605,6 +605,54 @@ async fn load_app_settings(state: State<'_, Arc<AppState>>) -> Result<Option<Str
         .map_err(|e| format!("task join: {}", e))?
 }
 
+// ---- Quake (dropdown console) ----
+
+/// Toggle the "main" window between hidden and a top-docked "Quake" dropdown.
+///
+/// When hidden → reposition the window to the top of the primary monitor,
+/// span the full monitor width and half its height, then show + focus.
+/// When visible → hide it.
+///
+/// Monitor geometry is in physical pixels; `set_position`/`set_size` take
+/// physical units, so no DPI scaling is applied here. Multi-monitor / mixed-DPI
+/// layouts are best-effort (we use whichever monitor Tauri reports).
+fn toggle_quake_window(app: &AppHandle) {
+    let window = match app.get_webview_window("main") {
+        Some(w) => w,
+        None => return,
+    };
+
+    // Treat any error as "not visible" so a failed query still tries to show.
+    if window.is_visible().unwrap_or(false) {
+        let _ = window.hide();
+        return;
+    }
+
+    // Prefer the monitor the window currently sits on; fall back to primary.
+    let monitor = match window.current_monitor() {
+        Ok(Some(m)) => Some(m),
+        _ => window.primary_monitor().ok().flatten(),
+    };
+
+    if let Some(monitor) = monitor {
+        let pos = monitor.position();
+        let size = monitor.size();
+        let _ = window.set_position(tauri::PhysicalPosition { x: pos.x, y: pos.y });
+        let _ = window.set_size(tauri::PhysicalSize {
+            width: size.width,
+            height: size.height / 2,
+        });
+    }
+
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+#[tauri::command]
+fn toggle_quake_window_cmd(app: tauri::AppHandle) {
+    toggle_quake_window(&app);
+}
+
 // ---- Command History Commands ----
 
 #[tauri::command]
@@ -840,6 +888,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             app_ready,
@@ -880,6 +929,7 @@ pub fn run() {
             list_serial_ports,
             save_app_settings,
             load_app_settings,
+            toggle_quake_window_cmd,
             pick_directory,
             export_sessions_data,
             import_sessions_data,
@@ -975,6 +1025,58 @@ pub fn run() {
             // Window stays hidden until the frontend calls `app_ready`
             // after React has mounted and painted the first frame.
             // This eliminates the white flash on startup.
+
+            // ---- Quake dropdown console: register global hotkey (opt-in) ----
+            //
+            // Read the persisted settings blob and, if `quakeEnabled` is true,
+            // register `quakeHotkey` as a global shortcut whose handler toggles
+            // the main window. Changes take effect on the next launch (v1: no
+            // live re-registration). Any failure here is logged and skipped —
+            // a bad hotkey must never prevent the app from starting.
+            {
+                use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+                let default_hotkey = "CommandOrControl+Shift+Backquote";
+                let settings_json = {
+                    let state = app.state::<Arc<AppState>>();
+                    state.db.load_app_settings().ok().flatten()
+                };
+                let (quake_enabled, quake_hotkey) = settings_json
+                    .as_deref()
+                    .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+                    .map(|v| {
+                        let enabled = v
+                            .get("quakeEnabled")
+                            .and_then(|b| b.as_bool())
+                            .unwrap_or(false);
+                        let hotkey = v
+                            .get("quakeHotkey")
+                            .and_then(|s| s.as_str())
+                            .filter(|s| !s.trim().is_empty())
+                            .unwrap_or(default_hotkey)
+                            .to_string();
+                        (enabled, hotkey)
+                    })
+                    .unwrap_or((false, default_hotkey.to_string()));
+
+                if quake_enabled {
+                    let handle = app.handle().clone();
+                    let register = app.global_shortcut().on_shortcut(
+                        quake_hotkey.as_str(),
+                        move |_app, _shortcut, event| {
+                            // Fire on key press only, not on release, to avoid a
+                            // double toggle per keystroke.
+                            if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed
+                            {
+                                toggle_quake_window(&handle);
+                            }
+                        },
+                    );
+                    if let Err(e) = register {
+                        eprintln!("[quake] failed to register hotkey '{}': {}", quake_hotkey, e);
+                    }
+                }
+            }
 
             Ok(())
         })

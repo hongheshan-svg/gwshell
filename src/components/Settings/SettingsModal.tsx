@@ -107,6 +107,9 @@ export interface AppSettings {
   storageAutoSync: boolean;
   storageSource: string;
   keymapOverrides: Record<string, string | null>;
+  // Quake dropdown console
+  quakeEnabled: boolean;
+  quakeHotkey: string;
 }
 
 const _t = (key: TranslationKeys) => i18n.t(key);
@@ -184,6 +187,8 @@ const defaultSettings: AppSettings = {
   storageAutoSync: true,
   storageSource: _t('settings_storage_source_off'),
   keymapOverrides: {},
+  quakeEnabled: false,
+  quakeHotkey: 'CommandOrControl+Shift+Backquote',
 };
 void defaultSettings;
 
@@ -433,6 +438,8 @@ export const SettingsModal: React.FC = () => {
                   <Row label={t('settings_lock_password')}><input type="password" className="settings-input" value={settings.lockScreenPassword} onChange={(e) => u('lockScreenPassword', e.target.value)} disabled={!settings.autoLockScreen} /></Row>
                   <Row label={t('settings_session_tab_memory')} desc={t('settings_session_tab_memory_desc')}><Toggle value={settings.sessionTabMemory} onChange={(v) => u('sessionTabMemory', v)} /></Row>
                   <Row label={t('settings_show_vip')} desc={t('settings_show_vip_desc')}><Toggle value={settings.showVipBadge} onChange={(v) => u('showVipBadge', v)} /></Row>
+                  <Row label={t('settings_quake_enabled')} desc={t('settings_quake_hint')}><Toggle value={settings.quakeEnabled} onChange={(v) => u('quakeEnabled', v)} /></Row>
+                  <Row label={t('settings_quake_hotkey')}><input type="text" className="settings-input" value={settings.quakeHotkey} onChange={(e) => u('quakeHotkey', e.target.value)} disabled={!settings.quakeEnabled} /></Row>
                 </div>
               </div>
             )}

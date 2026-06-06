@@ -80,6 +80,8 @@ export interface AppSettings {
   storageAutoSync: boolean;
   storageSource: string;
   keymapOverrides: Record<string, string | null>;
+  quakeEnabled: boolean;
+  quakeHotkey: string;
 }
 
 export const defaultSettings: AppSettings = {
@@ -154,6 +156,8 @@ export const defaultSettings: AppSettings = {
   storageAutoSync: true,
   storageSource: 'off',
   keymapOverrides: {},
+  quakeEnabled: false,
+  quakeHotkey: 'CommandOrControl+Shift+Backquote',
 };
 
 interface SettingsStore {

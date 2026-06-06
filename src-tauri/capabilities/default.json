@@ -26,6 +26,7 @@
     "deep-link:default",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
-    "process:allow-exit"
+    "process:allow-exit",
+    "global-shortcut:default"
   ]
 }
