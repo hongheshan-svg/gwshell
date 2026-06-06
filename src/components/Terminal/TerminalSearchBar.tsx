@@ -35,7 +35,9 @@ export const TerminalSearchBar: React.FC = () => {
     // Match-count reporting. onDidChangeResults is a non-optional IEvent in the
     // type, but guard the call/dispose anyway so a future API change can't crash.
     const sub = a.onDidChangeResults?.(({ resultIndex, resultCount }) => {
-      setCount(resultCount > 0 ? { idx: resultIndex + 1, total: resultCount } : null);
+      // resultIndex is -1 when the active match is unknown (e.g. match count
+      // capped on very large result sets); show 0 in that case, not a negative.
+      setCount(resultCount > 0 ? { idx: resultIndex >= 0 ? resultIndex + 1 : 0, total: resultCount } : null);
     });
     return () => { try { sub?.dispose?.(); } catch { /* noop */ } };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -80,9 +82,9 @@ export const TerminalSearchBar: React.FC = () => {
       <span className="terminal-search-count">
         {count ? `${count.idx}/${count.total}` : (query ? t('search_no_results') : '')}
       </span>
-      <button className="terminal-search-btn" onClick={findPrev} title="Prev"><ChevronUp size={14} /></button>
-      <button className="terminal-search-btn" onClick={findNext} title="Next"><ChevronDown size={14} /></button>
-      <button className="terminal-search-btn" onClick={close} title="Close"><X size={14} /></button>
+      <button className="terminal-search-btn" onClick={findPrev} title={t('search_prev')}><ChevronUp size={14} /></button>
+      <button className="terminal-search-btn" onClick={findNext} title={t('search_next')}><ChevronDown size={14} /></button>
+      <button className="terminal-search-btn" onClick={close} title={t('search_close')}><X size={14} /></button>
     </div>
   );
 };
