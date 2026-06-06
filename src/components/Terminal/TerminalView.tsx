@@ -307,6 +307,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
   const terminalCmdHint = useSettingsStore((s) => s.settings.terminalCmdHint);
   const terminalFont = useSettingsStore((s) => s.settings.terminalFont);
   const terminalFontSize = useSettingsStore((s) => s.settings.terminalFontSize);
+  const broadcastInput = useAppStore((s) => s.broadcastInput);
   const { t } = useTranslation();
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
@@ -1053,6 +1054,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
           }
         }
 
+        // Input broadcast: fan this keystroke to all OTHER connected interactive
+        // terminals. The focused tab still writes to itself below. No echo loop:
+        // sendInputToTab feeds writeQueue/IPC, it does not trigger onData.
+        {
+          const app = useAppStore.getState();
+          if (app.broadcastInput) {
+            for (const tb of app.tabs) {
+              if (
+                tb.id !== tab.id && tb.connected &&
+                (tb.type === 'ssh' || tb.type === 'localshell' || tb.type === 'serial' || tb.type === 'docker')
+              ) {
+                sendInputToTab(tb.id, data);
+              }
+            }
+          }
+        }
+
         writeQueue += data;
         if (writeQueue.length >= WRITE_CHUNK_SIZE) {
           if (writeTimer) {
@@ -1547,7 +1565,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
     <>
       <div
         ref={containerRef}
-        className="terminal-pane"
+        className={`terminal-pane${broadcastInput ? ' broadcasting' : ''}`}
         style={{ display: isActive ? "block" : "none" }}
       />
 

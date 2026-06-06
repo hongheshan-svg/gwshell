@@ -3488,3 +3488,8 @@ input, select, textarea, button {
 }
 .quick-connect-btn:hover { background: var(--hover-bg, #2a2a33); }
 .quick-connect-btn.primary { background: var(--accent, #3b78ff); border-color: var(--accent, #3b78ff); color: #fff; }
+
+.terminal-pane.broadcasting {
+  outline: 2px solid var(--accent, #3b78ff);
+  outline-offset: -2px;
+}
