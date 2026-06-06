@@ -3565,4 +3565,77 @@ input, select, textarea, button {
 .shortcut-capture { width: 120px; background: var(--accent, #3b78ff); color: #fff; border: none; border-radius: 4px; padding: 4px 8px; text-align: center; }
 .shortcut-mini { background: none; border: none; color: var(--text-muted, #aaa); cursor: pointer; }
 .shortcut-mini:hover { color: inherit; }
+
+/* Group defaults button in session panel group header */
+.session-group-defaults-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted, #888);
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.session-group-defaults-btn:hover { color: inherit; background: var(--hover-bg, #2a2a33); }
+
+/* Group defaults modal */
+.group-defaults-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 10vh;
+  background: rgba(0, 0, 0, 0.4);
+}
+.group-defaults-card {
+  width: min(480px, 92%);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--bg-secondary, #1b1b24);
+  border: 1px solid var(--border-color, #33333f);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+  overflow-y: auto;
+}
+.group-defaults-title { font-weight: 600; font-size: 15px; }
+.group-defaults-group-name { color: var(--accent, #3b78ff); }
+.group-defaults-hint { font-size: 12px; color: var(--text-muted, #888); margin-top: -4px; }
+.group-defaults-form {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 12px;
+  align-items: center;
+}
+.group-defaults-label { font-size: 12px; color: var(--text-muted, #888); white-space: nowrap; }
+.group-defaults-input {
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color, #33333f);
+  background: var(--bg-primary, #0c0c14);
+  color: inherit;
+  font-size: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.group-defaults-textarea { resize: vertical; }
+.group-defaults-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.group-defaults-btn {
+  padding: 6px 14px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color, #33333f);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 13px;
+}
+.group-defaults-btn:hover { background: var(--hover-bg, #2a2a33); }
+.group-defaults-btn.primary { background: var(--accent, #3b78ff); border-color: var(--accent, #3b78ff); color: #fff; }
 .shortcut-error { color: #e06c75; font-size: 12px; }
