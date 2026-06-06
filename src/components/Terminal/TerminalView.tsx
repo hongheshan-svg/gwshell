@@ -21,6 +21,11 @@ import "@xterm/xterm/css/xterm.css";
 interface TerminalViewProps {
   tab: TabInfo;
   isActive: boolean;
+  // Opt-in split: when defined, controls pane visibility independently of
+  // isActive (so a non-active tab can still be shown as a side-by-side pane).
+  // When undefined the pane falls back to isActive — the single-pane path,
+  // byte-for-byte unchanged.
+  visible?: boolean;
 }
 
 interface FingerprintInfo {
@@ -301,7 +306,7 @@ export function forceTerminalRedraw(
   }
 }
 
-export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => {
+export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visible }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sessions = useAppStore((s) => s.sessions);
   const theme = useAppStore((s) => s.theme);
@@ -1582,7 +1587,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive }) => 
       <div
         ref={containerRef}
         className={`terminal-pane${broadcastInput ? ' broadcasting' : ''}`}
-        style={{ display: isActive ? "block" : "none" }}
+        style={{ display: (visible ?? isActive) ? "block" : "none" }}
+        onMouseDown={() => useAppStore.getState().setActiveTab(tab.id)}
       />
 
       {ghostText && isActive && terminalCmdHint && isInteractiveTerminal(tab.type) && (
