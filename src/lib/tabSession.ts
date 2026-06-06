@@ -13,12 +13,16 @@ export interface StoredTabs {
 
 const KEY = 'gwshell.openTabs';
 
-// Returns the restorable subset of tabs: excludes the asset-list tab, tabs whose
-// session no longer exists, and _temporary (Quick Connect) sessions.
+// Only tab types that TerminalView.setupConnection auto-reconnects on mount.
+// docker/sftp/asset-list are excluded (no reconnect branch → would restore dead).
+const RESTORABLE_TYPES = new Set<TabInfo['type']>(['ssh', 'localshell', 'serial']);
+
+// Returns the restorable subset of tabs: only reconnectable types, tabs whose
+// session still exists, and non-_temporary (Quick Connect) sessions.
 function restorableTabs(tabs: TabInfo[], sessions: SessionConfig[]): TabInfo[] {
   const byId = new Map(sessions.map((s) => [s.id, s]));
   return tabs.filter((t) => {
-    if (t.type === 'asset-list') return false;
+    if (!RESTORABLE_TYPES.has(t.type)) return false;
     const s = byId.get(t.sessionId);
     return !!s && !s._temporary;
   });
