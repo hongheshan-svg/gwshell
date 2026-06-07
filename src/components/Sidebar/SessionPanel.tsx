@@ -10,9 +10,7 @@ import {
   FolderOpen,
   Folder,
   Settings,
-  FolderPlus,
   Copy,
-  Link,
   Play,
   Edit,
   Trash2,
@@ -119,24 +117,10 @@ export const SessionPanel: React.FC = () => {
       {/* Header row 1: title + search */}
       <div className="sidebar-header">
         <div className="sidebar-header-row">
-          <h3>{t('panel_asset_list')}</h3>
+          <h3 className="sidebar-title-link" onClick={() => setActiveTab('asset-list')} title={t('nav_assetlist')}>{t('panel_asset_list')}</h3>
           <button className="sidebar-action-btn" onClick={() => setShowSearch(!showSearch)} title={t('panel_search')}>
             <Search size={13} />
           </button>
-          <div className="sidebar-actions">
-            <button className="sidebar-action-btn" title={t('panel_settings')}>
-              <Settings size={13} />
-            </button>
-            <button className="sidebar-action-btn" title={t('panel_new_folder')}>
-              <FolderPlus size={13} />
-            </button>
-            <button className="sidebar-action-btn" title={t('panel_copy')}>
-              <Copy size={13} />
-            </button>
-            <button className="sidebar-action-btn" title={t('panel_link')}>
-              <Link size={13} />
-            </button>
-          </div>
         </div>
         {/* Toolbar row 2: + button area */}
         <div className="sidebar-toolbar">
