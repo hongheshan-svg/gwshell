@@ -212,19 +212,6 @@ input, select, textarea, button {
 
 /* ========== Icon Navbar ========== */
 
-.icon-navbar {
-  width: var(--navbar-width);
-  background: var(--bg-secondary);
-  border-right: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 8px 0;
-  gap: 2px;
-  flex-shrink: 0;
-  z-index: 10;
-}
-
 .nav-icon-btn {
   width: 34px;
   height: 34px;
