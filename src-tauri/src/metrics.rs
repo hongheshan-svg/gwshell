@@ -50,6 +50,13 @@ pub struct NetStats {
     pub tx_bytes_per_sec: f64,
 }
 
+#[derive(Debug, Serialize, Clone, Default)]
+pub struct DiskStats {
+    pub total_bytes: u64,
+    pub used_bytes: u64,
+    pub mount: String,
+}
+
 #[derive(Debug, Serialize, Clone)]
 pub struct ProcInfo {
     pub pid: u32,
@@ -72,6 +79,7 @@ pub struct MetricsSnapshot {
     pub cpu: Option<CpuStats>,
     pub mem: Option<MemStats>,
     pub net: Option<NetStats>,
+    pub disk: Option<DiskStats>,
     pub procs: Option<Vec<ProcInfo>>,
     pub nics: Option<Vec<NicInfo>>,
     pub collected_at: i64,
@@ -258,6 +266,23 @@ pub fn parse_loadavg(text: &str) -> (f64, f64, f64) {
         3 => (nums[0], nums[1], nums[2]),
         _ => (0.0, 0.0, 0.0),
     }
+}
+
+/// Parse `df -kP /` output (header + one data row). Sizes are KiB.
+pub fn parse_df(text: &str) -> Option<DiskStats> {
+    let line = text.lines().nth(1)?; // skip header
+    let cols: Vec<&str> = line.split_whitespace().collect();
+    if cols.len() < 6 {
+        return None;
+    }
+    let total_kb: u64 = cols[1].parse().ok()?;
+    let used_kb: u64 = cols[2].parse().ok()?;
+    let mount = cols[cols.len() - 1].to_string();
+    Some(DiskStats {
+        total_bytes: total_kb.saturating_mul(1024),
+        used_bytes: used_kb.saturating_mul(1024),
+        mount,
+    })
 }
 
 /// Parse `ip -o -4 addr show` lines for ipv4 per interface.
@@ -448,6 +473,21 @@ mod tests {
     }
 
     #[test]
+    fn parses_df_output() {
+        let text = "Filesystem     1024-blocks     Used Available Capacity Mounted on\n/dev/sda1         41251136 12345678  26800000      32% /\n";
+        let d = parse_df(text).expect("parse_df should succeed");
+        assert_eq!(d.total_bytes, 41251136u64 * 1024);
+        assert_eq!(d.used_bytes, 12345678u64 * 1024);
+        assert_eq!(d.mount, "/");
+    }
+
+    #[test]
+    fn parse_df_returns_none_on_header_only() {
+        let text = "Filesystem     1024-blocks     Used Available Capacity Mounted on\n";
+        assert!(parse_df(text).is_none());
+    }
+
+    #[test]
     fn parses_ip_addr_lines() {
         let text = "1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever preferred_lft forever\n2: eth0    inet 10.0.0.5/24 scope global eth0\\       valid_lft forever preferred_lft forever\n";
         let out = parse_ip_addr(text);
@@ -600,6 +640,7 @@ echo '---MEM---';    cat /proc/meminfo
 echo '---NET---';    cat /proc/net/dev
 echo '---UPT---';    cat /proc/uptime
 echo '---LOAD---';   cat /proc/loadavg
+echo '---DISK---';   df -kP / 2>/dev/null
 echo '---PROC---';   ps -eo pid,%cpu,%mem,rss,comm --sort=-%cpu 2>/dev/null | head -21
 echo '---NIC4---';   ip -o -4 addr show 2>/dev/null
 echo '---NICLINK---';ip -o link show 2>/dev/null
@@ -737,6 +778,7 @@ pub fn build_snapshot(
                     "NET" => "NET",
                     "UPT" => "UPT",
                     "LOAD" => "LOAD",
+                    "DISK" => "DISK",
                     "PROC" => "PROC",
                     "NIC4" => "NIC4",
                     "NICLINK" => "NICLINK",
@@ -843,6 +885,8 @@ pub fn build_snapshot(
         }
     };
 
+    let disk_stats = sections.get("DISK").and_then(|t| parse_df(t));
+
     let procs = sections.get("PROC").map(|t| parse_ps(t));
 
     let nics = {
@@ -905,6 +949,7 @@ pub fn build_snapshot(
         cpu: cpu_stats,
         mem: mem_stats,
         net: net_stats,
+        disk: disk_stats,
         procs,
         nics,
         collected_at: SystemTime::now()

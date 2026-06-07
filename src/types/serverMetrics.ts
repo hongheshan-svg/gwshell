@@ -37,6 +37,12 @@ export interface NetStats {
   tx_bytes_per_sec: number;
 }
 
+export interface DiskStats {
+  total_bytes: number;
+  used_bytes: number;
+  mount: string;
+}
+
 export interface ProcInfo {
   pid: number;
   comm: string;
@@ -56,6 +62,7 @@ export interface MetricsSnapshot {
   cpu: CpuStats | null;
   mem: MemStats | null;
   net: NetStats | null;
+  disk: DiskStats | null;
   procs: ProcInfo[] | null;
   nics: NicInfo[] | null;
   collected_at: number;   // unix ms
