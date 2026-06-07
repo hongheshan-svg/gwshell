@@ -12,43 +12,35 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
-import { useAppStore } from '../../stores/appStore';
 import type { SessionConfig } from '../../types';
+import { useAssetData } from '../../hooks/useAssetData';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { AssetDashboard } from '../AssetDashboard/AssetDashboard';
 
 export const AssetTable: React.FC = () => {
   const {
-    sessions,
+    filteredSessions,
+    searchQuery,
+    setSearchQuery,
     selectedSessionIds,
     setSelectedSessionIds,
     toggleSelectSession,
     setShowNewSession,
     setEditingSession,
     removeSession,
-    addSession,
-    addTab,
-    setActiveTab,
-    tabs,
-    batchUpdateLatency,
+    handleConnect,
+    handleDeleteSelected,
+    handleCopySession,
+    doPingRef,
     sidebarCollapsed,
     toggleSidebar,
-  } = useAppStore();
+  } = useAssetData();
   const { t } = useTranslation();
-  const [searchQuery, setSearchQuery] = useState('');
+  const homeView = useSettingsStore((s) => s.settings.homeView);
+  const saveSettings = useSettingsStore((s) => s.save);
+  const allSettings = useSettingsStore((s) => s.settings);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: SessionConfig } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
-
-  // Filter out temporary sessions created by split-screen
-  const realSessions = sessions.filter((s) => !s._temporary);
-
-  const filteredSessions = searchQuery
-    ? realSessions.filter(
-        (s) =>
-          s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (s.host && s.host.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          (s.username && s.username.toLowerCase().includes(searchQuery.toLowerCase()))
-      )
-    : realSessions;
 
   const allSelected = filteredSessions.length > 0 && filteredSessions.every((s) => selectedSessionIds.includes(s.id));
 
@@ -58,38 +50,6 @@ export const AssetTable: React.FC = () => {
     } else {
       setSelectedSessionIds(filteredSessions.map((s) => s.id));
     }
-  };
-
-  const handleConnect = (session: SessionConfig) => {
-    const existingTab = tabs.find((t) => t.sessionId === session.id);
-    if (existingTab) {
-      setActiveTab(existingTab.id);
-      return;
-    }
-    const tabId = crypto.randomUUID();
-    addTab({
-      id: tabId,
-      sessionId: session.id,
-      title: session.name,
-      type: session.session_type,
-      connected: false,
-    });
-  };
-
-  const handleDeleteSelected = () => {
-    selectedSessionIds.forEach((id) => removeSession(id));
-    setSelectedSessionIds([]);
-  };
-
-  const handleCopySession = (session: SessionConfig) => {
-    const copied: SessionConfig = {
-      ...session,
-      id: crypto.randomUUID(),
-      name: `${session.name} - 副本`,
-      created_at: new Date().toISOString().slice(0, 10),
-      _temporary: undefined,
-    };
-    addSession(copied);
   };
 
   const handleContextMenu = (e: React.MouseEvent, session: SessionConfig) => {
@@ -115,111 +75,6 @@ export const AssetTable: React.FC = () => {
     return <span className={cls}>{latency}ms</span>;
   };
 
-  // Ping latency: fully async, batch-update to avoid blocking renders
-  const sessionsRef = useRef(realSessions);
-  sessionsRef.current = realSessions;
-
-  const idleCallbackRef = useRef<number | null>(null);
-  const idleUsesTimeoutRef = useRef(false);
-  const lastInteractionRef = useRef(Date.now());
-  const pingLoopRunningRef = useRef(false);
-
-  const sleep = (ms: number) => new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-
-  const scheduleIdle = (callback: () => void) => {
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      idleUsesTimeoutRef.current = false;
-      idleCallbackRef.current = window.requestIdleCallback(callback, { timeout: 2000 });
-      return;
-    }
-    idleUsesTimeoutRef.current = true;
-    idleCallbackRef.current = setTimeout(callback, 0);
-  };
-
-  const cancelIdle = () => {
-    if (idleCallbackRef.current == null) return;
-    if (!idleUsesTimeoutRef.current && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-      window.cancelIdleCallback(idleCallbackRef.current);
-    } else {
-      clearTimeout(idleCallbackRef.current);
-    }
-    idleCallbackRef.current = null;
-  };
-
-  useEffect(() => {
-    const markInteraction = () => {
-      lastInteractionRef.current = Date.now();
-    };
-
-    window.addEventListener('pointerdown', markInteraction, { passive: true });
-    window.addEventListener('keydown', markInteraction);
-    window.addEventListener('resize', markInteraction);
-
-    return () => {
-      window.removeEventListener('pointerdown', markInteraction);
-      window.removeEventListener('keydown', markInteraction);
-      window.removeEventListener('resize', markInteraction);
-    };
-  }, []);
-
-  const doPingRef = useRef(() => {});
-  doPingRef.current = async () => {
-    if (pingLoopRunningRef.current) return;
-    const targets = sessionsRef.current.filter((s) => s.host);
-    if (targets.length === 0) return;
-
-    pingLoopRunningRef.current = true;
-    const updates = new Map<string, number | null>();
-
-    try {
-      for (const session of targets) {
-        while (Date.now() - lastInteractionRef.current < 1500) {
-          await sleep(250);
-        }
-
-        if (document.hidden || !document.hasFocus()) {
-          break;
-        }
-
-        try {
-          const latency = await invoke<number>('ping_host', {
-            host: session.host!,
-            port: session.port || 22,
-          });
-          updates.set(session.id, latency);
-        } catch {
-          updates.set(session.id, null);
-        }
-
-        // Leave breathing room for UI interactions between hosts.
-        await sleep(150);
-      }
-
-      if (updates.size > 0) {
-        batchUpdateLatency(updates);
-      }
-    } finally {
-      pingLoopRunningRef.current = false;
-    }
-  };
-
-  useEffect(() => {
-    // First ping waits until the UI is already visible and the main thread is idle.
-    const initTimer = window.setTimeout(() => {
-      scheduleIdle(() => {
-        void doPingRef.current();
-      });
-    }, 8000);
-    const timer = setInterval(() => doPingRef.current(), 60_000);
-    return () => {
-      clearTimeout(initTimer);
-      clearInterval(timer);
-      cancelIdle();
-    };
-  }, []);
-
   return (
     <div className="asset-table-wrapper">
       {/* Toolbar */}
@@ -235,6 +90,24 @@ export const AssetTable: React.FC = () => {
             {sidebarCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
           </button>
           <span className="asset-toolbar-title">{t('table_title')}</span>
+          <div className="home-view-seg" role="group" aria-label="View mode">
+            <button
+              type="button"
+              className={`home-view-seg__btn${homeView === 'card' ? ' active' : ''}`}
+              onClick={() => saveSettings({ ...allSettings, homeView: 'card' })}
+              aria-pressed={homeView === 'card'}
+            >
+              {t('home_view_card')}
+            </button>
+            <button
+              type="button"
+              className={`home-view-seg__btn${homeView === 'table' ? ' active' : ''}`}
+              onClick={() => saveSettings({ ...allSettings, homeView: 'table' })}
+              aria-pressed={homeView === 'table'}
+            >
+              {t('home_view_list')}
+            </button>
+          </div>
         </div>
         <div className="asset-toolbar-center">
           <span className="asset-toolbar-info">{t('table_selected', { count: selectedSessionIds.length })}</span>
@@ -263,95 +136,103 @@ export const AssetTable: React.FC = () => {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="asset-table-container">
-        <table className="asset-table">
-          <thead>
-            <tr>
-              <th className="col-check">
-                <input type="checkbox" checked={allSelected} onChange={handleSelectAll} />
-              </th>
-              <th className="col-name">{t('table_col_name')}</th>
-              <th className="col-latency">{t('table_col_latency')}</th>
-              <th className="col-host">{t('table_col_host')}</th>
-              <th className="col-user">{t('table_col_user')}</th>
-              <th className="col-created">{t('table_col_created')}</th>
-              <th className="col-expired">{t('table_col_expired')}</th>
-              <th className="col-remark">{t('table_col_remark')}</th>
-              <th className="col-actions">{t('table_col_actions')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredSessions.length === 0 ? (
+      {/* Body: card grid or table depending on homeView */}
+      {homeView === 'card' ? (
+        <AssetDashboard
+          sessions={filteredSessions}
+          onConnect={handleConnect}
+          onEdit={(s) => { setEditingSession(s); setShowNewSession(true); }}
+        />
+      ) : (
+        <div className="asset-table-container">
+          <table className="asset-table">
+            <thead>
               <tr>
-                <td colSpan={9} className="asset-empty">
-                  <div className="asset-empty-content">
-                    <Server size={32} />
-                    <p>{t('table_empty')}</p>
-                  </div>
-                </td>
+                <th className="col-check">
+                  <input type="checkbox" checked={allSelected} onChange={handleSelectAll} />
+                </th>
+                <th className="col-name">{t('table_col_name')}</th>
+                <th className="col-latency">{t('table_col_latency')}</th>
+                <th className="col-host">{t('table_col_host')}</th>
+                <th className="col-user">{t('table_col_user')}</th>
+                <th className="col-created">{t('table_col_created')}</th>
+                <th className="col-expired">{t('table_col_expired')}</th>
+                <th className="col-remark">{t('table_col_remark')}</th>
+                <th className="col-actions">{t('table_col_actions')}</th>
               </tr>
-            ) : (
-              filteredSessions.map((session) => (
-                <tr
-                  key={session.id}
-                  className={selectedSessionIds.includes(session.id) ? 'selected' : ''}
-                  onDoubleClick={() => handleConnect(session)}
-                  onContextMenu={(e) => handleContextMenu(e, session)}
-                >
-                  <td className="col-check">
-                    <input
-                      type="checkbox"
-                      checked={selectedSessionIds.includes(session.id)}
-                      onChange={() => toggleSelectSession(session.id)}
-                    />
-                  </td>
-                  <td className="col-name">
-                    <span className="asset-name-icon"><Server size={13} /></span>
-                    <span>{session.name}</span>
-                  </td>
-                  <td className="col-latency">{formatLatency(session.latency)}</td>
-                  <td className="col-host">{session.host || '-'}</td>
-                  <td className="col-user">{session.username || '-'}</td>
-                  <td className="col-created">{session.created_at || '-'}</td>
-                  <td className="col-expired">{session.expired_at || '-'}</td>
-                  <td className="col-remark">{session.remark || '-'}</td>
-                  <td className="col-actions">
-                    <button
-                      className="asset-action-btn"
-                      onClick={() => handleConnect(session)}
-                      title={t('table_connect')}
-                    >
-                      <Play size={12} />
-                    </button>
-                    <button
-                      className="asset-action-btn"
-                      onClick={() => { setEditingSession(session); setShowNewSession(true); }}
-                      title={t('table_edit')}
-                    >
-                      <Edit size={12} />
-                    </button>
-                    <button
-                      className="asset-action-btn"
-                      onClick={() => handleCopySession(session)}
-                      title={t('table_copy')}
-                    >
-                      <Copy size={12} />
-                    </button>
-                    <button
-                      className="asset-action-btn danger"
-                      onClick={() => removeSession(session.id)}
-                      title={t('table_delete')}
-                    >
-                      <Trash2 size={12} />
-                    </button>
+            </thead>
+            <tbody>
+              {filteredSessions.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="asset-empty">
+                    <div className="asset-empty-content">
+                      <Server size={32} />
+                      <p>{t('table_empty')}</p>
+                    </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : (
+                filteredSessions.map((session) => (
+                  <tr
+                    key={session.id}
+                    className={selectedSessionIds.includes(session.id) ? 'selected' : ''}
+                    onDoubleClick={() => handleConnect(session)}
+                    onContextMenu={(e) => handleContextMenu(e, session)}
+                  >
+                    <td className="col-check">
+                      <input
+                        type="checkbox"
+                        checked={selectedSessionIds.includes(session.id)}
+                        onChange={() => toggleSelectSession(session.id)}
+                      />
+                    </td>
+                    <td className="col-name">
+                      <span className="asset-name-icon"><Server size={13} /></span>
+                      <span>{session.name}</span>
+                    </td>
+                    <td className="col-latency">{formatLatency(session.latency)}</td>
+                    <td className="col-host">{session.host || '-'}</td>
+                    <td className="col-user">{session.username || '-'}</td>
+                    <td className="col-created">{session.created_at || '-'}</td>
+                    <td className="col-expired">{session.expired_at || '-'}</td>
+                    <td className="col-remark">{session.remark || '-'}</td>
+                    <td className="col-actions">
+                      <button
+                        className="asset-action-btn"
+                        onClick={() => handleConnect(session)}
+                        title={t('table_connect')}
+                      >
+                        <Play size={12} />
+                      </button>
+                      <button
+                        className="asset-action-btn"
+                        onClick={() => { setEditingSession(session); setShowNewSession(true); }}
+                        title={t('table_edit')}
+                      >
+                        <Edit size={12} />
+                      </button>
+                      <button
+                        className="asset-action-btn"
+                        onClick={() => handleCopySession(session)}
+                        title={t('table_copy')}
+                      >
+                        <Copy size={12} />
+                      </button>
+                      <button
+                        className="asset-action-btn danger"
+                        onClick={() => removeSession(session.id)}
+                        title={t('table_delete')}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Right-click context menu */}
       {contextMenu && (

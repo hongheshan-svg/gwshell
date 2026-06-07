@@ -29,3 +29,6 @@ dist-ssr
 
 # Claude Code
 .claude/
+
+# Browser MCP screenshot artifacts
+.playwright-mcp/

@@ -25,6 +25,7 @@ import i18n from './i18n';
 import type { SessionConfig } from './types';
 import * as commandHistory from './lib/commandHistory';
 import { saveOpenTabs, tabsSignature, loadOpenTabs } from './lib/tabSession';
+import './styles/theme.css';
 import './styles/global.css';
 
 const NewSessionModal = lazy(() => import('./components/Modals/NewSessionModal').then((m) => ({ default: m.NewSessionModal })));

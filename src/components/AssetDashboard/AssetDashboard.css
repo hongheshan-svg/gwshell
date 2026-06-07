@@ -1,0 +1,339 @@
+/* =============================================================================
+   AssetDashboard — HostDashCard styles
+   Uses only P1 design tokens (var(--token)).  No hardcoded colors.
+   ============================================================================= */
+
+/* ---- Dashboard grid (used by the container, defined here for later use) ---- */
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-3);
+}
+
+.dash-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: var(--space-2) 0 var(--space-1);
+  grid-column: 1 / -1;
+}
+
+/* ---- Card shell ------------------------------------------------------------ */
+
+.dash-card {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  min-width: 240px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.dash-card:hover {
+  border-color: var(--border-light);
+  box-shadow: var(--shadow-sm);
+}
+
+.dash-card.connected {
+  border-color: rgba(var(--accent-primary-rgb), 0.35);
+}
+
+.dash-card.connected:hover {
+  border-color: rgba(var(--accent-primary-rgb), 0.55);
+}
+
+/* ---- Color stripe (left 3px) ---------------------------------------------- */
+
+.dash-stripe {
+  flex-shrink: 0;
+  width: 3px;
+  background: var(--border-color); /* overridden inline by session.color_label */
+}
+
+/* ---- Card inner content ---------------------------------------------------- */
+
+.dash-card-inner {
+  flex: 1;
+  padding: var(--space-3);
+  min-width: 0; /* allow text truncation */
+}
+
+/* ---- Header row ------------------------------------------------------------ */
+
+.dash-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.dash-status-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.dash-status-dot.online {
+  background: var(--success);
+  box-shadow: 0 0 5px rgba(74, 222, 128, 0.5);
+}
+
+.dash-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.dash-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.dash-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.dash-action-btn.primary {
+  color: var(--accent-primary);
+}
+
+.dash-action-btn.primary:hover {
+  background: var(--accent-bg);
+  color: var(--accent-hover);
+}
+
+/* ---- Sub row (username@host:port) ----------------------------------------- */
+
+.dash-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: var(--space-2);
+}
+
+/* ---- Connected: metrics --------------------------------------------------- */
+
+.dash-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dash-metric-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.dash-metric-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  width: 34px;
+  flex-shrink: 0;
+}
+
+/* CPU ring */
+
+.dash-cpu-ring {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dash-cpu-ring-inner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dash-cpu-ring-inner span {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* MEM / DISK bar */
+
+.dash-metric-bar-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dash-bar-track {
+  height: 4px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.dash-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  transition: width 300ms ease;
+}
+
+.dash-metric-value {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.dash-metric-mount {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+/* LOAD chip */
+
+.dash-load-chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+}
+
+/* Sparkline */
+
+.dash-sparkline-wrap {
+  display: flex;
+  align-items: center;
+  padding-top: var(--space-1);
+}
+
+.dash-sparkline {
+  display: block;
+  border-radius: var(--radius-sm);
+}
+
+/* ---- Disconnected: offline state ------------------------------------------ */
+
+.dash-offline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dash-ping-badge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  align-self: flex-start;
+}
+
+.dash-ping-badge.live {
+  color: var(--success);
+  background: rgba(74, 222, 128, 0.1);
+}
+
+.dash-connect-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid rgba(var(--accent-primary-rgb), 0.4);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.dash-connect-btn:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent-primary);
+}
+
+.dash-created {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ---- Dashboard scroll container ------------------------------------------- */
+
+.asset-dash-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ---- Group block ----------------------------------------------------------- */
+
+.dash-group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Empty state ----------------------------------------------------------- */
+
+.asset-dash-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

@@ -50,6 +50,13 @@ pub struct NetStats {
     pub tx_bytes_per_sec: f64,
 }
 
+#[derive(Debug, Serialize, Clone, Default)]
+pub struct DiskStats {
+    pub total_bytes: u64,
+    pub used_bytes: u64,
+    pub mount: String,
+}
+
 #[derive(Debug, Serialize, Clone)]
 pub struct ProcInfo {
     pub pid: u32,
@@ -72,6 +79,7 @@ pub struct MetricsSnapshot {
     pub cpu: Option<CpuStats>,
     pub mem: Option<MemStats>,
     pub net: Option<NetStats>,
+    pub disk: Option<DiskStats>,
     pub procs: Option<Vec<ProcInfo>>,
     pub nics: Option<Vec<NicInfo>>,
     pub collected_at: i64,
@@ -258,6 +266,23 @@ pub fn parse_loadavg(text: &str) -> (f64, f64, f64) {
         3 => (nums[0], nums[1], nums[2]),
         _ => (0.0, 0.0, 0.0),
     }
+}
+
+/// Parse `df -kP /` output (header + one data row). Sizes are KiB.
+pub fn parse_df(text: &str) -> Option<DiskStats> {
+    let line = text.lines().nth(1)?; // skip header
+    let cols: Vec<&str> = line.split_whitespace().collect();
+    if cols.len() < 6 {
+        return None;
+    }
+    let total_kb: u64 = cols[1].parse().ok()?;
+    let used_kb: u64 = cols[2].parse().ok()?;
+    let mount = cols[cols.len() - 1].to_string();
+    Some(DiskStats {
+        total_bytes: total_kb.saturating_mul(1024),
+        used_bytes: used_kb.saturating_mul(1024),
+        mount,
+    })
 }
 
 /// Parse `ip -o -4 addr show` lines for ipv4 per interface.
@@ -448,6 +473,21 @@ mod tests {
     }
 
     #[test]
+    fn parses_df_output() {
+        let text = "Filesystem     1024-blocks     Used Available Capacity Mounted on\n/dev/sda1         41251136 12345678  26800000      32% /\n";
+        let d = parse_df(text).expect("parse_df should succeed");
+        assert_eq!(d.total_bytes, 41251136u64 * 1024);
+        assert_eq!(d.used_bytes, 12345678u64 * 1024);
+        assert_eq!(d.mount, "/");
+    }
+
+    #[test]
+    fn parse_df_returns_none_on_header_only() {
+        let text = "Filesystem     1024-blocks     Used Available Capacity Mounted on\n";
+        assert!(parse_df(text).is_none());
+    }
+
+    #[test]
     fn parses_ip_addr_lines() {
         let text = "1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever preferred_lft forever\n2: eth0    inet 10.0.0.5/24 scope global eth0\\       valid_lft forever preferred_lft forever\n";
         let out = parse_ip_addr(text);
@@ -511,6 +551,8 @@ pub struct LastSample {
 
 pub struct MetricsManager {
     tasks: Mutex<StdHashMap<String, JoinHandle<()>>>,
+    /// Per-session reference count. The poller runs while refs > 0.
+    refs: Mutex<StdHashMap<String, usize>>,
     last: Arc<Mutex<StdHashMap<String, LastSample>>>,
     static_host: Arc<Mutex<StdHashMap<String, HostInfo>>>,
 }
@@ -519,20 +561,40 @@ impl MetricsManager {
     pub fn new() -> Self {
         Self {
             tasks: Mutex::new(StdHashMap::new()),
+            refs: Mutex::new(StdHashMap::new()),
             last: Arc::new(Mutex::new(StdHashMap::new())),
             static_host: Arc::new(Mutex::new(StdHashMap::new())),
         }
     }
 
-    /// Idempotent. If a task already exists for this session_id, returns early.
+    /// Start (or share) a metrics poller for `session_id`.
+    ///
+    /// Reference-counted: the first caller spawns the poller task; subsequent
+    /// callers while the task is still alive merely increment the count and
+    /// return.  If the task died on its own (e.g. SSH disconnected and it
+    /// exited) the stale handle is cleaned up and a fresh poller is spawned
+    /// regardless of the current count — the count is kept as-is because the
+    /// callers are still logically subscribed and will eventually call `stop`.
     pub fn start(&self, session_id: String, ssh: Arc<SshManager>, app: AppHandle) {
+        // --- 1. Increment the reference count (always). ---
+        // Lock refs briefly, then drop before touching tasks.
+        {
+            let mut refs = self.refs.lock();
+            *refs.entry(session_id.clone()).or_insert(0) += 1;
+        }
+
+        // --- 2. Decide whether to spawn. ---
         let mut tasks = self.tasks.lock();
+        // If a handle exists but the task finished on its own, evict it so we
+        // can re-spawn below.  The ref-count is kept unchanged because the
+        // existing callers are still subscribed.
         if tasks
             .get(&session_id)
             .is_some_and(|handle| handle.is_finished())
         {
             tasks.remove(&session_id);
         }
+        // A live task already covers this session — nothing more to do.
         if tasks.contains_key(&session_id) {
             return;
         }
@@ -600,6 +662,7 @@ echo '---MEM---';    cat /proc/meminfo
 echo '---NET---';    cat /proc/net/dev
 echo '---UPT---';    cat /proc/uptime
 echo '---LOAD---';   cat /proc/loadavg
+echo '---DISK---';   df -kP / 2>/dev/null
 echo '---PROC---';   ps -eo pid,%cpu,%mem,rss,comm --sort=-%cpu 2>/dev/null | head -21
 echo '---NIC4---';   ip -o -4 addr show 2>/dev/null
 echo '---NICLINK---';ip -o link show 2>/dev/null
@@ -645,16 +708,42 @@ echo '---END---'
         tasks.insert(session_id, handle);
     }
 
+    /// Decrement the reference count for `session_id`.
+    ///
+    /// The poller is only aborted when the count reaches zero.  If callers are
+    /// still subscribed (count > 0 after decrement) the poller keeps running.
     pub fn stop(&self, session_id: &str) {
-        let mut tasks = self.tasks.lock();
-        if let Some(handle) = tasks.remove(session_id) {
-            handle.abort();
+        // --- 1. Decrement the reference count. ---
+        let should_stop = {
+            let mut refs = self.refs.lock();
+            let count = refs.entry(session_id.to_string()).or_insert(0);
+            if *count > 0 {
+                *count -= 1;
+            }
+            let remaining = *count;
+            if remaining == 0 {
+                refs.remove(session_id);
+            }
+            remaining == 0
+        };
+
+        // --- 2. Only tear down when no more subscribers. ---
+        if should_stop {
+            let mut tasks = self.tasks.lock();
+            if let Some(handle) = tasks.remove(session_id) {
+                handle.abort();
+            }
+            self.last.lock().remove(session_id);
+            self.static_host.lock().remove(session_id);
         }
-        self.last.lock().remove(session_id);
-        self.static_host.lock().remove(session_id);
     }
 
+    /// Abort all pollers unconditionally (used on app shutdown).
+    /// Clears all reference counts too.
     pub fn stop_all(&self) {
+        // Clear refs first (separate lock, brief hold).
+        self.refs.lock().clear();
+
         let handles: Vec<_> = self
             .tasks
             .lock()
@@ -737,6 +826,7 @@ pub fn build_snapshot(
                     "NET" => "NET",
                     "UPT" => "UPT",
                     "LOAD" => "LOAD",
+                    "DISK" => "DISK",
                     "PROC" => "PROC",
                     "NIC4" => "NIC4",
                     "NICLINK" => "NICLINK",
@@ -843,6 +933,8 @@ pub fn build_snapshot(
         }
     };
 
+    let disk_stats = sections.get("DISK").and_then(|t| parse_df(t));
+
     let procs = sections.get("PROC").map(|t| parse_ps(t));
 
     let nics = {
@@ -905,6 +997,7 @@ pub fn build_snapshot(
         cpu: cpu_stats,
         mem: mem_stats,
         net: net_stats,
+        disk: disk_stats,
         procs,
         nics,
         collected_at: SystemTime::now()

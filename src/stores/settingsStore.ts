@@ -82,12 +82,13 @@ export interface AppSettings {
   keymapOverrides: Record<string, string | null>;
   quakeEnabled: boolean;
   quakeHotkey: string;
+  homeView: 'card' | 'table';
 }
 
 export const defaultSettings: AppSettings = {
   theme: 'dark',
   middleClickCloseTab: true,
-  uiFont: 'JetBrainsMono, NotoSansSC',
+  uiFont: 'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif',
   editorLineEnding: '(compat) \\r\\n',
   enableAnimation: false,
   showRealtimeInfo: false,
@@ -158,6 +159,7 @@ export const defaultSettings: AppSettings = {
   keymapOverrides: {},
   quakeEnabled: false,
   quakeHotkey: 'CommandOrControl+Shift+Backquote',
+  homeView: 'card',
 };
 
 interface SettingsStore {

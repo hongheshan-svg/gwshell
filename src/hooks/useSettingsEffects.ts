@@ -44,6 +44,17 @@ export function useSettingsEffects() {
     setLocale(LANG_MAP[settings.language] ?? 'zh');
   }, [settings.language, setLocale]);
 
+  // UI (chrome) font — drives the CSS --font-sans token. Empty falls back to
+  // the stylesheet default. Terminal font is separate (settings.terminalFont).
+  useEffect(() => {
+    const sans = settings.uiFont?.trim();
+    if (sans) {
+      document.documentElement.style.setProperty('--font-sans', sans);
+    } else {
+      document.documentElement.style.removeProperty('--font-sans');
+    }
+  }, [settings.uiFont]);
+
   useEffect(() => {
     const zoom = ZOOM_MAP[settings.zoomLevel] ?? 1.0;
     (document.documentElement.style as unknown as Record<string, string>).zoom = String(zoom);
