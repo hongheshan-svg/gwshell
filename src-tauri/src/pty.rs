@@ -8,8 +8,11 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
 };
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
+
+#[cfg(unix)]
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 
 /// Monotonic counter for unique temp-file naming (pid + counter).
 static SHELL_INTEGRATION_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -165,39 +168,80 @@ fn resolve_shell(name: Option<&str>, shell_integration: bool) -> CommandBuilder 
 
 /// Write a bash rcfile with OSC 133 integration and return its path.
 /// Returns None on any I/O error (shell will start without integration).
+///
+/// Security: file is created with O_CREAT|O_EXCL (fails if path exists) and
+/// mode 0600 (owner-read/write only), using an unpredictable name that includes
+/// pid + monotonic counter + subsecond nanosecond timestamp entropy.
 #[cfg(not(target_os = "windows"))]
 fn write_bash_integration() -> Option<std::path::PathBuf> {
-    let counter = SHELL_INTEGRATION_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let pid = std::process::id();
-    let file_name = format!("gw_bash_rc_{}_{}", pid, counter);
-    let path = std::env::temp_dir().join(file_name);
-
     // NOTE: \033 and \007 are literal backslash sequences — the shell's
     // `printf` builtin will interpret them as ESC (0x1b) and BEL (0x07).
+    // FIX 3: PS0 must NOT use \[ \] readline markers — bash doesn't strip
+    // them in PS0, leaking 0x01/0x02 bytes. PS1 keeps \[ \] (correct there).
     let content = r#"[ -f ~/.bashrc ] && source ~/.bashrc
 __gw_precmd() { local e=$?; printf '\033]133;D;%s\007' "$e"; }
 case "$PROMPT_COMMAND" in *__gw_precmd*) ;; *) PROMPT_COMMAND='__gw_precmd'${PROMPT_COMMAND:+';'$PROMPT_COMMAND} ;; esac
 PS1='\[\033]133;A\007\]'"$PS1"'\[\033]133;B\007\]'
-PS0='\[\033]133;C\007\]'"$PS0"
+PS0='\033]133;C\007'"$PS0"
 "#;
 
-    std::fs::write(&path, content).ok()?;
-    Some(path)
+    let pid = std::process::id();
+    let tmp = std::env::temp_dir();
+
+    // Retry a few times in case a name collision occurs (extremely unlikely).
+    for attempt in 0u64..8 {
+        let counter = SHELL_INTEGRATION_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let nanos = std::time::SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.subsec_nanos())
+            .unwrap_or(0);
+        let file_name = format!("gw_bash_rc_{}_{}_{}", pid, counter.wrapping_add(attempt), nanos);
+        let path = tmp.join(file_name);
+
+        // O_CREAT|O_EXCL: fails atomically if path already exists → defeats
+        // symlink/pre-create races. Mode 0600: owner-only read/write.
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&path)
+        {
+            Ok(mut f) => {
+                if f.write_all(content.as_bytes()).is_ok() {
+                    return Some(path);
+                } else {
+                    // Write failed; clean up and give up.
+                    let _ = std::fs::remove_file(&path);
+                    return None;
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                // Name collision — try again with a fresh counter/nanos.
+                continue;
+            }
+            Err(_) => return None,
+        }
+    }
+    None
 }
 
-/// Write a zsh integration directory (containing .zshrc) and return the dir path.
+/// Write a zsh integration directory (containing .zshenv + .zshrc) and return the dir path.
 /// Returns None on any I/O error.
+///
+/// Security: directory is created with mode 0700 (owner-only) using DirBuilder
+/// with recursive=false on the final component, so creation fails atomically if
+/// the path already exists. Name includes pid + counter + subsecond nanos entropy.
+///
+/// FIX 2: We also write a .zshenv that sources the user's real .zshenv, because
+/// zsh reads $ZDOTDIR/.zshenv unconditionally and overriding ZDOTDIR would
+/// otherwise skip the user's env setup (PATH shims, Homebrew, asdf, fnm, etc.).
 #[cfg(not(target_os = "windows"))]
 fn write_zsh_integration() -> Option<std::path::PathBuf> {
-    let counter = SHELL_INTEGRATION_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let pid = std::process::id();
-    let dir_name = format!("gw_zdotdir_{}_{}", pid, counter);
-    let dir_path = std::env::temp_dir().join(dir_name);
-
-    std::fs::create_dir_all(&dir_path).ok()?;
-
     // NOTE: \033 and \007 are literal backslash sequences for the shell's printf.
-    let content = r#"[ -f "${__gw_user_zdotdir:-$HOME}/.zshrc" ] && source "${__gw_user_zdotdir:-$HOME}/.zshrc"
+    let zshenv_content = r#"[ -f "${__gw_user_zdotdir:-$HOME}/.zshenv" ] && source "${__gw_user_zdotdir:-$HOME}/.zshenv"
+"#;
+
+    let zshrc_content = r#"[ -f "${__gw_user_zdotdir:-$HOME}/.zshrc" ] && source "${__gw_user_zdotdir:-$HOME}/.zshrc"
 autoload -Uz add-zsh-hook
 __gw_preexec() { print -n '\033]133;C\007' }
 __gw_precmd()  { print -n "\033]133;D;$?\007\033]133;A\007" }
@@ -205,8 +249,63 @@ add-zsh-hook preexec __gw_preexec
 add-zsh-hook precmd  __gw_precmd
 "#;
 
-    std::fs::write(dir_path.join(".zshrc"), content).ok()?;
-    Some(dir_path)
+    let pid = std::process::id();
+    let tmp = std::env::temp_dir();
+
+    // Retry a few times in case a name collision occurs (extremely unlikely).
+    for attempt in 0u64..8 {
+        let counter = SHELL_INTEGRATION_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let nanos = std::time::SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.subsec_nanos())
+            .unwrap_or(0);
+        let dir_name = format!("gw_zdotdir_{}_{}_{}", pid, counter.wrapping_add(attempt), nanos);
+        let dir_path = tmp.join(&dir_name);
+
+        // DirBuilder with mode 0700 + recursive=false on the final component:
+        // create() fails if the directory already exists → defeats pre-create races.
+        let created = std::fs::DirBuilder::new()
+            .recursive(false)
+            .mode(0o700)
+            .create(&dir_path);
+
+        match created {
+            Ok(()) => {
+                // Write .zshenv (sources user's real .zshenv before .zshrc runs).
+                let zshenv_ok = std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .mode(0o600)
+                    .open(dir_path.join(".zshenv"))
+                    .ok()
+                    .and_then(|mut f| f.write_all(zshenv_content.as_bytes()).ok())
+                    .is_some();
+
+                let zshrc_ok = std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .mode(0o600)
+                    .open(dir_path.join(".zshrc"))
+                    .ok()
+                    .and_then(|mut f| f.write_all(zshrc_content.as_bytes()).ok())
+                    .is_some();
+
+                if zshenv_ok && zshrc_ok {
+                    return Some(dir_path);
+                } else {
+                    // Partial write — clean up and give up.
+                    let _ = std::fs::remove_dir_all(&dir_path);
+                    return None;
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                // Name collision — try again.
+                continue;
+            }
+            Err(_) => return None,
+        }
+    }
+    None
 }
 
 /// Detect shells available on the current system.
