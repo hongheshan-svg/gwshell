@@ -597,5 +597,10 @@
   "group_defaults_cancel": "Cancel",
   "group_defaults_username": "Username",
   "home_view_card": "Cards",
-  "home_view_list": "List"
+  "home_view_list": "List",
+  "dash_connect": "Connect",
+  "dash_offline": "Timeout",
+  "dash_disk": "DISK",
+  "dash_load": "LOAD",
+  "dash_ungrouped": "Ungrouped"
 }

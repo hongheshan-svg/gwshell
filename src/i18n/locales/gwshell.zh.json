@@ -597,5 +597,10 @@
   "group_defaults_cancel": "取消",
   "group_defaults_username": "用户名",
   "home_view_card": "卡片",
-  "home_view_list": "列表"
+  "home_view_list": "列表",
+  "dash_connect": "连接",
+  "dash_offline": "超时",
+  "dash_disk": "磁盘",
+  "dash_load": "负载",
+  "dash_ungrouped": "未分组"
 }
