@@ -3770,3 +3770,7 @@ textarea,
               color var(--transition-fast),
               box-shadow var(--transition-fast);
 }
+
+/* P3: command palette row alignment — label fills, icon left, sub/hint right */
+.command-palette-item { justify-content: flex-start; }
+.command-palette-item-label { flex: 1 1 auto; text-align: left; }
