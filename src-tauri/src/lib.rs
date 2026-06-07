@@ -491,8 +491,12 @@ async fn ssh_exec(
 
 // ---- Server Panel (Metrics) Commands ----
 
+// NOTE: must be `async` so Tauri runs it on the async (Tokio) runtime. As a sync
+// command it executes on the main thread with no reactor entered, and the
+// `tokio::spawn` inside `MetricsManager::start` panics ("there is no reactor
+// running"), aborting the whole app the moment the Server panel opens on an SSH tab.
 #[tauri::command]
-fn start_server_metrics(
+async fn start_server_metrics(
     session_id: String,
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
