@@ -12,43 +12,30 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
-import { useAppStore } from '../../stores/appStore';
 import type { SessionConfig } from '../../types';
+import { useAssetData } from '../../hooks/useAssetData';
 
 export const AssetTable: React.FC = () => {
   const {
-    sessions,
+    filteredSessions,
+    searchQuery,
+    setSearchQuery,
     selectedSessionIds,
     setSelectedSessionIds,
     toggleSelectSession,
     setShowNewSession,
     setEditingSession,
     removeSession,
-    addSession,
-    addTab,
-    setActiveTab,
-    tabs,
-    batchUpdateLatency,
+    handleConnect,
+    handleDeleteSelected,
+    handleCopySession,
+    doPingRef,
     sidebarCollapsed,
     toggleSidebar,
-  } = useAppStore();
+  } = useAssetData();
   const { t } = useTranslation();
-  const [searchQuery, setSearchQuery] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: SessionConfig } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
-
-  // Filter out temporary sessions created by split-screen
-  const realSessions = sessions.filter((s) => !s._temporary);
-
-  const filteredSessions = searchQuery
-    ? realSessions.filter(
-        (s) =>
-          s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (s.host && s.host.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          (s.username && s.username.toLowerCase().includes(searchQuery.toLowerCase()))
-      )
-    : realSessions;
 
   const allSelected = filteredSessions.length > 0 && filteredSessions.every((s) => selectedSessionIds.includes(s.id));
 
@@ -58,38 +45,6 @@ export const AssetTable: React.FC = () => {
     } else {
       setSelectedSessionIds(filteredSessions.map((s) => s.id));
     }
-  };
-
-  const handleConnect = (session: SessionConfig) => {
-    const existingTab = tabs.find((t) => t.sessionId === session.id);
-    if (existingTab) {
-      setActiveTab(existingTab.id);
-      return;
-    }
-    const tabId = crypto.randomUUID();
-    addTab({
-      id: tabId,
-      sessionId: session.id,
-      title: session.name,
-      type: session.session_type,
-      connected: false,
-    });
-  };
-
-  const handleDeleteSelected = () => {
-    selectedSessionIds.forEach((id) => removeSession(id));
-    setSelectedSessionIds([]);
-  };
-
-  const handleCopySession = (session: SessionConfig) => {
-    const copied: SessionConfig = {
-      ...session,
-      id: crypto.randomUUID(),
-      name: `${session.name} - 副本`,
-      created_at: new Date().toISOString().slice(0, 10),
-      _temporary: undefined,
-    };
-    addSession(copied);
   };
 
   const handleContextMenu = (e: React.MouseEvent, session: SessionConfig) => {
@@ -114,111 +69,6 @@ export const AssetTable: React.FC = () => {
     const cls = latency <= 50 ? 'latency-good' : latency <= 150 ? 'latency-ok' : 'latency-bad';
     return <span className={cls}>{latency}ms</span>;
   };
-
-  // Ping latency: fully async, batch-update to avoid blocking renders
-  const sessionsRef = useRef(realSessions);
-  sessionsRef.current = realSessions;
-
-  const idleCallbackRef = useRef<number | null>(null);
-  const idleUsesTimeoutRef = useRef(false);
-  const lastInteractionRef = useRef(Date.now());
-  const pingLoopRunningRef = useRef(false);
-
-  const sleep = (ms: number) => new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-
-  const scheduleIdle = (callback: () => void) => {
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      idleUsesTimeoutRef.current = false;
-      idleCallbackRef.current = window.requestIdleCallback(callback, { timeout: 2000 });
-      return;
-    }
-    idleUsesTimeoutRef.current = true;
-    idleCallbackRef.current = setTimeout(callback, 0);
-  };
-
-  const cancelIdle = () => {
-    if (idleCallbackRef.current == null) return;
-    if (!idleUsesTimeoutRef.current && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-      window.cancelIdleCallback(idleCallbackRef.current);
-    } else {
-      clearTimeout(idleCallbackRef.current);
-    }
-    idleCallbackRef.current = null;
-  };
-
-  useEffect(() => {
-    const markInteraction = () => {
-      lastInteractionRef.current = Date.now();
-    };
-
-    window.addEventListener('pointerdown', markInteraction, { passive: true });
-    window.addEventListener('keydown', markInteraction);
-    window.addEventListener('resize', markInteraction);
-
-    return () => {
-      window.removeEventListener('pointerdown', markInteraction);
-      window.removeEventListener('keydown', markInteraction);
-      window.removeEventListener('resize', markInteraction);
-    };
-  }, []);
-
-  const doPingRef = useRef(() => {});
-  doPingRef.current = async () => {
-    if (pingLoopRunningRef.current) return;
-    const targets = sessionsRef.current.filter((s) => s.host);
-    if (targets.length === 0) return;
-
-    pingLoopRunningRef.current = true;
-    const updates = new Map<string, number | null>();
-
-    try {
-      for (const session of targets) {
-        while (Date.now() - lastInteractionRef.current < 1500) {
-          await sleep(250);
-        }
-
-        if (document.hidden || !document.hasFocus()) {
-          break;
-        }
-
-        try {
-          const latency = await invoke<number>('ping_host', {
-            host: session.host!,
-            port: session.port || 22,
-          });
-          updates.set(session.id, latency);
-        } catch {
-          updates.set(session.id, null);
-        }
-
-        // Leave breathing room for UI interactions between hosts.
-        await sleep(150);
-      }
-
-      if (updates.size > 0) {
-        batchUpdateLatency(updates);
-      }
-    } finally {
-      pingLoopRunningRef.current = false;
-    }
-  };
-
-  useEffect(() => {
-    // First ping waits until the UI is already visible and the main thread is idle.
-    const initTimer = window.setTimeout(() => {
-      scheduleIdle(() => {
-        void doPingRef.current();
-      });
-    }, 8000);
-    const timer = setInterval(() => doPingRef.current(), 60_000);
-    return () => {
-      clearTimeout(initTimer);
-      clearInterval(timer);
-      cancelIdle();
-    };
-  }, []);
 
   return (
     <div className="asset-table-wrapper">
