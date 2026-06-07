@@ -1225,7 +1225,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           if (!sentFirstResize.has(tabId)) {
             sentFirstResize.add(tabId);
             fire();
-            try { rebuildCards(instance!.terminal, { tabId, tabType: tab.type, sessionId }); } catch {}
             return;
           }
           // Subsequent resizes (window drag fires onResize at frame rate) are
@@ -1236,8 +1235,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           pendingBackendResize.set(tabId, setTimeout(() => {
             pendingBackendResize.delete(tabId);
             fire();
-            try { rebuildCards(instance!.terminal, { tabId, tabType: tab.type, sessionId }); } catch {}
           }, 40));
+        });
+      }
+
+      // Card frames bake in a fixed row-span at creation, so a width change that
+      // rewraps lines leaves them stale. Rebuild on resize for ALL interactive
+      // terminals — serial has no resizeCmd, so this can't live in that block.
+      let cardsResizeDispose: { dispose(): void } | null = null;
+      {
+        let pendingCardsResize: ReturnType<typeof setTimeout> | null = null;
+        cardsResizeDispose = instance!.terminal.onResize(() => {
+          if (pendingCardsResize) clearTimeout(pendingCardsResize);
+          pendingCardsResize = setTimeout(() => {
+            pendingCardsResize = null;
+            try { rebuildCards(instance!.terminal, { tabId: tab.id, tabType: tab.type, sessionId: tab.sessionId }); } catch {}
+          }, 60);
         });
       }
 
@@ -1245,6 +1258,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         unlistenData(); unlistenExit();
         try { dataDispose.dispose(); } catch {}
         try { resizeDispose?.dispose(); } catch {}
+        try { cardsResizeDispose?.dispose(); } catch {}
         try { osc7Dispose.dispose(); } catch {}
         try { osc133Dispose.dispose(); } catch {}
         return;
@@ -1263,6 +1277,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         if (pendingResize) { clearTimeout(pendingResize); pendingBackendResize.delete(tab.id); }
         try { dataDispose.dispose(); } catch {}
         try { resizeDispose?.dispose(); } catch {}
+        try { cardsResizeDispose?.dispose(); } catch {}
         try { osc7Dispose.dispose(); } catch {}
         try { osc133Dispose.dispose(); } catch {}
         ghostAcceptCallbacks.delete(tab.id);

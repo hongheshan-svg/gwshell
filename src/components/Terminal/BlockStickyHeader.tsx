@@ -7,7 +7,7 @@ import React, { useEffect, useReducer } from 'react';
 import type { TabInfo } from '../../types';
 import { terminalInstances } from './terminalRegistry';
 import { blocksFor, frameRange, type CommandBlock } from './blocks';
-import { blockFocus, type BlockCtx } from './blockActions';
+import { blockFocus, blockStatusClass, blockBadgeText, type BlockCtx } from './blockActions';
 
 export const BlockStickyHeader: React.FC<{ tab: TabInfo }> = ({ tab }) => {
   const [, bump] = useReducer((x: number) => x + 1, 0);
@@ -37,10 +37,9 @@ export const BlockStickyHeader: React.FC<{ tab: TabInfo }> = ({ tab }) => {
   if (!current || current.promptMarker?.line === top) return null;
 
   const ctx: BlockCtx = { tabId: tab.id, tabType: tab.type, sessionId: tab.sessionId };
-  const ok = current.state === 'done' && current.exitCode === 0;
-  const badge = current.state === 'running' ? '…' : ok ? '✓ 0' : '✕ ' + (current.exitCode ?? '?');
-  const cls = current.state === 'running' ? 'running' : ok ? 'ok' : 'err';
   const block = current;
+  const cls = blockStatusClass(block);
+  const badge = blockBadgeText(block, '…');
 
   return (
     <div className="gw-sticky" onMouseDown={() => blockFocus(ctx, block)}>

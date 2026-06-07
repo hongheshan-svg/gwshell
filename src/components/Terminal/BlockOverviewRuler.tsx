@@ -7,6 +7,7 @@ import React, { useEffect, useReducer } from 'react';
 import type { TabInfo } from '../../types';
 import { terminalInstances } from './terminalRegistry';
 import { blocksFor } from './blocks';
+import { blockStatusClass } from './blockActions';
 import { flashBlock } from './blockNav';
 
 export const BlockOverviewRuler: React.FC<{ tab: TabInfo }> = ({ tab }) => {
@@ -33,7 +34,7 @@ export const BlockOverviewRuler: React.FC<{ tab: TabInfo }> = ({ tab }) => {
   return (
     <div className="gw-ruler">
       {blocks.map((b) => {
-        const cls = b.state === 'running' ? 'running' : b.exitCode === 0 ? 'ok' : 'err';
+        const cls = blockStatusClass(b);
         const pct = (b.promptMarker!.line / total) * 100;
         return (
           <div

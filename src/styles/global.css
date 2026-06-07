@@ -3792,24 +3792,28 @@ textarea,
 .gw-card.ok     { border-left: 2px solid var(--success); }
 .gw-card.err    { border-left: 2px solid var(--danger); }
 
-/* Header chrome (layer:top, 1 row) — transparent container, right-aligned
-   badge + hover toolbar. pointer-events none so terminal selection still works;
-   only the buttons capture clicks. */
+/* Header chrome (layer:top, 1 row) — transparent, full-width container so the
+   terminal text/selection underneath is NOT blocked (pointer-events:none). The
+   right-aligned .gw-card-actions wrapper re-enables pointer-events so its
+   :hover can reveal the toolbar and the buttons are clickable. */
 .gw-card-hdr {
   display: flex; align-items: center; justify-content: flex-end;
   gap: 6px; padding: 0 8px; pointer-events: none;
 }
+.gw-card-actions {
+  display: flex; align-items: center; gap: 6px; pointer-events: auto;
+}
 .gw-card-badge {
   font-size: 10.5px; font-weight: 600; line-height: 1.4;
   padding: 0 7px; border-radius: var(--radius-pill); white-space: nowrap;
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent); color: var(--text-secondary);
 }
 .gw-card-badge.ok      { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
 .gw-card-badge.err     { background: color-mix(in srgb, var(--danger) 18%, transparent);  color: var(--danger); }
 .gw-card-badge.running { background: color-mix(in srgb, var(--accent-primary) 16%, transparent); color: var(--accent-primary); }
 
-.gw-card-toolbar { display: none; gap: 4px; pointer-events: auto; }
-.gw-card-hdr:hover .gw-card-toolbar,
-.gw-card-live:hover .gw-card-toolbar { display: flex; }
+.gw-card-toolbar { display: none; gap: 4px; }
+.gw-card-actions:hover .gw-card-toolbar { display: flex; }
 .gw-card-btn {
   font-size: 11px; padding: 1px 7px; border: 1px solid var(--border-color);
   border-radius: var(--radius-sm); background: var(--bg-secondary);
@@ -3846,7 +3850,7 @@ textarea,
 
 /* Overview ruler (Task 10). */
 .gw-ruler { position: absolute; top: 0; right: 0; bottom: 0; width: 8px; z-index: 5; pointer-events: none; }
-.gw-ruler-tick { position: absolute; right: 1px; width: 4px; height: 12px; border-radius: 2px; cursor: pointer; pointer-events: auto; opacity: .75; }
+.gw-ruler-tick { position: absolute; right: 1px; width: 4px; height: 12px; border-radius: 2px; cursor: pointer; pointer-events: auto; opacity: .75; background: var(--text-tertiary, #888); }
 .gw-ruler-tick:hover { opacity: 1; }
 .gw-ruler-tick.running { background: var(--accent-primary); }
 .gw-ruler-tick.ok { background: var(--success); }

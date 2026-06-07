@@ -11,21 +11,23 @@ import type { Terminal } from '@xterm/xterm';
 import i18n from '../../i18n';
 import { blocksFor, rowSpan, type CommandBlock } from './blocks';
 import {
-  blockCopyCommand, blockCopyOutput, blockRerun, blockFocus, type BlockCtx,
+  blockCopyCommand, blockCopyOutput, blockRerun, blockFocus,
+  blockStatusClass, blockBadgeText, type BlockCtx,
 } from './blockActions';
 
 function applyCardState(el: HTMLElement, block: CommandBlock): void {
   el.classList.add('gw-card');
-  el.classList.toggle('running', block.state === 'running');
-  el.classList.toggle('ok', block.state === 'done' && block.exitCode === 0);
-  el.classList.toggle('err', block.state === 'done' && (block.exitCode ?? 0) !== 0);
+  const s = blockStatusClass(block);
+  el.classList.toggle('running', s === 'running');
+  el.classList.toggle('ok', s === 'ok');
+  el.classList.toggle('err', s === 'err');
 }
 
 function buildBadge(block: CommandBlock): HTMLElement {
   const b = document.createElement('span');
-  b.className = 'gw-card-badge';
-  if (block.exitCode === 0) { b.classList.add('ok'); b.textContent = '✓ 0'; }
-  else { b.classList.add('err'); b.textContent = '✕ ' + (block.exitCode ?? '?'); }
+  const s = blockStatusClass(block);
+  b.className = 'gw-card-badge' + (s ? ' ' + s : '');
+  b.textContent = blockBadgeText(block, i18n.t('gwshell:block_running' as never) as string);
   return b;
 }
 
@@ -66,8 +68,14 @@ function createCard(term: Terminal, ctx: BlockCtx, block: CommandBlock): void {
     if (el.dataset.gwChrome) return;
     el.dataset.gwChrome = '1';
     el.classList.add('gw-card-hdr');
-    el.appendChild(buildBadge(block));
-    el.appendChild(buildToolbar(term, ctx, block));
+    // badge + toolbar live in a pointer-events:auto wrapper so the toolbar's
+    // hover reveal works (the header itself stays pointer-events:none so the
+    // terminal text/selection underneath isn't blocked).
+    const actions = document.createElement('div');
+    actions.className = 'gw-card-actions';
+    actions.appendChild(buildBadge(block));
+    actions.appendChild(buildToolbar(term, ctx, block));
+    el.appendChild(actions);
   });
 }
 

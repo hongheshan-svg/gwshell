@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../stores/appStore';
 import { terminalInstances } from './terminalRegistry';
 import { blocksFor, readOutput, durationMs } from './blocks';
-import { blockCopyOutput, blockRerun, type BlockCtx } from './blockActions';
+import { blockCopyOutput, blockRerun, blockStatusClass, blockBadgeText, type BlockCtx } from './blockActions';
 
 export const BlockFocusPanel: React.FC = () => {
   const { t } = useTranslation('gwshell');
@@ -31,16 +31,13 @@ export const BlockFocusPanel: React.FC = () => {
   const output = readOutput(focused.tabId, term, block);
   const dur = durationMs(block);
   const ctx: BlockCtx = { tabId: tab.id, tabType: tab.type, sessionId: tab.sessionId };
-  const ok = block.state === 'done' && block.exitCode === 0;
-  const badgeCls = block.state === 'running' ? 'running' : ok ? 'ok' : 'err';
+  const badgeCls = blockStatusClass(block);
 
   return (
     <div className="gw-focus-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setFocused(null); }}>
       <div className="gw-focus-panel">
         <div className="gw-focus-head">
-          <span className={`gw-card-badge ${badgeCls}`}>
-            {block.state === 'running' ? t('block_running') : ok ? '✓ 0' : '✕ ' + (block.exitCode ?? '?')}
-          </span>
+          <span className={`gw-card-badge ${badgeCls}`}>{blockBadgeText(block, t('block_running'))}</span>
           <span className="gw-focus-cmd">{block.command || '—'}</span>
           {dur != null && <span className="gw-focus-meta">{t('focus_duration')}: {dur} ms</span>}
           <button type="button" className="gw-card-btn" onClick={() => setFocused(null)}>✕</button>

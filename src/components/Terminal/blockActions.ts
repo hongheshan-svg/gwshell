@@ -36,3 +36,21 @@ export function blockRerun(ctx: BlockCtx, block: CommandBlock): void {
 export function blockFocus(ctx: BlockCtx, block: CommandBlock): void {
   useAppStore.getState().setFocusedBlock({ tabId: ctx.tabId, blockId: block.id });
 }
+
+/**
+ * Status CSS modifier for a block, shared by every card surface so colors
+ * agree. Per spec: a `done` block with no exit code (shell emitted bare `D`)
+ * is NEUTRAL (no green/red) — only a numeric code colors it.
+ */
+export function blockStatusClass(block: CommandBlock): 'running' | 'ok' | 'err' | '' {
+  if (block.state === 'running') return 'running';
+  if (block.exitCode == null) return '';
+  return block.exitCode === 0 ? 'ok' : 'err';
+}
+
+/** Badge label for a block. `runningLabel` is the i18n "Running…" string. */
+export function blockBadgeText(block: CommandBlock, runningLabel: string): string {
+  if (block.state === 'running') return runningLabel;
+  if (block.exitCode == null) return '·';
+  return block.exitCode === 0 ? '✓ 0' : '✕ ' + block.exitCode;
+}

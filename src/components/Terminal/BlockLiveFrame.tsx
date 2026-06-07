@@ -11,15 +11,11 @@ import React, { useEffect, useReducer } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TabInfo } from '../../types';
 import { terminalInstances } from './terminalRegistry';
-import { activeBlock, frameRange, type CommandBlock } from './blocks';
+import { activeBlock, frameRange } from './blocks';
 import {
-  blockCopyCommand, blockCopyOutput, blockRerun, blockFocus, type BlockCtx,
+  blockCopyCommand, blockCopyOutput, blockRerun, blockFocus,
+  blockStatusClass, blockBadgeText, type BlockCtx,
 } from './blockActions';
-
-function statusClass(block: CommandBlock): string {
-  if (block.state === 'running') return 'running';
-  return block.exitCode === 0 ? 'ok' : 'err';
-}
 
 export const BlockLiveFrame: React.FC<{ tab: TabInfo }> = ({ tab }) => {
   const { t } = useTranslation('gwshell');
@@ -53,19 +49,20 @@ export const BlockLiveFrame: React.FC<{ tab: TabInfo }> = ({ tab }) => {
   if (topPx + heightPx <= 0 || topRows >= term.rows) return null; // fully out of view
 
   const ctx: BlockCtx = { tabId: tab.id, tabType: tab.type, sessionId: tab.sessionId };
-  const cls = statusClass(block);
-  const badge = block.state === 'running' ? t('block_running')
-    : block.exitCode === 0 ? '✓ 0' : '✕ ' + (block.exitCode ?? '?');
+  const cls = blockStatusClass(block);
+  const badge = blockBadgeText(block, t('block_running'));
 
   return (
     <div className={`gw-card gw-card-live ${cls}`} style={{ top: `${topPx}px`, height: `${heightPx}px` }}>
       <div className="gw-card-hdr">
-        <span className={`gw-card-badge ${cls}`}>{badge}</span>
-        <div className="gw-card-toolbar">
-          <button type="button" className="gw-card-btn" onClick={() => blockCopyCommand(block)}>{t('block_copy_cmd')}</button>
-          <button type="button" className="gw-card-btn" onClick={() => blockCopyOutput(term, ctx, block)}>{t('block_copy_output')}</button>
-          <button type="button" className="gw-card-btn" onClick={() => blockRerun(ctx, block)}>{t('block_rerun')}</button>
-          <button type="button" className="gw-card-btn" onClick={() => blockFocus(ctx, block)}>{t('block_focus')}</button>
+        <div className="gw-card-actions">
+          <span className={`gw-card-badge ${cls}`}>{badge}</span>
+          <div className="gw-card-toolbar">
+            <button type="button" className="gw-card-btn" onClick={() => blockCopyCommand(block)}>{t('block_copy_cmd')}</button>
+            <button type="button" className="gw-card-btn" onClick={() => blockCopyOutput(term, ctx, block)}>{t('block_copy_output')}</button>
+            <button type="button" className="gw-card-btn" onClick={() => blockRerun(ctx, block)}>{t('block_rerun')}</button>
+            <button type="button" className="gw-card-btn" onClick={() => blockFocus(ctx, block)}>{t('block_focus')}</button>
+          </div>
         </div>
       </div>
     </div>
