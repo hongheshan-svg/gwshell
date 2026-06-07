@@ -26,13 +26,21 @@ export const TitleBar: React.FC = () => {
     appWindow.toggleMaximize();
   };
 
+  const handleTitlebarDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest('.titlebar-controls')) return;
+    appWindow.toggleMaximize().catch(() => {});
+  };
+
   const handleClose = () => {
     exit(0).catch(() => {});
     appWindow.close().catch(() => {});
   };
 
   return (
-    <div className={`titlebar${IS_MACOS ? ' titlebar--macos' : ''}`}>
+    <div
+      className={`titlebar${IS_MACOS ? ' titlebar--macos' : ''}`}
+      onDoubleClick={handleTitlebarDoubleClick}
+    >
       <div className="titlebar-title" data-tauri-drag-region>
         GWShell
       </div>
