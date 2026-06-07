@@ -595,5 +595,7 @@
   "group_defaults_hint": "Unset session fields inherit these",
   "group_defaults_save": "Save",
   "group_defaults_cancel": "Cancel",
-  "group_defaults_username": "Username"
+  "group_defaults_username": "Username",
+  "home_view_card": "Cards",
+  "home_view_list": "List"
 }

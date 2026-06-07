@@ -82,6 +82,7 @@ export interface AppSettings {
   keymapOverrides: Record<string, string | null>;
   quakeEnabled: boolean;
   quakeHotkey: string;
+  homeView: 'card' | 'table';
 }
 
 export const defaultSettings: AppSettings = {
@@ -158,6 +159,7 @@ export const defaultSettings: AppSettings = {
   keymapOverrides: {},
   quakeEnabled: false,
   quakeHotkey: 'CommandOrControl+Shift+Backquote',
+  homeView: 'card',
 };
 
 interface SettingsStore {

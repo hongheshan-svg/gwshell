@@ -1816,6 +1816,40 @@ input, select, textarea, button {
   color: var(--danger);
 }
 
+/* View toggle segmented control */
+.home-view-seg {
+  display: flex;
+  align-items: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  height: 26px;
+}
+
+.home-view-seg__btn {
+  display: flex;
+  align-items: center;
+  padding: 0 9px;
+  height: 100%;
+  font-size: 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.1s linear, color 0.1s linear;
+  white-space: nowrap;
+}
+
+.home-view-seg__btn:hover {
+  color: var(--text-primary);
+}
+
+.home-view-seg__btn.active {
+  background: var(--accent-bg);
+  color: var(--text-primary);
+}
+
 .asset-table-container {
   flex: 1;
   overflow: auto;

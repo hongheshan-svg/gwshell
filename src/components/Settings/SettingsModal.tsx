@@ -113,6 +113,7 @@ export interface AppSettings {
   // Quake dropdown console
   quakeEnabled: boolean;
   quakeHotkey: string;
+  homeView: 'card' | 'table';
 }
 
 const _t = (key: TranslationKeys) => i18n.t(key);
@@ -192,6 +193,7 @@ const defaultSettings: AppSettings = {
   keymapOverrides: {},
   quakeEnabled: false,
   quakeHotkey: 'CommandOrControl+Shift+Backquote',
+  homeView: 'card',
 };
 void defaultSettings;
 

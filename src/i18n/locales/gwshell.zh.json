@@ -595,5 +595,7 @@
   "group_defaults_hint": "会话未设字段将继承这些",
   "group_defaults_save": "保存",
   "group_defaults_cancel": "取消",
-  "group_defaults_username": "用户名"
+  "group_defaults_username": "用户名",
+  "home_view_card": "卡片",
+  "home_view_list": "列表"
 }

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import type { SessionConfig } from '../../types';
 import { useAssetData } from '../../hooks/useAssetData';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 export const AssetTable: React.FC = () => {
   const {
@@ -34,6 +35,9 @@ export const AssetTable: React.FC = () => {
     toggleSidebar,
   } = useAssetData();
   const { t } = useTranslation();
+  const homeView = useSettingsStore((s) => s.settings.homeView);
+  const saveSettings = useSettingsStore((s) => s.save);
+  const allSettings = useSettingsStore((s) => s.settings);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: SessionConfig } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
@@ -85,6 +89,24 @@ export const AssetTable: React.FC = () => {
             {sidebarCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
           </button>
           <span className="asset-toolbar-title">{t('table_title')}</span>
+          <div className="home-view-seg" role="group" aria-label="View mode">
+            <button
+              type="button"
+              className={`home-view-seg__btn${homeView === 'card' ? ' active' : ''}`}
+              onClick={() => saveSettings({ ...allSettings, homeView: 'card' })}
+              aria-pressed={homeView === 'card'}
+            >
+              {t('home_view_card')}
+            </button>
+            <button
+              type="button"
+              className={`home-view-seg__btn${homeView === 'table' ? ' active' : ''}`}
+              onClick={() => saveSettings({ ...allSettings, homeView: 'table' })}
+              aria-pressed={homeView === 'table'}
+            >
+              {t('home_view_list')}
+            </button>
+          </div>
         </div>
         <div className="asset-toolbar-center">
           <span className="asset-toolbar-info">{t('table_selected', { count: selectedSessionIds.length })}</span>
