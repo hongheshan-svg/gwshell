@@ -237,16 +237,17 @@ function openBlockMenu(
     return btn;
   };
 
-  // Copy command
+  // Copy command (use the Tauri clipboard plugin — navigator.clipboard is
+  // unreliable inside the webview)
   menu.appendChild(makeBtn(t('block_copy_cmd'), () => {
-    navigator.clipboard?.writeText(block.command).catch(() => {});
+    clipboardWrite(block.command).catch(() => { navigator.clipboard?.writeText(block.command).catch(() => {}); });
   }));
 
   // Copy output
   menu.appendChild(makeBtn(t('block_copy_output'), () => {
     if (!term) return;
     const output = readOutput(tabId, term, block);
-    navigator.clipboard?.writeText(output).catch(() => {});
+    clipboardWrite(output).catch(() => { navigator.clipboard?.writeText(output).catch(() => {}); });
   }));
 
   // Re-run (writes command WITHOUT a trailing newline so the user can review)
@@ -1213,7 +1214,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               if (trimmed.length > 0 && !tabHasOsc133.get(tab.id)) {
                 commandHistory.record(trimmed, { scope, cwd, sessionType });
               }
-              buf = '';
+              // With OSC 133 active, the authoritative command capture (history +
+              // block.command) happens in the 'C' handler, which fires AFTER this
+              // Enter keystroke. Keep the buffer so 'C' can read it; the 'C' (and
+              // next 'A') handler clears it. Without OSC 133, clear now as before.
+              if (!tabHasOsc133.get(tab.id)) buf = '';
               clearGhost();
             } else if (data === '\x7f' || data === '\b') {
               // Backspace
