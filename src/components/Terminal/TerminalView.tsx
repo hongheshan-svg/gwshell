@@ -14,6 +14,7 @@ import { useAppStore } from "../../stores/appStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { terminalInstances } from "./terminalRegistry";
 import * as commandHistory from '../../lib/commandHistory';
+import { blocksFor, startBlock, markOutput, setCommand, finishBlock, clearTab as clearBlockTab } from './blocks';
 import { resolveTerminalTheme } from '../../lib/terminalThemes';
 import { runLoginScript } from '../../lib/sendScript';
 import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';
@@ -222,6 +223,7 @@ export function destroyTerminal(tabId: string): void {
   ghostAcceptCallbacks.delete(tabId);
   tabCwd.delete(tabId);
   tabHasOsc133.delete(tabId);
+  clearBlockTab(tabId);
   tabCandidates.delete(tabId);
   candidateIndex.delete(tabId);
   tabInputSenders.delete(tabId);
@@ -964,6 +966,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           candidateIndex.set(tab.id, 0);
           ghostTextState.set(tab.id, '');
           ghostTextSetters.get(tab.id)?.('', 0, 0);
+          // Block model: start on A; fall back to B when shell only emits B.
+          if (kind === 'A') {
+            startBlock(tab.id, term133);
+          } else {
+            // B without a preceding A — start a block if none is running.
+            const existing = blocksFor(tab.id);
+            const hasRunning = existing.length > 0 && existing[existing.length - 1].state === 'running';
+            if (!hasRunning) startBlock(tab.id, term133);
+          }
         } else if (kind === 'C') {
           // Command submitted: record the authoritative line (heuristic buffer).
           const sess = sessionsRef.current.find((s) => s.id === tab.sessionId);
@@ -975,8 +986,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             commandHistory.record(line, { scope, cwd, sessionType: tab.type });
           }
           inputBuffers.set(tab.id, '');
+          // Block model: mark start of output and capture command text.
+          markOutput(tab.id, term133);
+          setCommand(tab.id, line);
+        } else if (kind === 'D') {
+          // Block model: parse exit code from "D" or "D;N" payload.
+          const m = payload.match(/^D(?:;(\d+))?/);
+          finishBlock(tab.id, m && m[1] ? Number(m[1]) : undefined);
         }
-        // kind 'D' (command-done / exit-status) and others: no history action needed.
+        // Other kinds: no action needed.
         return false;
       });
 
@@ -1199,6 +1217,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         candidateIndex.delete(tab.id);
         bracketedPaste.delete(tab.id);
         tabHasOsc133.delete(tab.id);
+        clearBlockTab(tab.id);
       });
 
       const rawSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
