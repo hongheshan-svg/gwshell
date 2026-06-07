@@ -1,75 +1,193 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../stores/appStore';
-import type { SessionConfig, TabInfo } from '../../types';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { buildCommands, type Command } from './commands';
 
-type Item =
-  | { kind: 'session'; session: SessionConfig; label: string; sub: string }
-  | { kind: 'tab'; tab: TabInfo; label: string; sub: string };
+const GROUPS: Array<Command['group']> = ['action', 'create', 'session', 'tab'];
+
+const GROUP_LABELS: Record<Command['group'], [string, string]> = {
+  action:  ['cmd_grp_action',  'Commands'],
+  create:  ['cmd_grp_create',  'Create'],
+  session: ['cmd_grp_session', 'Sessions'],
+  tab:     ['cmd_grp_tab',     'Tabs'],
+};
 
 export const CommandPalette: React.FC = () => {
-  const { t } = useTranslation();
-  const { sessions, tabs, addTab, setActiveTab, setShowCommandPalette } = useAppStore();
+  const { t } = useTranslation('gwshell');
+
+  const {
+    sessions,
+    tabs,
+    addTab,
+    setActiveTab,
+    setShowNewSession,
+    setShowQuickConnect,
+    setShowLocalTerminalModal,
+    setShowSettings,
+    toggleSidebar,
+    toggleTheme,
+    setShowCommandPalette,
+  } = useAppStore();
+
+  const { settings } = useSettingsStore();
+
   const [query, setQuery] = useState('');
-  const [index, setIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(0);
 
-  const items = useMemo<Item[]>(() => {
-    const sessionItems: Item[] = sessions
-      .filter((s) => !s._temporary)
-      .map((s) => ({ kind: 'session' as const, session: s, label: s.name, sub: s.host ?? s.session_type }));
-    const tabItems: Item[] = tabs
-      .filter((tb) => tb.type !== 'asset-list')
-      .map((tb) => ({ kind: 'tab' as const, tab: tb, label: tb.title, sub: tb.type }));
-    const all = [...sessionItems, ...tabItems];
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Focus input on mount
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const ctx = useMemo(() => ({
+    sessions,
+    tabs,
+    keymapOverrides: settings.keymapOverrides ?? {},
+    t: (k: string, d?: string) => t(k, d ?? k),
+    addTab,
+    setActiveTab,
+    setShowNewSession,
+    setShowQuickConnect,
+    setShowLocalTerminalModal,
+    setShowSettings,
+    toggleSidebar,
+    toggleTheme,
+  }), [
+    sessions,
+    tabs,
+    settings.keymapOverrides,
+    t,
+    addTab,
+    setActiveTab,
+    setShowNewSession,
+    setShowQuickConnect,
+    setShowLocalTerminalModal,
+    setShowSettings,
+    toggleSidebar,
+    toggleTheme,
+  ]);
+
+  const commands = useMemo(() => buildCommands(ctx), [ctx]);
+
+  // Filter across label + sub + keywords (case-insensitive)
+  const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return all;
-    return all.filter((it) => it.label.toLowerCase().includes(q) || it.sub.toLowerCase().includes(q));
-  }, [query, sessions, tabs]);
+    if (!q) return commands;
+    return commands.filter((cmd) => {
+      const haystack = [cmd.label, cmd.sub ?? '', cmd.keywords ?? ''].join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [query, commands]);
 
-  const close = () => setShowCommandPalette(false);
+  // Build grouped structure: groups in fixed order, only non-empty
+  const grouped = useMemo(() => {
+    return GROUPS.flatMap((group) => {
+      const items = filtered.filter((cmd) => cmd.group === group);
+      if (items.length === 0) return [];
+      return [{ group, items }];
+    });
+  }, [filtered]);
 
-  const activate = (it: Item | undefined) => {
-    if (!it) return;
-    if (it.kind === 'session') {
-      const existing = tabs.find((tb) => tb.sessionId === it.session.id);
-      if (existing) setActiveTab(existing.id);
-      else addTab({ id: crypto.randomUUID(), sessionId: it.session.id, title: it.session.name, type: it.session.session_type, connected: false });
-    } else {
-      setActiveTab(it.tab.id);
-    }
-    close();
-  };
+  // Flat list of visible items for keyboard navigation
+  const flatItems = useMemo(() => grouped.flatMap((g) => g.items), [grouped]);
+
+  // Reset to 0 when query changes
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [query]);
+
+  // Scroll active item into view when activeIndex changes
+  useEffect(() => {
+    const el = itemRefs.current[activeIndex];
+    if (el) el.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex]);
+
+  const close = useCallback(() => {
+    setShowCommandPalette(false);
+  }, [setShowCommandPalette]);
+
+  const runCommand = useCallback((cmd: Command) => {
+    setShowCommandPalette(false);
+    cmd.run();
+  }, [setShowCommandPalette]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); setIndex((i) => Math.min(i + 1, items.length - 1)); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setIndex((i) => Math.max(i - 1, 0)); }
-    else if (e.key === 'Enter') { e.preventDefault(); activate(items[index]); }
-    else if (e.key === 'Escape') { e.preventDefault(); close(); }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex((i) => Math.min(i + 1, flatItems.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex((i) => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const cmd = flatItems[activeIndex];
+      if (cmd) runCommand(cmd);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+    }
   };
+
+  // Reset itemRefs array length each render
+  itemRefs.current = [];
 
   return (
     <div className="command-palette-overlay" onMouseDown={close}>
-      <div className="command-palette-card" onMouseDown={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
+      <div
+        className="command-palette-card"
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
+      >
         <input
+          ref={inputRef}
           className="command-palette-input"
-          autoFocus
-          placeholder={t('palette_placeholder')}
+          placeholder={t('palette_placeholder', 'Search commands…')}
           value={query}
-          onChange={(e) => { setQuery(e.target.value); setIndex(0); }}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setActiveIndex(0);
+          }}
         />
-        <div className="command-palette-list">
-          {items.length === 0 && <div className="command-palette-empty">{t('palette_no_results')}</div>}
-          {items.map((it, i) => (
-            <div
-              key={it.kind === 'session' ? `s-${it.session.id}` : `t-${it.tab.id}`}
-              className={`command-palette-item${i === index ? ' active' : ''}`}
-              onMouseEnter={() => setIndex(i)}
-              onClick={() => activate(it)}
-            >
-              <span className="command-palette-item-label">{it.label}</span>
-              <span className="command-palette-item-sub">{it.kind === 'tab' ? '↹ ' : ''}{it.sub}</span>
-            </div>
-          ))}
+        <div className="command-palette-list" ref={listRef}>
+          {flatItems.length === 0 && (
+            <div className="command-palette-empty">{t('palette_no_results', 'No results')}</div>
+          )}
+          {grouped.map(({ group, items }) => {
+            const [labelKey, fallback] = GROUP_LABELS[group];
+            return (
+              <div key={group} className="command-palette-group">
+                <div className="command-palette-group-title">{t(labelKey, fallback)}</div>
+                {items.map((cmd) => {
+                  const flatIdx = flatItems.indexOf(cmd);
+                  const isActive = flatIdx === activeIndex;
+                  const Icon = cmd.icon;
+                  return (
+                    <div
+                      key={cmd.id}
+                      ref={(el) => { itemRefs.current[flatIdx] = el; }}
+                      className={`command-palette-item${isActive ? ' active' : ''}`}
+                      onMouseEnter={() => setActiveIndex(flatIdx)}
+                      onClick={() => runCommand(cmd)}
+                    >
+                      {Icon && <Icon size={14} className="command-palette-item-icon" />}
+                      <span className="command-palette-item-label">{cmd.label}</span>
+                      {cmd.sub && (
+                        <span className="command-palette-item-sub">{cmd.sub}</span>
+                      )}
+                      {cmd.hint && (
+                        <kbd className="command-palette-item-hint">{cmd.hint}</kbd>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
