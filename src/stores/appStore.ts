@@ -61,6 +61,8 @@ interface AppStore {
   setShowCommandPalette: (show: boolean) => void;
   showTerminalSearch: boolean;
   setShowTerminalSearch: (show: boolean) => void;
+  focusedBlock: { tabId: string; blockId: number } | null;
+  setFocusedBlock: (v: { tabId: string; blockId: number } | null) => void;
   editingSession: SessionConfig | null;
   setEditingSession: (session: SessionConfig | null) => void;
   showDockerModal: boolean;
@@ -258,6 +260,8 @@ export const useAppStore = create<AppStore>((set, _get) => ({
   setShowCommandPalette: (show) => set({ showCommandPalette: show }),
   showTerminalSearch: false,
   setShowTerminalSearch: (show) => set({ showTerminalSearch: show }),
+  focusedBlock: null,
+  setFocusedBlock: (v) => set({ focusedBlock: v }),
   editingSession: null,
   setEditingSession: (session) => set({ editingSession: session }),
   showDockerModal: false,

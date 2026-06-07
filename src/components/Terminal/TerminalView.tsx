@@ -14,9 +14,14 @@ import { useAppStore } from "../../stores/appStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { terminalInstances } from "./terminalRegistry";
 import * as commandHistory from '../../lib/commandHistory';
-import { blocksFor, startBlock, markOutput, setCommand, finishBlock, clearTab as clearBlockTab, readOutput } from './blocks';
-import type { CommandBlock } from './blocks';
-import i18n from '../../i18n';
+import { blocksFor, startBlock, markOutput, setCommand, finishBlock, clearTab as clearBlockTab } from './blocks';
+import { syncCards, rebuildCards } from './blockCards';
+import { BlockLiveFrame } from './BlockLiveFrame';
+import { BlockStickyHeader } from './BlockStickyHeader';
+import { BlockOverviewRuler } from './BlockOverviewRuler';
+import { resolveBindings } from '../../keymap/dispatch';
+import { matchStep } from '../../keymap/match';
+import { ACTION_BY_ID } from '../../keymap/actions';
 import { resolveTerminalTheme } from '../../lib/terminalThemes';
 import { runLoginScript } from '../../lib/sendScript';
 import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';
@@ -174,120 +179,6 @@ const bracketedPaste    = new Map<string, boolean>();
 
 function isInteractiveTerminal(type: string): boolean {
   return type === 'ssh' || type === 'localshell' || type === 'serial' || type === 'docker';
-}
-
-/**
- * Apply (or refresh) the state CSS classes on a block's gutter decoration
- * element. Called both when the decoration first renders and after finishBlock
- * transitions state from running → done.
- */
-function applyBlockDecoClass(el: HTMLElement, block: CommandBlock): void {
-  el.classList.add('gw-block-deco');
-  el.classList.toggle('running', block.state === 'running');
-  el.classList.toggle('ok', block.state === 'done' && block.exitCode === 0);
-  el.classList.toggle('err', block.state === 'done' && (block.exitCode ?? 0) !== 0);
-}
-
-// ---------------------------------------------------------------------------
-// Block action menu — lightweight DOM menu for gutter decoration clicks.
-// ---------------------------------------------------------------------------
-
-/** Currently-open block menu element (at most one open at a time). */
-let activeBlockMenu: HTMLElement | null = null;
-
-/** Close and remove the currently open block menu, if any. */
-function closeBlockMenu(): void {
-  if (activeBlockMenu) {
-    activeBlockMenu.remove();
-    activeBlockMenu = null;
-  }
-}
-
-/**
- * Open a small context menu near the gutter decoration click,
- * offering Copy command / Copy output / Re-run for the given block.
- */
-function openBlockMenu(
-  e: MouseEvent,
-  block: CommandBlock,
-  tabId: string,
-  tabType: TabInfo['type'],
-  sessionId: string,
-): void {
-  e.stopPropagation();
-  closeBlockMenu();
-
-  const inst = terminalInstances.get(tabId);
-  const term = inst?.terminal;
-
-  const t = (key: string) => i18n.t(`gwshell:${key}` as never);
-
-  const menu = document.createElement('div');
-  menu.className = 'gw-block-menu';
-  menu.style.position = 'fixed';
-  menu.style.left = `${e.clientX}px`;
-  menu.style.top = `${e.clientY}px`;
-  menu.style.zIndex = '9999';
-
-  const makeBtn = (label: string, onClick: () => void) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'gw-block-menu-item';
-    btn.textContent = label;
-    btn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      onClick();
-      closeBlockMenu();
-    });
-    return btn;
-  };
-
-  // Copy command (use the Tauri clipboard plugin — navigator.clipboard is
-  // unreliable inside the webview)
-  menu.appendChild(makeBtn(t('block_copy_cmd'), () => {
-    clipboardWrite(block.command).catch(() => { navigator.clipboard?.writeText(block.command).catch(() => {}); });
-  }));
-
-  // Copy output
-  menu.appendChild(makeBtn(t('block_copy_output'), () => {
-    if (!term) return;
-    const output = readOutput(tabId, term, block);
-    clipboardWrite(output).catch(() => { navigator.clipboard?.writeText(output).catch(() => {}); });
-  }));
-
-  // Re-run (writes command WITHOUT a trailing newline so the user can review)
-  menu.appendChild(makeBtn(t('block_rerun'), () => {
-    if (!block.command) return;
-    const writeCmd = tabType === 'ssh' ? 'write_to_ssh'
-      : tabType === 'serial' ? 'write_to_serial'
-      : 'write_to_pty';
-    invoke(writeCmd, { sessionId, data: block.command }).catch(() => {});
-  }));
-
-  document.body.appendChild(menu);
-  activeBlockMenu = menu;
-
-  // Clamp to viewport so the menu doesn't overflow.
-  const rect = menu.getBoundingClientRect();
-  if (rect.right > window.innerWidth) {
-    menu.style.left = `${window.innerWidth - rect.width - 4}px`;
-  }
-  if (rect.bottom > window.innerHeight) {
-    menu.style.top = `${window.innerHeight - rect.height - 4}px`;
-  }
-
-  // Dismiss on outside click or Escape.
-  const dismiss = (ev: Event) => {
-    if (ev.type === 'keydown' && (ev as KeyboardEvent).key !== 'Escape') return;
-    closeBlockMenu();
-    document.removeEventListener('click', dismiss, true);
-    document.removeEventListener('keydown', dismiss, true);
-  };
-  // Use a tiny timeout so the current click event doesn't immediately dismiss.
-  setTimeout(() => {
-    document.addEventListener('click', dismiss, true);
-    document.addEventListener('keydown', dismiss, true);
-  }, 0);
 }
 
 // Per-tab scope key for history ranking.
@@ -813,6 +704,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             }
           }
 
+          // Block navigation / focus — handle at the terminal level so a focused
+          // terminal doesn't swallow the chord (fixes the Phase A ⌘⇧↑/↓ leftover:
+          // the window-level dispatcher bails on defaultPrevented).
+          {
+            const overrides = useSettingsStore.getState().settings.keymapOverrides ?? {};
+            for (const b of resolveBindings(overrides)) {
+              if ((b.actionId === 'block.prev' || b.actionId === 'block.next' || b.actionId === 'block.focus')
+                  && b.chord.length === 1 && matchStep(e, b.chord[0])) {
+                e.preventDefault();
+                ACTION_BY_ID.get(b.actionId)?.run();
+                return false;
+              }
+            }
+          }
+
           if (isCopyShortcut(e)) {
             const selection = readTerminalSelection(termRef) || selectionSnapshotRef.current;
             if (selection) {
@@ -1099,6 +1005,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             const hasRunning = existing.length > 0 && existing[existing.length - 1].state === 'running';
             if (!hasRunning) startBlock(tab.id, term133);
           }
+          // P4 Phase B: a new prompt defines the previous block's bottom edge —
+          // finalize it into a finished card. The active (last) block stays
+          // un-decorated; the React live-frame overlay renders it.
+          syncCards(term133, { tabId: tab.id, tabType: tab.type, sessionId: tab.sessionId });
         } else if (kind === 'C') {
           // Mark that this shell emits the real pre-exec OSC 133 C sequence.
           // Used by the Enter branch to avoid double-recording history on shells
@@ -1115,50 +1025,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           }
           inputBuffers.set(tab.id, '');
           // Block model: mark start of output and capture command text.
-          // markOutput returns the lastRunning block it marked — use THAT block
-          // for the decoration so it stays anchored to the same block as
-          // markOutput/setCommand even on malformed streams (FIX 10).
-          const cblock = markOutput(tab.id, term133);
+          // The card itself is drawn later — finished blocks by blockCards (on
+          // the next prompt), the active block by the React live-frame overlay.
+          markOutput(tab.id, term133);
           setCommand(tab.id, line);
-          // P4: create the left-gutter status decoration now that a real command
-          // is executing (running→done). Idle prompts get none. Anchored to the
-          // running block's prompt marker (3-px pill in gutter column x:0).
-          if (cblock && cblock.promptMarker && !cblock.deco) {
-            const deco = term133.registerDecoration({ marker: cblock.promptMarker, x: 0, width: 1 });
-            cblock.deco = deco ?? null;
-            if (deco) {
-              deco.onRender((el) => {
-                applyBlockDecoClass(el, cblock);
-                el.style.cursor = 'pointer';
-                el.title = cblock.command || '';
-                if (!el.dataset.gwMenuAttached) {
-                  el.dataset.gwMenuAttached = '1';
-                  el.addEventListener('click', (ev) => {
-                    openBlockMenu(ev as MouseEvent, cblock, tab.id, tab.type, tab.sessionId);
-                  });
-                }
-              });
-            }
-          }
         } else if (kind === 'D') {
-          // Block model: parse exit code from "D" or "D;N" payload.
+          // Block model: parse exit code from "D" or "D;N" payload and close the
+          // block. The live-frame overlay reflects running→done; it becomes a
+          // finished card on the next prompt (syncCards in the 'A' branch).
           const m = payload.match(/^D(?:;(\d+))?/);
           const exit = m && m[1] != null ? Number(m[1]) : undefined;
-          // finishBlock returns the block it finished — use THAT block for the
-          // repaint so it stays anchored to lastRunning, not the array tail
-          // (FIX 10: avoids mismatch on malformed streams).
-          const finished = finishBlock(tab.id, exit);
-          // P4: re-paint the gutter decoration running→done. The decoration's
-          // `element` may not exist yet at D time (xterm renders it on a later
-          // frame), and onRender may only fire once — so repaint immediately,
-          // on the next frame, and with a short fallback, without requiring the
-          // element to be present right now.
-          if (finished?.deco) {
-            const repaint = () => { const el = finished.deco?.element; if (el) applyBlockDecoClass(el, finished); };
-            repaint();
-            requestAnimationFrame(repaint);
-            setTimeout(repaint, 50);
-          }
+          finishBlock(tab.id, exit);
         }
         // Other kinds: no action needed.
         return false;
@@ -1362,10 +1239,26 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         });
       }
 
+      // Card frames bake in a fixed row-span at creation, so a width change that
+      // rewraps lines leaves them stale. Rebuild on resize for ALL interactive
+      // terminals — serial has no resizeCmd, so this can't live in that block.
+      let cardsResizeDispose: { dispose(): void } | null = null;
+      {
+        let pendingCardsResize: ReturnType<typeof setTimeout> | null = null;
+        cardsResizeDispose = instance!.terminal.onResize(() => {
+          if (pendingCardsResize) clearTimeout(pendingCardsResize);
+          pendingCardsResize = setTimeout(() => {
+            pendingCardsResize = null;
+            try { rebuildCards(instance!.terminal, { tabId: tab.id, tabType: tab.type, sessionId: tab.sessionId }); } catch {}
+          }, 60);
+        });
+      }
+
       if (cancelled) {
         unlistenData(); unlistenExit();
         try { dataDispose.dispose(); } catch {}
         try { resizeDispose?.dispose(); } catch {}
+        try { cardsResizeDispose?.dispose(); } catch {}
         try { osc7Dispose.dispose(); } catch {}
         try { osc133Dispose.dispose(); } catch {}
         return;
@@ -1384,6 +1277,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         if (pendingResize) { clearTimeout(pendingResize); pendingBackendResize.delete(tab.id); }
         try { dataDispose.dispose(); } catch {}
         try { resizeDispose?.dispose(); } catch {}
+        try { cardsResizeDispose?.dispose(); } catch {}
         try { osc7Dispose.dispose(); } catch {}
         try { osc133Dispose.dispose(); } catch {}
         ghostAcceptCallbacks.delete(tab.id);
@@ -1830,6 +1724,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           {ghostText}
         </div>
       )}
+
+      {isActive && isInteractiveTerminal(tab.type) && <BlockLiveFrame tab={tab} />}
+      {isActive && isInteractiveTerminal(tab.type) && <BlockStickyHeader tab={tab} />}
+      {isActive && isInteractiveTerminal(tab.type) && <BlockOverviewRuler tab={tab} />}
 
       {contextMenu && isActive && (
         <div className="context-menu terminal-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>

@@ -32,6 +32,10 @@ export interface CommandBlock {
   /** xterm decoration handle for the left-gutter status bar (P4). null when
    *  the terminal does not support decorations or OSC 133 is not active. */
   deco?: IDecoration | null;
+  /** xterm decoration for the top-layer header chrome (badge + toolbar). */
+  chromeDeco?: IDecoration | null;
+  /** Unix timestamp (ms) when OSC 133 D was received. */
+  finishedAt?: number;
 }
 
 /** Maximum number of blocks retained per tab (oldest are evicted). */
@@ -72,6 +76,7 @@ export function startBlock(tabId: string, term: Terminal): CommandBlock {
       list.pop();
       prev.promptMarker?.dispose();
       try { prev.deco?.dispose(); } catch {}
+      try { prev.chromeDeco?.dispose(); } catch {}
     }
   }
 
@@ -97,6 +102,7 @@ export function startBlock(tabId: string, term: Terminal): CommandBlock {
     old?.promptMarker?.dispose();
     old?.outputMarker?.dispose();
     try { old?.deco?.dispose(); } catch {}
+    try { old?.chromeDeco?.dispose(); } catch {}
   }
 
   tabBlocks.set(tabId, list);
@@ -135,6 +141,7 @@ export function finishBlock(tabId: string, exitCode?: number): CommandBlock | un
   if (b) {
     b.state = 'done';
     b.exitCode = exitCode;
+    b.finishedAt = Date.now();
   }
   return b;
 }
@@ -150,6 +157,7 @@ export function clearTab(tabId: string): void {
       b.promptMarker?.dispose();
       b.outputMarker?.dispose();
       try { b.deco?.dispose(); } catch {}
+      try { b.chromeDeco?.dispose(); } catch {}
     });
   }
   tabBlocks.delete(tabId);
@@ -169,15 +177,10 @@ export function readOutput(
 ): string {
   const start = block.outputMarker?.line;
   if (start == null || start < 0) return '';
-
-  const list = tabBlocks.get(tabId) ?? [];
-  const idx = list.indexOf(block);
-  const next = idx >= 0 ? list[idx + 1] : undefined;
   // A disposed IMarker returns .line === -1 (not null/undefined), so ?? doesn't
   // fire.  Treat negative lines the same as "no marker" and fall back to the
   // end of the buffer.
-  const nextLine = next?.promptMarker?.line;
-  const end = (nextLine == null || nextLine < 0) ? term.buffer.active.length : nextLine;
+  const end = blockEndLine(tabId, term, block);
 
   const out: string[] = [];
   for (let i = start; i < end; i++) {
@@ -185,6 +188,46 @@ export function readOutput(
     if (ln) out.push(ln.translateToString(true));
   }
   return out.join('\n').replace(/\n+$/, '');
+}
+
+/** End line (exclusive) of a block's region: the next block's prompt line,
+ *  or the buffer end for the trailing/running block. Shared by readOutput,
+ *  the card frame span, and the live overlay. */
+export function blockEndLine(tabId: string, term: Terminal, block: CommandBlock): number {
+  const list = tabBlocks.get(tabId) ?? [];
+  const idx = list.indexOf(block);
+  const next = idx >= 0 ? list[idx + 1] : undefined;
+  const nextLine = next?.promptMarker?.line;
+  return (nextLine == null || nextLine < 0) ? term.buffer.active.length : nextLine;
+}
+
+/** Frame region [start,end): from the prompt line to the next prompt (or buffer end). */
+export function frameRange(tabId: string, term: Terminal, block: CommandBlock): { start: number; end: number } {
+  const start = block.promptMarker?.line ?? -1;
+  return { start, end: blockEndLine(tabId, term, block) };
+}
+
+/** Number of rows the card frame spans (>=1). */
+export function rowSpan(tabId: string, term: Terminal, block: CommandBlock): number {
+  const { start, end } = frameRange(tabId, term, block);
+  return start < 0 ? 1 : Math.max(1, end - start);
+}
+
+/** The trailing block not yet finalized into a finished-card decoration:
+ *  still running, or done but with no next prompt yet (its bottom edge
+ *  is unknown). The React live-frame overlay renders exactly this one. */
+export function activeBlock(tabId: string): CommandBlock | undefined {
+  const list = tabBlocks.get(tabId);
+  if (!list || list.length === 0) return undefined;
+  const last = list[list.length - 1];
+  if (last.state === 'running') return last;
+  if (last.state === 'done' && !last.deco) return last;
+  return undefined;
+}
+
+/** Elapsed wall-clock for a finished block, ms (undefined while running). */
+export function durationMs(block: CommandBlock): number | undefined {
+  return block.finishedAt != null ? block.finishedAt - block.startedAt : undefined;
 }
 
 // ---------------------------------------------------------------------------
