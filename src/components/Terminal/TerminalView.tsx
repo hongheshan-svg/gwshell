@@ -14,8 +14,9 @@ import { useAppStore } from "../../stores/appStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { terminalInstances } from "./terminalRegistry";
 import * as commandHistory from '../../lib/commandHistory';
-import { blocksFor, startBlock, markOutput, setCommand, finishBlock, clearTab as clearBlockTab } from './blocks';
+import { blocksFor, startBlock, markOutput, setCommand, finishBlock, clearTab as clearBlockTab, readOutput } from './blocks';
 import type { CommandBlock } from './blocks';
+import i18n from '../../i18n';
 import { resolveTerminalTheme } from '../../lib/terminalThemes';
 import { runLoginScript } from '../../lib/sendScript';
 import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';
@@ -180,6 +181,107 @@ function applyBlockDecoClass(el: HTMLElement, block: CommandBlock): void {
   el.classList.toggle('running', block.state === 'running');
   el.classList.toggle('ok', block.state === 'done' && block.exitCode === 0);
   el.classList.toggle('err', block.state === 'done' && (block.exitCode ?? 0) !== 0);
+}
+
+// ---------------------------------------------------------------------------
+// Block action menu — lightweight DOM menu for gutter decoration clicks.
+// ---------------------------------------------------------------------------
+
+/** Currently-open block menu element (at most one open at a time). */
+let activeBlockMenu: HTMLElement | null = null;
+
+/** Close and remove the currently open block menu, if any. */
+function closeBlockMenu(): void {
+  if (activeBlockMenu) {
+    activeBlockMenu.remove();
+    activeBlockMenu = null;
+  }
+}
+
+/**
+ * Open a small context menu near the gutter decoration click,
+ * offering Copy command / Copy output / Re-run for the given block.
+ */
+function openBlockMenu(
+  e: MouseEvent,
+  block: CommandBlock,
+  tabId: string,
+  tabType: TabInfo['type'],
+  sessionId: string,
+): void {
+  e.stopPropagation();
+  closeBlockMenu();
+
+  const inst = terminalInstances.get(tabId);
+  const term = inst?.terminal;
+
+  const t = (key: string) => i18n.t(`gwshell:${key}` as never);
+
+  const menu = document.createElement('div');
+  menu.className = 'gw-block-menu';
+  menu.style.position = 'fixed';
+  menu.style.left = `${e.clientX}px`;
+  menu.style.top = `${e.clientY}px`;
+  menu.style.zIndex = '9999';
+
+  const makeBtn = (label: string, onClick: () => void) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'gw-block-menu-item';
+    btn.textContent = label;
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      onClick();
+      closeBlockMenu();
+    });
+    return btn;
+  };
+
+  // Copy command
+  menu.appendChild(makeBtn(t('block_copy_cmd'), () => {
+    navigator.clipboard?.writeText(block.command).catch(() => {});
+  }));
+
+  // Copy output
+  menu.appendChild(makeBtn(t('block_copy_output'), () => {
+    if (!term) return;
+    const output = readOutput(tabId, term, block);
+    navigator.clipboard?.writeText(output).catch(() => {});
+  }));
+
+  // Re-run (writes command WITHOUT a trailing newline so the user can review)
+  menu.appendChild(makeBtn(t('block_rerun'), () => {
+    if (!block.command) return;
+    const writeCmd = tabType === 'ssh' ? 'write_to_ssh'
+      : tabType === 'serial' ? 'write_to_serial'
+      : 'write_to_pty';
+    invoke(writeCmd, { sessionId, data: block.command }).catch(() => {});
+  }));
+
+  document.body.appendChild(menu);
+  activeBlockMenu = menu;
+
+  // Clamp to viewport so the menu doesn't overflow.
+  const rect = menu.getBoundingClientRect();
+  if (rect.right > window.innerWidth) {
+    menu.style.left = `${window.innerWidth - rect.width - 4}px`;
+  }
+  if (rect.bottom > window.innerHeight) {
+    menu.style.top = `${window.innerHeight - rect.height - 4}px`;
+  }
+
+  // Dismiss on outside click or Escape.
+  const dismiss = (ev: Event) => {
+    if (ev.type === 'keydown' && (ev as KeyboardEvent).key !== 'Escape') return;
+    closeBlockMenu();
+    document.removeEventListener('click', dismiss, true);
+    document.removeEventListener('keydown', dismiss, true);
+  };
+  // Use a tiny timeout so the current click event doesn't immediately dismiss.
+  setTimeout(() => {
+    document.addEventListener('click', dismiss, true);
+    document.addEventListener('keydown', dismiss, true);
+  }, 0);
 }
 
 // Per-tab scope key for history ranking.
@@ -1003,7 +1105,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             });
             block.deco = deco ?? null;
             if (deco) {
-              deco.onRender((el) => applyBlockDecoClass(el, block));
+              deco.onRender((el) => {
+                applyBlockDecoClass(el, block);
+                el.style.cursor = 'pointer';
+                el.title = block.command || '';
+                // Only attach click handler once (onRender may fire repeatedly).
+                if (!el.dataset.gwMenuAttached) {
+                  el.dataset.gwMenuAttached = '1';
+                  el.addEventListener('click', (ev) => {
+                    openBlockMenu(ev as MouseEvent, block, tab.id, tab.type, tab.sessionId);
+                  });
+                }
+              });
             }
           }
         } else if (kind === 'C') {

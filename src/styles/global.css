@@ -3783,3 +3783,31 @@ textarea,
 .gw-block-deco.running { background: var(--accent-primary); opacity: .55; }
 .gw-block-deco.ok { background: var(--success); }
 .gw-block-deco.err { background: var(--danger); }
+
+/* ========== Block action menu (gutter click) ========== */
+.gw-block-menu {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  min-width: 148px;
+  box-shadow: var(--shadow-lg);
+}
+
+.gw-block-menu-item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+  border: none;
+  background: transparent;
+  text-align: left;
+}
+
+.gw-block-menu-item:hover {
+  background: var(--bg-hover, var(--accent-bg));
+  color: var(--text-primary);
+}
