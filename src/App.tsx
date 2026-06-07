@@ -2,7 +2,7 @@ import { Suspense, lazy, useEffect, useMemo, useRef } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { TitleBar } from './components/TitleBar/TitleBar';
-import { Sidebar } from './components/Sidebar/IconNav';
+import { SidebarFooter } from './components/Sidebar/SidebarFooter';
 import { SessionPanel } from './components/Sidebar/SessionPanel';
 import { SnippetPanel } from './components/Sidebar/SnippetPanel';
 import { useSnippetStore } from './stores/snippetStore';
@@ -48,7 +48,7 @@ function App() {
     showTerminalSearch,
     groupDefaultsTarget,
     vaultLocked, setVaultLocked,
-    mainView, activeNavItem } = useAppStore();
+    mainView, activeNavItem, sidebarCollapsed } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
   const settingsLoaded = useSettingsStore((s) => s.loaded);
   const sessionTabMemory = useSettingsStore((s) => s.settings.sessionTabMemory);
@@ -187,8 +187,12 @@ function App() {
       <div className="app-root">
         <TitleBar />
         <div className="app-layout">
-          <Sidebar />
-          {activeNavItem === 'snippets' ? <SnippetPanel /> : <SessionPanel />}
+          {!sidebarCollapsed && (
+            <div className="sidebar-column">
+              {activeNavItem === 'snippets' ? <SnippetPanel /> : <SessionPanel />}
+              <SidebarFooter />
+            </div>
+          )}
           <div className="main-content">
             <TabBar />
             <div className="terminal-sftp-wrapper">
