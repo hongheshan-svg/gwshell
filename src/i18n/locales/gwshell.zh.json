@@ -34,6 +34,7 @@
   "panel_search_placeholder": "搜索资产...",
   "panel_default_group": "默认分组",
   "newasset_ssh": "SSH",
+  "newasset_quickconnect": "快速连接",
   "newasset_ssh_tunnel": "SSH 隧道",
   "newasset_rdp": "RDP",
   "newasset_telnet": "Telnet",

@@ -34,6 +34,7 @@
   "panel_search_placeholder": "Search assets...",
   "panel_default_group": "Default Group",
   "newasset_ssh": "SSH",
+  "newasset_quickconnect": "Quick Connect",
   "newasset_ssh_tunnel": "SSH Tunnel",
   "newasset_rdp": "RDP",
   "newasset_telnet": "Telnet",

@@ -7,6 +7,7 @@ import {
   Network,
   Usb,
   Server,
+  Zap,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useEscapeClose } from '../../lib/useEscapeClose';
@@ -28,6 +29,7 @@ const remoteItems: { id: string; icon: typeof TerminalSquare; labelKey: Translat
 // SSH is the app's core action, so it leads as a one-click top-level item rather
 // than being buried in the remote submenu. Unimplemented entries are omitted.
 const menuItems: { id: string; icon: typeof TerminalSquare; labelKey: TranslationKeys; hasSubmenu?: boolean; disabled?: boolean }[] = [
+  { id: 'quickconnect', icon: Zap, labelKey: 'newasset_quickconnect' },
   { id: 'ssh', icon: Server, labelKey: 'newasset_ssh' },
   { id: 'localshell', icon: TerminalSquare, labelKey: 'newasset_localshell' },
   { id: 'docker', icon: Box, labelKey: 'newasset_docker' },

@@ -22,7 +22,7 @@ import { NewAssetMenu } from './NewAssetMenu';
 import type { SessionConfig } from '../../types';
 
 export const SessionPanel: React.FC = () => {
-  const { sessions, sidebarCollapsed, setShowNewSession, setShowDockerModal, setShowLocalTerminalModal, setShowSerialModal, setEditingSession, addSession, removeSession, tabs, addTab, setActiveTab, setGroupDefaultsTarget } = useAppStore();
+  const { sessions, sidebarCollapsed, setShowNewSession, setShowQuickConnect, setShowDockerModal, setShowLocalTerminalModal, setShowSerialModal, setEditingSession, addSession, removeSession, tabs, addTab, setActiveTab, setGroupDefaultsTarget } = useAppStore();
   const { t } = useTranslation();
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -94,6 +94,7 @@ export const SessionPanel: React.FC = () => {
   };
 
   const handleNewAssetSelect = (type: string) => {
+    if (type === 'quickconnect') { setShowQuickConnect(true); return; }
     if (supportedQuickCreateTypes.has(type)) {
       setShowNewSession(true);
     } else if (type === 'serial') {

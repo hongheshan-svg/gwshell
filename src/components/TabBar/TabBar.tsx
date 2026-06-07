@@ -5,7 +5,7 @@ import { useAppStore } from '../../stores/appStore';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
 
 export const TabBar: React.FC = () => {
-  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, setShowSerialModal, setShowDockerModal, setShowLocalTerminalModal, sftpPanelOpen, toggleSftpPanel, splitTabId, setSplitTabId } = useAppStore();
+  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, setShowSerialModal, setShowDockerModal, setShowLocalTerminalModal, setShowQuickConnect, sftpPanelOpen, toggleSftpPanel, splitTabId, setSplitTabId } = useAppStore();
   const { t } = useTranslation();
   const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
   const addBtnRef = useRef<HTMLButtonElement>(null);
@@ -38,6 +38,7 @@ export const TabBar: React.FC = () => {
   };
 
   const handleNewAssetSelect = (type: string) => {
+    if (type === 'quickconnect') { setShowQuickConnect(true); return; }
     if (supportedQuickCreateTypes.has(type)) {
       setShowNewSession(true);
     } else if (type === 'serial') {
