@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Plus, Eye, Monitor, CornerDownLeft } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../../stores/appStore";
+import { useEscapeClose } from "../../lib/useEscapeClose";
 import type { SessionConfig } from "../../types";
 
 const colorLabels = [
@@ -95,6 +96,7 @@ export const SerialPortModal: React.FC = () => {
   if (!showSerialModal) return null;
 
   const handleClose = () => setShowSerialModal(false);
+  useEscapeClose(handleClose);
 
   const setField = <K extends keyof SerialForm>(key: K, value: SerialForm[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));

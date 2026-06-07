@@ -4,6 +4,7 @@ import { X, FolderOpen, ChevronDown } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "../../stores/appStore";
+import { useEscapeClose } from "../../lib/useEscapeClose";
 import type { SessionConfig } from "../../types";
 
 const colorLabels = [
@@ -108,6 +109,7 @@ export const LocalTerminalModal: React.FC = () => {
   if (!showLocalTerminalModal) return null;
 
   const handleClose = () => setShowLocalTerminalModal(false);
+  useEscapeClose(handleClose);
 
   const handlePickDir = async () => {
     try {

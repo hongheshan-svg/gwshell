@@ -2520,6 +2520,38 @@ input, select, textarea, button {
   background: var(--accent-bg);
 }
 
+/* Right-aligned Cancel + Save group; Save reads as the primary action. */
+.ssh-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ssh-footer-link.ssh-footer-primary {
+  background: var(--accent-primary);
+  color: #fff;
+}
+.ssh-footer-link.ssh-footer-primary:hover {
+  background: var(--accent-hover);
+}
+
+/* Required-field asterisk on form labels. */
+.required-mark {
+  color: var(--danger);
+  font-weight: 600;
+  margin-left: 1px;
+}
+
+/* Keyboard-only focus ring for click targets that otherwise show no focus
+   state on the dark theme (icon buttons, links, custom role=button elements).
+   :focus-visible keeps mouse clicks ring-free. */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
 /* Serial port autofill (高级 tab) */
 .autofill-section {
   border: 1px solid var(--border-color);

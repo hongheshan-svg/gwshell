@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import { useEscapeClose } from '../../lib/useEscapeClose';
 import type { SessionConfig } from '../../types';
 import type { TranslationKeys } from '../../i18n';
 
@@ -52,6 +53,7 @@ export const DockerModal: React.FC = () => {
   if (!showDockerModal) return null;
 
   const handleClose = () => setShowDockerModal(false);
+  useEscapeClose(handleClose);
 
   const handleBlur = (field: string) => {
     setTouched((prev) => ({ ...prev, [field]: true }));

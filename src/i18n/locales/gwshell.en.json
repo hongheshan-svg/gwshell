@@ -44,6 +44,8 @@
   "newasset_remote": "Remote Connection",
   "newasset_database": "Database",
   "common_unavailable": "Unavailable",
+  "common_cancel": "Cancel",
+  "field_required": "Required",
   "table_title": "Asset List",
   "table_selected": "{{count}} connection(s) selected",
   "table_search_placeholder": "Name, IP, User (Ctrl+F)",

@@ -44,6 +44,8 @@
   "newasset_remote": "远程连接",
   "newasset_database": "数据库",
   "common_unavailable": "暂不可用",
+  "common_cancel": "取消",
+  "field_required": "必填项",
   "table_title": "资产列表",
   "table_selected": "已选择 {{count}} 个连接",
   "table_search_placeholder": "名称,IP,User (Ctrl+F)",

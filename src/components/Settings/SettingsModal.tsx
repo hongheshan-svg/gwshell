@@ -7,6 +7,7 @@ import { useSettingsStore, defaultSettings as persistedDefaultSettings } from '.
 import i18n from '../../i18n';
 import type { TranslationKeys } from '../../i18n';
 import { TERMINAL_SCHEME_OPTIONS } from '../../lib/terminalThemes';
+import { useEscapeClose } from '../../lib/useEscapeClose';
 import { ShortcutEditor } from './ShortcutEditor';
 
 /* ---- Nav categories ---- */
@@ -511,6 +512,7 @@ export const SettingsModal: React.FC = () => {
 
   if (!showSettings) return null;
   const handleClose = () => setShowSettings(false);
+  useEscapeClose(handleClose);
   const fonts = [CMD_TERMINAL_FONT, 'Consolas', 'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono, "Noto Sans SC", monospace', 'Fira Code', 'monospace'];
 
   return (

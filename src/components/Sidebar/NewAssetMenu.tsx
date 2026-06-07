@@ -9,6 +9,7 @@ import {
   Server,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useEscapeClose } from '../../lib/useEscapeClose';
 import type { TranslationKeys } from '../../i18n';
 
 interface NewAssetMenuProps {
@@ -38,6 +39,8 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
   const menuRef = useRef<HTMLDivElement>(null);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [submenuPos, setSubmenuPos] = useState<{ top: number; left: number } | null>(null);
+
+  useEscapeClose(onClose);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {

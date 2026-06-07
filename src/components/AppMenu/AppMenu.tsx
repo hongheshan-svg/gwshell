@@ -16,6 +16,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import { useEscapeClose } from '../../lib/useEscapeClose';
 
 const appWindow = getCurrentWindow();
 
@@ -35,6 +36,8 @@ export const AppMenu: React.FC = () => {
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showAppMenu, setShowAppMenu]);
+
+  useEscapeClose(() => setShowAppMenu(false));
 
   if (!showAppMenu) return null;
 

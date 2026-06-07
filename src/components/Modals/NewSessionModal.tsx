@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Eye, EyeOff, FolderOpen } from 'lucide-react';
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
 import { useAppStore } from '../../stores/appStore';
+import { useEscapeClose } from '../../lib/useEscapeClose';
 import type { SessionConfig } from '../../types';
 import type { TranslationKeys } from '../../i18n';
 
@@ -90,6 +91,8 @@ export const NewSessionModal: React.FC = () => {
   const handleBlur = (field: string) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
   };
+
+  useEscapeClose(handleClose);
 
   const buildConfig = (sessionId: string): SessionConfig => {
     const now = new Date().toISOString().slice(0, 10);
@@ -211,7 +214,7 @@ export const NewSessionModal: React.FC = () => {
               {/* Name + Host — lead with the essential connection fields */}
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
-                  <label className={nameError ? 'label-error' : ''}>{t('ssh_name')}</label>
+                  <label className={nameError ? 'label-error' : ''}>{t('ssh_name')} <span className="required-mark">*</span></label>
                   <input
                     type="text"
                     value={form.name || ''}
@@ -219,10 +222,10 @@ export const NewSessionModal: React.FC = () => {
                     onBlur={() => handleBlur('name')}
                     className={nameError ? 'input-error' : ''}
                   />
-                  {nameError && <span className="field-error">name is a required field</span>}
+                  {nameError && <span className="field-error">{t('field_required')}</span>}
                 </div>
                 <div className="ssh-form-group">
-                  <label className={hostError ? 'label-error' : ''}>Host</label>
+                  <label className={hostError ? 'label-error' : ''}>Host <span className="required-mark">*</span></label>
                   <input
                     type="text"
                     value={form.host || ''}
@@ -230,7 +233,7 @@ export const NewSessionModal: React.FC = () => {
                     onBlur={() => handleBlur('host')}
                     className={hostError ? 'input-error' : ''}
                   />
-                  {hostError && <span className="field-error">host is a required field</span>}
+                  {hostError && <span className="field-error">{t('field_required')}</span>}
                 </div>
               </div>
 
@@ -764,7 +767,10 @@ export const NewSessionModal: React.FC = () => {
         {/* Footer */}
         <div className="ssh-modal-footer">
           <button className="ssh-footer-link" onClick={handleTestConnect}>{t('ssh_test_connect')}</button>
-          <button className="ssh-footer-link" onClick={handleSave}>{t('ssh_save')}</button>
+          <div className="ssh-footer-actions">
+            <button className="ssh-footer-link" onClick={handleClose}>{t('common_cancel')}</button>
+            <button className="ssh-footer-link ssh-footer-primary" onClick={handleSave}>{t('ssh_save')}</button>
+          </div>
         </div>
       </div>
     </div>
