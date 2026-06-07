@@ -163,16 +163,25 @@
       window.__GWSHELL_BOOT_T0__ = performance.now();
     </script>
     <script>
-      // Global event delegate: intercepts titlebar button clicks using native
+      // Global event delegate: intercepts native *window-control* clicks using
       // DOM events + Tauri IPC. Works instantly even while the 666KB React
       // bundle is still being parsed, because this listener is registered in
       // <head> before any module scripts execute.
+      //
+      // IMPORTANT: only genuine window-plugin actions are handled here. App-level
+      // actions (e.g. `toggle_server_panel`) are NOT `plugin:window|*` commands and
+      // must reach React's onClick — if this delegate intercepted them it would
+      // stopPropagation() (swallowing the click) and fire a non-existent IPC call,
+      // making the button appear completely dead.
+      var GW_WINDOW_ACTIONS = { minimize: 1, toggle_maximize: 1, exit: 1 };
       document.addEventListener('click', function(e) {
         var t = e.target;
         // Walk up at most 3 levels to find a button with data-gw-action
         for (var i = 0; i < 3 && t && t !== document; i++, t = t.parentElement) {
           var action = t.getAttribute && t.getAttribute('data-gw-action');
           if (action) {
+            // Unknown / app-level action: let it bubble to React, don't swallow it.
+            if (!GW_WINDOW_ACTIONS[action]) return;
             e.preventDefault();
             e.stopPropagation();
             try {
