@@ -1,92 +1,5 @@
-:root {
-  /* Neutral slate dark + indigo signature */
-  --bg-primary:   #0d0e12;
-  --bg-secondary: #16171d;
-  --bg-tertiary:  #1c1d25;
-  --bg-hover:     #22232c;
-  --bg-active:    #2a2b36;
-  --bg-card:      #14151a;
-
-  --border-color: #24262e;
-  --border-light: #2e3039;
-
-  --text-primary:   #e7e9f0;
-  --text-secondary: #9ca3b4;
-  --text-muted:     #5b6172;
-
-  --accent-primary: #6366f1;
-  --accent-primary-rgb: 99, 102, 241;
-  --accent-hover:   #818cf8;
-  --accent-bg:      rgba(99, 102, 241, 0.14);
-
-  --success: #4ade80;  --success-rgb: 74, 222, 128;
-  --warning: #fbbf24;  --warning-rgb: 251, 191, 36;
-  --danger:  #f87171;  --danger-rgb: 248, 113, 113;
-
-  /* Layout (preserved) */
-  --sidebar-width: 220px;
-  --sidebar-collapsed-width: 44px;
-  --tabbar-height: 32px;
-  --statusbar-height: 24px;
-
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-
-  --font-mono: 'Cascadia Mono', 'JetBrains Mono', 'Consolas', 'Fira Code', monospace;
-  --font-sans: -apple-system, system-ui, 'Segoe UI', 'Inter', Roboto, 'Helvetica Neue', Arial, sans-serif;
-
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 12px 40px -8px rgba(0, 0, 0, 0.55);
-
-  --surface-blur: 7px;
-  --chrome-bg: rgba(22, 23, 29, 0.78);
-  --term-bg:   rgba(6, 7, 10, 0.92);
-
-  /* Back-compat aliases: many components reference these legacy token names,
-     which were never defined and silently fell back to hardcoded colors.
-     Point them at the real theme-aware tokens so they follow the palette. */
-  --accent: var(--accent-primary);
-  --accent-subtle: var(--accent-bg);
-  --border: var(--border-color);
-  --hover-bg: var(--bg-hover);
-  --input-bg: var(--bg-primary);
-  --panel-bg: var(--bg-tertiary);
-  --text-tertiary: var(--text-muted);
-}
-
-[data-theme='light'] {
-  --bg-primary:   #f7f8fa;
-  --bg-secondary: #eef0f4;
-  --bg-tertiary:  #e4e7ec;
-  --bg-hover:     #e0e3e9;
-  --bg-active:    #d6dae2;
-  --bg-card:      #ffffff;
-
-  --border-color: #d8dce3;
-  --border-light: #e6e9ee;
-
-  --text-primary:   #1a1c23;
-  --text-secondary: #5b6172;
-  --text-muted:     #8a91a0;
-
-  --accent-primary: #4f46e5;
-  --accent-primary-rgb: 79, 70, 229;
-  --accent-hover:   #4338ca;
-  --accent-bg:      rgba(79, 70, 229, 0.10);
-
-  --success: #16a34a;  --success-rgb: 22, 163, 74;
-  --warning: #ca8a04;  --warning-rgb: 202, 138, 4;
-  --danger:  #dc2626;  --danger-rgb: 220, 38, 38;
-
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.10);
-  --shadow-lg: 0 12px 40px -8px rgba(0, 0, 0, 0.16);
-
-  --chrome-bg: rgba(247, 248, 250, 0.80);
-  --term-bg:   rgba(255, 255, 255, 0.96);
-}
+/* Design tokens live in ./theme.css — the single source of truth, imported
+   before this file in App.tsx. Do not redefine tokens here. */
 
 * {
   margin: 0;
@@ -121,7 +34,7 @@ html, body, #root {
 
 ::-webkit-scrollbar-thumb {
   background-color: var(--border-light);
-  border-radius: 1px;
+  border-radius: var(--radius-sm);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -746,7 +659,7 @@ input, select, textarea, button {
 .xterm .xterm-scrollable-element > .scrollbar > .slider {
   width: 8px !important;
   right: 2px !important;
-  border-radius: 999px !important;
+  border-radius: var(--radius-pill) !important;
 }
 
 .xterm .xterm-scrollable-element > .invisible,
@@ -848,7 +761,7 @@ input, select, textarea, button {
   align-items: center;
   gap: 4px;
   padding: 4px 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg-secondary, #1b1b24);
   border: 1px solid var(--border-color, #33333f);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
@@ -858,7 +771,7 @@ input, select, textarea, button {
   background: var(--bg-primary, #0c0c14);
   border: 1px solid var(--border-color, #333);
   color: inherit;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 3px 8px;
   font-size: 12px;
   width: 180px;
@@ -932,7 +845,7 @@ input, select, textarea, button {
   color: var(--text-secondary);
   cursor: pointer;
   padding: 2px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
 }
@@ -960,7 +873,7 @@ input, select, textarea, button {
   width: 26px;
   height: 26px;
   padding: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1005,7 +918,7 @@ input, select, textarea, button {
   font-size: 11px;
   color: var(--text-primary);
   padding: 4px 7px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   cursor: default;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1024,7 +937,7 @@ input, select, textarea, button {
   color: var(--text-primary);
   background: var(--bg-primary);
   border: 1px solid var(--accent-primary);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 3px 6px;
   outline: none;
   box-sizing: border-box;
@@ -1064,7 +977,7 @@ input, select, textarea, button {
 
 .sftp-file-list::-webkit-scrollbar-thumb {
   background: var(--text-tertiary);
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
 }
 
 .sftp-file-item {
@@ -1149,7 +1062,7 @@ input, select, textarea, button {
   color: var(--text-primary);
   background: var(--bg-primary);
   border: 1px solid var(--accent-primary);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 2px 4px;
   outline: none;
   min-width: 0;
@@ -1280,7 +1193,7 @@ input, select, textarea, button {
   font-family: 'Fira Code', monospace;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text-primary);
   outline: none;
 }
@@ -1299,7 +1212,7 @@ input, select, textarea, button {
   padding: 4px 14px;
   font-size: 12px;
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   background: var(--bg-secondary);
   color: var(--text-primary);
@@ -1384,7 +1297,7 @@ input, select, textarea, button {
   padding: 4px 8px;
   font-size: 12px;
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   color: var(--text-primary);
   cursor: pointer;
@@ -2322,7 +2235,7 @@ input, select, textarea, button {
   right: 12px;
   height: 2px;
   background: var(--accent-primary);
-  border-radius: 2px 2px 0 0;
+  border-radius: var(--radius-sm) 2px 0 0;
 }
 
 /* Body */
@@ -2714,7 +2627,7 @@ a:focus-visible,
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
   color: var(--text-muted);
@@ -2735,7 +2648,7 @@ a:focus-visible,
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
   color: var(--text-muted);
@@ -2946,7 +2859,7 @@ a:focus-visible,
   position: relative;
   width: 36px;
   height: 20px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: none;
   background: var(--bg-active);
   cursor: pointer;
@@ -2964,7 +2877,7 @@ a:focus-visible,
   left: 3px;
   width: 14px;
   height: 14px;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   background: #fff;
   transition: transform 0.1s linear;
 }
@@ -3492,7 +3405,7 @@ a:focus-visible,
 }
 .snippet-error { padding: 6px 12px; color: var(--danger); font-size: 12px; }
 .snippet-form { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border-color, #2a2a2a); }
-.snippet-input { background: var(--input-bg, #111); border: 1px solid var(--border-color, #333); color: inherit; border-radius: 4px; padding: 6px 8px; font-size: 12px; font-family: inherit; }
+.snippet-input { background: var(--input-bg, #111); border: 1px solid var(--border-color, #333); color: inherit; border-radius: var(--radius-sm); padding: 6px 8px; font-size: 12px; font-family: inherit; }
 .snippet-textarea { resize: vertical; }
 .snippet-form-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .snippet-list { flex: 1; overflow-y: auto; }
@@ -3503,7 +3416,7 @@ a:focus-visible,
 .snippet-item-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .snippet-item-cmd { font-size: 11px; color: var(--text-muted, #888); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: monospace; }
 .snippet-item-actions { display: flex; gap: 2px; }
-.snippet-icon-btn { background: none; border: none; color: var(--text-muted, #aaa); cursor: pointer; padding: 4px; border-radius: 4px; display: inline-flex; }
+.snippet-icon-btn { background: none; border: none; color: var(--text-muted, #aaa); cursor: pointer; padding: 4px; border-radius: var(--radius-sm); display: inline-flex; }
 .snippet-icon-btn:hover:not(:disabled) { background: var(--hover-bg, #333); color: inherit; }
 .snippet-icon-btn:disabled { opacity: 0.4; cursor: default; }
 
@@ -3523,7 +3436,7 @@ a:focus-visible,
   flex-direction: column;
   gap: 10px;
   padding: 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-secondary, #1b1b24);
   border: 1px solid var(--border-color, #33333f);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
@@ -3535,7 +3448,7 @@ a:focus-visible,
   overflow: auto;
   max-height: 220px;
   padding: 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--bg-primary, #0c0c14);
   border: 1px solid var(--border-color, #2a2a33);
   font-family: monospace;
@@ -3545,7 +3458,7 @@ a:focus-visible,
 .paste-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .paste-confirm-btn {
   padding: 6px 14px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-color, #33333f);
   background: transparent;
   color: inherit;
@@ -3571,7 +3484,7 @@ a:focus-visible,
   flex-direction: column;
   gap: 10px;
   padding: 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-secondary, #1b1b24);
   border: 1px solid var(--border-color, #33333f);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
@@ -3579,7 +3492,7 @@ a:focus-visible,
 .quick-connect-title { font-weight: 600; font-size: 15px; }
 .quick-connect-input {
   padding: 8px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-color, #33333f);
   background: var(--bg-primary, #0c0c14);
   color: inherit;
@@ -3589,7 +3502,7 @@ a:focus-visible,
 .quick-connect-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .quick-connect-btn {
   padding: 6px 14px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-color, #33333f);
   background: transparent;
   color: inherit;
@@ -3617,7 +3530,7 @@ a:focus-visible,
 .status-broadcast.active {
   color: #fff;
   background: var(--accent, #3b78ff);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 0 6px;
 }
 .command-palette-overlay {
@@ -3635,7 +3548,7 @@ a:focus-visible,
   max-height: 60vh;
   display: flex;
   flex-direction: column;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-secondary, #1b1b24);
   border: 1px solid var(--border-color, #33333f);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
@@ -3669,10 +3582,10 @@ a:focus-visible,
 .shortcut-editor-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .shortcut-row-label { font-size: 13px; }
 .shortcut-row-keys { display: flex; align-items: center; gap: 6px; }
-.shortcut-chip { background: var(--input-bg, #111); border: 1px solid var(--border-color, #333); border-radius: 4px; padding: 4px 8px; cursor: pointer; color: inherit; display: inline-flex; gap: 4px; }
-.shortcut-chip kbd { background: var(--bg-secondary, #222); border-radius: 3px; padding: 0 4px; font-size: 11px; }
+.shortcut-chip { background: var(--input-bg, #111); border: 1px solid var(--border-color, #333); border-radius: var(--radius-sm); padding: 4px 8px; cursor: pointer; color: inherit; display: inline-flex; gap: 4px; }
+.shortcut-chip kbd { background: var(--bg-secondary, #222); border-radius: var(--radius-sm); padding: 0 4px; font-size: 11px; }
 .shortcut-unbound { color: var(--text-muted, #888); }
-.shortcut-capture { width: 120px; background: var(--accent, #3b78ff); color: #fff; border: none; border-radius: 4px; padding: 4px 8px; text-align: center; }
+.shortcut-capture { width: 120px; background: var(--accent, #3b78ff); color: #fff; border: none; border-radius: var(--radius-sm); padding: 4px 8px; text-align: center; }
 .shortcut-mini { background: none; border: none; color: var(--text-muted, #aaa); cursor: pointer; }
 .shortcut-mini:hover { color: inherit; }
 
@@ -3686,7 +3599,7 @@ a:focus-visible,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
 }
 .session-group-defaults-btn:hover { color: inherit; background: var(--hover-bg, #2a2a33); }
@@ -3709,7 +3622,7 @@ a:focus-visible,
   flex-direction: column;
   gap: 10px;
   padding: 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-secondary, #1b1b24);
   border: 1px solid var(--border-color, #33333f);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
@@ -3727,7 +3640,7 @@ a:focus-visible,
 .group-defaults-label { font-size: 12px; color: var(--text-muted, #888); white-space: nowrap; }
 .group-defaults-input {
   padding: 6px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-color, #33333f);
   background: var(--bg-primary, #0c0c14);
   color: inherit;
@@ -3739,7 +3652,7 @@ a:focus-visible,
 .group-defaults-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 .group-defaults-btn {
   padding: 6px 14px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-color, #33333f);
   background: transparent;
   color: inherit;
@@ -3749,3 +3662,49 @@ a:focus-visible,
 .group-defaults-btn:hover { background: var(--hover-bg, #2a2a33); }
 .group-defaults-btn.primary { background: var(--accent, #3b78ff); border-color: var(--accent, #3b78ff); color: #fff; }
 .shortcut-error { color: var(--danger); font-size: 12px; }
+
+/* ============================================================================
+   P1 form polish — translucency, soft focus, motion. Centralized overrides so
+   the look is tunable from here + theme.css. (Appended = wins over earlier rules.)
+   ============================================================================ */
+
+/* Floating surfaces get a subtle frosted-glass treatment (they sit over content) */
+.modal-content,
+.context-menu,
+.app-menu,
+.command-palette-card,
+.session-dropdown,
+.quick-connect-modal {
+  background: var(--chrome-bg);
+  backdrop-filter: blur(var(--surface-blur));
+  -webkit-backdrop-filter: blur(var(--surface-blur));
+  box-shadow: var(--shadow-lg);
+}
+
+/* Soft, consistent focus ring on all text inputs */
+input:focus,
+select:focus,
+textarea:focus,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+
+/* Gentle motion on interactive chrome */
+button,
+input,
+select,
+textarea,
+.tab,
+.session-item,
+.asset-row,
+.sidebar-action-btn,
+.sidebar-add-btn {
+  transition: background-color var(--transition-fast),
+              border-color var(--transition-fast),
+              color var(--transition-fast),
+              box-shadow var(--transition-fast);
+}

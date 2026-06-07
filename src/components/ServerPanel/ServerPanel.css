@@ -34,7 +34,7 @@
   color: inherit;
   cursor: pointer;
   padding: 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 .sp-header__close:hover {
   background: var(--bg-hover, rgba(255,255,255,0.08));
@@ -60,7 +60,7 @@
 .sp-card {
   background: var(--bg-primary, #161616);
   border: 1px solid var(--border-color, #2a2a2a);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
 }
 .sp-card__title {
@@ -94,7 +94,7 @@
   display: block;
   height: 8px;
   background: var(--bg-secondary, #2a2a2a);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 .sp-corerow__bar-fill {
@@ -108,7 +108,7 @@
 
 .sp-membar { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
 .sp-membar__head { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); }
-.sp-membar__track { height: 10px; background: var(--bg-secondary); border-radius: 5px; overflow: hidden; }
+.sp-membar__track { height: 10px; background: var(--bg-secondary); border-radius: var(--radius-pill); overflow: hidden; }
 .sp-membar__fill { height: 100%; }
 .sp-membar__fill--ram { background: linear-gradient(90deg, #3b82f6, #22c55e); }
 .sp-membar__fill--swap { background: linear-gradient(90deg, #f59e0b, #ef4444); }
