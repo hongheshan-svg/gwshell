@@ -1,7 +1,7 @@
 # P4 · 终端 Block 化（Terminal Blocks）设计
 
 **日期:** 2026-06-07
-**状态:** 待用户确认
+**状态:** 已确认（Phase A；本地 bash/zsh/fish 注入 + 远端 best-effort；`cmdHintShellIntegration` 默认关）
 **所属:** GWShell UI 现代化，子项目 4 / 4（依赖 P1 令牌；同分支）
 
 ---
