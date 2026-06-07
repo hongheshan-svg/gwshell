@@ -1081,43 +1081,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           candidateIndex.set(tab.id, 0);
           ghostTextState.set(tab.id, '');
           ghostTextSetters.get(tab.id)?.('', 0, 0);
-          // Block model: start on A; fall back to B when shell only emits B.
-          let block;
+          // Block model: start a block on A (or on B when the shell only emits
+          // B without a preceding A). The gutter status bar is NOT created here —
+          // an idle prompt should show no indicator. It's created on 'C' below,
+          // once a command actually runs.
           if (kind === 'A') {
-            block = startBlock(tab.id, term133);
+            startBlock(tab.id, term133);
           } else {
-            // B without a preceding A — start a block if none is running.
             const existing = blocksFor(tab.id);
             const hasRunning = existing.length > 0 && existing[existing.length - 1].state === 'running';
-            if (!hasRunning) {
-              block = startBlock(tab.id, term133);
-            }
-          }
-          // P4: create a left-gutter status decoration if the block has a
-          // prompt marker. Only fires when OSC 133 is active (which it always
-          // is here, since we just set tabHasOsc133). x:0,width:1 places the
-          // 3-px pill in the gutter column to the left of text.
-          if (block && block.promptMarker) {
-            const deco = term133.registerDecoration({
-              marker: block.promptMarker,
-              x: 0,
-              width: 1,
-            });
-            block.deco = deco ?? null;
-            if (deco) {
-              deco.onRender((el) => {
-                applyBlockDecoClass(el, block);
-                el.style.cursor = 'pointer';
-                el.title = block.command || '';
-                // Only attach click handler once (onRender may fire repeatedly).
-                if (!el.dataset.gwMenuAttached) {
-                  el.dataset.gwMenuAttached = '1';
-                  el.addEventListener('click', (ev) => {
-                    openBlockMenu(ev as MouseEvent, block, tab.id, tab.type, tab.sessionId);
-                  });
-                }
-              });
-            }
+            if (!hasRunning) startBlock(tab.id, term133);
           }
         } else if (kind === 'C') {
           // Command submitted: record the authoritative line (heuristic buffer).
@@ -1133,6 +1106,28 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           // Block model: mark start of output and capture command text.
           markOutput(tab.id, term133);
           setCommand(tab.id, line);
+          // P4: create the left-gutter status decoration now that a real command
+          // is executing (running→done). Idle prompts get none. Anchored to the
+          // running block's prompt marker (3-px pill in gutter column x:0).
+          const cblocks = blocksFor(tab.id);
+          const cblock = cblocks.length > 0 ? cblocks[cblocks.length - 1] : undefined;
+          if (cblock && cblock.promptMarker && !cblock.deco) {
+            const deco = term133.registerDecoration({ marker: cblock.promptMarker, x: 0, width: 1 });
+            cblock.deco = deco ?? null;
+            if (deco) {
+              deco.onRender((el) => {
+                applyBlockDecoClass(el, cblock);
+                el.style.cursor = 'pointer';
+                el.title = cblock.command || '';
+                if (!el.dataset.gwMenuAttached) {
+                  el.dataset.gwMenuAttached = '1';
+                  el.addEventListener('click', (ev) => {
+                    openBlockMenu(ev as MouseEvent, cblock, tab.id, tab.type, tab.sessionId);
+                  });
+                }
+              });
+            }
+          }
         } else if (kind === 'D') {
           // Block model: parse exit code from "D" or "D;N" payload.
           const m = payload.match(/^D(?:;(\d+))?/);

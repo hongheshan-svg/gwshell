@@ -7,7 +7,7 @@ import type { ThemeMode } from '../types';
 // previous getTerminalThemeColors pattern.
 
 const AUTO_DARK = {
-  background: '#0d0e12', foreground: '#e7e9f0', cursor: '#818cf8', cursorAccent: '#0d0e12',
+  background: '#0d0e12', foreground: '#e7e9f0', cursor: '#a8a8b3', cursorAccent: '#0d0e12',
   selectionBackground: 'rgba(99, 102, 241, 0.28)',
   black: '#1a1a28', red: '#ff5555', green: '#50fa7b', yellow: '#f1fa8c',
   blue: '#5ac8fa', magenta: '#c084fc', cyan: '#22d3ee', white: '#d4d4d8',
@@ -19,7 +19,7 @@ const AUTO_DARK = {
 };
 
 const AUTO_LIGHT = {
-  background: '#ffffff', foreground: '#1a1c23', cursor: '#4f46e5', cursorAccent: '#ffffff',
+  background: '#ffffff', foreground: '#1a1c23', cursor: '#6e6e7a', cursorAccent: '#ffffff',
   selectionBackground: 'rgba(79, 70, 229, 0.18)',
   black: '#1a1a2e', red: '#dc2626', green: '#16a34a', yellow: '#ca8a04',
   blue: '#0078d4', magenta: '#9333ea', cyan: '#0891b2', white: '#d4d4d8',
