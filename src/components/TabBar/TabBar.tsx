@@ -1,11 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Plus, Menu, ChevronDown, FolderOpen, Columns2 } from 'lucide-react';
+import { X, Plus, Menu, ChevronDown, FolderOpen, Columns2, PanelLeftOpen } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
 
 export const TabBar: React.FC = () => {
-  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, setShowSerialModal, setShowDockerModal, setShowLocalTerminalModal, setShowQuickConnect, sftpPanelOpen, toggleSftpPanel, splitTabId, setSplitTabId } = useAppStore();
+  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, setShowSerialModal, setShowDockerModal, setShowLocalTerminalModal, setShowQuickConnect, sftpPanelOpen, toggleSftpPanel, splitTabId, setSplitTabId, sidebarCollapsed, toggleSidebar } = useAppStore();
   const { t } = useTranslation();
   const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
   const addBtnRef = useRef<HTMLButtonElement>(null);
@@ -52,6 +52,11 @@ export const TabBar: React.FC = () => {
 
   return (
     <div className="tab-bar">
+      {sidebarCollapsed && (
+        <button className="tab-add-btn" onClick={toggleSidebar} title={t('nav_toggle_sidebar')}>
+          <PanelLeftOpen size={14} />
+        </button>
+      )}
       {tabs.map((tab) => (
         <div
           key={tab.id}
