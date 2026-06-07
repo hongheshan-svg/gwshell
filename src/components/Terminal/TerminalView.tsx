@@ -17,6 +17,8 @@ import * as commandHistory from '../../lib/commandHistory';
 import { blocksFor, startBlock, markOutput, setCommand, finishBlock, clearTab as clearBlockTab } from './blocks';
 import { syncCards, rebuildCards } from './blockCards';
 import { BlockLiveFrame } from './BlockLiveFrame';
+import { BlockStickyHeader } from './BlockStickyHeader';
+import { BlockOverviewRuler } from './BlockOverviewRuler';
 import { resolveBindings } from '../../keymap/dispatch';
 import { matchStep } from '../../keymap/match';
 import { ACTION_BY_ID } from '../../keymap/actions';
@@ -1709,6 +1711,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       )}
 
       {isActive && isInteractiveTerminal(tab.type) && <BlockLiveFrame tab={tab} />}
+      {isActive && isInteractiveTerminal(tab.type) && <BlockStickyHeader tab={tab} />}
+      {isActive && isInteractiveTerminal(tab.type) && <BlockOverviewRuler tab={tab} />}
 
       {contextMenu && isActive && (
         <div className="context-menu terminal-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
