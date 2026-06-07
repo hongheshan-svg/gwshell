@@ -1131,13 +1131,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         } else if (kind === 'D') {
           // Block model: parse exit code from "D" or "D;N" payload.
           const m = payload.match(/^D(?:;(\d+))?/);
-          finishBlock(tab.id, m && m[1] ? Number(m[1]) : undefined);
-          // P4: re-paint the decoration now that state has changed running→done.
-          // Find the block that just finished (last done block in the list).
+          const exit = m && m[1] != null ? Number(m[1]) : undefined;
+          finishBlock(tab.id, exit);
+          // P4: re-paint the gutter decoration running→done. The decoration's
+          // `element` may not exist yet at D time (xterm renders it on a later
+          // frame), and onRender may only fire once — so repaint immediately,
+          // on the next frame, and with a short fallback, without requiring the
+          // element to be present right now.
           const blocks = blocksFor(tab.id);
           const finished = blocks.length > 0 ? blocks[blocks.length - 1] : undefined;
-          if (finished && finished.state === 'done' && finished.deco?.element) {
-            applyBlockDecoClass(finished.deco.element, finished);
+          if (finished?.deco) {
+            const repaint = () => { const el = finished.deco?.element; if (el) applyBlockDecoClass(el, finished); };
+            repaint();
+            requestAnimationFrame(repaint);
+            setTimeout(repaint, 50);
           }
         }
         // Other kinds: no action needed.
