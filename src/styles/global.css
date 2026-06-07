@@ -28,7 +28,6 @@
 
   --sidebar-width: 220px;
   --sidebar-collapsed-width: 44px;
-  --navbar-width: 44px;
   --tabbar-height: 32px;
   --statusbar-height: 24px;
 
@@ -287,11 +286,6 @@ input, select, textarea, button {
   flex-shrink: 0;
   overflow: hidden;
   transition: width 0.15s linear;
-}
-
-.sidebar-panel.collapsed {
-  width: 0;
-  border-right: none;
 }
 
 .sidebar-header {

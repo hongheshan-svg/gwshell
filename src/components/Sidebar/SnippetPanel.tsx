@@ -10,7 +10,7 @@ import type { Snippet } from '../../types';
 export const SnippetPanel: React.FC = () => {
   const { t } = useTranslation();
   const { snippets, loaded, load, add, update, remove } = useSnippetStore();
-  const { sidebarCollapsed, activeTabId, tabs } = useAppStore();
+  const { activeTabId, tabs } = useAppStore();
   const [editing, setEditing] = useState<Snippet | null>(null);
   const [draftName, setDraftName] = useState('');
   const [draftCmd, setDraftCmd] = useState('');
@@ -20,8 +20,6 @@ export const SnippetPanel: React.FC = () => {
   useEffect(() => {
     if (!loaded) void load();
   }, [loaded, load]);
-
-  if (sidebarCollapsed) return null;
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
   const canSend =

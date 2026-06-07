@@ -20,7 +20,7 @@ import { NewAssetMenu } from './NewAssetMenu';
 import type { SessionConfig } from '../../types';
 
 export const SessionPanel: React.FC = () => {
-  const { sessions, sidebarCollapsed, setShowNewSession, setShowQuickConnect, setShowDockerModal, setShowLocalTerminalModal, setShowSerialModal, setEditingSession, addSession, removeSession, tabs, addTab, setActiveTab, setGroupDefaultsTarget } = useAppStore();
+  const { sessions, setShowNewSession, setShowQuickConnect, setShowDockerModal, setShowLocalTerminalModal, setShowSerialModal, setEditingSession, addSession, removeSession, tabs, addTab, setActiveTab, setGroupDefaultsTarget } = useAppStore();
   const { t } = useTranslation();
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -41,8 +41,6 @@ export const SessionPanel: React.FC = () => {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [contextMenu]);
-
-  if (sidebarCollapsed) return null;
 
   // Filter out temporary sessions created by split-screen
   const allSessions = sessions.filter((s) => !s._temporary);
@@ -113,7 +111,7 @@ export const SessionPanel: React.FC = () => {
     : null;
 
   return (
-    <div className={`sidebar-panel ${sidebarCollapsed ? 'collapsed' : ''}`}>
+    <div className="sidebar-panel">
       {/* Header row 1: title + search */}
       <div className="sidebar-header">
         <div className="sidebar-header-row">
