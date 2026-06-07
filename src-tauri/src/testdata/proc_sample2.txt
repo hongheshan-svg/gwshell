@@ -1,0 +1,110 @@
+---STAT---
+cpu  652132 0 307247 295499898 2656 0 210476 0 0 0
+cpu0 66593 0 34023 29516023 217 0 84795 0 0 0
+cpu1 66021 0 30989 29547223 274 0 32057 0 0 0
+cpu2 65606 0 30576 29551919 264 0 17231 0 0 0
+cpu3 65175 0 30467 29553396 281 0 13082 0 0 0
+cpu4 64938 0 30319 29554454 285 0 11574 0 0 0
+cpu5 64894 0 30214 29554982 282 0 10827 0 0 0
+cpu6 64880 0 30253 29554872 244 0 10488 0 0 0
+cpu7 64602 0 30204 29555256 298 0 10269 0 0 0
+cpu8 64657 0 30037 29556021 235 0 10124 0 0 0
+cpu9 64762 0 30159 29555747 271 0 10026 0 0 0
+intr 163645331 0 4651629 87712172 0 0 0 1010475 0 0 0 0 67756408 0 0 611771 898 36447 2893 1502331 3 3 3 3 20 355430 4846 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+ctxt 230991161
+btime 1780496352
+processes 1305618
+procs_running 4
+procs_blocked 0
+softirq 132714761 0 17937781 346 44930663 39025 0 58 51333364 0 18473524
+---MEM---
+MemTotal:        8126672 kB
+MemFree:         6697528 kB
+MemAvailable:    7191804 kB
+Buffers:           56964 kB
+Cached:           593880 kB
+SwapCached:            0 kB
+Active:           864052 kB
+Inactive:         278132 kB
+Active(anon):     517692 kB
+Inactive(anon):        0 kB
+Active(file):     346360 kB
+Inactive(file):   278132 kB
+Unevictable:           0 kB
+Mlocked:               0 kB
+SwapTotal:       1048572 kB
+SwapFree:        1048572 kB
+Zswap:                 0 kB
+Zswapped:              0 kB
+Dirty:             15984 kB
+Writeback:             0 kB
+AnonPages:        477504 kB
+Mapped:           265348 kB
+Shmem:             26372 kB
+KReclaimable:      33424 kB
+Slab:              90848 kB
+SReclaimable:      33424 kB
+SUnreclaim:        57424 kB
+KernelStack:        6240 kB
+PageTables:         9136 kB
+SecPageTables:         0 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:     5111908 kB
+Committed_AS:    1607716 kB
+VmallocTotal:   135288315904 kB
+VmallocUsed:        5564 kB
+VmallocChunk:          0 kB
+Percpu:             3080 kB
+AnonHugePages:    286720 kB
+ShmemHugePages:        0 kB
+ShmemPmdMapped:        0 kB
+FileHugePages:         0 kB
+FilePmdMapped:         0 kB
+HugePages_Total:       0
+HugePages_Free:        0
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+Hugetlb:               0 kB
+---NET---
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+ tunl0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+  gre0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+gretap0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+erspan0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+ip_vti0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+ip6_vti0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+  sit0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+ip6tnl0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+ip6gre0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+  eth0: 14684846    1829    0    0    0     0          0         0    99633    1444    0    0    0     0       0          0
+---UPT---
+297007.66 2954998.99
+---LOAD---
+0.87 0.51 0.42 1/385 449
+---PROC---
+  PID %CPU %MEM   RSS COMMAND
+  439 25.0  0.0  1412 sh
+    1  0.0  0.0  1116 sleep
+  450  0.0  0.0  3740 ps
+  451  0.0  0.0  1060 head
+---NIC4---
+1: lo    inet 127.0.0.1/8 scope host lo\       valid_lft forever preferred_lft forever
+11: eth0    inet 172.17.0.2/16 brd 172.17.255.255 scope global eth0\       valid_lft forever preferred_lft forever
+---NICLINK---
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000\    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: tunl0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN mode DEFAULT group default qlen 1000\    link/ipip 0.0.0.0 brd 0.0.0.0
+3: gre0@NONE: <NOARP> mtu 1476 qdisc noop state DOWN mode DEFAULT group default qlen 1000\    link/gre 0.0.0.0 brd 0.0.0.0
+4: gretap0@NONE: <BROADCAST,MULTICAST> mtu 1462 qdisc noop state DOWN mode DEFAULT group default qlen 1000\    link/ether 00:00:00:00:00:00 brd ff:ff:ff:ff:ff:ff
+5: erspan0@NONE: <BROADCAST,MULTICAST> mtu 1450 qdisc noop state DOWN mode DEFAULT group default qlen 1000\    link/ether 00:00:00:00:00:00 brd ff:ff:ff:ff:ff:ff
+6: ip_vti0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN mode DEFAULT group default qlen 1000\    link/ipip 0.0.0.0 brd 0.0.0.0
+7: ip6_vti0@NONE: <NOARP> mtu 1428 qdisc noop state DOWN mode DEFAULT group default qlen 1000\    link/tunnel6 :: brd :: permaddr aec4:ddfc:ec8d::
+8: sit0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN mode DEFAULT group default qlen 1000\    link/sit 0.0.0.0 brd 0.0.0.0
+9: ip6tnl0@NONE: <NOARP> mtu 1452 qdisc noop state DOWN mode DEFAULT group default qlen 1000\    link/tunnel6 :: brd :: permaddr 86c6:fbda:c5e7::
+10: ip6gre0@NONE: <NOARP> mtu 1448 qdisc noop state DOWN mode DEFAULT group default qlen 1000\    link/gre6 :: brd :: permaddr 5a70:f068:92be::
+11: eth0@if23: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 65535 qdisc noqueue state UP mode DEFAULT group default \    link/ether 7e:ea:06:23:7e:cd brd ff:ff:ff:ff:ff:ff link-netnsid 0
+---END---

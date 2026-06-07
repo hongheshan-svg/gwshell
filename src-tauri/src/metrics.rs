@@ -332,6 +332,47 @@ pub fn cpu_breakdown(prev: CpuTimes, cur: CpuTimes) -> (f64, f64, f64) {
 mod tests {
     use super::*;
 
+    /// End-to-end parse of the full Server-panel probe against REAL `/proc`
+    /// output captured from a Linux host (Debian bookworm, via Docker). Drives
+    /// two samples through `build_snapshot` so the CPU% and byte-rate deltas
+    /// are actually exercised — this is the data the Server panel renders.
+    #[test]
+    fn build_snapshot_parses_real_linux_proc_capture() {
+        let s1 = include_str!("testdata/proc_sample1.txt");
+        let s2 = include_str!("testdata/proc_sample2.txt");
+        let last = Arc::new(Mutex::new(StdHashMap::new()));
+        let static_host = Arc::new(Mutex::new(StdHashMap::new()));
+        let sid = "test-session";
+
+        // First sample primes the CPU-jiffie / net-byte baselines.
+        let _ = build_snapshot(s1, sid, &last, &static_host);
+        // Second sample (captured ~2s later) yields real deltas.
+        let snap = build_snapshot(s2, sid, &last, &static_host);
+
+        let cpu = snap.cpu.expect("CPU section parsed");
+        assert!(
+            (0.0..=100.0).contains(&cpu.total_percent),
+            "cpu total% in range, got {}",
+            cpu.total_percent
+        );
+        assert!(!cpu.per_core.is_empty(), "per-core CPU parsed");
+
+        let mem = snap.mem.expect("MEM section parsed");
+        assert!(mem.mem_total_bytes > 0, "mem total > 0");
+        assert!(
+            mem.mem_used_bytes > 0 && mem.mem_used_bytes <= mem.mem_total_bytes,
+            "mem used in (0, total]"
+        );
+
+        assert!(snap.net.is_some(), "NET section parsed");
+
+        let procs = snap.procs.expect("PROC section parsed");
+        assert!(!procs.is_empty(), "process list non-empty");
+
+        let nics = snap.nics.expect("NIC section parsed");
+        assert!(!nics.is_empty(), "NIC list non-empty");
+    }
+
     #[test]
     fn parses_cpu_line() {
         let t = parse_cpu_line("cpu  100 10 50 800 5 2 3 1 0 0").unwrap();
