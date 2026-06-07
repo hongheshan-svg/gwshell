@@ -1,7 +1,7 @@
 # P2 · 主页仪表盘（Home Dashboard）设计
 
 **日期:** 2026-06-07
-**状态:** 待用户确认
+**状态:** 已确认（磁盘仅根分区；含后端 disk 探针 + MetricsManager ref-count）
 **所属:** GWShell UI 现代化，子项目 2 / 4（依赖 P1 令牌与 theme.css）
 
 ---
