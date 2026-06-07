@@ -87,7 +87,7 @@ export interface AppSettings {
 export const defaultSettings: AppSettings = {
   theme: 'dark',
   middleClickCloseTab: true,
-  uiFont: 'JetBrainsMono, NotoSansSC',
+  uiFont: 'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif',
   editorLineEnding: '(compat) \\r\\n',
   enableAnimation: false,
   showRealtimeInfo: false,

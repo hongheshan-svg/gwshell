@@ -121,7 +121,7 @@ const CMD_TERMINAL_FONT = 'Consolas, "Cascadia Mono", "Courier New", monospace';
 const defaultSettings: AppSettings = {
   theme: 'dark',
   middleClickCloseTab: true,
-  uiFont: 'JetBrainsMono, NotoSansSC',
+  uiFont: 'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif',
   editorLineEnding: '(compat) \\r\\n',
   enableAnimation: false,
   showRealtimeInfo: false,
@@ -513,7 +513,7 @@ export const SettingsModal: React.FC = () => {
   if (!showSettings) return null;
   const handleClose = () => setShowSettings(false);
   useEscapeClose(handleClose);
-  const fonts = [CMD_TERMINAL_FONT, 'Consolas', 'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono, "Noto Sans SC", monospace', 'Fira Code', 'monospace'];
+  const fonts = ['system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif', 'Inter, system-ui, sans-serif', CMD_TERMINAL_FONT, 'Consolas', 'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono, "Noto Sans SC", monospace', 'Fira Code', 'monospace'];
 
   return (
     <div className="settings-overlay">
