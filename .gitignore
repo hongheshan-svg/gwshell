@@ -32,3 +32,6 @@ dist-ssr
 
 # Browser MCP screenshot artifacts
 .playwright-mcp/
+
+# Visual brainstorm artifacts
+.superpowers/
