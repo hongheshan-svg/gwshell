@@ -15,6 +15,7 @@ import {
 import type { SessionConfig } from '../../types';
 import { useAssetData } from '../../hooks/useAssetData';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { AssetDashboard } from '../AssetDashboard/AssetDashboard';
 
 export const AssetTable: React.FC = () => {
   const {
@@ -135,95 +136,103 @@ export const AssetTable: React.FC = () => {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="asset-table-container">
-        <table className="asset-table">
-          <thead>
-            <tr>
-              <th className="col-check">
-                <input type="checkbox" checked={allSelected} onChange={handleSelectAll} />
-              </th>
-              <th className="col-name">{t('table_col_name')}</th>
-              <th className="col-latency">{t('table_col_latency')}</th>
-              <th className="col-host">{t('table_col_host')}</th>
-              <th className="col-user">{t('table_col_user')}</th>
-              <th className="col-created">{t('table_col_created')}</th>
-              <th className="col-expired">{t('table_col_expired')}</th>
-              <th className="col-remark">{t('table_col_remark')}</th>
-              <th className="col-actions">{t('table_col_actions')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredSessions.length === 0 ? (
+      {/* Body: card grid or table depending on homeView */}
+      {homeView === 'card' ? (
+        <AssetDashboard
+          sessions={filteredSessions}
+          onConnect={handleConnect}
+          onEdit={(s) => { setEditingSession(s); setShowNewSession(true); }}
+        />
+      ) : (
+        <div className="asset-table-container">
+          <table className="asset-table">
+            <thead>
               <tr>
-                <td colSpan={9} className="asset-empty">
-                  <div className="asset-empty-content">
-                    <Server size={32} />
-                    <p>{t('table_empty')}</p>
-                  </div>
-                </td>
+                <th className="col-check">
+                  <input type="checkbox" checked={allSelected} onChange={handleSelectAll} />
+                </th>
+                <th className="col-name">{t('table_col_name')}</th>
+                <th className="col-latency">{t('table_col_latency')}</th>
+                <th className="col-host">{t('table_col_host')}</th>
+                <th className="col-user">{t('table_col_user')}</th>
+                <th className="col-created">{t('table_col_created')}</th>
+                <th className="col-expired">{t('table_col_expired')}</th>
+                <th className="col-remark">{t('table_col_remark')}</th>
+                <th className="col-actions">{t('table_col_actions')}</th>
               </tr>
-            ) : (
-              filteredSessions.map((session) => (
-                <tr
-                  key={session.id}
-                  className={selectedSessionIds.includes(session.id) ? 'selected' : ''}
-                  onDoubleClick={() => handleConnect(session)}
-                  onContextMenu={(e) => handleContextMenu(e, session)}
-                >
-                  <td className="col-check">
-                    <input
-                      type="checkbox"
-                      checked={selectedSessionIds.includes(session.id)}
-                      onChange={() => toggleSelectSession(session.id)}
-                    />
-                  </td>
-                  <td className="col-name">
-                    <span className="asset-name-icon"><Server size={13} /></span>
-                    <span>{session.name}</span>
-                  </td>
-                  <td className="col-latency">{formatLatency(session.latency)}</td>
-                  <td className="col-host">{session.host || '-'}</td>
-                  <td className="col-user">{session.username || '-'}</td>
-                  <td className="col-created">{session.created_at || '-'}</td>
-                  <td className="col-expired">{session.expired_at || '-'}</td>
-                  <td className="col-remark">{session.remark || '-'}</td>
-                  <td className="col-actions">
-                    <button
-                      className="asset-action-btn"
-                      onClick={() => handleConnect(session)}
-                      title={t('table_connect')}
-                    >
-                      <Play size={12} />
-                    </button>
-                    <button
-                      className="asset-action-btn"
-                      onClick={() => { setEditingSession(session); setShowNewSession(true); }}
-                      title={t('table_edit')}
-                    >
-                      <Edit size={12} />
-                    </button>
-                    <button
-                      className="asset-action-btn"
-                      onClick={() => handleCopySession(session)}
-                      title={t('table_copy')}
-                    >
-                      <Copy size={12} />
-                    </button>
-                    <button
-                      className="asset-action-btn danger"
-                      onClick={() => removeSession(session.id)}
-                      title={t('table_delete')}
-                    >
-                      <Trash2 size={12} />
-                    </button>
+            </thead>
+            <tbody>
+              {filteredSessions.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="asset-empty">
+                    <div className="asset-empty-content">
+                      <Server size={32} />
+                      <p>{t('table_empty')}</p>
+                    </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : (
+                filteredSessions.map((session) => (
+                  <tr
+                    key={session.id}
+                    className={selectedSessionIds.includes(session.id) ? 'selected' : ''}
+                    onDoubleClick={() => handleConnect(session)}
+                    onContextMenu={(e) => handleContextMenu(e, session)}
+                  >
+                    <td className="col-check">
+                      <input
+                        type="checkbox"
+                        checked={selectedSessionIds.includes(session.id)}
+                        onChange={() => toggleSelectSession(session.id)}
+                      />
+                    </td>
+                    <td className="col-name">
+                      <span className="asset-name-icon"><Server size={13} /></span>
+                      <span>{session.name}</span>
+                    </td>
+                    <td className="col-latency">{formatLatency(session.latency)}</td>
+                    <td className="col-host">{session.host || '-'}</td>
+                    <td className="col-user">{session.username || '-'}</td>
+                    <td className="col-created">{session.created_at || '-'}</td>
+                    <td className="col-expired">{session.expired_at || '-'}</td>
+                    <td className="col-remark">{session.remark || '-'}</td>
+                    <td className="col-actions">
+                      <button
+                        className="asset-action-btn"
+                        onClick={() => handleConnect(session)}
+                        title={t('table_connect')}
+                      >
+                        <Play size={12} />
+                      </button>
+                      <button
+                        className="asset-action-btn"
+                        onClick={() => { setEditingSession(session); setShowNewSession(true); }}
+                        title={t('table_edit')}
+                      >
+                        <Edit size={12} />
+                      </button>
+                      <button
+                        className="asset-action-btn"
+                        onClick={() => handleCopySession(session)}
+                        title={t('table_copy')}
+                      >
+                        <Copy size={12} />
+                      </button>
+                      <button
+                        className="asset-action-btn danger"
+                        onClick={() => removeSession(session.id)}
+                        title={t('table_delete')}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Right-click context menu */}
       {contextMenu && (

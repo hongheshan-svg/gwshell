@@ -310,3 +310,30 @@
   font-size: 10px;
   color: var(--text-muted);
 }
+
+/* ---- Dashboard scroll container ------------------------------------------- */
+
+.asset-dash-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ---- Group block ----------------------------------------------------------- */
+
+.dash-group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Empty state ----------------------------------------------------------- */
+
+.asset-dash-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
