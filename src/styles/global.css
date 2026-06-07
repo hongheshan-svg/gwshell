@@ -3609,8 +3609,36 @@ a:focus-visible,
 }
 .command-palette-item.active { background: var(--accent); color: #fff; }
 .command-palette-item-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.command-palette-item-sub { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.command-palette-item-sub { font-size: 12px; color: var(--text-muted); white-space: nowrap; margin-left: auto; }
 .command-palette-item.active .command-palette-item-sub { color: rgba(255, 255, 255, 0.8); }
+
+/* titlebar Cmd-K pill */
+.titlebar-cmdk {
+  -webkit-app-region: no-drag; app-region: no-drag;
+  display: flex; align-items: center; gap: 6px;
+  height: 22px; padding: 0 10px; min-width: 200px; max-width: 360px;
+  background: var(--bg-tertiary); border: 1px solid var(--border-color);
+  border-radius: var(--radius-md); color: var(--text-secondary);
+  font-size: 12px; cursor: pointer; justify-content: center; font-family: var(--font-sans);
+}
+.titlebar-cmdk:hover { color: var(--text-primary); border-color: var(--border-light); background: var(--bg-hover); }
+.titlebar-cmdk kbd { margin-left: 6px; padding: 0 5px; border-radius: var(--radius-sm);
+  background: var(--bg-secondary); color: var(--text-muted); font-size: 10.5px; font-family: var(--font-sans); }
+
+/* command palette group + structure classes (added in P3) */
+.command-palette-group + .command-palette-group { margin-top: 4px; }
+.command-palette-group-title {
+  padding: 6px 14px 4px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-muted); font-weight: 600;
+}
+.command-palette-item-icon { color: var(--text-secondary); flex-shrink: 0; }
+.command-palette-item-label { color: var(--text-primary); }
+.command-palette-item-hint {
+  margin-left: 8px; padding: 1px 6px; border-radius: var(--radius-sm);
+  background: var(--bg-secondary); color: var(--text-muted); font-size: 11px; flex-shrink: 0;
+}
+.command-palette-item.active .command-palette-item-icon,
+.command-palette-item.active .command-palette-item-label { color: var(--text-primary); }
 
 .shortcut-editor { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .shortcut-editor-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Minus, Square, X, Activity } from 'lucide-react';
+import { Minus, Square, X, Activity, Search } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { exit } from '@tauri-apps/plugin-process';
 import { useTranslation } from 'react-i18next';
@@ -10,7 +10,7 @@ const appWindow = getCurrentWindow();
 
 export const TitleBar: React.FC = () => {
   const { t } = useTranslation();
-  const { serverPanelOpen, toggleServerPanel } = useAppStore();
+  const { serverPanelOpen, toggleServerPanel, setShowCommandPalette } = useAppStore();
 
   const handleMinimize = () => {
     appWindow.minimize();
@@ -38,7 +38,13 @@ export const TitleBar: React.FC = () => {
       <div className="titlebar-title" data-tauri-drag-region>
         GWShell
       </div>
-      <div className="titlebar-center" data-tauri-drag-region />
+      <div className="titlebar-center" data-tauri-drag-region>
+        <button type="button" className="titlebar-cmdk" onClick={() => setShowCommandPalette(true)}>
+          <Search size={12} />
+          <span>{t('palette_entry', '搜索或输入命令')}</span>
+          <kbd>{IS_MACOS ? '⌘K' : 'Ctrl K'}</kbd>
+        </button>
+      </div>
       <div className="titlebar-controls">
         <button
           className={`titlebar-btn${serverPanelOpen ? ' titlebar-btn--active' : ''}`}
