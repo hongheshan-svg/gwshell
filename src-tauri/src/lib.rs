@@ -110,9 +110,11 @@ async fn create_local_shell(
     shell_name: Option<String>,
     working_dir: Option<String>,
     charset: Option<String>,
+    shell_integration: Option<bool>,
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
+    let integration = shell_integration.unwrap_or(false);
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || -> Result<(), String> {
         state.pty_manager.create_shell(
@@ -123,6 +125,7 @@ async fn create_local_shell(
             shell_name,
             working_dir,
             charset,
+            integration,
         )
     })
     .await

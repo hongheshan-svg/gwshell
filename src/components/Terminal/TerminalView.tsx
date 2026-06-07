@@ -14,6 +14,9 @@ import { useAppStore } from "../../stores/appStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { terminalInstances } from "./terminalRegistry";
 import * as commandHistory from '../../lib/commandHistory';
+import { blocksFor, startBlock, markOutput, setCommand, finishBlock, clearTab as clearBlockTab, readOutput } from './blocks';
+import type { CommandBlock } from './blocks';
+import i18n from '../../i18n';
 import { resolveTerminalTheme } from '../../lib/terminalThemes';
 import { runLoginScript } from '../../lib/sendScript';
 import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';
@@ -43,6 +46,20 @@ interface TerminalContextMenu {
 }
 
 const isPasteAction = (value: string) => value === "paste" || value === "Paste" || value === "\u7c98\u8d34";
+
+// OSC 133 shell-integration snippet injected into SSH sessions when
+// cmdHintShellIntegration is enabled (opt-in, best-effort).
+// bash only (no-ops on other remote shells).
+// The snippet will be echoed once in the terminal output \u2014 acceptable for an
+// opt-in best-effort feature.
+const SSH_OSC133_SNIPPET =
+  `if [ -n "$BASH_VERSION" ]; then ` +
+  `__gw_pc() { printf '\\033]133;D;%s\\007' "$?"; }; ` +
+  `case "$PROMPT_COMMAND" in *__gw_pc*) ;; ` +
+  `*) PROMPT_COMMAND="__gw_pc\${PROMPT_COMMAND:+;$PROMPT_COMMAND}";; esac; ` +
+  `PS1='\\[\\033]133;A\\007\\]'"$PS1"'\\[\\033]133;B\\007\\]'; ` +
+  `PS0='\\[\\033]133;C\\007\\]'"$PS0"'; fi` +
+  `\n`;
 
 const writeClipboardText = async (text: string) => {
   const browserWrite = navigator.clipboard?.writeText(text).catch(() => {});
@@ -146,6 +163,10 @@ const ghostAcceptCallbacks = new Map<string, (suffix: string) => void>();
 
 const tabCwd            = new Map<string, string>();
 const tabHasOsc133      = new Map<string, boolean>();
+// True only when OSC 133 'C' (pre-exec) has been received for this tab.
+// Shells without PS0 (bash <4.4, macOS /bin/bash 3.2) emit A and D but
+// never C, so history must still be recorded in the Enter branch.
+const tabHasOsc133Exec  = new Map<string, boolean>();
 const tabCandidates     = new Map<string, string[]>();
 const candidateIndex    = new Map<string, number>();
 const tabInputSenders   = new Map<string, (data: string) => void>(); // populated by the snippet input-sender task
@@ -153,6 +174,120 @@ const bracketedPaste    = new Map<string, boolean>();
 
 function isInteractiveTerminal(type: string): boolean {
   return type === 'ssh' || type === 'localshell' || type === 'serial' || type === 'docker';
+}
+
+/**
+ * Apply (or refresh) the state CSS classes on a block's gutter decoration
+ * element. Called both when the decoration first renders and after finishBlock
+ * transitions state from running → done.
+ */
+function applyBlockDecoClass(el: HTMLElement, block: CommandBlock): void {
+  el.classList.add('gw-block-deco');
+  el.classList.toggle('running', block.state === 'running');
+  el.classList.toggle('ok', block.state === 'done' && block.exitCode === 0);
+  el.classList.toggle('err', block.state === 'done' && (block.exitCode ?? 0) !== 0);
+}
+
+// ---------------------------------------------------------------------------
+// Block action menu — lightweight DOM menu for gutter decoration clicks.
+// ---------------------------------------------------------------------------
+
+/** Currently-open block menu element (at most one open at a time). */
+let activeBlockMenu: HTMLElement | null = null;
+
+/** Close and remove the currently open block menu, if any. */
+function closeBlockMenu(): void {
+  if (activeBlockMenu) {
+    activeBlockMenu.remove();
+    activeBlockMenu = null;
+  }
+}
+
+/**
+ * Open a small context menu near the gutter decoration click,
+ * offering Copy command / Copy output / Re-run for the given block.
+ */
+function openBlockMenu(
+  e: MouseEvent,
+  block: CommandBlock,
+  tabId: string,
+  tabType: TabInfo['type'],
+  sessionId: string,
+): void {
+  e.stopPropagation();
+  closeBlockMenu();
+
+  const inst = terminalInstances.get(tabId);
+  const term = inst?.terminal;
+
+  const t = (key: string) => i18n.t(`gwshell:${key}` as never);
+
+  const menu = document.createElement('div');
+  menu.className = 'gw-block-menu';
+  menu.style.position = 'fixed';
+  menu.style.left = `${e.clientX}px`;
+  menu.style.top = `${e.clientY}px`;
+  menu.style.zIndex = '9999';
+
+  const makeBtn = (label: string, onClick: () => void) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'gw-block-menu-item';
+    btn.textContent = label;
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      onClick();
+      closeBlockMenu();
+    });
+    return btn;
+  };
+
+  // Copy command (use the Tauri clipboard plugin — navigator.clipboard is
+  // unreliable inside the webview)
+  menu.appendChild(makeBtn(t('block_copy_cmd'), () => {
+    clipboardWrite(block.command).catch(() => { navigator.clipboard?.writeText(block.command).catch(() => {}); });
+  }));
+
+  // Copy output
+  menu.appendChild(makeBtn(t('block_copy_output'), () => {
+    if (!term) return;
+    const output = readOutput(tabId, term, block);
+    clipboardWrite(output).catch(() => { navigator.clipboard?.writeText(output).catch(() => {}); });
+  }));
+
+  // Re-run (writes command WITHOUT a trailing newline so the user can review)
+  menu.appendChild(makeBtn(t('block_rerun'), () => {
+    if (!block.command) return;
+    const writeCmd = tabType === 'ssh' ? 'write_to_ssh'
+      : tabType === 'serial' ? 'write_to_serial'
+      : 'write_to_pty';
+    invoke(writeCmd, { sessionId, data: block.command }).catch(() => {});
+  }));
+
+  document.body.appendChild(menu);
+  activeBlockMenu = menu;
+
+  // Clamp to viewport so the menu doesn't overflow.
+  const rect = menu.getBoundingClientRect();
+  if (rect.right > window.innerWidth) {
+    menu.style.left = `${window.innerWidth - rect.width - 4}px`;
+  }
+  if (rect.bottom > window.innerHeight) {
+    menu.style.top = `${window.innerHeight - rect.height - 4}px`;
+  }
+
+  // Dismiss on outside click or Escape.
+  const dismiss = (ev: Event) => {
+    if (ev.type === 'keydown' && (ev as KeyboardEvent).key !== 'Escape') return;
+    closeBlockMenu();
+    document.removeEventListener('click', dismiss, true);
+    document.removeEventListener('keydown', dismiss, true);
+  };
+  // Use a tiny timeout so the current click event doesn't immediately dismiss.
+  setTimeout(() => {
+    document.addEventListener('click', dismiss, true);
+    document.addEventListener('keydown', dismiss, true);
+  }, 0);
 }
 
 // Per-tab scope key for history ranking.
@@ -209,6 +344,8 @@ export function destroyTerminal(tabId: string): void {
   ghostAcceptCallbacks.delete(tabId);
   tabCwd.delete(tabId);
   tabHasOsc133.delete(tabId);
+  tabHasOsc133Exec.delete(tabId);
+  clearBlockTab(tabId);
   tabCandidates.delete(tabId);
   candidateIndex.delete(tabId);
   tabInputSenders.delete(tabId);
@@ -951,7 +1088,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           candidateIndex.set(tab.id, 0);
           ghostTextState.set(tab.id, '');
           ghostTextSetters.get(tab.id)?.('', 0, 0);
+          // Block model: start a block on A (or on B when the shell only emits
+          // B without a preceding A). The gutter status bar is NOT created here —
+          // an idle prompt should show no indicator. It's created on 'C' below,
+          // once a command actually runs.
+          if (kind === 'A') {
+            startBlock(tab.id, term133);
+          } else {
+            const existing = blocksFor(tab.id);
+            const hasRunning = existing.length > 0 && existing[existing.length - 1].state === 'running';
+            if (!hasRunning) startBlock(tab.id, term133);
+          }
         } else if (kind === 'C') {
+          // Mark that this shell emits the real pre-exec OSC 133 C sequence.
+          // Used by the Enter branch to avoid double-recording history on shells
+          // that do send C (i.e. bash ≥4.4 / zsh with PS0).
+          tabHasOsc133Exec.set(tab.id, true);
           // Command submitted: record the authoritative line (heuristic buffer).
           const sess = sessionsRef.current.find((s) => s.id === tab.sessionId);
           const st = useSettingsStore.getState().settings;
@@ -962,8 +1114,53 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             commandHistory.record(line, { scope, cwd, sessionType: tab.type });
           }
           inputBuffers.set(tab.id, '');
+          // Block model: mark start of output and capture command text.
+          // markOutput returns the lastRunning block it marked — use THAT block
+          // for the decoration so it stays anchored to the same block as
+          // markOutput/setCommand even on malformed streams (FIX 10).
+          const cblock = markOutput(tab.id, term133);
+          setCommand(tab.id, line);
+          // P4: create the left-gutter status decoration now that a real command
+          // is executing (running→done). Idle prompts get none. Anchored to the
+          // running block's prompt marker (3-px pill in gutter column x:0).
+          if (cblock && cblock.promptMarker && !cblock.deco) {
+            const deco = term133.registerDecoration({ marker: cblock.promptMarker, x: 0, width: 1 });
+            cblock.deco = deco ?? null;
+            if (deco) {
+              deco.onRender((el) => {
+                applyBlockDecoClass(el, cblock);
+                el.style.cursor = 'pointer';
+                el.title = cblock.command || '';
+                if (!el.dataset.gwMenuAttached) {
+                  el.dataset.gwMenuAttached = '1';
+                  el.addEventListener('click', (ev) => {
+                    openBlockMenu(ev as MouseEvent, cblock, tab.id, tab.type, tab.sessionId);
+                  });
+                }
+              });
+            }
+          }
+        } else if (kind === 'D') {
+          // Block model: parse exit code from "D" or "D;N" payload.
+          const m = payload.match(/^D(?:;(\d+))?/);
+          const exit = m && m[1] != null ? Number(m[1]) : undefined;
+          // finishBlock returns the block it finished — use THAT block for the
+          // repaint so it stays anchored to lastRunning, not the array tail
+          // (FIX 10: avoids mismatch on malformed streams).
+          const finished = finishBlock(tab.id, exit);
+          // P4: re-paint the gutter decoration running→done. The decoration's
+          // `element` may not exist yet at D time (xterm renders it on a later
+          // frame), and onRender may only fire once — so repaint immediately,
+          // on the next frame, and with a short fallback, without requiring the
+          // element to be present right now.
+          if (finished?.deco) {
+            const repaint = () => { const el = finished.deco?.element; if (el) applyBlockDecoClass(el, finished); };
+            repaint();
+            requestAnimationFrame(repaint);
+            setTimeout(repaint, 50);
+          }
         }
-        // kind 'D' (command-done / exit-status) and others: no history action needed.
+        // Other kinds: no action needed.
         return false;
       });
 
@@ -1026,10 +1223,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               clearGhost();
             } else if (data === '\r' || data === '\n') {
               const trimmed = buf.trim();
-              if (trimmed.length > 0 && !tabHasOsc133.get(tab.id)) {
+              // Record history on Enter ONLY when the shell has NOT yet emitted
+              // OSC 133 C (pre-exec). Shells that do emit C (bash ≥4.4, zsh with
+              // PS0) will record via the authoritative 'C' handler instead.
+              // Shells without PS0 (bash <4.4, macOS /bin/bash 3.2) emit A+D but
+              // never C, so tabHasOsc133Exec stays false and we record here.
+              if (trimmed.length > 0 && !tabHasOsc133Exec.get(tab.id)) {
                 commandHistory.record(trimmed, { scope, cwd, sessionType });
               }
-              buf = '';
+              // With OSC 133 C active, the authoritative capture happens in the
+              // 'C' handler (fires AFTER this Enter keystroke). Keep the buffer so
+              // 'C' can read it; the 'C' (and next 'A') handler clears it.
+              // Without a real 'C', clear now so the buffer doesn't carry over.
+              if (!tabHasOsc133Exec.get(tab.id)) buf = '';
               clearGhost();
             } else if (data === '\x7f' || data === '\b') {
               // Backspace
@@ -1186,6 +1392,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         candidateIndex.delete(tab.id);
         bracketedPaste.delete(tab.id);
         tabHasOsc133.delete(tab.id);
+        tabHasOsc133Exec.delete(tab.id);
+        clearBlockTab(tab.id);
       });
 
       const rawSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
@@ -1266,6 +1474,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // between disconnect and now). Failure re-arms so another keypress retries.
       const reconnect = async (): Promise<void> => {
         instance?.terminal.write(`\r\n\x1b[90m${t('term_reconnecting')}\x1b[0m\r\n`);
+        // Clear the stale block model so old decorations/markers don't persist
+        // against stale buffer lines after the new session starts (FIX 9).
+        clearBlockTab(tab.id);
+        tabHasOsc133.delete(tab.id);
+        tabHasOsc133Exec.delete(tab.id);
+        inputBuffers.set(tab.id, '');
         const rawFreshSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
         const freshSession = rawFreshSession ? applyGroupDefaults(rawFreshSession, loadGroupDefaults()) : rawFreshSession;
         if (tab.type === 'ssh') {
@@ -1334,6 +1548,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             shellName: session?.shell_name ?? null,
             workingDir: session?.working_dir ?? null,
             charset: session?.charset ?? null,
+            shellIntegration: useSettingsStore.getState().settings.cmdHintShellIntegration,
           });
           connectionReady = true;
           if (session?.init_command) {
@@ -1373,6 +1588,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               setTimeout(() => {
                 runLoginScript((d) => { invoke("write_to_ssh", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
               }, 300);
+            }
+
+            // Best-effort OSC 133 shell-integration: inject once on connect when
+            // the user has opted in. Uses the same write_to_ssh mechanism as
+            // init_command. Fails silently — remote shell type is unknown.
+            if (useSettingsStore.getState().settings.cmdHintShellIntegration) {
+              invoke("write_to_ssh", { sessionId: tab.sessionId, data: SSH_OSC133_SNIPPET }).catch(() => {});
             }
 
             // Dynamic (SOCKS) only needs a local port; local/remote need the full triple.
