@@ -471,7 +471,7 @@ const VaultSection: React.FC<{ open: boolean }> = ({ open }) => {
         )}
 
         {msg && (
-          <p className="settings-desc" style={{ marginTop: 8, color: msg.kind === 'err' ? 'var(--danger, #f38ba8)' : 'var(--success, #a6e3a1)' }}>
+          <p className="settings-desc" style={{ marginTop: 8, color: msg.kind === 'err' ? 'var(--danger)' : 'var(--success)' }}>
             {msg.text}
           </p>
         )}

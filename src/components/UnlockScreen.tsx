@@ -57,7 +57,7 @@ export const UnlockScreen: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'var(--bg-primary, #1e1e2e)',
+        background: 'var(--bg-primary)',
         // Block any interaction with the app underneath.
         WebkitUserSelect: 'none',
         userSelect: 'none',
@@ -73,16 +73,16 @@ export const UnlockScreen: React.FC = () => {
           gap: 16,
           padding: '40px 48px',
           borderRadius: 12,
-          background: 'var(--bg-secondary, #2a2a3c)',
+          background: 'var(--bg-secondary)',
           boxShadow: '0 12px 48px rgba(0,0,0,0.5)',
           minWidth: 320,
         }}
       >
-        <Lock size={36} style={{ color: 'var(--accent, #89b4fa)' }} />
-        <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary, #cdd6f4)' }}>
+        <Lock size={36} style={{ color: 'var(--accent)' }} />
+        <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary)' }}>
           {t('vault_unlock_title')}
         </div>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary, #a6adc8)', textAlign: 'center' }}>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center' }}>
           {t('vault_unlock_desc')}
         </div>
         <input
@@ -99,15 +99,15 @@ export const UnlockScreen: React.FC = () => {
             width: '100%',
             padding: '10px 12px',
             borderRadius: 6,
-            border: `1px solid ${error ? 'var(--danger, #f38ba8)' : 'var(--border, #45475a)'}`,
-            background: 'var(--bg-primary, #1e1e2e)',
-            color: 'var(--text-primary, #cdd6f4)',
+            border: `1px solid ${error ? 'var(--danger)' : 'var(--border)'}`,
+            background: 'var(--bg-primary)',
+            color: 'var(--text-primary)',
             fontSize: 14,
             outline: 'none',
           }}
         />
         {error && (
-          <div style={{ fontSize: 12, color: 'var(--danger, #f38ba8)' }}>
+          <div style={{ fontSize: 12, color: 'var(--danger)' }}>
             {t('vault_wrong_passphrase')}
           </div>
         )}
@@ -119,8 +119,8 @@ export const UnlockScreen: React.FC = () => {
             padding: '10px 12px',
             borderRadius: 6,
             border: 'none',
-            background: 'var(--accent, #89b4fa)',
-            color: 'var(--bg-primary, #1e1e2e)',
+            background: 'var(--accent)',
+            color: 'var(--bg-primary)',
             fontSize: 14,
             fontWeight: 600,
             cursor: busy || !passphrase ? 'default' : 'pointer',
