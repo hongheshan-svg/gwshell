@@ -258,6 +258,39 @@ input, select, textarea, button {
 
 /* ============ Sidebar Panel ============ */
 
+/* Single sidebar = body panel (SessionPanel/SnippetPanel) + SidebarFooter. */
+.sidebar-column {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  overflow: hidden;
+}
+.sidebar-column > .sidebar-panel,
+.sidebar-column > .snippet-panel {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  border-right: none;
+}
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.sidebar-title-link {
+  cursor: pointer;
+}
+.sidebar-title-link:hover {
+  color: var(--text-primary);
+}
+
 .sidebar-panel {
   width: var(--sidebar-width);
   background: var(--bg-secondary);
