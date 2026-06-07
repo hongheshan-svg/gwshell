@@ -44,6 +44,19 @@ interface TerminalContextMenu {
 
 const isPasteAction = (value: string) => value === "paste" || value === "Paste" || value === "\u7c98\u8d34";
 
+// OSC 133 shell-integration snippet injected into SSH sessions when
+// cmdHintShellIntegration is enabled (opt-in, best-effort).
+// Works for bash/zsh remotes; silently no-ops on fish/csh/restricted shells.
+// The snippet will be echoed once in the terminal output \u2014 acceptable for an
+// opt-in best-effort feature.
+const SSH_OSC133_SNIPPET =
+  `__gw_pc() { printf '\\033]133;D;%s\\007' "$?"; }; ` +
+  `case "$PROMPT_COMMAND" in *__gw_pc*) ;; ` +
+  `*) PROMPT_COMMAND="__gw_pc\${PROMPT_COMMAND:+;$PROMPT_COMMAND}";; esac; ` +
+  `PS1='\\[\\033]133;A\\007\\]'"$PS1"'\\[\\033]133;B\\007\\]'; ` +
+  `PS0='\\[\\033]133;C\\007\\]'"$PS0"
+`;
+
 const writeClipboardText = async (text: string) => {
   const browserWrite = navigator.clipboard?.writeText(text).catch(() => {});
   await clipboardWrite(text).catch(() => browserWrite);
@@ -1374,6 +1387,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               setTimeout(() => {
                 runLoginScript((d) => { invoke("write_to_ssh", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
               }, 300);
+            }
+
+            // Best-effort OSC 133 shell-integration: inject once on connect when
+            // the user has opted in. Uses the same write_to_ssh mechanism as
+            // init_command. Fails silently — remote shell type is unknown.
+            if (useSettingsStore.getState().settings.cmdHintShellIntegration) {
+              invoke("write_to_ssh", { sessionId: tab.sessionId, data: SSH_OSC133_SNIPPET }).catch(() => {});
             }
 
             // Dynamic (SOCKS) only needs a local port; local/remote need the full triple.
