@@ -551,6 +551,8 @@ pub struct LastSample {
 
 pub struct MetricsManager {
     tasks: Mutex<StdHashMap<String, JoinHandle<()>>>,
+    /// Per-session reference count. The poller runs while refs > 0.
+    refs: Mutex<StdHashMap<String, usize>>,
     last: Arc<Mutex<StdHashMap<String, LastSample>>>,
     static_host: Arc<Mutex<StdHashMap<String, HostInfo>>>,
 }
@@ -559,20 +561,40 @@ impl MetricsManager {
     pub fn new() -> Self {
         Self {
             tasks: Mutex::new(StdHashMap::new()),
+            refs: Mutex::new(StdHashMap::new()),
             last: Arc::new(Mutex::new(StdHashMap::new())),
             static_host: Arc::new(Mutex::new(StdHashMap::new())),
         }
     }
 
-    /// Idempotent. If a task already exists for this session_id, returns early.
+    /// Start (or share) a metrics poller for `session_id`.
+    ///
+    /// Reference-counted: the first caller spawns the poller task; subsequent
+    /// callers while the task is still alive merely increment the count and
+    /// return.  If the task died on its own (e.g. SSH disconnected and it
+    /// exited) the stale handle is cleaned up and a fresh poller is spawned
+    /// regardless of the current count — the count is kept as-is because the
+    /// callers are still logically subscribed and will eventually call `stop`.
     pub fn start(&self, session_id: String, ssh: Arc<SshManager>, app: AppHandle) {
+        // --- 1. Increment the reference count (always). ---
+        // Lock refs briefly, then drop before touching tasks.
+        {
+            let mut refs = self.refs.lock();
+            *refs.entry(session_id.clone()).or_insert(0) += 1;
+        }
+
+        // --- 2. Decide whether to spawn. ---
         let mut tasks = self.tasks.lock();
+        // If a handle exists but the task finished on its own, evict it so we
+        // can re-spawn below.  The ref-count is kept unchanged because the
+        // existing callers are still subscribed.
         if tasks
             .get(&session_id)
             .is_some_and(|handle| handle.is_finished())
         {
             tasks.remove(&session_id);
         }
+        // A live task already covers this session — nothing more to do.
         if tasks.contains_key(&session_id) {
             return;
         }
@@ -686,16 +708,42 @@ echo '---END---'
         tasks.insert(session_id, handle);
     }
 
+    /// Decrement the reference count for `session_id`.
+    ///
+    /// The poller is only aborted when the count reaches zero.  If callers are
+    /// still subscribed (count > 0 after decrement) the poller keeps running.
     pub fn stop(&self, session_id: &str) {
-        let mut tasks = self.tasks.lock();
-        if let Some(handle) = tasks.remove(session_id) {
-            handle.abort();
+        // --- 1. Decrement the reference count. ---
+        let should_stop = {
+            let mut refs = self.refs.lock();
+            let count = refs.entry(session_id.to_string()).or_insert(0);
+            if *count > 0 {
+                *count -= 1;
+            }
+            let remaining = *count;
+            if remaining == 0 {
+                refs.remove(session_id);
+            }
+            remaining == 0
+        };
+
+        // --- 2. Only tear down when no more subscribers. ---
+        if should_stop {
+            let mut tasks = self.tasks.lock();
+            if let Some(handle) = tasks.remove(session_id) {
+                handle.abort();
+            }
+            self.last.lock().remove(session_id);
+            self.static_host.lock().remove(session_id);
         }
-        self.last.lock().remove(session_id);
-        self.static_host.lock().remove(session_id);
     }
 
+    /// Abort all pollers unconditionally (used on app shutdown).
+    /// Clears all reference counts too.
     pub fn stop_all(&self) {
+        // Clear refs first (separate lock, brief hold).
+        self.refs.lock().clear();
+
         let handles: Vec<_> = self
             .tasks
             .lock()
