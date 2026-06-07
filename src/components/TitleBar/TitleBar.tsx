@@ -4,15 +4,9 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { exit } from '@tauri-apps/plugin-process';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../stores/appStore';
+import { IS_MACOS } from '../../lib/platform';
 
 const appWindow = getCurrentWindow();
-
-// macOS is detected from the user agent (Tauri's WebView reports the
-// host OS reliably). We avoid an async @tauri-apps/api/os import to keep
-// the title bar a synchronous render — UA detection has been stable for
-// macOS for many years.
-const IS_MACOS = typeof navigator !== 'undefined'
-  && /Mac OS X|Macintosh/.test(navigator.userAgent);
 
 export const TitleBar: React.FC = () => {
   const { t } = useTranslation();
