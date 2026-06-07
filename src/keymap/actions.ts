@@ -22,8 +22,8 @@ export const KEY_ACTIONS: KeyAction[] = [
   { id: 'tab.close', labelKey: 'action_tab_close', defaultBinding: 'Ctrl+Shift+W', run: () => { const { activeTabId, removeTab } = useAppStore.getState(); if (activeTabId) removeTab(activeTabId); } },
   { id: 'settings.open', labelKey: 'action_settings_open', defaultBinding: 'Ctrl+Comma', run: () => useAppStore.getState().setShowSettings(true) },
   { id: 'terminal.search', labelKey: 'action_terminal_search', defaultBinding: 'Ctrl+Shift+H', run: () => useAppStore.getState().setShowTerminalSearch(true) },
-  { id: 'block.prev', labelKey: 'action_block_prev', defaultBinding: IS_MACOS ? 'Meta+ArrowUp' : 'Ctrl+ArrowUp', run: () => scrollToAdjacentBlock(-1) },
-  { id: 'block.next', labelKey: 'action_block_next', defaultBinding: IS_MACOS ? 'Meta+ArrowDown' : 'Ctrl+ArrowDown', run: () => scrollToAdjacentBlock(1) },
+  { id: 'block.prev', labelKey: 'action_block_prev', defaultBinding: IS_MACOS ? 'Meta+Shift+ArrowUp' : 'Ctrl+Shift+ArrowUp', run: () => scrollToAdjacentBlock(-1) },
+  { id: 'block.next', labelKey: 'action_block_next', defaultBinding: IS_MACOS ? 'Meta+Shift+ArrowDown' : 'Ctrl+Shift+ArrowDown', run: () => scrollToAdjacentBlock(1) },
 ];
 
 export const ACTION_BY_ID = new Map(KEY_ACTIONS.map((a) => [a.id, a]));

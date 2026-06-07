@@ -631,7 +631,10 @@ input, select, textarea, button {
   white-space: pre;
   z-index: 10;
   opacity: 0.45;
-  line-height: inherit;
+  line-height: var(--cell-h);
+  height: var(--cell-h);
+  display: flex;
+  align-items: center;
   user-select: none;
 }
 
