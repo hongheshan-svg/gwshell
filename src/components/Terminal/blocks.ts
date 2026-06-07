@@ -12,7 +12,7 @@
  *   tab close         → clearTab()
  */
 
-import type { Terminal, IMarker } from '@xterm/xterm';
+import type { Terminal, IMarker, IDecoration } from '@xterm/xterm';
 
 export interface CommandBlock {
   /** Monotonically increasing sequence number across all tabs. */
@@ -29,6 +29,9 @@ export interface CommandBlock {
   state: 'running' | 'done';
   /** Unix timestamp (ms) when the block was started. */
   startedAt: number;
+  /** xterm decoration handle for the left-gutter status bar (P4). null when
+   *  the terminal does not support decorations or OSC 133 is not active. */
+  deco?: IDecoration | null;
 }
 
 /** Maximum number of blocks retained per tab (oldest are evicted). */
@@ -73,12 +76,13 @@ export function startBlock(tabId: string, term: Terminal): CommandBlock {
 
   list.push(block);
 
-  // Trim oldest blocks beyond MAX_BLOCKS, disposing their markers to avoid
-  // leaking xterm resources.
+  // Trim oldest blocks beyond MAX_BLOCKS, disposing their markers and
+  // decoration handles to avoid leaking xterm resources.
   while (list.length > MAX_BLOCKS) {
     const old = list.shift();
     old?.promptMarker?.dispose();
     old?.outputMarker?.dispose();
+    try { old?.deco?.dispose(); } catch {}
   }
 
   tabBlocks.set(tabId, list);
@@ -127,6 +131,7 @@ export function clearTab(tabId: string): void {
     list.forEach((b) => {
       b.promptMarker?.dispose();
       b.outputMarker?.dispose();
+      try { b.deco?.dispose(); } catch {}
     });
   }
   tabBlocks.delete(tabId);

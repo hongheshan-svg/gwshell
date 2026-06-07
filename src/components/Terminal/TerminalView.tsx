@@ -15,6 +15,7 @@ import { useSettingsStore } from "../../stores/settingsStore";
 import { terminalInstances } from "./terminalRegistry";
 import * as commandHistory from '../../lib/commandHistory';
 import { blocksFor, startBlock, markOutput, setCommand, finishBlock, clearTab as clearBlockTab } from './blocks';
+import type { CommandBlock } from './blocks';
 import { resolveTerminalTheme } from '../../lib/terminalThemes';
 import { runLoginScript } from '../../lib/sendScript';
 import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';
@@ -167,6 +168,18 @@ const bracketedPaste    = new Map<string, boolean>();
 
 function isInteractiveTerminal(type: string): boolean {
   return type === 'ssh' || type === 'localshell' || type === 'serial' || type === 'docker';
+}
+
+/**
+ * Apply (or refresh) the state CSS classes on a block's gutter decoration
+ * element. Called both when the decoration first renders and after finishBlock
+ * transitions state from running → done.
+ */
+function applyBlockDecoClass(el: HTMLElement, block: CommandBlock): void {
+  el.classList.add('gw-block-deco');
+  el.classList.toggle('running', block.state === 'running');
+  el.classList.toggle('ok', block.state === 'done' && block.exitCode === 0);
+  el.classList.toggle('err', block.state === 'done' && (block.exitCode ?? 0) !== 0);
 }
 
 // Per-tab scope key for history ranking.
@@ -967,13 +980,31 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           ghostTextState.set(tab.id, '');
           ghostTextSetters.get(tab.id)?.('', 0, 0);
           // Block model: start on A; fall back to B when shell only emits B.
+          let block;
           if (kind === 'A') {
-            startBlock(tab.id, term133);
+            block = startBlock(tab.id, term133);
           } else {
             // B without a preceding A — start a block if none is running.
             const existing = blocksFor(tab.id);
             const hasRunning = existing.length > 0 && existing[existing.length - 1].state === 'running';
-            if (!hasRunning) startBlock(tab.id, term133);
+            if (!hasRunning) {
+              block = startBlock(tab.id, term133);
+            }
+          }
+          // P4: create a left-gutter status decoration if the block has a
+          // prompt marker. Only fires when OSC 133 is active (which it always
+          // is here, since we just set tabHasOsc133). x:0,width:1 places the
+          // 3-px pill in the gutter column to the left of text.
+          if (block && block.promptMarker) {
+            const deco = term133.registerDecoration({
+              marker: block.promptMarker,
+              x: 0,
+              width: 1,
+            });
+            block.deco = deco ?? null;
+            if (deco) {
+              deco.onRender((el) => applyBlockDecoClass(el, block));
+            }
           }
         } else if (kind === 'C') {
           // Command submitted: record the authoritative line (heuristic buffer).
@@ -993,6 +1024,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           // Block model: parse exit code from "D" or "D;N" payload.
           const m = payload.match(/^D(?:;(\d+))?/);
           finishBlock(tab.id, m && m[1] ? Number(m[1]) : undefined);
+          // P4: re-paint the decoration now that state has changed running→done.
+          // Find the block that just finished (last done block in the list).
+          const blocks = blocksFor(tab.id);
+          const finished = blocks.length > 0 ? blocks[blocks.length - 1] : undefined;
+          if (finished && finished.state === 'done' && finished.deco?.element) {
+            applyBlockDecoClass(finished.deco.element, finished);
+          }
         }
         // Other kinds: no action needed.
         return false;
