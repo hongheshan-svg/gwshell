@@ -208,23 +208,7 @@ export const NewSessionModal: React.FC = () => {
           {/* ══════════════ 标准 Tab ══════════════ */}
           {activeTab === 'standard' && (
             <>
-              {/* Color label + Environment */}
-              <div className="ssh-form-row">
-                <div className="ssh-form-group">
-                  <label>{t('ssh_color_label')}</label>
-                  <select
-                    value={form.environment || ''}
-                    onChange={(e) => setForm({ ...form, environment: e.target.value })}
-                  >
-                    <option value="">{t('ssh_env_none')}</option>
-                    <option value="dev">{t('ssh_env_dev')}</option>
-                    <option value="staging">{t('ssh_env_staging')}</option>
-                    <option value="production">{t('ssh_env_production')}</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Name + Host */}
+              {/* Name + Host — lead with the essential connection fields */}
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
                   <label className={nameError ? 'label-error' : ''}>{t('ssh_name')}</label>
@@ -269,6 +253,22 @@ export const NewSessionModal: React.FC = () => {
                     value={form.port || 22}
                     onChange={(e) => setForm({ ...form, port: parseInt(e.target.value) || 22 })}
                   />
+                </div>
+              </div>
+
+              {/* Environment tag — optional/cosmetic, kept after the essential fields */}
+              <div className="ssh-form-row">
+                <div className="ssh-form-group">
+                  <label>{t('ssh_color_label')}</label>
+                  <select
+                    value={form.environment || ''}
+                    onChange={(e) => setForm({ ...form, environment: e.target.value })}
+                  >
+                    <option value="">{t('ssh_env_none')}</option>
+                    <option value="dev">{t('ssh_env_dev')}</option>
+                    <option value="staging">{t('ssh_env_staging')}</option>
+                    <option value="production">{t('ssh_env_production')}</option>
+                  </select>
                 </div>
               </div>
 

@@ -1,14 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  FolderPlus,
   TerminalSquare,
   Box,
   Monitor,
-  Database,
   ChevronRight,
   Network,
-  Cable,
   Usb,
+  Server,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TranslationKeys } from '../../i18n';
@@ -19,20 +17,20 @@ interface NewAssetMenuProps {
   onSelect: (type: string) => void;
 }
 
+// Niche remote types kept under a submenu (disabled placeholders like RDP/Telnet
+// are hidden rather than shown as dead "unavailable" rows).
 const remoteItems: { id: string; icon: typeof TerminalSquare; labelKey: TranslationKeys; disabled?: boolean }[] = [
-  { id: 'ssh', icon: TerminalSquare, labelKey: 'newasset_ssh' },
   { id: 'ssh-tunnel', icon: Network, labelKey: 'newasset_ssh_tunnel' },
-  { id: 'rdp', icon: Monitor, labelKey: 'newasset_rdp', disabled: true },
-  { id: 'telnet', icon: Cable, labelKey: 'newasset_telnet', disabled: true },
   { id: 'serial', icon: Usb, labelKey: 'newasset_serial' },
 ];
 
-const menuItems: { id: string; icon: typeof FolderPlus; labelKey: TranslationKeys; hasSubmenu?: boolean; disabled?: boolean }[] = [
-  { id: 'directory', icon: FolderPlus, labelKey: 'newasset_directory', disabled: true },
+// SSH is the app's core action, so it leads as a one-click top-level item rather
+// than being buried in the remote submenu. Unimplemented entries are omitted.
+const menuItems: { id: string; icon: typeof TerminalSquare; labelKey: TranslationKeys; hasSubmenu?: boolean; disabled?: boolean }[] = [
+  { id: 'ssh', icon: Server, labelKey: 'newasset_ssh' },
   { id: 'localshell', icon: TerminalSquare, labelKey: 'newasset_localshell' },
   { id: 'docker', icon: Box, labelKey: 'newasset_docker' },
   { id: 'remote', icon: Monitor, labelKey: 'newasset_remote', hasSubmenu: true },
-  { id: 'database', icon: Database, labelKey: 'newasset_database', disabled: true },
 ];
 
 export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, onSelect }) => {
