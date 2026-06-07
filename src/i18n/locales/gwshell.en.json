@@ -304,7 +304,7 @@
   "settings_ssh_history_count": "SSH History Load Count",
   "settings_cmd_hint_all_sessions": "Command hints in all session types",
   "settings_cmd_hint_scope_host": "Rank hints by current host / directory",
-  "settings_cmd_hint_shell_integration": "Inject shell integration (local shells)",
+  "settings_cmd_hint_shell_integration": "Inject shell integration (local + SSH, best-effort)",
   "settings_cmd_hint_defer_remote": "Defer to remote shell suggestions when detected",
   "nav_snippets": "Snippets",
   "snippet_title": "Quick Commands",

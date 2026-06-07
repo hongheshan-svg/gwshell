@@ -49,16 +49,17 @@ const isPasteAction = (value: string) => value === "paste" || value === "Paste" 
 
 // OSC 133 shell-integration snippet injected into SSH sessions when
 // cmdHintShellIntegration is enabled (opt-in, best-effort).
-// Works for bash/zsh remotes; silently no-ops on fish/csh/restricted shells.
+// bash only (no-ops on other remote shells).
 // The snippet will be echoed once in the terminal output \u2014 acceptable for an
 // opt-in best-effort feature.
 const SSH_OSC133_SNIPPET =
+  `if [ -n "$BASH_VERSION" ]; then ` +
   `__gw_pc() { printf '\\033]133;D;%s\\007' "$?"; }; ` +
   `case "$PROMPT_COMMAND" in *__gw_pc*) ;; ` +
   `*) PROMPT_COMMAND="__gw_pc\${PROMPT_COMMAND:+;$PROMPT_COMMAND}";; esac; ` +
   `PS1='\\[\\033]133;A\\007\\]'"$PS1"'\\[\\033]133;B\\007\\]'; ` +
-  `PS0='\\[\\033]133;C\\007\\]'"$PS0"
-`;
+  `PS0='\\[\\033]133;C\\007\\]'"$PS0"'; fi` +
+  `\n`;
 
 const writeClipboardText = async (text: string) => {
   const browserWrite = navigator.clipboard?.writeText(text).catch(() => {});
@@ -162,6 +163,10 @@ const ghostAcceptCallbacks = new Map<string, (suffix: string) => void>();
 
 const tabCwd            = new Map<string, string>();
 const tabHasOsc133      = new Map<string, boolean>();
+// True only when OSC 133 'C' (pre-exec) has been received for this tab.
+// Shells without PS0 (bash <4.4, macOS /bin/bash 3.2) emit A and D but
+// never C, so history must still be recorded in the Enter branch.
+const tabHasOsc133Exec  = new Map<string, boolean>();
 const tabCandidates     = new Map<string, string[]>();
 const candidateIndex    = new Map<string, number>();
 const tabInputSenders   = new Map<string, (data: string) => void>(); // populated by the snippet input-sender task
@@ -339,6 +344,7 @@ export function destroyTerminal(tabId: string): void {
   ghostAcceptCallbacks.delete(tabId);
   tabCwd.delete(tabId);
   tabHasOsc133.delete(tabId);
+  tabHasOsc133Exec.delete(tabId);
   clearBlockTab(tabId);
   tabCandidates.delete(tabId);
   candidateIndex.delete(tabId);
@@ -1094,6 +1100,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             if (!hasRunning) startBlock(tab.id, term133);
           }
         } else if (kind === 'C') {
+          // Mark that this shell emits the real pre-exec OSC 133 C sequence.
+          // Used by the Enter branch to avoid double-recording history on shells
+          // that do send C (i.e. bash ≥4.4 / zsh with PS0).
+          tabHasOsc133Exec.set(tab.id, true);
           // Command submitted: record the authoritative line (heuristic buffer).
           const sess = sessionsRef.current.find((s) => s.id === tab.sessionId);
           const st = useSettingsStore.getState().settings;
@@ -1105,13 +1115,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           }
           inputBuffers.set(tab.id, '');
           // Block model: mark start of output and capture command text.
-          markOutput(tab.id, term133);
+          // markOutput returns the lastRunning block it marked — use THAT block
+          // for the decoration so it stays anchored to the same block as
+          // markOutput/setCommand even on malformed streams (FIX 10).
+          const cblock = markOutput(tab.id, term133);
           setCommand(tab.id, line);
           // P4: create the left-gutter status decoration now that a real command
           // is executing (running→done). Idle prompts get none. Anchored to the
           // running block's prompt marker (3-px pill in gutter column x:0).
-          const cblocks = blocksFor(tab.id);
-          const cblock = cblocks.length > 0 ? cblocks[cblocks.length - 1] : undefined;
           if (cblock && cblock.promptMarker && !cblock.deco) {
             const deco = term133.registerDecoration({ marker: cblock.promptMarker, x: 0, width: 1 });
             cblock.deco = deco ?? null;
@@ -1133,14 +1144,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           // Block model: parse exit code from "D" or "D;N" payload.
           const m = payload.match(/^D(?:;(\d+))?/);
           const exit = m && m[1] != null ? Number(m[1]) : undefined;
-          finishBlock(tab.id, exit);
+          // finishBlock returns the block it finished — use THAT block for the
+          // repaint so it stays anchored to lastRunning, not the array tail
+          // (FIX 10: avoids mismatch on malformed streams).
+          const finished = finishBlock(tab.id, exit);
           // P4: re-paint the gutter decoration running→done. The decoration's
           // `element` may not exist yet at D time (xterm renders it on a later
           // frame), and onRender may only fire once — so repaint immediately,
           // on the next frame, and with a short fallback, without requiring the
           // element to be present right now.
-          const blocks = blocksFor(tab.id);
-          const finished = blocks.length > 0 ? blocks[blocks.length - 1] : undefined;
           if (finished?.deco) {
             const repaint = () => { const el = finished.deco?.element; if (el) applyBlockDecoClass(el, finished); };
             repaint();
@@ -1211,14 +1223,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               clearGhost();
             } else if (data === '\r' || data === '\n') {
               const trimmed = buf.trim();
-              if (trimmed.length > 0 && !tabHasOsc133.get(tab.id)) {
+              // Record history on Enter ONLY when the shell has NOT yet emitted
+              // OSC 133 C (pre-exec). Shells that do emit C (bash ≥4.4, zsh with
+              // PS0) will record via the authoritative 'C' handler instead.
+              // Shells without PS0 (bash <4.4, macOS /bin/bash 3.2) emit A+D but
+              // never C, so tabHasOsc133Exec stays false and we record here.
+              if (trimmed.length > 0 && !tabHasOsc133Exec.get(tab.id)) {
                 commandHistory.record(trimmed, { scope, cwd, sessionType });
               }
-              // With OSC 133 active, the authoritative command capture (history +
-              // block.command) happens in the 'C' handler, which fires AFTER this
-              // Enter keystroke. Keep the buffer so 'C' can read it; the 'C' (and
-              // next 'A') handler clears it. Without OSC 133, clear now as before.
-              if (!tabHasOsc133.get(tab.id)) buf = '';
+              // With OSC 133 C active, the authoritative capture happens in the
+              // 'C' handler (fires AFTER this Enter keystroke). Keep the buffer so
+              // 'C' can read it; the 'C' (and next 'A') handler clears it.
+              // Without a real 'C', clear now so the buffer doesn't carry over.
+              if (!tabHasOsc133Exec.get(tab.id)) buf = '';
               clearGhost();
             } else if (data === '\x7f' || data === '\b') {
               // Backspace
@@ -1375,6 +1392,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         candidateIndex.delete(tab.id);
         bracketedPaste.delete(tab.id);
         tabHasOsc133.delete(tab.id);
+        tabHasOsc133Exec.delete(tab.id);
         clearBlockTab(tab.id);
       });
 
@@ -1456,6 +1474,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // between disconnect and now). Failure re-arms so another keypress retries.
       const reconnect = async (): Promise<void> => {
         instance?.terminal.write(`\r\n\x1b[90m${t('term_reconnecting')}\x1b[0m\r\n`);
+        // Clear the stale block model so old decorations/markers don't persist
+        // against stale buffer lines after the new session starts (FIX 9).
+        clearBlockTab(tab.id);
+        tabHasOsc133.delete(tab.id);
+        tabHasOsc133Exec.delete(tab.id);
+        inputBuffers.set(tab.id, '');
         const rawFreshSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
         const freshSession = rawFreshSession ? applyGroupDefaults(rawFreshSession, loadGroupDefaults()) : rawFreshSession;
         if (tab.type === 'ssh') {

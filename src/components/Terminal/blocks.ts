@@ -61,6 +61,20 @@ export function blocksFor(tabId: string): CommandBlock[] {
 export function startBlock(tabId: string, term: Terminal): CommandBlock {
   const list = tabBlocks.get(tabId) ?? [];
 
+  // Reclaim orphan: if the last block is still running but never had an
+  // outputMarker set, it is a prompt that was reprompted without executing a
+  // command (fish bare-Enter, Ctrl+C reprompt, etc.).  Pop and dispose it so
+  // these stale entries do not accumulate.  A running block WITH an
+  // outputMarker is a genuinely-executing command — do NOT remove that.
+  if (list.length > 0) {
+    const prev = list[list.length - 1];
+    if (prev.state === 'running' && prev.outputMarker === null) {
+      list.pop();
+      prev.promptMarker?.dispose();
+      try { prev.deco?.dispose(); } catch {}
+    }
+  }
+
   // registerMarker() is typed as returning IMarker (non-optional) in xterm v6,
   // but we guard with || null for safety in case a future version changes.
   const marker: IMarker | null = term.registerMarker() || null;
@@ -92,12 +106,14 @@ export function startBlock(tabId: string, term: Terminal): CommandBlock {
 /**
  * Place the output marker at the current cursor position (OSC 133 C).
  * This marks the line just before command output begins.
+ * Returns the block that was marked (the lastRunning), or undefined if none.
  */
-export function markOutput(tabId: string, term: Terminal): void {
+export function markOutput(tabId: string, term: Terminal): CommandBlock | undefined {
   const b = lastRunning(tabId);
   if (b && !b.outputMarker) {
     b.outputMarker = term.registerMarker() || null;
   }
+  return b;
 }
 
 /**
@@ -112,13 +128,15 @@ export function setCommand(tabId: string, cmd: string): void {
 /**
  * Mark the last running block as done and record its exit code (OSC 133 D).
  * exitCode is undefined when the shell did not send a numeric exit code.
+ * Returns the block that was finished, or undefined if none.
  */
-export function finishBlock(tabId: string, exitCode?: number): void {
+export function finishBlock(tabId: string, exitCode?: number): CommandBlock | undefined {
   const b = lastRunning(tabId);
   if (b) {
     b.state = 'done';
     b.exitCode = exitCode;
   }
+  return b;
 }
 
 /**
@@ -155,7 +173,11 @@ export function readOutput(
   const list = tabBlocks.get(tabId) ?? [];
   const idx = list.indexOf(block);
   const next = idx >= 0 ? list[idx + 1] : undefined;
-  const end = next?.promptMarker?.line ?? term.buffer.active.length;
+  // A disposed IMarker returns .line === -1 (not null/undefined), so ?? doesn't
+  // fire.  Treat negative lines the same as "no marker" and fall back to the
+  // end of the buffer.
+  const nextLine = next?.promptMarker?.line;
+  const end = (nextLine == null || nextLine < 0) ? term.buffer.active.length : nextLine;
 
   const out: string[] = [];
   for (let i = start; i < end; i++) {

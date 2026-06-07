@@ -304,7 +304,7 @@
   "settings_ssh_history_count": "SSH历史命令-输入提示加载数量",
   "settings_cmd_hint_all_sessions": "在所有会话类型显示命令提示",
   "settings_cmd_hint_scope_host": "按当前主机/目录排序提示",
-  "settings_cmd_hint_shell_integration": "注入 shell 集成(本地终端)",
+  "settings_cmd_hint_shell_integration": "注入 shell 集成(本地+SSH，尽力)",
   "settings_cmd_hint_defer_remote": "检测到远程 shell 补全时让位",
   "nav_snippets": "快捷命令",
   "snippet_title": "快捷命令",
