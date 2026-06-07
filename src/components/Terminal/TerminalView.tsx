@@ -1334,6 +1334,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             shellName: session?.shell_name ?? null,
             workingDir: session?.working_dir ?? null,
             charset: session?.charset ?? null,
+            shellIntegration: useSettingsStore.getState().settings.cmdHintShellIntegration,
           });
           connectionReady = true;
           if (session?.init_command) {

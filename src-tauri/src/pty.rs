@@ -5,11 +5,14 @@ use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::sync::mpsc;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
 };
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
+
+/// Monotonic counter for unique temp-file naming (pid + counter).
+static SHELL_INTEGRATION_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 const PTY_INPUT_BUFFER_LIMIT: usize = 1024 * 1024;
 const PTY_CMD_QUEUE_LIMIT: usize = 64;
@@ -62,7 +65,8 @@ pub struct PtyManager {
 }
 
 #[cfg(target_os = "windows")]
-fn resolve_shell(name: Option<&str>) -> CommandBuilder {
+fn resolve_shell(name: Option<&str>, _shell_integration: bool) -> CommandBuilder {
+    // Shell integration (OSC 133) is not injected on Windows for now.
     match name {
         Some("cmd") => CommandBuilder::new("cmd.exe"),
         Some("bash") => CommandBuilder::new("bash.exe"),
@@ -105,18 +109,104 @@ fn resolve_shell(name: Option<&str>) -> CommandBuilder {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn resolve_shell(name: Option<&str>) -> CommandBuilder {
+fn resolve_shell(name: Option<&str>, shell_integration: bool) -> CommandBuilder {
     match name {
         Some("powershell7") | Some("powershell") => {
             let mut c = CommandBuilder::new("pwsh");
             c.arg("-NoLogo");
+            // No OSC 133 injection for pwsh on unix
             c
         }
-        Some("zsh") => CommandBuilder::new("zsh"),
-        Some("fish") => CommandBuilder::new("fish"),
+        Some("zsh") => {
+            let mut c = CommandBuilder::new("zsh");
+            if shell_integration {
+                if let Some(tmp_dir) = write_zsh_integration() {
+                    // Preserve original ZDOTDIR (or $HOME) so .zshrc can source it
+                    let original_zdotdir = std::env::var("ZDOTDIR")
+                        .unwrap_or_else(|_| {
+                            dirs::home_dir()
+                                .map(|h| h.to_string_lossy().into_owned())
+                                .unwrap_or_default()
+                        });
+                    c.env("ZDOTDIR", &tmp_dir);
+                    c.env("__gw_user_zdotdir", original_zdotdir);
+                }
+            }
+            c
+        }
+        Some("fish") => {
+            let mut c = CommandBuilder::new("fish");
+            if shell_integration {
+                let init_cmd = concat!(
+                    "function __gw_pre --on-event fish_preexec; printf '\\033]133;C\\007'; end; ",
+                    "function __gw_post --on-event fish_postexec; printf '\\033]133;D;%s\\007' $status; end; ",
+                    "function __gw_prompt --on-event fish_prompt; printf '\\033]133;A\\007'; end"
+                );
+                c.arg("--init-command");
+                c.arg(init_cmd);
+            }
+            c
+        }
         Some("cmd") => CommandBuilder::new("sh"), // fallback on unix
-        _ => CommandBuilder::new("bash"),
+        _ => {
+            // bash (default)
+            let mut c = CommandBuilder::new("bash");
+            if shell_integration {
+                if let Some(rc_path) = write_bash_integration() {
+                    c.arg("--rcfile");
+                    c.arg(&rc_path);
+                    c.arg("-i");
+                }
+            }
+            c
+        }
     }
+}
+
+/// Write a bash rcfile with OSC 133 integration and return its path.
+/// Returns None on any I/O error (shell will start without integration).
+#[cfg(not(target_os = "windows"))]
+fn write_bash_integration() -> Option<std::path::PathBuf> {
+    let counter = SHELL_INTEGRATION_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let pid = std::process::id();
+    let file_name = format!("gw_bash_rc_{}_{}", pid, counter);
+    let path = std::env::temp_dir().join(file_name);
+
+    // NOTE: \033 and \007 are literal backslash sequences — the shell's
+    // `printf` builtin will interpret them as ESC (0x1b) and BEL (0x07).
+    let content = r#"[ -f ~/.bashrc ] && source ~/.bashrc
+__gw_precmd() { local e=$?; printf '\033]133;D;%s\007' "$e"; }
+case "$PROMPT_COMMAND" in *__gw_precmd*) ;; *) PROMPT_COMMAND='__gw_precmd'${PROMPT_COMMAND:+';'$PROMPT_COMMAND} ;; esac
+PS1='\[\033]133;A\007\]'"$PS1"'\[\033]133;B\007\]'
+PS0='\[\033]133;C\007\]'"$PS0"
+"#;
+
+    std::fs::write(&path, content).ok()?;
+    Some(path)
+}
+
+/// Write a zsh integration directory (containing .zshrc) and return the dir path.
+/// Returns None on any I/O error.
+#[cfg(not(target_os = "windows"))]
+fn write_zsh_integration() -> Option<std::path::PathBuf> {
+    let counter = SHELL_INTEGRATION_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let pid = std::process::id();
+    let dir_name = format!("gw_zdotdir_{}_{}", pid, counter);
+    let dir_path = std::env::temp_dir().join(dir_name);
+
+    std::fs::create_dir_all(&dir_path).ok()?;
+
+    // NOTE: \033 and \007 are literal backslash sequences for the shell's printf.
+    let content = r#"[ -f "${__gw_user_zdotdir:-$HOME}/.zshrc" ] && source "${__gw_user_zdotdir:-$HOME}/.zshrc"
+autoload -Uz add-zsh-hook
+__gw_preexec() { print -n '\033]133;C\007' }
+__gw_precmd()  { print -n "\033]133;D;$?\007\033]133;A\007" }
+add-zsh-hook preexec __gw_preexec
+add-zsh-hook precmd  __gw_precmd
+"#;
+
+    std::fs::write(dir_path.join(".zshrc"), content).ok()?;
+    Some(dir_path)
 }
 
 /// Detect shells available on the current system.
@@ -244,6 +334,7 @@ impl PtyManager {
         shell_name: Option<String>,
         working_dir: Option<String>,
         charset: Option<String>,
+        shell_integration: bool,
     ) -> Result<(), String> {
         self.close_pty(session_id);
 
@@ -257,7 +348,7 @@ impl PtyManager {
             })
             .map_err(|e| format!("Failed to open PTY: {}", e))?;
 
-        let mut cmd = resolve_shell(shell_name.as_deref());
+        let mut cmd = resolve_shell(shell_name.as_deref(), shell_integration);
 
         // Set charset-aware env vars
         let charset_str = charset.clone().unwrap_or_else(|| "UTF-8".to_string());
