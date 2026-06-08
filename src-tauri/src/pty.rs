@@ -61,6 +61,27 @@ struct PtyHandle {
     input: Arc<Mutex<PtyInputBuffer>>,
     wake_pending: Arc<AtomicBool>,
     charset: String,
+    /// Temp shell-integration artifact (bash rcfile / zsh ZDOTDIR dir). Held
+    /// only for its Drop: removed when the session's last handle clone goes
+    /// away (close_pty / close_all / app exit). Arc-wrapped so the (Clone)
+    /// handle's brief read-path clones don't double-delete.
+    _integration: Option<Arc<TempIntegration>>,
+}
+
+/// A temp shell-integration file or directory that deletes itself on drop.
+struct TempIntegration {
+    path: std::path::PathBuf,
+    is_dir: bool,
+}
+
+impl Drop for TempIntegration {
+    fn drop(&mut self) {
+        let _ = if self.is_dir {
+            std::fs::remove_dir_all(&self.path)
+        } else {
+            std::fs::remove_file(&self.path)
+        };
+    }
 }
 
 pub struct PtyManager {
@@ -68,9 +89,9 @@ pub struct PtyManager {
 }
 
 #[cfg(target_os = "windows")]
-fn resolve_shell(name: Option<&str>, _shell_integration: bool) -> CommandBuilder {
+fn resolve_shell(name: Option<&str>, _shell_integration: bool) -> (CommandBuilder, Option<TempIntegration>) {
     // Shell integration (OSC 133) is not injected on Windows for now.
-    match name {
+    let c: CommandBuilder = match name {
         Some("cmd") => CommandBuilder::new("cmd.exe"),
         Some("bash") => CommandBuilder::new("bash.exe"),
         Some("powershell7") => {
@@ -88,7 +109,7 @@ fn resolve_shell(name: Option<&str>, _shell_integration: bool) -> CommandBuilder
                     let mut c = CommandBuilder::new(path);
                     c.arg("--login");
                     c.arg("-i");
-                    return c;
+                    return (c, None);
                 }
             }
             CommandBuilder::new("bash.exe")
@@ -108,20 +129,22 @@ fn resolve_shell(name: Option<&str>, _shell_integration: bool) -> CommandBuilder
             c.arg("-NoLogo");
             c
         }
-    }
+    };
+    (c, None)
 }
 
 #[cfg(not(target_os = "windows"))]
-fn resolve_shell(name: Option<&str>, shell_integration: bool) -> CommandBuilder {
+fn resolve_shell(name: Option<&str>, shell_integration: bool) -> (CommandBuilder, Option<TempIntegration>) {
     match name {
         Some("powershell7") | Some("powershell") => {
             let mut c = CommandBuilder::new("pwsh");
             c.arg("-NoLogo");
             // No OSC 133 injection for pwsh on unix
-            c
+            (c, None)
         }
         Some("zsh") => {
             let mut c = CommandBuilder::new("zsh");
+            let mut temp = None;
             if shell_integration {
                 if let Some(tmp_dir) = write_zsh_integration() {
                     // Preserve original ZDOTDIR (or $HOME) so .zshrc can source it
@@ -133,9 +156,10 @@ fn resolve_shell(name: Option<&str>, shell_integration: bool) -> CommandBuilder 
                         });
                     c.env("ZDOTDIR", &tmp_dir);
                     c.env("__gw_user_zdotdir", original_zdotdir);
+                    temp = Some(TempIntegration { path: tmp_dir, is_dir: true });
                 }
             }
-            c
+            (c, temp)
         }
         Some("fish") => {
             let mut c = CommandBuilder::new("fish");
@@ -148,20 +172,22 @@ fn resolve_shell(name: Option<&str>, shell_integration: bool) -> CommandBuilder 
                 c.arg("--init-command");
                 c.arg(init_cmd);
             }
-            c
+            (c, None)
         }
-        Some("cmd") => CommandBuilder::new("sh"), // fallback on unix
+        Some("cmd") => (CommandBuilder::new("sh"), None), // fallback on unix
         _ => {
             // bash (default)
             let mut c = CommandBuilder::new("bash");
+            let mut temp = None;
             if shell_integration {
                 if let Some(rc_path) = write_bash_integration() {
                     c.arg("--rcfile");
                     c.arg(&rc_path);
                     c.arg("-i");
+                    temp = Some(TempIntegration { path: rc_path, is_dir: false });
                 }
             }
-            c
+            (c, temp)
         }
     }
 }
@@ -447,7 +473,7 @@ impl PtyManager {
             })
             .map_err(|e| format!("Failed to open PTY: {}", e))?;
 
-        let mut cmd = resolve_shell(shell_name.as_deref(), shell_integration);
+        let (mut cmd, integration_temp) = resolve_shell(shell_name.as_deref(), shell_integration);
 
         // Set charset-aware env vars
         let charset_str = charset.clone().unwrap_or_else(|| "UTF-8".to_string());
@@ -501,6 +527,7 @@ impl PtyManager {
             input: input_buffer,
             wake_pending,
             charset: charset_str.clone(),
+            _integration: integration_temp.map(Arc::new),
         };
 
         self.sessions.lock().insert(session_id.to_string(), handle);

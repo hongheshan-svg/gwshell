@@ -181,6 +181,21 @@ function isInteractiveTerminal(type: string): boolean {
   return type === 'ssh' || type === 'localshell' || type === 'serial' || type === 'docker';
 }
 
+/**
+ * Per-cell CSS pixel size as xterm itself uses for row/column layout.
+ * Prefer the render service's exact cell dimensions — `clientHeight / rows`
+ * is only an average and its rounding error accumulates, drifting the ghost
+ * overlay down by a row on lower lines. Falls back to the average if the
+ * (proposed/internal) render service shape is unavailable.
+ */
+function cellSize(term: Terminal, el: HTMLElement): { w: number; h: number } {
+  const cell = (term as unknown as {
+    _core?: { _renderService?: { dimensions?: { css?: { cell?: { width: number; height: number } } } } };
+  })._core?._renderService?.dimensions?.css?.cell;
+  if (cell && cell.width > 0 && cell.height > 0) return { w: cell.width, h: cell.height };
+  return { w: el.clientWidth / term.cols, h: el.clientHeight / term.rows };
+}
+
 // Per-tab scope key for history ranking.
 function tabScope(
   type: string,
@@ -819,15 +834,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       const el2 = containerRef.current;
       const inst2 = terminalInstances.get(tab.id);
       if (el2 && inst2 && el2.clientWidth > 0 && inst2.terminal.cols > 0) {
-        el2.style.setProperty('--cell-w', `${el2.clientWidth / inst2.terminal.cols}px`);
-        el2.style.setProperty('--cell-h', `${el2.clientHeight / inst2.terminal.rows}px`);
+        const { w, h } = cellSize(inst2.terminal, el2);
+        el2.style.setProperty('--cell-w', `${w}px`);
+        el2.style.setProperty('--cell-h', `${h}px`);
         // The ghost-text overlay is a SIBLING of the pane, so it can't inherit
         // these vars from the pane. Also set them on the shared parent
         // (.terminal-container) so the sibling overlay can read them.
         const parent2 = el2.parentElement;
         if (parent2) {
-          parent2.style.setProperty('--cell-w', `${el2.clientWidth / inst2.terminal.cols}px`);
-          parent2.style.setProperty('--cell-h', `${el2.clientHeight / inst2.terminal.rows}px`);
+          parent2.style.setProperty('--cell-w', `${w}px`);
+          parent2.style.setProperty('--cell-h', `${h}px`);
         }
       }
 
@@ -1651,12 +1667,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // Update cell-size CSS variables used by the ghost text overlay.
       const inst = terminalInstances.get(tab.id);
       if (inst && w > 0 && inst.terminal.cols > 0) {
-        el.style.setProperty('--cell-w', `${w / inst.terminal.cols}px`);
-        el.style.setProperty('--cell-h', `${h / inst.terminal.rows}px`);
+        const { w: cw, h: ch } = cellSize(inst.terminal, el);
+        el.style.setProperty('--cell-w', `${cw}px`);
+        el.style.setProperty('--cell-h', `${ch}px`);
         const parent = el.parentElement;
         if (parent) {
-          parent.style.setProperty('--cell-w', `${w / inst.terminal.cols}px`);
-          parent.style.setProperty('--cell-h', `${h / inst.terminal.rows}px`);
+          parent.style.setProperty('--cell-w', `${cw}px`);
+          parent.style.setProperty('--cell-h', `${ch}px`);
         }
       }
     });
