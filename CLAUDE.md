@@ -43,7 +43,7 @@ GWShell is a **Tauri 2** desktop application: a React/TypeScript frontend render
 - **`stores/settingsStore.ts`** — separate Zustand store for user preferences (terminal font/size, editor settings, UI toggles). Persisted to backend via `invoke("save_settings")`.
 - **`types/index.ts`** — shared TypeScript types (`SessionConfig`, `TabInfo`, `ThemeMode`, `MainView`)
 - **`components/Terminal/TerminalView.tsx`** — xterm.js terminal. Maintains global maps (`terminalInstances`, `tabListenerCleanups`, `connectedTabs`) outside React to preserve terminal instances across re-renders and split-mode transitions. **Critical: only ONE set of event listeners per tab ID is allowed—`cleanupTabListeners()` must be called before re-attaching.**
-- **`components/Terminal/TerminalContainer.tsx`** — renders one or two `TerminalView`s side-by-side based on `splitTabId`
+- **`components/Terminal/TerminalContainer.tsx`** — renders a grid of 1/2/4/6/8 `TerminalView` panes based on `splitCount`/`splitPanes`
 - **`i18n/`** — bilingual (en/zh) via `i18next` + `react-i18next`. Translation files in `i18n/locales/gwshell.{en,zh}.json`. Namespace is `gwshell`.
 
 ### Backend (`src-tauri/src/`)
@@ -66,7 +66,7 @@ Backend pushes terminal output to the frontend via Tauri events:
 
 ### Split-Pane Architecture
 
-The app supports an optional 2-pane side-by-side split. `splitTabId: string | null` in `appStore` drives the split: when non-null it identifies the second (partner) tab to display alongside the active tab. `setSplitTabId(id)` enables the split; `setSplitTabId(null)` returns to single-pane. If the partner tab is closed, `splitTabId` is automatically cleared. Temporary clone sessions created for the split are marked `_temporary: true` and are never persisted to SQLite.
+The app tiles open terminal tabs in a grid. `splitCount` (1/2/4/6/8) in `appStore` selects the layout (1 = single pane; 2 = 2×1, 4 = 2×2, 6 = 2×3, 8 = 2×4), and `splitPanes: (string | null)[]` maps each grid slot to an open terminal tab id (or `null` for an empty slot). `setSplitCount(n)` rebuilds `splitPanes` from the current terminal tabs (active tab first). Pure slot helpers live in `lib/splitLayout.ts` (`buildSplitPanes`/`clearSlot`/`fillFirstEmpty`). Closing a tab empties its slot (`clearSlot`); dropping to ≤1 terminal tab collapses back to single-pane; a new tab fills the first empty slot. Tabs not currently in a slot stay mounted but hidden so their xterm instances survive layout changes. Clicking a pane sets the active tab (the active pane gets a highlight border). Split state is session-only (not persisted). Temporary clone sessions (`_temporary: true`) are never persisted to SQLite.
 
 ### Session Types
 
