@@ -5,12 +5,16 @@ import { TerminalView } from './TerminalView';
 import { AssetTable } from '../AssetTable/AssetTable';
 
 export const TerminalContainer: React.FC = () => {
-  const { tabs, activeTabId, mainView, splitTabId } = useAppStore(useShallow((s) => ({
-    tabs: s.tabs,
-    activeTabId: s.activeTabId,
-    mainView: s.mainView,
-    splitTabId: s.splitTabId,
-  })));
+  const { tabs, activeTabId, mainView, splitCount, splitPanes, setActiveTab } = useAppStore(
+    useShallow((s) => ({
+      tabs: s.tabs,
+      activeTabId: s.activeTabId,
+      mainView: s.mainView,
+      splitCount: s.splitCount,
+      splitPanes: s.splitPanes,
+      setActiveTab: s.setActiveTab,
+    })),
+  );
 
   if (activeTabId === 'asset-list' || mainView === 'asset-list') {
     return (
@@ -30,26 +34,41 @@ export const TerminalContainer: React.FC = () => {
     );
   }
 
-  // Split is opt-in. It only engages when a distinct, still-open second tab is
-  // selected as the split partner. Otherwise we fall through to the original
-  // single-pane render below, untouched.
-  const splitActive =
-    splitTabId != null &&
-    splitTabId !== activeTabId &&
-    terminalTabs.some((t) => t.id === splitTabId);
+  const splitActive = splitCount > 1;
 
   if (splitActive) {
+    const slotIds = new Set(splitPanes.filter((id): id is string => id != null));
+    // Tabs not shown in any slot must stay MOUNTED (preserve xterm) but hidden.
+    const offGrid = terminalTabs.filter((t) => !slotIds.has(t.id));
     return (
-      <div className="terminal-container terminal-split-grid">
-        {terminalTabs.map((tab) => (
-          <TerminalView
-            key={tab.id}
-            tab={tab}
-            isActive={tab.id === activeTabId}
-            visible={tab.id === activeTabId || tab.id === splitTabId}
-          />
-        ))}
-      </div>
+      <>
+        <div className={`terminal-container terminal-split-grid split-${splitCount}`}>
+          {splitPanes.map((id, slot) => {
+            if (id == null) {
+              return <div key={`empty-${slot}`} className="terminal-pane terminal-pane-empty" />;
+            }
+            const tab = terminalTabs.find((t) => t.id === id);
+            if (!tab) {
+              return <div key={`gone-${slot}`} className="terminal-pane terminal-pane-empty" />;
+            }
+            const isActive = tab.id === activeTabId;
+            return (
+              <div
+                key={tab.id}
+                className={`terminal-pane-cell${isActive ? ' is-active-pane' : ''}`}
+                onMouseDown={() => { if (!isActive) setActiveTab(tab.id); }}
+              >
+                <TerminalView tab={tab} isActive={isActive} visible />
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: 'none' }}>
+          {offGrid.map((tab) => (
+            <TerminalView key={tab.id} tab={tab} isActive={false} visible={false} />
+          ))}
+        </div>
+      </>
     );
   }
 

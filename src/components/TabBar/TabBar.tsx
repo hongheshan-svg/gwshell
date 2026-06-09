@@ -1,14 +1,15 @@
 import React, { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Plus, Menu, ChevronDown, FolderOpen, Columns2, PanelLeftOpen } from 'lucide-react';
+import { X, Plus, Menu, ChevronDown, FolderOpen, Columns2, PanelLeftOpen, Square, Grid2x2, LayoutGrid } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
 
 export const TabBar: React.FC = () => {
-  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, setShowSerialModal, setShowDockerModal, setShowLocalTerminalModal, setShowQuickConnect, sftpPanelOpen, toggleSftpPanel, splitTabId, setSplitTabId, sidebarCollapsed, toggleSidebar } = useAppStore();
+  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, setShowSerialModal, setShowDockerModal, setShowLocalTerminalModal, setShowQuickConnect, sftpPanelOpen, toggleSftpPanel, splitCount, setSplitCount, sidebarCollapsed, toggleSidebar } = useAppStore();
   const { t } = useTranslation();
   const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
+  const [splitMenuOpen, setSplitMenuOpen] = useState(false);
   const addBtnRef = useRef<HTMLButtonElement>(null);
   const supportedQuickCreateTypes = new Set(['ssh', 'ssh-tunnel']);
 
@@ -44,18 +45,6 @@ export const TabBar: React.FC = () => {
     }
   };
 
-  const terminalTabs = tabs.filter((tab) => tab.type !== 'asset-list');
-
-  const handleToggleSplit = () => {
-    if (splitTabId) {
-      setSplitTabId(null);
-      return;
-    }
-    // Pick a sensible second pane: the most-recent OTHER terminal tab.
-    const partner = [...terminalTabs].reverse().find((tab) => tab.id !== activeTabId);
-    if (partner) setSplitTabId(partner.id);
-  };
-
   const handleNewAssetSelect = (type: string) => {
     if (type === 'quickconnect') { setShowQuickConnect(true); return; }
     if (supportedQuickCreateTypes.has(type)) {
@@ -68,6 +57,8 @@ export const TabBar: React.FC = () => {
       setShowLocalTerminalModal(true);
     }
   };
+
+  const terminalTabs = tabs.filter((tab) => tab.type !== 'asset-list');
 
   return (
     <div className="tab-bar">
@@ -116,16 +107,34 @@ export const TabBar: React.FC = () => {
           onSelect={handleNewAssetSelect}
         />
       )}
-      {/* Split toggle - only show when there are >=2 terminal tabs to lay side by side */}
+      {/* Split count selector - only show when there are >=2 terminal tabs */}
       {terminalTabs.length >= 2 && (
-        <button
-          className={`tab-add-btn ${(splitTabId != null && splitTabId !== activeTabId) ? 'tab-btn-active' : ''}`}
-          onClick={handleToggleSplit}
-          title={t('split_toggle')}
-          style={{ marginLeft: 'auto' }}
-        >
-          <Columns2 size={14} />
-        </button>
+        <div className="split-selector" style={{ marginLeft: 'auto', position: 'relative' }}>
+          <button
+            className={`tab-add-btn ${splitCount > 1 ? 'tab-btn-active' : ''}`}
+            onClick={() => setSplitMenuOpen((v) => !v)}
+            title={t('split_layout')}
+          >
+            <Columns2 size={14} />
+          </button>
+          {splitMenuOpen && (
+            <>
+              <div className="split-menu-backdrop" onClick={() => setSplitMenuOpen(false)} />
+              <div className="split-menu">
+                {([1, 2, 4, 6, 8] as const).map((n) => (
+                  <button
+                    key={n}
+                    className={`split-menu-item${splitCount === n ? ' active' : ''}`}
+                    onClick={() => { setSplitCount(n); setSplitMenuOpen(false); }}
+                  >
+                    {n === 1 ? <Square size={14} /> : n === 2 ? <Columns2 size={14} /> : n === 4 ? <Grid2x2 size={14} /> : <LayoutGrid size={14} />}
+                    <span>{n === 1 ? t('split_single') : `${n}`}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       )}
       {/* SFTP toggle - only show when active tab is SSH */}
       {(() => {
@@ -135,7 +144,7 @@ export const TabBar: React.FC = () => {
             className={`tab-add-btn ${sftpPanelOpen ? 'tab-btn-active' : ''}`}
             onClick={toggleSftpPanel}
             title={t('sftp_title')}
-            // The split button (shown when >=2 terminal tabs) already carries
+            // The split selector (shown when >=2 terminal tabs) already carries
             // marginLeft:auto to push the right-aligned group over; avoid a
             // second auto-margin that would split them apart.
             style={terminalTabs.length >= 2 ? undefined : { marginLeft: 'auto' }}
