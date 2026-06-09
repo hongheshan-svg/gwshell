@@ -25,6 +25,9 @@ import { ACTION_BY_ID } from '../../keymap/actions';
 import { resolveTerminalTheme } from '../../lib/terminalThemes';
 import { runLoginScript } from '../../lib/sendScript';
 import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';
+import { buildCompletions, type Completion } from '../../lib/completion';
+import { CompletionDropdown } from './CompletionDropdown';
+import i18n from '../../i18n';
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalViewProps {
@@ -160,11 +163,10 @@ const sentFirstResize = new Set<string>();
  *  listener cleanup. Only SSH and serial sessions are ever armed. */
 const reconnectableTabs = new Set<string>();
 
-// Command history: per-tab line buffer, ghost text state, and callbacks.
+// Command history: per-tab line buffer, completion state, and callbacks.
 const inputBuffers         = new Map<string, string>();
-const ghostTextState       = new Map<string, string>();
-const ghostTextSetters     = new Map<string, (text: string, x: number, y: number) => void>();
-const ghostAcceptCallbacks = new Map<string, (suffix: string) => void>();
+const completionSetters    = new Map<string, (items: Completion[], index: number, x: number, y: number, above: boolean) => void>();
+const completionAccept     = new Map<string, (suffix: string) => void>();
 
 const tabCwd            = new Map<string, string>();
 const tabHasOsc133      = new Map<string, boolean>();
@@ -172,8 +174,9 @@ const tabHasOsc133      = new Map<string, boolean>();
 // Shells without PS0 (bash <4.4, macOS /bin/bash 3.2) emit A and D but
 // never C, so history must still be recorded in the Enter branch.
 const tabHasOsc133Exec  = new Map<string, boolean>();
-const tabCandidates     = new Map<string, string[]>();
-const candidateIndex    = new Map<string, number>();
+const tabCompletions    = new Map<string, Completion[]>();
+const tabCompletionIdx  = new Map<string, number>();
+const completionNav     = new Map<string, boolean>(); // user moved selection with ↑/↓
 const tabInputSenders   = new Map<string, (data: string) => void>(); // populated by the snippet input-sender task
 const bracketedPaste    = new Map<string, boolean>();
 
@@ -245,15 +248,15 @@ export function destroyTerminal(tabId: string): void {
   connectedTabs.delete(tabId);
   reconnectableTabs.delete(tabId);
   inputBuffers.delete(tabId);
-  ghostTextState.delete(tabId);
-  ghostTextSetters.delete(tabId);
-  ghostAcceptCallbacks.delete(tabId);
+  completionSetters.delete(tabId);
+  completionAccept.delete(tabId);
   tabCwd.delete(tabId);
   tabHasOsc133.delete(tabId);
   tabHasOsc133Exec.delete(tabId);
   clearBlockTab(tabId);
-  tabCandidates.delete(tabId);
-  candidateIndex.delete(tabId);
+  tabCompletions.delete(tabId);
+  tabCompletionIdx.delete(tabId);
+  completionNav.delete(tabId);
   tabInputSenders.delete(tabId);
   bracketedPaste.delete(tabId);
   const inst = terminalInstances.get(tabId);
@@ -364,19 +367,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
   const selectionSnapshotRef = useRef("");
 
   useEffect(() => {
-    ghostTextSetters.set(tab.id, (text, x, y) => {
-      setGhostText(text);
-      setGhostCursor({ x, y });
+    completionSetters.set(tab.id, (items, index, x, y, above) => {
+      setCompletionItems(items);
+      setCompletionIndex(index);
+      setCompletionPos({ x, y, above });
     });
     return () => {
-      ghostTextSetters.delete(tab.id);
+      completionSetters.delete(tab.id);
     };
   }, [tab.id]);
 
   const [fingerprintInfo, setFingerprintInfo] = useState<FingerprintInfo | null>(null);
   const [contextMenu, setContextMenu] = useState<TerminalContextMenu | null>(null);
-  const [ghostText, setGhostText] = useState('');
-  const [ghostCursor, setGhostCursor] = useState({ x: 0, y: 0 });
+  const [completionItems, setCompletionItems] = useState<Completion[]>([]);
+  const [completionIndex, setCompletionIndex] = useState(0);
+  const [completionPos, setCompletionPos] = useState({ x: 0, y: 0, above: false });
   const [pasteConfirm, setPasteConfirm] = useState<string | null>(null);
   const fingerprintResolveRef = useRef<(accepted: boolean) => void>(() => {});
 
@@ -1006,10 +1011,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         if (kind === 'A' || kind === 'B') {
           // New prompt / command start — reset the heuristic buffer & ghost.
           inputBuffers.set(tab.id, '');
-          tabCandidates.set(tab.id, []);
-          candidateIndex.set(tab.id, 0);
-          ghostTextState.set(tab.id, '');
-          ghostTextSetters.get(tab.id)?.('', 0, 0);
+          tabCompletions.set(tab.id, []);
+          tabCompletionIdx.set(tab.id, 0);
+          completionNav.set(tab.id, false);
+          completionSetters.get(tab.id)?.([], 0, 0, 0, false);
           // Block model: start a block on A (or on B when the shell only emits
           // B without a preceding A). The gutter status bar is NOT created here —
           // an idle prompt should show no indicator. It's created on 'C' below,
@@ -1081,28 +1086,30 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             const sessionType = tab.type;
 
             let buf = inputBuffers.get(tab.id) ?? '';
-            const setter = ghostTextSetters.get(tab.id);
+            const setter = completionSetters.get(tab.id);
             const inst = terminalInstances.get(tab.id);
             const cursorX = inst?.terminal.buffer.active.cursorX ?? 0;
             const cursorY = inst?.terminal.buffer.active.cursorY ?? 0;
+            const rows = inst?.terminal.rows ?? 24;
+            const locale = i18n.language?.startsWith('zh') ? 'zh' : 'en';
 
             const showGhost = () => {
               if (st.cmdHintDeferToRemote && tabHasOsc133.get(tab.id)) {
                 clearGhost();
                 return;
               }
-              const cands = commandHistory.getSuggestions(buf, { scope, cwd, sessionType });
-              tabCandidates.set(tab.id, cands);
-              candidateIndex.set(tab.id, 0);
-              const suffix = cands[0] ? cands[0].slice(buf.length) : '';
-              ghostTextState.set(tab.id, suffix);
-              setter?.(suffix, cursorX, cursorY);
+              const items = buildCompletions(buf, { scope, cwd, sessionType }, locale);
+              tabCompletions.set(tab.id, items);
+              tabCompletionIdx.set(tab.id, 0);
+              completionNav.set(tab.id, false);
+              const above = cursorY > rows - Math.min(items.length, 8) - 1;
+              setter?.(items, 0, cursorX, cursorY, above);
             };
             const clearGhost = () => {
-              tabCandidates.set(tab.id, []);
-              candidateIndex.set(tab.id, 0);
-              ghostTextState.set(tab.id, '');
-              setter?.('', 0, 0);
+              tabCompletions.set(tab.id, []);
+              tabCompletionIdx.set(tab.id, 0);
+              completionNav.set(tab.id, false);
+              setter?.([], 0, 0, 0, false);
             };
 
             // Bracketed paste: buffer the pasted content into the line, no ghost.
@@ -1191,14 +1198,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         }
       });
 
-      // Register the ghost accept callback so the key handler can send completion text.
+      // Register the completion accept callback so the key handler can send completion text.
       if (isInteractiveTerminal(tab.type)) {
-        ghostAcceptCallbacks.set(tab.id, (suffix: string) => {
+        completionAccept.set(tab.id, (suffix: string) => {
           if (writeDisposed) return;
           const buf = (inputBuffers.get(tab.id) ?? '') + suffix;
           inputBuffers.set(tab.id, buf);
-          ghostTextState.set(tab.id, '');
-          ghostTextSetters.get(tab.id)?.('', 0, 0);
+          tabCompletions.set(tab.id, []);
+          tabCompletionIdx.set(tab.id, 0);
+          completionNav.set(tab.id, false);
+          completionSetters.get(tab.id)?.([], 0, 0, 0, false);
           writeQueue += suffix;
           if (writeQueue.length >= WRITE_CHUNK_SIZE) {
             if (writeTimer) { clearTimeout(writeTimer); writeTimer = null; }
@@ -1296,10 +1305,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         try { cardsResizeDispose?.dispose(); } catch {}
         try { osc7Dispose.dispose(); } catch {}
         try { osc133Dispose.dispose(); } catch {}
-        ghostAcceptCallbacks.delete(tab.id);
+        completionAccept.delete(tab.id);
         tabInputSenders.delete(tab.id);
-        tabCandidates.delete(tab.id);
-        candidateIndex.delete(tab.id);
+        tabCompletions.delete(tab.id);
+        tabCompletionIdx.delete(tab.id);
+        completionNav.delete(tab.id);
         bracketedPaste.delete(tab.id);
         tabHasOsc133.delete(tab.id);
         tabHasOsc133Exec.delete(tab.id);
@@ -1727,19 +1737,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         onMouseDown={() => useAppStore.getState().setActiveTab(tab.id)}
       />
 
-      {/* NOTE: in 2-pane split mode the ghost overlay anchors to the terminal-container, so when the active pane is the right column the hint can be offset. Known limitation (command hints are off by default); proper fix needs a per-pane positioned wrapper. */}
-      {ghostText && isActive && terminalCmdHint && isInteractiveTerminal(tab.type) && (
-        <div
-          className="terminal-ghost-text"
-          style={{
-            left: `calc(${ghostCursor.x} * var(--cell-w))`,
-            top: `calc(${ghostCursor.y} * var(--cell-h))`,
-            fontFamily: terminalFont,
-            fontSize: terminalFontSize,
-          }}
-        >
-          {ghostText}
-        </div>
+      {/* NOTE: in 2-pane split mode the completion dropdown anchors to the terminal-container, so when the active pane is the right column the hint can be offset. Known limitation (command hints are off by default); proper fix needs a per-pane positioned wrapper. */}
+      {completionItems.length > 0 && isActive && terminalCmdHint && isInteractiveTerminal(tab.type) && (
+        <CompletionDropdown
+          items={completionItems}
+          selectedIndex={completionIndex}
+          x={completionPos.x}
+          y={completionPos.y}
+          placeAbove={completionPos.above}
+          fontFamily={terminalFont}
+          fontSize={parseInt(terminalFontSize) || 13}
+        />
       )}
 
       {isActive && isInteractiveTerminal(tab.type) && <BlockLiveFrame tab={tab} />}
