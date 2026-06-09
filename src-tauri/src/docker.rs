@@ -132,6 +132,24 @@ fn valid_container_id(id: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
 }
 
+// ── split_exec_rc ──────────────────────────────────────────────────────────
+
+/// Split the trailing `__rc=<n>` marker (emitted by `…; echo "__rc=$?"`) off
+/// the command output. Returns `(body_without_marker, exit_code)`. If no
+/// marker is found, returns `(input, 0)` — treat as success (defensive).
+fn split_exec_rc(out: &str) -> (String, i32) {
+    let trimmed = out.trim_end();
+    if let Some(pos) = trimmed.rfind("__rc=") {
+        // The marker must be on the last line.
+        let after = &trimmed[pos + 5..];
+        if let Ok(code) = after.trim().parse::<i32>() {
+            let body = trimmed[..pos].trim_end_matches(['\n', '\r']).to_string();
+            return (body, code);
+        }
+    }
+    (out.to_string(), 0)
+}
+
 // ── docker_list_containers ─────────────────────────────────────────────────
 
 #[tauri::command]
@@ -159,11 +177,25 @@ pub async fn docker_list_containers(
             .await
             .map_err(|e| format!("SSH connect failed: {}", e))?;
         let conn = Arc::new(conn);
-        let cmd = format!("docker ps --no-trunc --format '{}'", PS_FMT);
-        let out = crate::ssh::exec::exec(&conn, &cmd)
+        // Merge stderr and append an exit-code sentinel so we can detect
+        // failures (e.g. docker missing, daemon down, permission denied) that
+        // would otherwise surface as silent empty output.
+        let remote_cmd = format!(
+            "docker ps --no-trunc --format '{}' 2>&1; echo \"__rc=$?\"",
+            PS_FMT
+        );
+        let raw = crate::ssh::exec::exec(&conn, &remote_cmd)
             .await
             .map_err(|e| format!("docker ps failed: {}", e))?;
-        Ok(parse_docker_ps(&out))
+        let (body, rc) = split_exec_rc(&raw);
+        if rc != 0 {
+            return Err(if body.trim().is_empty() {
+                format!("docker ps failed on remote host (exit {})", rc)
+            } else {
+                body.trim().to_string()
+            });
+        }
+        Ok(parse_docker_ps(&body))
     } else {
         // Local: run the docker CLI as a child process.
         let output = tokio::task::spawn_blocking(|| {
@@ -296,5 +328,26 @@ mod tests {
         assert!(!valid_container_id("a'b")); // single quote
         assert!(!valid_container_id("a`b")); // backtick
         assert!(!valid_container_id(&"a".repeat(129))); // too long
+    }
+
+    #[test]
+    fn split_exec_rc_success_row() {
+        let (body, rc) = split_exec_rc("a\tb\tc\td\n__rc=0\n");
+        assert_eq!(body, "a\tb\tc\td");
+        assert_eq!(rc, 0);
+    }
+
+    #[test]
+    fn split_exec_rc_nonzero_exit() {
+        let (body, rc) = split_exec_rc("docker: command not found\n__rc=127\n");
+        assert_eq!(body, "docker: command not found");
+        assert_eq!(rc, 127);
+    }
+
+    #[test]
+    fn split_exec_rc_no_marker() {
+        let (body, rc) = split_exec_rc("no marker here");
+        assert_eq!(body, "no marker here");
+        assert_eq!(rc, 0);
     }
 }
