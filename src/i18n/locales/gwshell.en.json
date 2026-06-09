@@ -549,6 +549,5 @@
   "docker_pick_container": "Select a container",
   "docker_no_containers": "No running containers on this host",
   "docker_listing": "Listing containers…",
-  "docker_not_found": "docker command failed — is Docker installed and running?",
   "docker_connecting_container": "Connecting to container…"
 }

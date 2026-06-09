@@ -457,6 +457,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
     if (!containerRef.current) return;
 
     let cancelled = false;
+    let resolveDockerPick: ((id: string | null) => void) | null = null;
     const container = containerRef.current;
 
     const initTerminal = async () => {
@@ -1675,7 +1676,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             }
           }
         } else if (tab.type === "docker") {
-          const method = (session?.docker_connect_method ?? 'Local');
+          const method = (session?.docker_connect_method ?? '');
           const tunnelId = session?.docker_ssh_tunnel ?? null;
           instance?.terminal.write(`\r\n\x1b[90m${t('docker_listing')}\x1b[0m\r\n`);
           let containers: { id: string; name: string; image: string; status: string }[];
@@ -1699,6 +1700,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           }
           // Ask the user to pick (App-root picker, bridged via window events).
           const containerId = await new Promise<string | null>((resolve) => {
+            resolveDockerPick = resolve;
             const onPick = (e: Event) => {
               const d = (e as CustomEvent).detail;
               if (d?.tabId === tab.id) { cleanup(); resolve(d.id as string); }
@@ -1708,6 +1710,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               if (d?.tabId === tab.id) { cleanup(); resolve(null); }
             };
             const cleanup = () => {
+              resolveDockerPick = null;
               window.removeEventListener('gwshell:docker-pick', onPick);
               window.removeEventListener('gwshell:docker-cancel', onCancel);
             };
@@ -1715,6 +1718,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             window.addEventListener('gwshell:docker-cancel', onCancel);
             useAppStore.getState().setDockerPicker({ tabId: tab.id, containers });
           });
+          resolveDockerPick = null;
           if (cancelled) return;
           if (!containerId) {
             // Cancelled — close the docker tab (no live session).
@@ -1752,6 +1756,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
 
     return () => {
       cancelled = true;
+      // Unblock a docker-container picker that is open for this tab: resolve the
+      // awaited Promise to null so the async frame exits cleanly, and dismiss
+      // the picker UI. Without this the Promise never resolves on tab close,
+      // leaking both window listeners and the on-screen picker modal.
+      resolveDockerPick?.(null);
+      useAppStore.getState().setDockerPicker(null);
       // Unstick a pending fingerprint-confirm prompt so its awaiting async frame
       // (which captures `instance`/`session`) completes instead of leaking.
       fingerprintResolveRef.current(false);
