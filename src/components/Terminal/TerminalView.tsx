@@ -958,6 +958,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         eventPrefix = "serial";
         writeCmd = "write_to_serial";
         resizeCmd = null;
+      } else if (tab.type === "docker") {
+        const dsess = sessionsRef.current.find((s) => s.id === tab.sessionId);
+        const isSshDocker = (dsess?.docker_connect_method ?? '').toLowerCase() === 'ssh';
+        eventPrefix = isSshDocker ? "ssh" : "pty";
+        writeCmd = isSshDocker ? "write_to_ssh" : "write_to_pty";
+        resizeCmd = isSshDocker ? "resize_ssh" : "resize_pty";
       } else {
         eventPrefix = "pty";
         writeCmd = "write_to_pty";
@@ -1668,6 +1674,64 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               }, 300);
             }
           }
+        } else if (tab.type === "docker") {
+          const method = (session?.docker_connect_method ?? 'Local');
+          const tunnelId = session?.docker_ssh_tunnel ?? null;
+          instance?.terminal.write(`\r\n\x1b[90m${t('docker_listing')}\x1b[0m\r\n`);
+          let containers: { id: string; name: string; image: string; status: string }[];
+          try {
+            containers = await invoke('docker_list_containers', {
+              connectMethod: method,
+              tunnelSessionId: tunnelId,
+            });
+          } catch (err) {
+            instance?.terminal.write(`\r\n\x1b[31m${String(err)}\x1b[0m\r\n`);
+            useAppStore.getState().updateTabConnected(tab.id, false);
+            connectedTabs.delete(tab.id);
+            return;
+          }
+          if (cancelled) return;
+          if (containers.length === 0) {
+            instance?.terminal.write(`\r\n\x1b[33m${t('docker_no_containers')}\x1b[0m\r\n`);
+            useAppStore.getState().updateTabConnected(tab.id, false);
+            connectedTabs.delete(tab.id);
+            return;
+          }
+          // Ask the user to pick (App-root picker, bridged via window events).
+          const containerId = await new Promise<string | null>((resolve) => {
+            const onPick = (e: Event) => {
+              const d = (e as CustomEvent).detail;
+              if (d?.tabId === tab.id) { cleanup(); resolve(d.id as string); }
+            };
+            const onCancel = (e: Event) => {
+              const d = (e as CustomEvent).detail;
+              if (d?.tabId === tab.id) { cleanup(); resolve(null); }
+            };
+            const cleanup = () => {
+              window.removeEventListener('gwshell:docker-pick', onPick);
+              window.removeEventListener('gwshell:docker-cancel', onCancel);
+            };
+            window.addEventListener('gwshell:docker-pick', onPick);
+            window.addEventListener('gwshell:docker-cancel', onCancel);
+            useAppStore.getState().setDockerPicker({ tabId: tab.id, containers });
+          });
+          if (cancelled) return;
+          if (!containerId) {
+            // Cancelled — close the docker tab (no live session).
+            destroyTerminal(tab.id);
+            useAppStore.getState().removeTab(tab.id);
+            return;
+          }
+          instance?.terminal.write(`\r\n\x1b[90m${t('docker_connecting_container')}\x1b[0m\r\n`);
+          await invoke('docker_exec', {
+            sessionId: tab.sessionId,
+            containerId,
+            rows: instance!.terminal.rows,
+            cols: instance!.terminal.cols,
+            connectMethod: method,
+            tunnelSessionId: tunnelId,
+          });
+          connectionReady = true;
         }
         } // end if (!alreadyConnected)
         if (!connectionReady && !alreadyConnected) {
@@ -1699,7 +1763,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       if (!tabStillExists) {
         connectedTabs.delete(tab.id);
         useAppStore.getState().updateTabConnected(tab.id, false);
-        const closeCmd = tab.type === "ssh" ? "close_ssh" : tab.type === "serial" ? "close_serial" : "close_pty";
+        const isSshDocker = tab.type === "docker"
+          && (sessionsRef.current.find((s) => s.id === tab.sessionId)?.docker_connect_method ?? '').toLowerCase() === 'ssh';
+        const closeCmd = (tab.type === "ssh" || isSshDocker) ? "close_ssh"
+          : tab.type === "serial" ? "close_serial"
+          : "close_pty";
         invoke(closeCmd, { sessionId: tab.sessionId }).catch(() => {});
       }
     };
