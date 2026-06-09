@@ -895,6 +895,50 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         });
       });
 
+      // Bell listener: plays a short WebAudio beep when terminalSound is enabled.
+      // Registered here (before cleanupTabListeners) so it gets torn down with
+      // the rest of the per-tab xterm listeners.
+      const bellDispose = instance!.terminal.onBell(() => {
+        if (!useSettingsStore.getState().settings.terminalSound) return;
+        try {
+          const ctx = new AudioContext();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, ctx.currentTime);
+          gain.gain.setValueAtTime(0.3, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+          osc.start(ctx.currentTime);
+          osc.stop(ctx.currentTime + 0.08);
+          osc.onended = () => { try { ctx.close(); } catch {} };
+        } catch { /* AudioContext unavailable — silently skip */ }
+      });
+
+      // Mouse-wheel zoom: Ctrl+wheel adjusts terminalFontSize when enabled.
+      // Attached to the terminal element; reads the setting live so toggling
+      // takes effect without reconnect.
+      const termElForWheel = instance!.terminal.element;
+      const handleWheelZoom = (e: WheelEvent) => {
+        if (!e.ctrlKey) return;
+        if (!useSettingsStore.getState().settings.mouseWheelZoom) return;
+        e.preventDefault();
+        const inst = terminalInstances.get(tab.id);
+        if (!inst) return;
+        const st = useSettingsStore.getState().settings;
+        const current = parseInt(st.terminalFontSize) || 13;
+        const next = e.deltaY < 0 ? Math.min(current + 1, 32) : Math.max(current - 1, 8);
+        if (next === current) return;
+        const newSize = `${next}px`;
+        inst.terminal.options.fontSize = next;
+        try { inst.fitAddon.fit(); } catch {}
+        useSettingsStore.getState().save({ ...st, terminalFontSize: newSize }).catch(() => {});
+      };
+      if (termElForWheel) {
+        termElForWheel.addEventListener('wheel', handleWheelZoom, { passive: false });
+      }
+
       // ── Listener setup ─────────────────────────────────────
       cleanupTabListeners(tab.id);
 
@@ -1332,6 +1376,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         try { cardsResizeDispose?.dispose(); } catch {}
         try { osc7Dispose.dispose(); } catch {}
         try { osc133Dispose.dispose(); } catch {}
+        try { bellDispose.dispose(); } catch {}
+        if (termElForWheel) {
+          try { termElForWheel.removeEventListener('wheel', handleWheelZoom); } catch {}
+        }
         completionAccept.delete(tab.id);
         // completionSetters is NOT deleted here — it is cleaned up by the
         // component useEffect return and destroyTerminal, matching the

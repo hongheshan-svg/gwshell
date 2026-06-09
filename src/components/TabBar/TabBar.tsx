@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Plus, Menu, ChevronDown, FolderOpen, Columns2, PanelLeftOpen } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
 
 export const TabBar: React.FC = () => {
@@ -11,7 +12,23 @@ export const TabBar: React.FC = () => {
   const addBtnRef = useRef<HTMLButtonElement>(null);
   const supportedQuickCreateTypes = new Set(['ssh', 'ssh-tunnel']);
 
+  const isConnectedInteractiveTab = (tabId: string) => {
+    const tab = tabs.find((tb) => tb.id === tabId);
+    if (!tab) return false;
+    if (tab.type === 'asset-list') return false;
+    return !!tab.connected;
+  };
+
+  const confirmClose = (tabId: string): boolean => {
+    const { tabCloseConfirm } = useSettingsStore.getState().settings;
+    if (tabCloseConfirm && isConnectedInteractiveTab(tabId)) {
+      return window.confirm(t('tab_close_confirm_msg'));
+    }
+    return true;
+  };
+
   const handleCloseTab = (tabId: string) => {
+    if (!confirmClose(tabId)) return;
     import('../Terminal/TerminalView').then(({ destroyTerminal }) => {
       destroyTerminal(tabId);
     });
@@ -21,6 +38,8 @@ export const TabBar: React.FC = () => {
   const handleMiddleClick = (e: React.MouseEvent, tabId: string) => {
     if (e.button === 1) {
       e.preventDefault();
+      const { middleClickCloseTab } = useSettingsStore.getState().settings;
+      if (!middleClickCloseTab) return;
       handleCloseTab(tabId);
     }
   };

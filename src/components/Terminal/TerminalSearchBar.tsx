@@ -1,20 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronUp, ChevronDown, X } from 'lucide-react';
 import type { ISearchOptions } from '@xterm/addon-search';
 import { useAppStore } from '../../stores/appStore';
 import { terminalInstances } from './terminalRegistry';
 
-// Decoration colors. @xterm/addon-search v0.16 only emits onDidChangeResults
+// Base decoration colors. @xterm/addon-search v0.16 only emits onDidChangeResults
 // (match count) when decorations are enabled, and its ISearchDecorationOptions
 // type requires the two overview-ruler colors, so they are always provided.
-const SEARCH_OPTS: ISearchOptions = {
-  decorations: {
-    matchBackground: '#5a4500',
-    matchOverviewRuler: '#5a4500',
-    activeMatchBackground: '#b58900',
-    activeMatchColorOverviewRuler: '#b58900',
-  },
+const BASE_DECORATIONS: ISearchOptions['decorations'] = {
+  matchBackground: '#5a4500',
+  matchOverviewRuler: '#5a4500',
+  activeMatchBackground: '#b58900',
+  activeMatchColorOverviewRuler: '#b58900',
 };
 
 export const TerminalSearchBar: React.FC = () => {
@@ -23,9 +21,20 @@ export const TerminalSearchBar: React.FC = () => {
   const setShowTerminalSearch = useAppStore((s) => s.setShowTerminalSearch);
   const [query, setQuery] = useState('');
   const [count, setCount] = useState<{ idx: number; total: number } | null>(null);
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [useRegex, setUseRegex] = useState(false);
+  const [wholeWord, setWholeWord] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const addon = () => (activeTabId ? terminalInstances.get(activeTabId)?.searchAddon : undefined);
+
+  const buildOpts = useCallback((extra?: Partial<ISearchOptions>): ISearchOptions => ({
+    decorations: BASE_DECORATIONS,
+    caseSensitive,
+    regex: useRegex,
+    wholeWord,
+    ...extra,
+  }), [caseSensitive, useRegex, wholeWord]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -43,8 +52,15 @@ export const TerminalSearchBar: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabId]);
 
-  const findNext = () => { if (query) addon()?.findNext(query, SEARCH_OPTS); };
-  const findPrev = () => { if (query) addon()?.findPrevious(query, SEARCH_OPTS); };
+  // Re-run search when any toggle changes.
+  useEffect(() => {
+    if (!query) return;
+    addon()?.findNext(query, buildOpts({ incremental: true }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseSensitive, useRegex, wholeWord]);
+
+  const findNext = () => { if (query) addon()?.findNext(query, buildOpts()); };
+  const findPrev = () => { if (query) addon()?.findPrevious(query, buildOpts()); };
   const close = () => {
     try { addon()?.clearDecorations?.(); } catch { /* noop */ }
     setCount(null);
@@ -67,7 +83,7 @@ export const TerminalSearchBar: React.FC = () => {
     setQuery(value);
     const a = addon();
     if (!value) { setCount(null); try { a?.clearDecorations?.(); } catch { /* noop */ } return; }
-    a?.findNext(value, { ...SEARCH_OPTS, incremental: true });
+    a?.findNext(value, buildOpts({ incremental: true }));
   };
 
   return (
@@ -82,6 +98,27 @@ export const TerminalSearchBar: React.FC = () => {
       <span className="terminal-search-count">
         {count ? `${count.idx}/${count.total}` : (query ? t('search_no_results') : '')}
       </span>
+      <button
+        className={`terminal-search-btn${caseSensitive ? ' active' : ''}`}
+        onClick={() => setCaseSensitive((v) => !v)}
+        title={t('search_case_sensitive')}
+        aria-label={t('search_case_sensitive')}
+        aria-pressed={caseSensitive}
+      >Aa</button>
+      <button
+        className={`terminal-search-btn${useRegex ? ' active' : ''}`}
+        onClick={() => setUseRegex((v) => !v)}
+        title={t('search_use_regex')}
+        aria-label={t('search_use_regex')}
+        aria-pressed={useRegex}
+      >.*</button>
+      <button
+        className={`terminal-search-btn${wholeWord ? ' active' : ''}`}
+        onClick={() => setWholeWord((v) => !v)}
+        title={t('search_whole_word')}
+        aria-label={t('search_whole_word')}
+        aria-pressed={wholeWord}
+      >W</button>
       <button className="terminal-search-btn" onClick={findPrev} title={t('search_prev')}><ChevronUp size={14} /></button>
       <button className="terminal-search-btn" onClick={findNext} title={t('search_next')}><ChevronDown size={14} /></button>
       <button className="terminal-search-btn" onClick={close} title={t('search_close')}><X size={14} /></button>
