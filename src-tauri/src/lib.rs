@@ -1040,6 +1040,8 @@ pub fn run() {
             save_snippet,
             get_snippets,
             delete_snippet,
+            docker::docker_list_containers,
+            docker::docker_exec,
         ])
         .setup(|app| {
             // Pre-warm OS info cache in a background thread so the first

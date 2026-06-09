@@ -1,12 +1,12 @@
 //! Async SSH backend on russh.
 
 mod auth;
-mod connect;
-mod exec;
+pub(crate) mod connect;
+pub(crate) mod exec;
 mod forward;
 mod handler;
 mod known_hosts;
-mod params;
+pub(crate) mod params;
 mod session;
 mod sftp;
 mod transport;
