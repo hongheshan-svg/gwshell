@@ -697,8 +697,11 @@ impl PtyManager {
         self.close_pty(session_id);
 
         let mut cmd = CommandBuilder::new("docker");
+        // `--` ends docker-exec option parsing, so a container id starting with
+        // `-` cannot smuggle flags into `docker exec` (defense-in-depth; the id
+        // is also format-validated at the `docker_exec` command layer).
         cmd.args([
-            "exec", "-it", container_id,
+            "exec", "-it", "--", container_id,
             "sh", "-c", "exec bash 2>/dev/null || exec sh",
         ]);
         cmd.env("TERM", "xterm-256color");
