@@ -19,7 +19,25 @@ export const KEY_ACTIONS: KeyAction[] = [
   { id: 'palette.open', labelKey: 'action_palette_open', defaultBinding: IS_MACOS ? 'Meta+K' : 'Ctrl+K', run: () => useAppStore.getState().setShowCommandPalette(true) },
   { id: 'tab.next', labelKey: 'action_tab_next', defaultBinding: 'Ctrl+Tab', run: () => cycleTab(1) },
   { id: 'tab.prev', labelKey: 'action_tab_prev', defaultBinding: 'Ctrl+Shift+Tab', run: () => cycleTab(-1) },
-  { id: 'tab.close', labelKey: 'action_tab_close', defaultBinding: 'Ctrl+Shift+W', run: () => { const { activeTabId, removeTab } = useAppStore.getState(); if (activeTabId) removeTab(activeTabId); } },
+  {
+    id: 'tab.close',
+    labelKey: 'action_tab_close',
+    defaultBinding: 'Ctrl+Shift+W',
+    run: () => {
+      const { activeTabId, tabs, removeTab } = useAppStore.getState();
+      if (!activeTabId) return;
+      const tab = tabs.find((t) => t.id === activeTabId);
+      // Destroy the xterm instance + backend listeners before removing the tab,
+      // matching the TabBar close-button path. Skip for the asset-list pseudo-tab
+      // which never has a terminal instance.
+      if (tab && tab.type !== 'asset-list') {
+        import('../components/Terminal/TerminalView').then(({ destroyTerminal }) => {
+          destroyTerminal(activeTabId);
+        });
+      }
+      removeTab(activeTabId);
+    },
+  },
   { id: 'settings.open', labelKey: 'action_settings_open', defaultBinding: 'Ctrl+Comma', run: () => useAppStore.getState().setShowSettings(true) },
   { id: 'terminal.search', labelKey: 'action_terminal_search', defaultBinding: 'Ctrl+Shift+H', run: () => useAppStore.getState().setShowTerminalSearch(true) },
   { id: 'block.prev', labelKey: 'action_block_prev', defaultBinding: IS_MACOS ? 'Meta+Shift+ArrowUp' : 'Ctrl+Shift+ArrowUp', run: () => scrollToAdjacentBlock(-1) },

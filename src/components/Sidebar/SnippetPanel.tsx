@@ -22,10 +22,15 @@ export const SnippetPanel: React.FC = () => {
   }, [loaded, load]);
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
+  // Only interactive terminal tabs can receive snippet input. SFTP tabs render
+  // SftpPanel (not TerminalView), so tabInputSenders has no entry for them —
+  // sending would silently fail even though connected=true. Allowlist the four
+  // types that are backed by a live terminal instance.
+  const INTERACTIVE_TERMINAL_TYPES = new Set(['ssh', 'localshell', 'serial', 'docker']);
   const canSend =
     !!activeTab &&
     activeTab.connected &&
-    activeTab.type !== 'asset-list';
+    INTERACTIVE_TERMINAL_TYPES.has(activeTab.type);
 
   const send = (snippet: Snippet) => {
     if (!canSend || !activeTab) {

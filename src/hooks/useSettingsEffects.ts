@@ -107,8 +107,14 @@ export function useSettingsEffects() {
 
   useEffect(() => {
     terminalInstances.forEach(({ terminal }) => {
-      // GWShell handles terminal copy through the Tauri clipboard plugin so
-      // right-click copy and paste match Windows CMD behavior consistently.
+      // xterm's native copyOnSelect is intentionally kept OFF at all times.
+      // GWShell implements auto-copy-on-select manually in TerminalView.tsx via
+      // an onSelectionChange handler and a mouseup handler, both gated on
+      // settings.autoCopyOnSelect. Using the native flag in addition would cause
+      // a double-copy (clipboard written twice per selection). The dependency on
+      // settings.autoCopyOnSelect re-runs this effect whenever the setting
+      // changes to ensure any newly-created terminal instance also has the flag
+      // cleared, but the written value is always false — this is correct.
       (terminal.options as unknown as { copyOnSelect?: boolean }).copyOnSelect = false;
     });
   }, [settings.autoCopyOnSelect]);

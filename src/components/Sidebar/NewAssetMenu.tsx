@@ -72,10 +72,6 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
     }
   };
 
-  const handleItemMouseLeave = () => {
-    // Don't immediately clear - let submenu handle it
-  };
-
   return (
     <div className="new-asset-menu-overlay" onClick={onClose}>
       <div
@@ -83,6 +79,9 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
         className="new-asset-menu"
         style={{ top: pos.top, left: pos.left }}
         onClick={(e) => e.stopPropagation()}
+        // Clear the submenu when the cursor leaves the entire menu panel
+        // (covers the gap between the remote row and the submenu itself).
+        onMouseLeave={() => setHoveredItem(null)}
       >
         {menuItems.map((item) => (
           <div
@@ -97,7 +96,6 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
               }
             }}
             onMouseEnter={(e) => handleItemMouseEnter(item.id, e)}
-            onMouseLeave={handleItemMouseLeave}
           >
             <span className="new-asset-menu-icon"><item.icon size={15} /></span>
             <span>{t(item.labelKey)}</span>
@@ -110,11 +108,16 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
           </div>
         ))}
 
-        {/* Submenu for remote */}
+        {/* Submenu for remote — keep hoveredItem='remote' while cursor is inside
+            so that moving from the Remote row directly into the submenu doesn't
+            collapse it (the onMouseLeave on the main panel fires before this
+            onMouseEnter, but React batches the state update so the submenu
+            stays mounted). */}
         {hoveredItem === 'remote' && submenuPos && (
           <div
             className="new-asset-submenu"
             style={{ top: submenuPos.top, left: submenuPos.left }}
+            onMouseEnter={() => setHoveredItem('remote')}
           >
             {remoteItems.map((item) => (
               <div
