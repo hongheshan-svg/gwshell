@@ -1,5 +1,6 @@
 mod crypto;
 mod database;
+mod docker;
 mod history;
 mod metrics;
 mod pty;
