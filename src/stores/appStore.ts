@@ -243,7 +243,16 @@ export const useAppStore = create<AppStore>((set, _get) => ({
           : state.activeTabId;
       const newMainView = newActiveId === 'asset-list' ? 'asset-list' : 'terminal';
 
-      return { tabs: newTabs, sessions: newSessions, activeTabId: newActiveId, mainView: newMainView as MainView, splitPanes: newSplitPanes };
+      const collapsedCount = terminalTabs.length <= 1 ? 1 : state.splitCount;
+      const collapsedPanes = collapsedCount === 1 ? [] : newSplitPanes;
+      return {
+        tabs: newTabs,
+        sessions: newSessions,
+        activeTabId: newActiveId,
+        mainView: newMainView as MainView,
+        splitCount: collapsedCount,
+        splitPanes: collapsedPanes,
+      };
     }),
   setActiveTab: (id) =>
     set({ activeTabId: id, mainView: id === 'asset-list' ? 'asset-list' : 'terminal' }),

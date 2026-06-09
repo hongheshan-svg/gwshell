@@ -45,11 +45,11 @@ export const TerminalContainer: React.FC = () => {
         <div className={`terminal-container terminal-split-grid split-${splitCount}`}>
           {splitPanes.map((id, slot) => {
             if (id == null) {
-              return <div key={`empty-${slot}`} className="terminal-pane terminal-pane-empty" />;
+              return <div key={`empty-${slot}`} className="terminal-pane-empty" />;
             }
             const tab = terminalTabs.find((t) => t.id === id);
             if (!tab) {
-              return <div key={`gone-${slot}`} className="terminal-pane terminal-pane-empty" />;
+              return <div key={`gone-${slot}`} className="terminal-pane-empty" />;
             }
             const isActive = tab.id === activeTabId;
             return (
