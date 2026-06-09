@@ -545,5 +545,10 @@
   "dash_offline": "Timeout",
   "dash_disk": "DISK",
   "dash_load": "LOAD",
-  "dash_ungrouped": "Ungrouped"
+  "dash_ungrouped": "Ungrouped",
+  "docker_pick_container": "Select a container",
+  "docker_no_containers": "No running containers on this host",
+  "docker_listing": "Listing containers…",
+  "docker_not_found": "docker command failed — is Docker installed and running?",
+  "docker_connecting_container": "Connecting to container…"
 }

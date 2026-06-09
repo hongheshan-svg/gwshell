@@ -18,6 +18,7 @@ const TerminalContainer = lazy(() => import('./components/Terminal/TerminalConta
 const SftpPanel = lazy(() => import('./components/SftpPanel/SftpPanel').then(m => ({ default: m.SftpPanel })));
 const TerminalSearchBar = lazy(() => import('./components/Terminal/TerminalSearchBar').then(m => ({ default: m.TerminalSearchBar })));
 import { useAppStore } from './stores/appStore';
+import { DockerContainerPicker } from './components/Terminal/DockerContainerPicker';
 import { useSettingsStore } from './stores/settingsStore';
 import { useSettingsEffects } from './hooks/useSettingsEffects';
 import { createKeymapHandler } from './keymap/dispatch';
@@ -50,6 +51,7 @@ function App() {
     showTerminalSearch,
     focusedBlock,
     groupDefaultsTarget,
+    dockerPicker, setDockerPicker,
     vaultLocked, setVaultLocked,
     mainView, activeNavItem, sidebarCollapsed } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
@@ -239,6 +241,13 @@ function App() {
           <SecurityNotice />
           <ServerPanel />
         </Suspense>
+        {dockerPicker && (
+          <DockerContainerPicker
+            containers={dockerPicker.containers}
+            onPick={(id) => { window.dispatchEvent(new CustomEvent('gwshell:docker-pick', { detail: { tabId: dockerPicker.tabId, id } })); setDockerPicker(null); }}
+            onCancel={() => { window.dispatchEvent(new CustomEvent('gwshell:docker-cancel', { detail: { tabId: dockerPicker.tabId } })); setDockerPicker(null); }}
+          />
+        )}
       </div>
     </I18nextProvider>
   );

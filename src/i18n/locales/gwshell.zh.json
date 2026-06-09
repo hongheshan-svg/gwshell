@@ -545,5 +545,10 @@
   "dash_offline": "超时",
   "dash_disk": "磁盘",
   "dash_load": "负载",
-  "dash_ungrouped": "未分组"
+  "dash_ungrouped": "未分组",
+  "docker_pick_container": "选择容器",
+  "docker_no_containers": "该主机没有运行中的容器",
+  "docker_listing": "正在列出容器…",
+  "docker_not_found": "docker 命令失败 —— Docker 是否已安装并运行？",
+  "docker_connecting_container": "正在连接容器…"
 }

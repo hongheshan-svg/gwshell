@@ -3,6 +3,8 @@ import { invoke } from '@tauri-apps/api/core';
 import type { SessionConfig, TabInfo, ThemeMode, MainView } from '../types';
 import i18n, { detectLocale, type Locale, type TranslationKeys } from '../i18n';
 
+export interface DockerContainer { id: string; name: string; image: string; status: string; }
+
 interface AppStore {
   // Locale
   locale: Locale;
@@ -71,6 +73,8 @@ interface AppStore {
   setShowLocalTerminalModal: (show: boolean) => void;
   showSerialModal: boolean;
   setShowSerialModal: (show: boolean) => void;
+  dockerPicker: { tabId: string; containers: DockerContainer[] } | null;
+  setDockerPicker: (p: { tabId: string; containers: DockerContainer[] } | null) => void;
 
   // Menu
   showAppMenu: boolean;
@@ -270,6 +274,8 @@ export const useAppStore = create<AppStore>((set, _get) => ({
   setShowLocalTerminalModal: (show) => set({ showLocalTerminalModal: show }),
   showSerialModal: false,
   setShowSerialModal: (show) => set({ showSerialModal: show }),
+  dockerPicker: null,
+  setDockerPicker: (p) => set({ dockerPicker: p }),
 
   showAppMenu: false,
   setShowAppMenu: (show) => set({ showAppMenu: show }),
