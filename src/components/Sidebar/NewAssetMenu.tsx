@@ -68,7 +68,11 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
     if (itemId === 'remote') {
       const target = e.currentTarget as HTMLElement;
       const rect = target.getBoundingClientRect();
-      setSubmenuPos({ top: rect.top, left: rect.right + 4 });
+      // Flush against the panel's right edge (no gap). The submenu is a DOM child
+      // of .new-asset-menu, so a flush position lets the cursor move from the
+      // Remote row into the submenu without crossing a dead zone over the overlay
+      // (which would fire the panel's onMouseLeave and collapse the submenu).
+      setSubmenuPos({ top: rect.top, left: rect.right });
     }
   };
 
@@ -108,11 +112,10 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
           </div>
         ))}
 
-        {/* Submenu for remote — keep hoveredItem='remote' while cursor is inside
-            so that moving from the Remote row directly into the submenu doesn't
-            collapse it (the onMouseLeave on the main panel fires before this
-            onMouseEnter, but React batches the state update so the submenu
-            stays mounted). */}
+        {/* Submenu for remote. It is a DOM child of .new-asset-menu and positioned
+            flush against the panel's right edge, so moving the cursor from the
+            Remote row into it stays within the panel's subtree and does not fire
+            the panel's onMouseLeave. onMouseEnter re-pins 'remote' as a safety net. */}
         {hoveredItem === 'remote' && submenuPos && (
           <div
             className="new-asset-submenu"
