@@ -450,19 +450,26 @@ impl PtyManager {
         }
     }
 
-    pub fn create_shell(
+    /// Shared helper: open a PTY, spawn `cmd` in it, start the reader/writer
+    /// threads, and register the session handle.  This is the part of
+    /// `create_shell` that lives AFTER the `CommandBuilder` (and env/cwd) are
+    /// fully set up.  `create_docker_exec` also calls this directly.
+    ///
+    /// * `charset_str`       — effective charset (e.g. "UTF-8", "GBK"); used
+    ///                         for the reader decoder and stored on the handle.
+    /// * `integration_temp`  — optional shell-integration tempfile / tempdir
+    ///                         kept alive for the session lifetime via `Arc`.
+    ///                         Pass `None` for docker / any non-shell caller.
+    fn spawn_in_pty(
         &self,
         session_id: &str,
         app_handle: AppHandle,
         rows: u16,
         cols: u16,
-        shell_name: Option<String>,
-        working_dir: Option<String>,
-        charset: Option<String>,
-        shell_integration: bool,
+        cmd: CommandBuilder,
+        charset_str: String,
+        integration_temp: Option<TempIntegration>,
     ) -> Result<(), String> {
-        self.close_pty(session_id);
-
         let pty_system = native_pty_system();
         let pair = pty_system
             .openpty(PtySize {
@@ -472,35 +479,6 @@ impl PtyManager {
                 pixel_height: 0,
             })
             .map_err(|e| format!("Failed to open PTY: {}", e))?;
-
-        let (mut cmd, integration_temp) = resolve_shell(shell_name.as_deref(), shell_integration);
-
-        // Set charset-aware env vars
-        let charset_str = charset.clone().unwrap_or_else(|| "UTF-8".to_string());
-        // Tell CLI/TUI apps the terminal capabilities (critical for apps like claude, vim, htop)
-        cmd.env("TERM", "xterm-256color");
-        cmd.env("COLORTERM", "truecolor");
-        cmd.env("PYTHONIOENCODING", &charset_str);
-        #[cfg(not(target_os = "windows"))]
-        {
-            let locale = match charset_str.to_lowercase().as_str() {
-                "gbk" | "gb2312" => "zh_CN.GBK",
-                "gb18030" => "zh_CN.GB18030",
-                "big5" => "zh_TW.Big5",
-                "shift-jis" | "shift_jis" => "ja_JP.SJIS",
-                "euc-jp" => "ja_JP.EUC-JP",
-                "euc-kr" => "ko_KR.EUC-KR",
-                "koi8-r" => "ru_RU.KOI8-R",
-                _ => "en_US.UTF-8",
-            };
-            cmd.env("LANG", locale);
-        }
-
-        if let Some(ref dir) = working_dir {
-            cmd.cwd(std::path::Path::new(dir));
-        } else if let Some(home) = dirs::home_dir() {
-            cmd.cwd(home);
-        }
 
         let child = pair
             .slave
@@ -658,6 +636,74 @@ impl PtyManager {
         });
 
         Ok(())
+    }
+
+    pub fn create_shell(
+        &self,
+        session_id: &str,
+        app_handle: AppHandle,
+        rows: u16,
+        cols: u16,
+        shell_name: Option<String>,
+        working_dir: Option<String>,
+        charset: Option<String>,
+        shell_integration: bool,
+    ) -> Result<(), String> {
+        self.close_pty(session_id);
+
+        let (mut cmd, integration_temp) = resolve_shell(shell_name.as_deref(), shell_integration);
+
+        // Set charset-aware env vars
+        let charset_str = charset.clone().unwrap_or_else(|| "UTF-8".to_string());
+        // Tell CLI/TUI apps the terminal capabilities (critical for apps like claude, vim, htop)
+        cmd.env("TERM", "xterm-256color");
+        cmd.env("COLORTERM", "truecolor");
+        cmd.env("PYTHONIOENCODING", &charset_str);
+        #[cfg(not(target_os = "windows"))]
+        {
+            let locale = match charset_str.to_lowercase().as_str() {
+                "gbk" | "gb2312" => "zh_CN.GBK",
+                "gb18030" => "zh_CN.GB18030",
+                "big5" => "zh_TW.Big5",
+                "shift-jis" | "shift_jis" => "ja_JP.SJIS",
+                "euc-jp" => "ja_JP.EUC-JP",
+                "euc-kr" => "ko_KR.EUC-KR",
+                "koi8-r" => "ru_RU.KOI8-R",
+                _ => "en_US.UTF-8",
+            };
+            cmd.env("LANG", locale);
+        }
+
+        if let Some(ref dir) = working_dir {
+            cmd.cwd(std::path::Path::new(dir));
+        } else if let Some(home) = dirs::home_dir() {
+            cmd.cwd(home);
+        }
+
+        self.spawn_in_pty(session_id, app_handle, rows, cols, cmd, charset_str, integration_temp)
+    }
+
+    /// Spawn `docker exec -it <container_id> sh -c 'exec bash 2>/dev/null || exec sh'`
+    /// in a local PTY, keyed by `session_id`.  Uses the shared `spawn_in_pty`
+    /// helper so the same reader/writer/resize/handle machinery is reused.
+    pub fn create_docker_exec(
+        &self,
+        session_id: &str,
+        app_handle: AppHandle,
+        rows: u16,
+        cols: u16,
+        container_id: &str,
+    ) -> Result<(), String> {
+        self.close_pty(session_id);
+
+        let mut cmd = CommandBuilder::new("docker");
+        cmd.args([
+            "exec", "-it", container_id,
+            "sh", "-c", "exec bash 2>/dev/null || exec sh",
+        ]);
+        cmd.env("TERM", "xterm-256color");
+        cmd.env("COLORTERM", "truecolor");
+        self.spawn_in_pty(session_id, app_handle, rows, cols, cmd, "UTF-8".to_string(), None)
     }
 
     pub fn write_to_pty(&self, session_id: &str, data: &[u8]) -> Result<(), String> {
