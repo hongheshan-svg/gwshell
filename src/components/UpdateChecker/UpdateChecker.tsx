@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { check, type Update } from '@tauri-apps/plugin-updater';
-import { Download, X } from 'lucide-react';
+import { relaunch } from '@tauri-apps/plugin-process';
+import { Download, RefreshCw, X } from 'lucide-react';
 
 type UpdateState = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error';
 
@@ -16,6 +17,8 @@ export const UpdateChecker: React.FC = () => {
   // flake / already-applied) and leave the toast stuck forever on "Downloading".
   const updateRef = useRef<Update | null>(null);
 
+  const DISMISSED_KEY = 'gwshell.updateDismissedVersion';
+
   const checkForUpdate = async () => {
     setState('checking');
     try {
@@ -23,7 +26,13 @@ export const UpdateChecker: React.FC = () => {
       if (update) {
         updateRef.current = update;
         setNewVersion(update.version);
-        setState('available');
+        // Only show if this version hasn't been dismissed before
+        const dismissedVersion = localStorage.getItem(DISMISSED_KEY);
+        if (dismissedVersion === update.version) {
+          setState('idle');
+        } else {
+          setState('available');
+        }
       } else {
         setState('idle');
       }
@@ -106,7 +115,10 @@ export const UpdateChecker: React.FC = () => {
             <Download size={12} />
             {t('update_download')}
           </button>
-          <button className="update-toast-btn" onClick={() => setDismissed(true)}>
+          <button className="update-toast-btn" onClick={() => {
+            localStorage.setItem(DISMISSED_KEY, newVersion);
+            setDismissed(true);
+          }}>
             <X size={12} />
           </button>
         </>
@@ -127,6 +139,10 @@ export const UpdateChecker: React.FC = () => {
           <div className="update-toast-text">
             <strong>{t('update_restart')}</strong>
           </div>
+          <button className="update-toast-btn primary" onClick={() => void relaunch()}>
+            <RefreshCw size={12} />
+            {t('update_restart_now')}
+          </button>
         </>
       )}
       {state === 'error' && (

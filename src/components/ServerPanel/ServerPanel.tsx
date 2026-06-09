@@ -11,6 +11,7 @@ import type {
 import { HostCard } from './HostCard';
 import { CpuCard } from './CpuCard';
 import { MemCard } from './MemCard';
+import { DiskCard } from './DiskCard';
 import { NetCard } from './NetCard';
 import { ProcessList } from './ProcessList';
 import { NicList } from './NicList';
@@ -159,6 +160,7 @@ export const ServerPanel: React.FC = () => {
             <HostCard host={snapshot?.host ?? null} hostIp={hostIp} />
             <CpuCard cpu={snapshot?.cpu ?? null} />
             <MemCard mem={snapshot?.mem ?? null} />
+            <DiskCard disk={snapshot?.disk ?? null} />
             <NetCard
               net={snapshot?.net ?? null}
               cpuHistory={cpuHistoryRef.current}

@@ -14,7 +14,11 @@ export const SecurityNotice: React.FC = () => {
   const { t } = useTranslation();
   const [show, setShow] = useState(false);
 
+  const DISMISSED_KEY = 'gwshell.securityNoticeDismissed';
+
   useEffect(() => {
+    // Don't show if previously dismissed
+    if (localStorage.getItem(DISMISSED_KEY)) return;
     let cancelled = false;
     invoke<boolean>('secret_storage_available')
       .then((available) => {
@@ -35,7 +39,10 @@ export const SecurityNotice: React.FC = () => {
         <strong>{t('secret_storage_warning_title')}</strong>
         <span>{t('secret_storage_warning_body')}</span>
       </div>
-      <button className="update-toast-btn" onClick={() => setShow(false)}>
+      <button className="update-toast-btn" onClick={() => {
+        localStorage.setItem(DISMISSED_KEY, '1');
+        setShow(false);
+      }}>
         <X size={12} />
       </button>
     </div>
