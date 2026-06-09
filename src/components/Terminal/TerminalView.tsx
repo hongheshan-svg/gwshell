@@ -458,6 +458,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
 
     let cancelled = false;
     let resolveDockerPick: ((id: string | null) => void) | null = null;
+    let cancelDockerPick: (() => void) | null = null;
     const container = containerRef.current;
 
     const initTerminal = async () => {
@@ -1710,14 +1711,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               if (d?.tabId === tab.id) { cleanup(); resolve(null); }
             };
             const cleanup = () => {
+              cancelDockerPick = null;
               resolveDockerPick = null;
               window.removeEventListener('gwshell:docker-pick', onPick);
               window.removeEventListener('gwshell:docker-cancel', onCancel);
             };
+            cancelDockerPick = cleanup;
             window.addEventListener('gwshell:docker-pick', onPick);
             window.addEventListener('gwshell:docker-cancel', onCancel);
             useAppStore.getState().setDockerPicker({ tabId: tab.id, containers });
           });
+          cancelDockerPick = null;
           resolveDockerPick = null;
           if (cancelled) return;
           if (!containerId) {
@@ -1756,11 +1760,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
 
     return () => {
       cancelled = true;
-      // Unblock a docker-container picker that is open for this tab: resolve the
-      // awaited Promise to null so the async frame exits cleanly, and dismiss
+      // Unblock a docker-container picker that is open for this tab: remove the
+      // two window listeners first (via cancelDockerPick / cleanup), then resolve
+      // the awaited Promise to null so the async frame exits cleanly, and dismiss
       // the picker UI. Without this the Promise never resolves on tab close,
       // leaking both window listeners and the on-screen picker modal.
-      resolveDockerPick?.(null);
+      // Capture resolve ref BEFORE cancelDockerPick nulls it (cleanup sets both
+      // cancelDockerPick and resolveDockerPick to null).
+      const pendingResolve = resolveDockerPick;
+      cancelDockerPick?.();   // removes listeners + nulls cancelDockerPick & resolveDockerPick
+      pendingResolve?.(null); // unblocks the awaiting async frame
       useAppStore.getState().setDockerPicker(null);
       // Unstick a pending fingerprint-confirm prompt so its awaiting async frame
       // (which captures `instance`/`session`) completes instead of leaking.
