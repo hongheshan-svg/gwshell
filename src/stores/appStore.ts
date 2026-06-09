@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { SessionConfig, TabInfo, ThemeMode, MainView } from '../types';
 import i18n, { detectLocale, type Locale, type TranslationKeys } from '../i18n';
+import { buildSplitPanes, clearSlot, fillFirstEmpty } from '../lib/splitLayout';
 
 export interface DockerContainer { id: string; name: string; image: string; status: string; }
 
@@ -46,9 +47,10 @@ interface AppStore {
   setActiveTab: (id: string) => void;
   updateTabConnected: (id: string, connected: boolean) => void;
 
-  // Split (opt-in 2-pane side-by-side). null = single-pane (default, unchanged path).
-  splitTabId: string | null;
-  setSplitTabId: (id: string | null) => void;
+  // Split (opt-in multi-pane grid). splitCount=1 = single-pane (default).
+  splitCount: 1 | 2 | 4 | 6 | 8;
+  splitPanes: (string | null)[];
+  setSplitCount: (n: 1 | 2 | 4 | 6 | 8) => void;
 
   // Broadcast
   broadcastInput: boolean;
@@ -199,6 +201,7 @@ export const useAppStore = create<AppStore>((set, _get) => ({
       tabs: [...state.tabs, tab],
       activeTabId: tab.id,
       mainView: tab.type === 'asset-list' ? 'asset-list' : 'terminal',
+      splitPanes: state.splitCount > 1 ? fillFirstEmpty(state.splitPanes, tab.id) : state.splitPanes,
     })),
   removeTab: (id) =>
     set((state) => {
@@ -207,8 +210,8 @@ export const useAppStore = create<AppStore>((set, _get) => ({
       const newTabs = state.tabs.filter((t) => t.id !== id);
       const terminalTabs = newTabs.filter((t) => t.type !== 'asset-list');
 
-      // If the closed tab was the split partner, drop back to single-pane.
-      const newSplitTabId = state.splitTabId === id ? null : state.splitTabId;
+      // Clear the closed tab from split panes.
+      const newSplitPanes = clearSlot(state.splitPanes, id);
 
       // Clean up temporary sessions created by split-screen cloning
       let newSessions = state.sessions;
@@ -229,7 +232,8 @@ export const useAppStore = create<AppStore>((set, _get) => ({
           sessions: newSessions,
           activeTabId: 'asset-list',
           mainView: 'asset-list' as MainView,
-          splitTabId: newSplitTabId,
+          splitCount: 1,
+          splitPanes: [],
         };
       }
 
@@ -239,7 +243,7 @@ export const useAppStore = create<AppStore>((set, _get) => ({
           : state.activeTabId;
       const newMainView = newActiveId === 'asset-list' ? 'asset-list' : 'terminal';
 
-      return { tabs: newTabs, sessions: newSessions, activeTabId: newActiveId, mainView: newMainView as MainView, splitTabId: newSplitTabId };
+      return { tabs: newTabs, sessions: newSessions, activeTabId: newActiveId, mainView: newMainView as MainView, splitPanes: newSplitPanes };
     }),
   setActiveTab: (id) =>
     set({ activeTabId: id, mainView: id === 'asset-list' ? 'asset-list' : 'terminal' }),
@@ -250,8 +254,14 @@ export const useAppStore = create<AppStore>((set, _get) => ({
       ),
     })),
 
-  splitTabId: null,
-  setSplitTabId: (id) => set({ splitTabId: id }),
+  splitCount: 1,
+  splitPanes: [],
+  setSplitCount: (n) =>
+    set((state) => {
+      if (n === 1) return { splitCount: 1, splitPanes: [] };
+      const termIds = state.tabs.filter((t) => t.type !== 'asset-list').map((t) => t.id);
+      return { splitCount: n, splitPanes: buildSplitPanes(termIds, state.activeTabId, n) };
+    }),
 
   broadcastInput: false,
   toggleBroadcastInput: () => set((s) => ({ broadcastInput: !s.broadcastInput })),
