@@ -99,10 +99,7 @@ export const DockerModal: React.FC = () => {
       <div className="ssh-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="ssh-modal-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h2>{t('docker_config_title')}</h2>
-            <span className="docker-notice-badge">{t('docker_notice')}</span>
-          </div>
+          <h2>{t('docker_config_title')}</h2>
           <button className="modal-close" onClick={handleClose}>
             <X size={16} />
           </button>

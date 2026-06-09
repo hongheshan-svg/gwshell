@@ -136,7 +136,6 @@
   "ssh_jump_key_path": "Jump Host Private Key Path (optional, overrides password)",
   "ssh_jump_desc": "Connection flow: Local → Jump ({{jumpHost}}:{{jumpPort}}) → Target ({{host}}:{{port}})",
   "docker_config_title": "Docker Configuration",
-  "docker_notice": "Read before use",
   "docker_tab_standard": "Standard",
   "docker_tab_proxy": "Proxy",
   "docker_protocol": "Protocol",

@@ -2721,18 +2721,6 @@ a:focus-visible,
   flex-shrink: 0;
 }
 
-/* Docker notice badge */
-.docker-notice-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 10px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #fff;
-  background: var(--danger);
-  border-radius: var(--radius-sm);
-  white-space: nowrap;
-}
 
 /* Docker type tag */
 .type-tag.docker {

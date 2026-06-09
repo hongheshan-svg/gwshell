@@ -136,7 +136,6 @@
   "ssh_jump_key_path": "跳板机私钥路径（可选，优先于密码）",
   "ssh_jump_desc": "连接流程：本机 → 跳板机 ({{jumpHost}}:{{jumpPort}}) → 目标主机 ({{host}}:{{port}})",
   "docker_config_title": "Docker配置编辑",
-  "docker_notice": "使用前请阅读",
   "docker_tab_standard": "标准",
   "docker_tab_proxy": "代理",
   "docker_protocol": "协议",
