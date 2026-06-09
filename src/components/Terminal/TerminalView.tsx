@@ -690,37 +690,65 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         termRef.attachCustomKeyEventHandler((e) => {
           if (e.type !== "keydown") return true;
 
-          // Ghost text: accept (Tab / →) or cycle candidates (↓ Ctrl-N / ↑ Ctrl-P).
+          // Completion dropdown: navigate (↑/↓/Ctrl-N/Ctrl-P), accept (Tab/→),
+          // dismiss (Esc), smart Enter (accept only if the user navigated).
           if (isInteractiveTerminal(tab.type)) {
-            const ghost = ghostTextState.get(tab.id) ?? '';
-            const cands = tabCandidates.get(tab.id) ?? [];
+            const items = tabCompletions.get(tab.id) ?? [];
             const plainArrow = !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
 
-            if (ghost && (e.key === 'Tab' || (e.key === 'ArrowRight' && plainArrow))) {
-              e.preventDefault();
-              ghostAcceptCallbacks.get(tab.id)?.(ghost);
-              return false;
-            }
-
-            const cycleNext =
-              (e.key === 'ArrowDown' && plainArrow) || (e.key === 'n' && e.ctrlKey);
-            const cyclePrev =
-              (e.key === 'ArrowUp' && plainArrow) || (e.key === 'p' && e.ctrlKey);
-            if (ghost && (cycleNext || cyclePrev) && cands.length > 1) {
-              e.preventDefault();
+            if (items.length > 0) {
+              const idx = tabCompletionIdx.get(tab.id) ?? 0;
               const buf = inputBuffers.get(tab.id) ?? '';
-              let idx = candidateIndex.get(tab.id) ?? 0;
-              idx = cycleNext
-                ? (idx + 1) % cands.length
-                : (idx - 1 + cands.length) % cands.length;
-              candidateIndex.set(tab.id, idx);
-              const suffix = cands[idx].slice(buf.length);
-              ghostTextState.set(tab.id, suffix);
-              const inst = terminalInstances.get(tab.id);
-              const cx = inst?.terminal.buffer.active.cursorX ?? 0;
-              const cy = inst?.terminal.buffer.active.cursorY ?? 0;
-              ghostTextSetters.get(tab.id)?.(suffix, cx, cy);
-              return false;
+
+              const accept = (i: number) => {
+                e.preventDefault();
+                completionAccept.get(tab.id)?.(items[i].text.slice(buf.length));
+              };
+
+              const repaint = (i: number) => {
+                const inst = terminalInstances.get(tab.id);
+                const cx = inst?.terminal.buffer.active.cursorX ?? 0;
+                const cy = inst?.terminal.buffer.active.cursorY ?? 0;
+                const rows = inst?.terminal.rows ?? 24;
+                const above = cy > rows - Math.min(items.length, 8) - 1;
+                completionSetters.get(tab.id)?.(items, i, cx, cy, above);
+              };
+
+              // Accept with Tab / →
+              if (e.key === 'Tab' || (e.key === 'ArrowRight' && plainArrow)) {
+                accept(idx);
+                return false;
+              }
+
+              // Dismiss with Esc
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                tabCompletions.set(tab.id, []);
+                tabCompletionIdx.set(tab.id, 0);
+                completionNav.set(tab.id, false);
+                completionSetters.get(tab.id)?.([], 0, 0, 0, false);
+                return false;
+              }
+
+              // Navigate with ↑/↓ (or Ctrl-N/Ctrl-P)
+              const next = (e.key === 'ArrowDown' && plainArrow) || (e.key === 'n' && e.ctrlKey);
+              const prev = (e.key === 'ArrowUp' && plainArrow) || (e.key === 'p' && e.ctrlKey);
+              if (next || prev) {
+                e.preventDefault();
+                const n = items.length;
+                const ni = next ? (idx + 1) % n : (idx - 1 + n) % n;
+                tabCompletionIdx.set(tab.id, ni);
+                completionNav.set(tab.id, true);
+                repaint(ni);
+                return false;
+              }
+
+              // Smart Enter: accept the highlighted item only if the user has
+              // actively navigated; otherwise fall through so the shell runs it.
+              if (e.key === 'Enter' && completionNav.get(tab.id)) {
+                accept(idx);
+                return false;
+              }
             }
           }
 
