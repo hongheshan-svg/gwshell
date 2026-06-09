@@ -700,9 +700,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               const idx = tabCompletionIdx.get(tab.id) ?? 0;
               const buf = inputBuffers.get(tab.id) ?? '';
 
-              const accept = (i: number) => {
+              const accept = (i: number): false => {
                 e.preventDefault();
                 completionAccept.get(tab.id)?.(items[i].text.slice(buf.length));
+                return false;
               };
 
               const repaint = (i: number) => {
@@ -716,8 +717,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
 
               // Accept with Tab / →
               if (e.key === 'Tab' || (e.key === 'ArrowRight' && plainArrow)) {
-                accept(idx);
-                return false;
+                return accept(idx);
               }
 
               // Dismiss with Esc
@@ -746,8 +746,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               // Smart Enter: accept the highlighted item only if the user has
               // actively navigated; otherwise fall through so the shell runs it.
               if (e.key === 'Enter' && completionNav.get(tab.id)) {
-                accept(idx);
-                return false;
+                return accept(idx);
               }
             }
           }
@@ -1334,6 +1333,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         try { osc7Dispose.dispose(); } catch {}
         try { osc133Dispose.dispose(); } catch {}
         completionAccept.delete(tab.id);
+        // completionSetters is NOT deleted here — it is cleaned up by the
+        // component useEffect return and destroyTerminal, matching the
+        // pre-migration ghostTextSetters lifecycle exactly.
         tabInputSenders.delete(tab.id);
         tabCompletions.delete(tab.id);
         tabCompletionIdx.delete(tab.id);
