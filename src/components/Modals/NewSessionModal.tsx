@@ -7,6 +7,11 @@ import { useEscapeClose } from '../../lib/useEscapeClose';
 import type { SessionConfig } from '../../types';
 import type { TranslationKeys } from '../../i18n';
 
+const colorLabels = [
+  '#ef4444', '#f97316', '#eab308', '#22c55e', '#10b981',
+  '#06b6d4', '#3b82f6', '#6366f1', '#a855f7', '#9ca3af', '#374151',
+];
+
 const configTabKeys: { id: string; labelKey: TranslationKeys }[] = [
   { id: 'standard', labelKey: 'ssh_tab_standard' },
   { id: 'tunnel', labelKey: 'ssh_tab_tunnel' },
@@ -259,10 +264,29 @@ export const NewSessionModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Environment tag — optional/cosmetic, kept after the essential fields */}
+              {/* Color label + Environment — optional/cosmetic, kept after the essential fields */}
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
                   <label>{t('ssh_color_label')}</label>
+                  <div className="color-label-row">
+                    {colorLabels.map((color) => (
+                      <button
+                        key={color}
+                        className={`color-dot ${form.color_label === color ? 'selected' : ''}`}
+                        style={{ background: color }}
+                        onClick={() => setForm({ ...form, color_label: color })}
+                      />
+                    ))}
+                    <button
+                      className="color-dot-clear"
+                      onClick={() => setForm({ ...form, color_label: '' })}
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                </div>
+                <div className="ssh-form-group">
+                  <label>{t('ssh_environment')}</label>
                   <select
                     value={form.environment || ''}
                     onChange={(e) => setForm({ ...form, environment: e.target.value })}
