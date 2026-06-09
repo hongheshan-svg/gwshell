@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { X, FolderOpen } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { useSettingsStore, defaultSettings as persistedDefaultSettings } from '../../stores/settingsStore';
-import i18n from '../../i18n';
 import type { TranslationKeys } from '../../i18n';
 import { TERMINAL_SCHEME_OPTIONS } from '../../lib/terminalThemes';
 import { useEscapeClose } from '../../lib/useEscapeClose';
@@ -17,7 +16,6 @@ const navCategories: { title?: TranslationKeys; items: { id: string; labelKey: T
     items: [
       { id: 'basic', labelKey: 'settings_basic' },
       { id: 'ssh-sftp', labelKey: 'settings_ssh_sftp' },
-      { id: 'database', labelKey: 'settings_database' },
     ],
   },
   {
@@ -39,36 +37,20 @@ export interface AppSettings {
   theme: 'dark' | 'light';
   middleClickCloseTab: boolean;
   uiFont: string;
-  editorLineEnding: string;
   enableAnimation: boolean;
-  showRealtimeInfo: boolean;
-  tabCloseButtonPos: string;
   ligatures: boolean;
   mouseWheelZoom: boolean;
   tabCloseConfirm: boolean;
   tabFlashAlert: boolean;
-  multiLineTab: boolean;
   language: string;
-  updateChannel: string;
-  editorFont: string;
   zoomLevel: string;
-  editorFontSize: string;
-  editorAutoWrap: boolean;
-  editorTabMode: string;
-  autoLockScreen: boolean;
-  autoLockScreenTime: string;
-  lockScreenPassword: string;
   sessionTabMemory: boolean;
-  showVipBadge: boolean;
   // SSH/SFTP
   terminalFont: string;
   terminalFontSize: string;
-  terminalHighlight: boolean;
-  sshSftpPathLink: boolean;
   autoCopyOnSelect: boolean;
   terminalCmdHint: boolean;
   sshHistoryCmd: boolean;
-  sshHistoryCmdStorage: string;
   sshHistoryCmdLoadCount: string;
   pasteWarnMultiline: boolean;
   terminalColorScheme: string;
@@ -77,7 +59,6 @@ export interface AppSettings {
   cmdHintDeferToRemote: boolean;
   cmdHintScopeByHost: boolean;
   terminalStripeBackground: boolean;
-  renderMode: boolean;
   middleClickAction: string;
   rightClickAction: string;
   terminalSound: boolean;
@@ -85,30 +66,6 @@ export interface AppSettings {
   terminalLineHeight: string;
   terminalLetterSpacing: string;
   terminalMaxScrollback: string;
-  logDirectory: string;
-  sftpDefaultEditor: string;
-  sftpParentDirClick: boolean;
-  sftpDefaultSavePath: string;
-  sftpDoubleClickAction: string;
-  // Database
-  dbTableFont: string;
-  dbAutoExpand: boolean;
-  dbShowPrimaryKey: boolean;
-  dbCalcTotalRows: boolean;
-  dbCompositeHeader: boolean;
-  dbLoadAllFields: boolean;
-  dbTextAlign: string;
-  dbRowsPerPage: string;
-  dbDangerSqlConfirm: boolean;
-  dbStopOnError: boolean;
-  dbScrollMode: string;
-  dbTabSwitchSpeed: string;
-  redisMaxLoad: string;
-  redisShowValue: boolean;
-  redisGroupSeparator: string;
-  // Storage
-  storageAutoSync: boolean;
-  storageSource: string;
   keymapOverrides: Record<string, string | null>;
   // Quake dropdown console
   quakeEnabled: boolean;
@@ -116,86 +73,7 @@ export interface AppSettings {
   homeView: 'card' | 'table';
 }
 
-const _t = (key: TranslationKeys) => i18n.t(key);
 const CMD_TERMINAL_FONT = 'Consolas, "Cascadia Mono", "Courier New", monospace';
-
-const defaultSettings: AppSettings = {
-  theme: 'dark',
-  middleClickCloseTab: true,
-  uiFont: 'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif',
-  editorLineEnding: '(compat) \\r\\n',
-  enableAnimation: false,
-  showRealtimeInfo: false,
-  tabCloseButtonPos: _t('settings_tab_close_left'),
-  ligatures: true,
-  mouseWheelZoom: true,
-  tabCloseConfirm: true,
-  tabFlashAlert: true,
-  multiLineTab: false,
-  language: '简体中文',
-  updateChannel: _t('settings_update_stable'),
-  editorFont: 'JetBrainsMono, NotoSansSC',
-  zoomLevel: '100%',
-  editorFontSize: '14px',
-  editorAutoWrap: false,
-  editorTabMode: _t('settings_tab_mode_tab'),
-  autoLockScreen: false,
-  autoLockScreenTime: _t('settings_lock_time_off'),
-  lockScreenPassword: '',
-  sessionTabMemory: false,
-  showVipBadge: true,
-  terminalFont: CMD_TERMINAL_FONT,
-  terminalFontSize: '12px',
-  terminalHighlight: true,
-  sshSftpPathLink: false,
-  autoCopyOnSelect: true,
-  terminalCmdHint: false,
-  sshHistoryCmd: true,
-  sshHistoryCmdStorage: _t('settings_ssh_history_local'),
-  sshHistoryCmdLoadCount: '100',
-  pasteWarnMultiline: true,
-  terminalColorScheme: 'auto',
-  cmdHintAllSessions: true,
-  cmdHintShellIntegration: false,
-  cmdHintDeferToRemote: false,
-  cmdHintScopeByHost: true,
-  terminalStripeBackground: true,
-  renderMode: true,
-  middleClickAction: 'none',
-  rightClickAction: 'menu',
-  terminalSound: false,
-  ctrlVPaste: true,
-  terminalLineHeight: '1',
-  terminalLetterSpacing: '0',
-  terminalMaxScrollback: '1000',
-  logDirectory: '',
-  sftpDefaultEditor: _t('settings_sftp_editor_builtin'),
-  sftpParentDirClick: false,
-  sftpDefaultSavePath: '',
-  sftpDoubleClickAction: _t('settings_sftp_auto'),
-  dbTableFont: 'JetBrainsMono, NotoSansSC',
-  dbAutoExpand: true,
-  dbShowPrimaryKey: true,
-  dbCalcTotalRows: false,
-  dbCompositeHeader: false,
-  dbLoadAllFields: false,
-  dbTextAlign: _t('settings_db_align_auto'),
-  dbRowsPerPage: '500',
-  dbDangerSqlConfirm: true,
-  dbStopOnError: false,
-  dbScrollMode: _t('settings_db_scroll_natural'),
-  dbTabSwitchSpeed: '1',
-  redisMaxLoad: '10000',
-  redisShowValue: false,
-  redisGroupSeparator: ':',
-  storageAutoSync: true,
-  storageSource: _t('settings_storage_source_off'),
-  keymapOverrides: {},
-  quakeEnabled: false,
-  quakeHotkey: 'CommandOrControl+Shift+Backquote',
-  homeView: 'card',
-};
-void defaultSettings;
 
 /* ---- Shortcut data ---- */
 interface ShortcutItem { labelKey: TranslationKeys; keys: string }
@@ -552,30 +430,17 @@ export const SettingsModal: React.FC = () => {
                   <Row label={t('settings_theme')}><Sel value={settings.theme === 'dark' ? 'Dark' : 'Light'} options={['Dark', 'Light']} onChange={(v) => u('theme', v === 'Dark' ? 'dark' : 'light')} /></Row>
                   <Row label={t('settings_middle_close')}><Toggle value={settings.middleClickCloseTab} onChange={(v) => u('middleClickCloseTab', v)} /></Row>
                   <Row label={t('settings_ui_font')}><Sel value={settings.uiFont} options={fonts} onChange={(v) => u('uiFont', v)} /></Row>
-                  <Row label={t('settings_line_ending')}><Sel value={settings.editorLineEnding} options={['(compat) \\r\\n', '\\n', '\\r']} onChange={(v) => u('editorLineEnding', v)} /></Row>
                   <Row label={t('settings_animation')}><Toggle value={settings.enableAnimation} onChange={(v) => u('enableAnimation', v)} /></Row>
-                  <Row label={t('settings_realtime_info')} desc={t('settings_realtime_info_desc')}><Toggle value={settings.showRealtimeInfo} onChange={(v) => u('showRealtimeInfo', v)} /></Row>
-                  <Row label={t('settings_tab_close_pos')}><Sel value={settings.tabCloseButtonPos} options={[{ value: 'left', label: t('settings_tab_close_left') }, { value: 'right', label: t('settings_tab_close_right') }]} onChange={(v) => u('tabCloseButtonPos', v)} /></Row>
                   <Row label={t('settings_ligatures')}><Toggle value={settings.ligatures} onChange={(v) => u('ligatures', v)} /></Row>
                   <Row label={t('settings_mouse_zoom')}><Toggle value={settings.mouseWheelZoom} onChange={(v) => u('mouseWheelZoom', v)} /></Row>
                   <Row label={t('settings_tab_close_confirm')} desc={t('settings_tab_close_confirm_desc')}><Toggle value={settings.tabCloseConfirm} onChange={(v) => u('tabCloseConfirm', v)} /></Row>
                   <Row label={t('settings_tab_flash')} desc={t('settings_tab_flash_desc')}><Toggle value={settings.tabFlashAlert} onChange={(v) => u('tabFlashAlert', v)} /></Row>
-                  <Row label={t('settings_multiline_tab')} desc={t('settings_multiline_tab_desc')}><Toggle value={settings.multiLineTab} onChange={(v) => u('multiLineTab', v)} /></Row>
                 </div>
                 <div className="settings-col">
                   <SectionTitle>&nbsp;</SectionTitle>
                   <Row label={t('settings_language')}><Sel value={settings.language} options={['简体中文', 'English', '繁體中文', '日本語']} onChange={(v) => u('language', v)} /></Row>
-                  <Row label={t('settings_update_channel')} desc={t('settings_update_channel_desc')}><Sel value={settings.updateChannel} options={[{ value: 'stable', label: t('settings_update_stable') }, { value: 'beta', label: t('settings_update_beta') }, { value: 'dev', label: t('settings_update_dev') }]} onChange={(v) => u('updateChannel', v)} /></Row>
-                  <Row label={t('settings_editor_font')}><Sel value={settings.editorFont} options={fonts} onChange={(v) => u('editorFont', v)} /></Row>
                   <Row label={t('settings_zoom')}><Sel value={settings.zoomLevel} options={['80%', '90%', '100%', '110%', '120%', '150%']} onChange={(v) => u('zoomLevel', v)} /></Row>
-                  <Row label={t('settings_editor_fontsize')}><Sel value={settings.editorFontSize} options={['12px', '13px', '14px', '15px', '16px', '18px', '20px']} onChange={(v) => u('editorFontSize', v)} /></Row>
-                  <Row label={t('settings_editor_wrap')}><Toggle value={settings.editorAutoWrap} onChange={(v) => u('editorAutoWrap', v)} /></Row>
-                  <Row label={t('settings_editor_tab_mode')}><Sel value={settings.editorTabMode} options={[{ value: 'tab', label: t('settings_tab_mode_tab') }, { value: 'space2', label: t('settings_tab_mode_space2') }, { value: 'space4', label: t('settings_tab_mode_space4') }]} onChange={(v) => u('editorTabMode', v)} /></Row>
-                  <Row label={t('settings_auto_lock')} desc={t('settings_auto_lock_desc')}><Toggle value={settings.autoLockScreen} onChange={(v) => u('autoLockScreen', v)} /></Row>
-                  <Row label={t('settings_auto_lock_time')}><Sel value={settings.autoLockScreenTime} options={[{ value: 'off', label: t('settings_lock_time_off') }, { value: '1m', label: t('settings_lock_time_1m') }, { value: '5m', label: t('settings_lock_time_5m') }, { value: '10m', label: t('settings_lock_time_10m') }, { value: '30m', label: t('settings_lock_time_30m') }]} onChange={(v) => u('autoLockScreenTime', v)} /></Row>
-                  <Row label={t('settings_lock_password')}><input type="password" className="settings-input" value={settings.lockScreenPassword} onChange={(e) => u('lockScreenPassword', e.target.value)} disabled={!settings.autoLockScreen} /></Row>
                   <Row label={t('settings_session_tab_memory')} desc={t('settings_session_tab_memory_desc')}><Toggle value={settings.sessionTabMemory} onChange={(v) => u('sessionTabMemory', v)} /></Row>
-                  <Row label={t('settings_show_vip')} desc={t('settings_show_vip_desc')}><Toggle value={settings.showVipBadge} onChange={(v) => u('showVipBadge', v)} /></Row>
                   <Row label={t('settings_quake_enabled')} desc={t('settings_quake_hint')}><Toggle value={settings.quakeEnabled} onChange={(v) => u('quakeEnabled', v)} /></Row>
                   <Row label={t('settings_quake_hotkey')}><input type="text" className="settings-input" value={settings.quakeHotkey} onChange={(e) => u('quakeHotkey', e.target.value)} disabled={!settings.quakeEnabled} /></Row>
                 </div>
@@ -589,12 +454,9 @@ export const SettingsModal: React.FC = () => {
                 <div className="settings-columns">
                   <div className="settings-col">
                     <Row label={t('settings_terminal_font')} desc={t('settings_terminal_font_desc')}><Sel value={settings.terminalFont} options={fonts} onChange={(v) => u('terminalFont', v)} /></Row>
-                    <Row label={t('settings_terminal_highlight')}><Toggle value={settings.terminalHighlight} onChange={(v) => u('terminalHighlight', v)} /></Row>
-                    <Row label={t('settings_sftp_path_link')}><Toggle value={settings.sshSftpPathLink} onChange={(v) => u('sshSftpPathLink', v)} /></Row>
                     <Row label={t('settings_auto_copy')}><Toggle value={settings.autoCopyOnSelect} onChange={(v) => u('autoCopyOnSelect', v)} /></Row>
                     <Row label={t('settings_cmd_hint')}><Toggle value={settings.terminalCmdHint} onChange={(v) => u('terminalCmdHint', v)} /></Row>
                     <Row label={t('settings_ssh_history')}><Toggle value={settings.sshHistoryCmd} onChange={(v) => u('sshHistoryCmd', v)} /></Row>
-                    <Row label={t('settings_ssh_history_storage')}><Sel value={settings.sshHistoryCmdStorage} options={[t('settings_ssh_history_local'), t('settings_ssh_history_cloud')]} onChange={(v) => u('sshHistoryCmdStorage', v)} /></Row>
                     <Row label={t('settings_ssh_history_count')}><NumInput value={settings.sshHistoryCmdLoadCount} onChange={(v) => u('sshHistoryCmdLoadCount', v)} /></Row>
                     <Row label={t('settings_cmd_hint_all_sessions')}><Toggle value={settings.cmdHintAllSessions} onChange={(v) => u('cmdHintAllSessions', v)} /></Row>
                     <Row label={t('settings_cmd_hint_scope_host')}><Toggle value={settings.cmdHintScopeByHost} onChange={(v) => u('cmdHintScopeByHost', v)} /></Row>
@@ -603,7 +465,6 @@ export const SettingsModal: React.FC = () => {
                     <Row label={t('settings_paste_warn_multiline')}><Toggle value={settings.pasteWarnMultiline} onChange={(v) => u('pasteWarnMultiline', v)} /></Row>
                     <Row label={t('settings_terminal_color_scheme')}><Sel value={settings.terminalColorScheme} options={TERMINAL_SCHEME_OPTIONS} onChange={(v) => u('terminalColorScheme', v)} /></Row>
                     <Row label={t('settings_stripe_bg')}><Toggle value={settings.terminalStripeBackground} onChange={(v) => u('terminalStripeBackground', v)} /></Row>
-                    <Row label={t('settings_render_mode')} desc={t('settings_render_mode_desc')}><Toggle value={settings.renderMode} onChange={(v) => u('renderMode', v)} /></Row>
                   </div>
                   <div className="settings-col">
                     <Row label={t('settings_terminal_fontsize')}><Sel value={settings.terminalFontSize} options={['10px', '11px', '12px', '13px', '14px', '16px', '18px']} onChange={(v) => u('terminalFontSize', v)} /></Row>
@@ -614,63 +475,6 @@ export const SettingsModal: React.FC = () => {
                     <Row label={t('settings_line_height')}><NumInput value={settings.terminalLineHeight} onChange={(v) => u('terminalLineHeight', v)} prefix={t('settings_line_height_prefix')} /></Row>
                     <Row label={t('settings_letter_spacing')}><NumInput value={settings.terminalLetterSpacing} onChange={(v) => u('terminalLetterSpacing', v)} prefix={t('settings_letter_spacing_prefix')} /></Row>
                     <Row label={t('settings_max_scrollback')}><NumInput value={settings.terminalMaxScrollback} onChange={(v) => u('terminalMaxScrollback', v)} /></Row>
-                    <Row label={t('settings_log_dir')}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <button className="settings-icon-btn"><FolderOpen size={14} /></button>
-                        <input className="settings-input" style={{ width: 140 }} placeholder={t('settings_log_dir_placeholder')} value={settings.logDirectory} onChange={(e) => u('logDirectory', e.target.value)} />
-                      </div>
-                    </Row>
-                  </div>
-                </div>
-                <SectionTitle>SFTP</SectionTitle>
-                <div className="settings-columns">
-                  <div className="settings-col">
-                    <Row label={t('settings_sftp_editor')}><Sel value={settings.sftpDefaultEditor} options={[t('settings_sftp_editor_builtin'), 'VS Code', 'Sublime Text']} onChange={(v) => u('sftpDefaultEditor', v)} /></Row>
-                    <Row label={t('settings_sftp_parent_click')}><Toggle value={settings.sftpParentDirClick} onChange={(v) => u('sftpParentDirClick', v)} /></Row>
-                  </div>
-                  <div className="settings-col">
-                    <Row label={t('settings_sftp_save_path')}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <button className="settings-icon-btn"><FolderOpen size={14} /></button>
-                        <input className="settings-input" style={{ width: 140 }} placeholder={t('settings_sftp_save_path_placeholder')} value={settings.sftpDefaultSavePath} onChange={(e) => u('sftpDefaultSavePath', e.target.value)} />
-                      </div>
-                    </Row>
-                    <Row label={t('settings_sftp_double_click')}><Sel value={settings.sftpDoubleClickAction} options={[t('settings_sftp_auto'), t('settings_sftp_edit'), t('settings_sftp_download')]} onChange={(v) => u('sftpDoubleClickAction', v)} /></Row>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* ===== 数据库 ===== */}
-            {activeNav === 'database' && (
-              <>
-                <SectionTitle>{t('settings_db_title')}</SectionTitle>
-                <div className="settings-columns">
-                  <div className="settings-col">
-                    <Row label={t('settings_db_table_font')}><Sel value={settings.dbTableFont} options={fonts} onChange={(v) => u('dbTableFont', v)} /></Row>
-                    <Row label={t('settings_db_auto_expand')}><Toggle value={settings.dbAutoExpand} onChange={(v) => u('dbAutoExpand', v)} /></Row>
-                    <Row label={t('settings_db_primary_key')}><Toggle value={settings.dbShowPrimaryKey} onChange={(v) => u('dbShowPrimaryKey', v)} /></Row>
-                    <Row label={t('settings_db_total_rows')} desc={t('settings_db_total_rows_desc')}><Toggle value={settings.dbCalcTotalRows} onChange={(v) => u('dbCalcTotalRows', v)} /></Row>
-                    <Row label={t('settings_db_composite_header')} desc={t('settings_db_composite_header_desc')}><Toggle value={settings.dbCompositeHeader} onChange={(v) => u('dbCompositeHeader', v)} /></Row>
-                    <Row label={t('settings_db_load_all')} desc={t('settings_db_load_all_desc')}><Toggle value={settings.dbLoadAllFields} onChange={(v) => u('dbLoadAllFields', v)} /></Row>
-                  </div>
-                  <div className="settings-col">
-                    <Row label={t('settings_db_text_align')}><Sel value={settings.dbTextAlign} options={[t('settings_db_align_auto'), t('settings_db_align_left'), t('settings_db_align_center'), t('settings_db_align_right')]} onChange={(v) => u('dbTextAlign', v)} /></Row>
-                    <Row label={t('settings_db_rows_per_page')}><NumInput value={settings.dbRowsPerPage} onChange={(v) => u('dbRowsPerPage', v)} /></Row>
-                    <Row label={t('settings_db_danger_confirm')}><Toggle value={settings.dbDangerSqlConfirm} onChange={(v) => u('dbDangerSqlConfirm', v)} /></Row>
-                    <Row label={t('settings_db_stop_on_error')}><Toggle value={settings.dbStopOnError} onChange={(v) => u('dbStopOnError', v)} /></Row>
-                    <Row label={t('settings_db_scroll_mode')}><Sel value={settings.dbScrollMode} options={[t('settings_db_scroll_natural'), t('settings_db_scroll_classic')]} onChange={(v) => u('dbScrollMode', v)} /></Row>
-                    <Row label={t('settings_db_tab_switch_speed')}><NumInput value={settings.dbTabSwitchSpeed} onChange={(v) => u('dbTabSwitchSpeed', v)} /></Row>
-                  </div>
-                </div>
-                <SectionTitle>Redis</SectionTitle>
-                <div className="settings-columns">
-                  <div className="settings-col">
-                    <Row label={t('settings_db_redis_max_load')}><NumInput value={settings.redisMaxLoad} onChange={(v) => u('redisMaxLoad', v)} /></Row>
-                    <Row label={t('settings_db_redis_show_value')} desc={t('settings_db_redis_show_value_desc')}><Toggle value={settings.redisShowValue} onChange={(v) => u('redisShowValue', v)} /></Row>
-                  </div>
-                  <div className="settings-col">
-                    <Row label={t('settings_db_redis_separator')}><NumInput value={settings.redisGroupSeparator} onChange={(v) => u('redisGroupSeparator', v)} width={50} /></Row>
                   </div>
                 </div>
               </>
@@ -736,8 +540,6 @@ export const SettingsModal: React.FC = () => {
                     <button className="settings-btn-outline" style={{ marginRight: 6 }}>{t('settings_storage_import')}</button>
                     <button className="settings-btn-outline">{t('settings_storage_export')}</button>
                   </div>
-                  <Row label={t('settings_storage_auto_sync')} desc={t('settings_storage_auto_sync_desc')}><Toggle value={settings.storageAutoSync} onChange={(v) => u('storageAutoSync', v)} /></Row>
-                  <Row label={t('settings_storage_source')}><Sel value={settings.storageSource} options={[t('settings_storage_source_off'), 'GitHub Gist', 'Gitee Gist', 'WebDAV']} onChange={(v) => u('storageSource', v)} /></Row>
                 </div>
               </>
             )}

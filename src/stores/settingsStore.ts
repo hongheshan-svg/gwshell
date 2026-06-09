@@ -12,35 +12,19 @@ export interface AppSettings {
   theme: 'dark' | 'light';
   middleClickCloseTab: boolean;
   uiFont: string;
-  editorLineEnding: string;
   enableAnimation: boolean;
-  showRealtimeInfo: boolean;
-  tabCloseButtonPos: string;
   ligatures: boolean;
   mouseWheelZoom: boolean;
   tabCloseConfirm: boolean;
   tabFlashAlert: boolean;
-  multiLineTab: boolean;
   language: string;
-  updateChannel: string;
-  editorFont: string;
   zoomLevel: string;
-  editorFontSize: string;
-  editorAutoWrap: boolean;
-  editorTabMode: string;
-  autoLockScreen: boolean;
-  autoLockScreenTime: string;
-  lockScreenPassword: string;
   sessionTabMemory: boolean;
-  showVipBadge: boolean;
   terminalFont: string;
   terminalFontSize: string;
-  terminalHighlight: boolean;
-  sshSftpPathLink: boolean;
   autoCopyOnSelect: boolean;
   terminalCmdHint: boolean;
   sshHistoryCmd: boolean;
-  sshHistoryCmdStorage: string;
   sshHistoryCmdLoadCount: string;
   pasteWarnMultiline: boolean;
   terminalColorScheme: string;
@@ -49,7 +33,6 @@ export interface AppSettings {
   cmdHintDeferToRemote: boolean;
   cmdHintScopeByHost: boolean;
   terminalStripeBackground: boolean;
-  renderMode: boolean;
   middleClickAction: string;
   rightClickAction: string;
   terminalSound: boolean;
@@ -57,28 +40,6 @@ export interface AppSettings {
   terminalLineHeight: string;
   terminalLetterSpacing: string;
   terminalMaxScrollback: string;
-  logDirectory: string;
-  sftpDefaultEditor: string;
-  sftpParentDirClick: boolean;
-  sftpDefaultSavePath: string;
-  sftpDoubleClickAction: string;
-  dbTableFont: string;
-  dbAutoExpand: boolean;
-  dbShowPrimaryKey: boolean;
-  dbCalcTotalRows: boolean;
-  dbCompositeHeader: boolean;
-  dbLoadAllFields: boolean;
-  dbTextAlign: string;
-  dbRowsPerPage: string;
-  dbDangerSqlConfirm: boolean;
-  dbStopOnError: boolean;
-  dbScrollMode: string;
-  dbTabSwitchSpeed: string;
-  redisMaxLoad: string;
-  redisShowValue: boolean;
-  redisGroupSeparator: string;
-  storageAutoSync: boolean;
-  storageSource: string;
   keymapOverrides: Record<string, string | null>;
   quakeEnabled: boolean;
   quakeHotkey: string;
@@ -89,35 +50,19 @@ export const defaultSettings: AppSettings = {
   theme: 'dark',
   middleClickCloseTab: true,
   uiFont: 'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif',
-  editorLineEnding: '(compat) \\r\\n',
   enableAnimation: false,
-  showRealtimeInfo: false,
-  tabCloseButtonPos: 'left',
   ligatures: true,
   mouseWheelZoom: true,
   tabCloseConfirm: true,
   tabFlashAlert: true,
-  multiLineTab: false,
   language: 'zh',
-  updateChannel: 'stable',
-  editorFont: 'JetBrainsMono, NotoSansSC',
   zoomLevel: '100%',
-  editorFontSize: '14px',
-  editorAutoWrap: false,
-  editorTabMode: 'tab',
-  autoLockScreen: false,
-  autoLockScreenTime: 'off',
-  lockScreenPassword: '',
   sessionTabMemory: false,
-  showVipBadge: true,
   terminalFont: CMD_TERMINAL_FONT,
   terminalFontSize: '13px',
-  terminalHighlight: true,
-  sshSftpPathLink: false,
   autoCopyOnSelect: true,
   terminalCmdHint: false,
   sshHistoryCmd: true,
-  sshHistoryCmdStorage: 'local',
   sshHistoryCmdLoadCount: '100',
   pasteWarnMultiline: true,
   terminalColorScheme: 'auto',
@@ -126,7 +71,6 @@ export const defaultSettings: AppSettings = {
   cmdHintDeferToRemote: false,
   cmdHintScopeByHost: true,
   terminalStripeBackground: true,
-  renderMode: true,
   middleClickAction: 'none',
   rightClickAction: 'menu',
   terminalSound: false,
@@ -134,28 +78,6 @@ export const defaultSettings: AppSettings = {
   terminalLineHeight: '1.2',
   terminalLetterSpacing: '0',
   terminalMaxScrollback: '10000',
-  logDirectory: '',
-  sftpDefaultEditor: 'builtin',
-  sftpParentDirClick: false,
-  sftpDefaultSavePath: '',
-  sftpDoubleClickAction: 'auto',
-  dbTableFont: 'JetBrainsMono, NotoSansSC',
-  dbAutoExpand: true,
-  dbShowPrimaryKey: true,
-  dbCalcTotalRows: false,
-  dbCompositeHeader: false,
-  dbLoadAllFields: false,
-  dbTextAlign: 'auto',
-  dbRowsPerPage: '500',
-  dbDangerSqlConfirm: true,
-  dbStopOnError: false,
-  dbScrollMode: 'natural',
-  dbTabSwitchSpeed: '1',
-  redisMaxLoad: '10000',
-  redisShowValue: false,
-  redisGroupSeparator: ':',
-  storageAutoSync: true,
-  storageSource: 'off',
   keymapOverrides: {},
   quakeEnabled: false,
   quakeHotkey: 'CommandOrControl+Shift+Backquote',

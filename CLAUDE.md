@@ -43,7 +43,7 @@ GWShell is a **Tauri 2** desktop application: a React/TypeScript frontend render
 - **`stores/settingsStore.ts`** — separate Zustand store for user preferences (terminal font/size, editor settings, UI toggles). Persisted to backend via `invoke("save_settings")`.
 - **`types/index.ts`** — shared TypeScript types (`SessionConfig`, `TabInfo`, `ThemeMode`, `MainView`)
 - **`components/Terminal/TerminalView.tsx`** — xterm.js terminal. Maintains global maps (`terminalInstances`, `tabListenerCleanups`, `connectedTabs`) outside React to preserve terminal instances across re-renders and split-mode transitions. **Critical: only ONE set of event listeners per tab ID is allowed—`cleanupTabListeners()` must be called before re-attaching.**
-- **`components/Terminal/TerminalContainer.tsx`** — renders one or more `TerminalView`s in a CSS grid based on `splitCount` (1/2/4/6/8 panes)
+- **`components/Terminal/TerminalContainer.tsx`** — renders one or two `TerminalView`s side-by-side based on `splitTabId`
 - **`i18n/`** — bilingual (en/zh) via `i18next` + `react-i18next`. Translation files in `i18n/locales/gwshell.{en,zh}.json`. Namespace is `gwshell`.
 
 ### Backend (`src-tauri/src/`)
@@ -66,7 +66,7 @@ Backend pushes terminal output to the frontend via Tauri events:
 
 ### Split-Pane Architecture
 
-`splitCount` (1/2/4/6/8) drives the layout. When splitting, `AppStore.setSplitCount()` clones sessions marked `_temporary: true`—these are never persisted to SQLite and are cleaned up when their tab closes or split count decreases. The `splitPanes` array maps slot index → tab ID.
+The app supports an optional 2-pane side-by-side split. `splitTabId: string | null` in `appStore` drives the split: when non-null it identifies the second (partner) tab to display alongside the active tab. `setSplitTabId(id)` enables the split; `setSplitTabId(null)` returns to single-pane. If the partner tab is closed, `splitTabId` is automatically cleared. Temporary clone sessions created for the split are marked `_temporary: true` and are never persisted to SQLite.
 
 ### Session Types
 
