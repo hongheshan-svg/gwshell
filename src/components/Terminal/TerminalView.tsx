@@ -1036,7 +1036,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         const kind = payload.charAt(0);
         tabHasOsc133.set(tab.id, true);
         if (kind === 'A' || kind === 'B') {
-          // New prompt / command start — reset the heuristic buffer & ghost.
+          // New prompt / command start — reset the heuristic buffer & completions.
           inputBuffers.set(tab.id, '');
           tabCompletions.set(tab.id, []);
           tabCompletionIdx.set(tab.id, 0);
@@ -1098,7 +1098,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           return;
         }
 
-        // Command history: track input line and compute ghost text.
+        // Command history: track input line and compute completions.
         // Generalized beyond SSH; gated by sshHistoryCmd (capture) + cmdHintAllSessions.
         {
           const st = useSettingsStore.getState().settings;
@@ -1120,9 +1120,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             const rows = inst?.terminal.rows ?? 24;
             const locale = i18n.language?.startsWith('zh') ? 'zh' : 'en';
 
-            const showGhost = () => {
+            const showCompletions = () => {
               if (st.cmdHintDeferToRemote && tabHasOsc133.get(tab.id)) {
-                clearGhost();
+                hideCompletions();
                 return;
               }
               const items = buildCompletions(buf, { scope, cwd, sessionType }, locale);
@@ -1132,14 +1132,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               const above = cursorY > rows - Math.min(items.length, 8) - 1;
               setter?.(items, 0, cursorX, cursorY, above);
             };
-            const clearGhost = () => {
+            const hideCompletions = () => {
               tabCompletions.set(tab.id, []);
               tabCompletionIdx.set(tab.id, 0);
               completionNav.set(tab.id, false);
               setter?.([], 0, 0, 0, false);
             };
 
-            // Bracketed paste: buffer the pasted content into the line, no ghost.
+            // Bracketed paste: buffer the pasted content into the line, hide completions.
             if (data.includes('\x1b[200~')) bracketedPaste.set(tab.id, true);
             if (bracketedPaste.get(tab.id)) {
               const end = data.indexOf('\x1b[201~');
@@ -1147,7 +1147,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                 .replace(/\x1b\[200~/g, '');
               buf += chunk;
               if (end >= 0) bracketedPaste.set(tab.id, false);
-              clearGhost();
+              hideCompletions();
             } else if (data === '\r' || data === '\n') {
               const trimmed = buf.trim();
               // Record history on Enter ONLY when the shell has NOT yet emitted
@@ -1163,34 +1163,34 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               // 'C' can read it; the 'C' (and next 'A') handler clears it.
               // Without a real 'C', clear now so the buffer doesn't carry over.
               if (!tabHasOsc133Exec.get(tab.id)) buf = '';
-              clearGhost();
+              hideCompletions();
             } else if (data === '\x7f' || data === '\b') {
               // Backspace
               buf = buf.slice(0, -1);
-              if (buf.length > 0) showGhost();
-              else clearGhost();
+              if (buf.length > 0) showCompletions();
+              else hideCompletions();
             } else if (data === '\x17') {
               // Ctrl+W — delete the previous word
               buf = buf.replace(/\s*\S+\s*$/, '');
-              if (buf.length > 0) showGhost();
-              else clearGhost();
+              if (buf.length > 0) showCompletions();
+              else hideCompletions();
             } else if (data === '\x15' || data === '\x0b' || data === '\x0c') {
               // Ctrl+U / Ctrl+K / Ctrl+L — clear line / kill / clear screen
               if (data === '\x15') buf = '';
-              clearGhost();
+              hideCompletions();
             } else if (
               data === '\x1b[A' || data === '\x1b[B' || data === '\x1b[C' || data === '\x1b[D' ||
               data === '\x1b[H' || data === '\x1b[F' || data === '\x01' || data === '\x05'
             ) {
-              // Arrows / Home / End / Ctrl-A / Ctrl-E — cursor moves: clear ghost only.
-              clearGhost();
+              // Arrows / Home / End / Ctrl-A / Ctrl-E — cursor moves: hide the dropdown.
+              hideCompletions();
             } else if (data.startsWith('\x1b')) {
-              // Other escape sequences — clear ghost only.
-              clearGhost();
+              // Other escape sequences — hide the dropdown.
+              hideCompletions();
             } else if (data.length >= 1 && data.charCodeAt(0) >= 0x20) {
               // Printable text (single char or multi-char without bracketed markers).
               buf += data;
-              showGhost();
+              showCompletions();
             }
             inputBuffers.set(tab.id, buf);
           }

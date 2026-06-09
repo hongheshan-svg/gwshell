@@ -69,8 +69,3 @@ export function getSuggestions(prefix: string, ctx: SuggestCtx = {}): string[] {
     .map(([cmd]) => cmd);
 }
 
-// Back-compat single-suffix helper.
-export function getSuggestion(prefix: string, ctx: SuggestCtx = {}): string {
-  const best = getSuggestions(prefix, ctx)[0];
-  return best ? best.slice(prefix.length) : '';
-}
