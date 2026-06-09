@@ -13,7 +13,6 @@ export interface AppSettings {
   middleClickCloseTab: boolean;
   uiFont: string;
   enableAnimation: boolean;
-  ligatures: boolean;
   mouseWheelZoom: boolean;
   tabCloseConfirm: boolean;
   tabFlashAlert: boolean;
@@ -51,7 +50,6 @@ export const defaultSettings: AppSettings = {
   middleClickCloseTab: true,
   uiFont: 'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif',
   enableAnimation: false,
-  ligatures: true,
   mouseWheelZoom: true,
   tabCloseConfirm: true,
   tabFlashAlert: true,

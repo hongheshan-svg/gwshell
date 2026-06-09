@@ -38,7 +38,6 @@ export interface AppSettings {
   middleClickCloseTab: boolean;
   uiFont: string;
   enableAnimation: boolean;
-  ligatures: boolean;
   mouseWheelZoom: boolean;
   tabCloseConfirm: boolean;
   tabFlashAlert: boolean;
@@ -431,7 +430,6 @@ export const SettingsModal: React.FC = () => {
                   <Row label={t('settings_middle_close')}><Toggle value={settings.middleClickCloseTab} onChange={(v) => u('middleClickCloseTab', v)} /></Row>
                   <Row label={t('settings_ui_font')}><Sel value={settings.uiFont} options={fonts} onChange={(v) => u('uiFont', v)} /></Row>
                   <Row label={t('settings_animation')}><Toggle value={settings.enableAnimation} onChange={(v) => u('enableAnimation', v)} /></Row>
-                  <Row label={t('settings_ligatures')}><Toggle value={settings.ligatures} onChange={(v) => u('ligatures', v)} /></Row>
                   <Row label={t('settings_mouse_zoom')}><Toggle value={settings.mouseWheelZoom} onChange={(v) => u('mouseWheelZoom', v)} /></Row>
                   <Row label={t('settings_tab_close_confirm')} desc={t('settings_tab_close_confirm_desc')}><Toggle value={settings.tabCloseConfirm} onChange={(v) => u('tabCloseConfirm', v)} /></Row>
                   <Row label={t('settings_tab_flash')} desc={t('settings_tab_flash_desc')}><Toggle value={settings.tabFlashAlert} onChange={(v) => u('tabFlashAlert', v)} /></Row>

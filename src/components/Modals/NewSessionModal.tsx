@@ -684,17 +684,6 @@ export const NewSessionModal: React.FC = () => {
                   <label className="ssh-toggle-label">
                     <input
                       type="checkbox"
-                      checked={form.compression || false}
-                      onChange={(e) => setForm({ ...form, compression: e.target.checked })}
-                    />
-                    <span>{t('ssh_compression')}</span>
-                  </label>
-                </div>
-                <div className="ssh-form-group">
-                  <label style={{ visibility: 'hidden' }}>{t('common_placeholder')}</label>
-                  <label className="ssh-toggle-label">
-                    <input
-                      type="checkbox"
                       checked={form.agent_forward || false}
                       onChange={(e) => setForm({ ...form, agent_forward: e.target.checked })}
                     />
