@@ -10,11 +10,11 @@ import { ShieldAlert, X } from 'lucide-react';
  * without a keyring backend (e.g. headless/minimal Linux); macOS and Windows
  * have native backends and never see it.
  */
+const DISMISSED_KEY = 'gwshell.securityNoticeDismissed';
+
 export const SecurityNotice: React.FC = () => {
   const { t } = useTranslation();
   const [show, setShow] = useState(false);
-
-  const DISMISSED_KEY = 'gwshell.securityNoticeDismissed';
 
   useEffect(() => {
     // Don't show if previously dismissed

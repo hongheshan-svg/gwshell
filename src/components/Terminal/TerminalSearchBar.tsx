@@ -28,6 +28,11 @@ export const TerminalSearchBar: React.FC = () => {
 
   const addon = () => (activeTabId ? terminalInstances.get(activeTabId)?.searchAddon : undefined);
 
+  // Guard against SyntaxError thrown by @xterm/addon-search when the regex
+  // pattern is syntactically incomplete (e.g. "[" or "*"). An in-progress
+  // invalid pattern is simply treated as a no-op.
+  const safeFind = (fn: () => void) => { try { fn(); } catch { /* invalid regex in-progress */ } };
+
   const buildOpts = useCallback((extra?: Partial<ISearchOptions>): ISearchOptions => ({
     decorations: BASE_DECORATIONS,
     caseSensitive,
@@ -52,15 +57,17 @@ export const TerminalSearchBar: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabId]);
 
-  // Re-run search when any toggle changes.
+  // Re-run search when any toggle changes (or query changes while toggles are
+  // active). query is included so the linter dep rule is satisfied; the early
+  // return when !query keeps it a no-op on empty input.
   useEffect(() => {
     if (!query) return;
-    addon()?.findNext(query, buildOpts({ incremental: true }));
+    safeFind(() => addon()?.findNext(query, buildOpts({ incremental: true })));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caseSensitive, useRegex, wholeWord]);
+  }, [caseSensitive, useRegex, wholeWord, query]);
 
-  const findNext = () => { if (query) addon()?.findNext(query, buildOpts()); };
-  const findPrev = () => { if (query) addon()?.findPrevious(query, buildOpts()); };
+  const findNext = () => { if (query) safeFind(() => addon()?.findNext(query, buildOpts())); };
+  const findPrev = () => { if (query) safeFind(() => addon()?.findPrevious(query, buildOpts())); };
   const close = () => {
     try { addon()?.clearDecorations?.(); } catch { /* noop */ }
     setCount(null);
@@ -83,7 +90,7 @@ export const TerminalSearchBar: React.FC = () => {
     setQuery(value);
     const a = addon();
     if (!value) { setCount(null); try { a?.clearDecorations?.(); } catch { /* noop */ } return; }
-    a?.findNext(value, buildOpts({ incremental: true }));
+    safeFind(() => a?.findNext(value, buildOpts({ incremental: true })));
   };
 
   return (

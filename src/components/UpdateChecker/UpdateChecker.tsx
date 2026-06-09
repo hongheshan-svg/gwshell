@@ -6,6 +6,8 @@ import { Download, RefreshCw, X } from 'lucide-react';
 
 type UpdateState = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error';
 
+const DISMISSED_KEY = 'gwshell.updateDismissedVersion';
+
 export const UpdateChecker: React.FC = () => {
   const { t } = useTranslation();
   const [state, setState] = useState<UpdateState>('idle');
@@ -16,8 +18,6 @@ export const UpdateChecker: React.FC = () => {
   // of issuing a second check() — that second call could return null (manifest
   // flake / already-applied) and leave the toast stuck forever on "Downloading".
   const updateRef = useRef<Update | null>(null);
-
-  const DISMISSED_KEY = 'gwshell.updateDismissedVersion';
 
   const checkForUpdate = async () => {
     setState('checking');
