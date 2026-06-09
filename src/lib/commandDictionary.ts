@@ -1,3 +1,4 @@
+/** Raw bilingual entry. Consumers should use lookupCommands() instead of accessing this directly. */
 export interface CommandDef {
   cmd: string;
   en: string;
@@ -78,7 +79,7 @@ export const COMMAND_DEFS: CommandDef[] = [
   { cmd: 'dmesg', en: 'Print kernel ring buffer', zh: '查看内核日志' },
   { cmd: 'date', en: 'Show or set the system date', zh: '显示或设置系统时间' },
   { cmd: 'env', en: 'Show environment variables', zh: '显示环境变量' },
-  { cmd: 'export', en: 'Set an environment variable', zh: '设置环境变量' },
+  { cmd: 'export', en: 'Mark variables for export to child processes', zh: '将变量标记为环境变量' },
   { cmd: 'history', en: 'Show command history', zh: '显示命令历史' },
   { cmd: 'alias', en: 'Define a command alias', zh: '定义命令别名' },
   { cmd: 'which', en: 'Locate a command', zh: '定位命令路径' },
@@ -126,7 +127,7 @@ export const COMMAND_DEFS: CommandDef[] = [
   { cmd: 'kubectl', en: 'Control Kubernetes clusters', zh: '管理 Kubernetes 集群' },
 ];
 
-// Pre-sorted by command name so lookups return alphabetical results.
+// Sorted once at module load; lookupCommands iterates this to return alphabetical results.
 const SORTED = [...COMMAND_DEFS].sort((a, b) => a.cmd.localeCompare(b.cmd));
 
 /**

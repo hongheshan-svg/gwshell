@@ -45,4 +45,9 @@ assert.deepEqual(dict.lookupCommands('ls -', 'en'), [], 'prefix with whitespace 
 const lsSorted = [...lMatches].sort((a, b) => a.localeCompare(b));
 assert.deepEqual(lMatches, lsSorted, 'dictionary matches are alphabetical');
 
+const gMatches = dict.lookupCommands('g', 'en').map((x) => x.cmd);
+assert.ok(gMatches.length >= 4, 'g* returns multiple commands');
+const gSorted = [...gMatches].sort((a, b) => a.localeCompare(b));
+assert.deepEqual(gMatches, gSorted, 'g* matches are alphabetical');
+
 console.log('commandDictionary tests passed');
