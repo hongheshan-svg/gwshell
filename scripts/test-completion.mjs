@@ -51,3 +51,65 @@ const gSorted = [...gMatches].sort((a, b) => a.localeCompare(b));
 assert.deepEqual(gMatches, gSorted, 'g* matches are alphabetical');
 
 console.log('commandDictionary tests passed');
+
+// ---- buildCompletions ----
+function loadCompletion(dictMatches, historyMatches) {
+  return loadTs('src/lib/completion.ts', {
+    './commandDictionary': {
+      lookupCommands: (prefix, _locale) => (prefix === 'l' ? dictMatches : []),
+    },
+    './commandHistory': {
+      getSuggestions: (prefix, _ctx) => (prefix === 'l' ? historyMatches : []),
+    },
+  });
+}
+
+{
+  const c = loadCompletion(
+    [{ cmd: 'ls', desc: 'List' }, { cmd: 'ln', desc: 'Link' }],
+    ['ls -al', 'less notes.txt'],
+  );
+  const r = c.buildCompletions('l', {}, 'en', 8);
+  assert.equal(r[0].kind, 'history', 'history items rank first');
+  assert.equal(r[0].text, 'ls -al');
+  assert.equal(r[1].text, 'less notes.txt');
+  assert.ok(r.some((x) => x.kind === 'command' && x.text === 'ls'), 'dictionary appended');
+  assert.ok(r.some((x) => x.kind === 'command' && x.text === 'ln'));
+  assert.equal(
+    r.find((x) => x.text === 'ls').desc,
+    'List',
+    'command item carries description',
+  );
+}
+
+{
+  // dedupe: same text from history and dictionary appears once (history wins)
+  const c = loadCompletion([{ cmd: 'ls', desc: 'List' }], ['ls']);
+  const r = c.buildCompletions('l', {}, 'en', 8);
+  assert.equal(r.filter((x) => x.text === 'ls').length, 1, 'no duplicate text');
+  assert.equal(r.find((x) => x.text === 'ls').kind, 'history', 'history wins dedupe');
+}
+
+{
+  // cap respected
+  const c = loadCompletion([{ cmd: 'ls', desc: 'd' }, { cmd: 'ln', desc: 'd' }], ['less x']);
+  assert.equal(c.buildCompletions('l', {}, 'en', 1).length, 1, 'max cap honored');
+}
+
+{
+  // whitespace in line -> dictionary skipped, history only
+  const c = loadTs('src/lib/completion.ts', {
+    './commandDictionary': { lookupCommands: () => [{ cmd: 'X', desc: 'd' }] },
+    './commandHistory': { getSuggestions: () => ['git status'] },
+  });
+  const r = c.buildCompletions('git ', {}, 'en', 8);
+  assert.ok(r.every((x) => x.kind === 'history'), 'no dictionary once past command name');
+}
+
+{
+  // empty line -> nothing
+  const c = loadCompletion([], []);
+  assert.deepEqual(c.buildCompletions('', {}, 'en', 8), [], 'empty line yields nothing');
+}
+
+console.log('completion tests passed');
