@@ -71,6 +71,29 @@ impl SshManager {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub async fn connect_and_exec_interactive(
+        &self,
+        session_id: &str,
+        params: ConnectParams,
+        command: String,
+        rows: u32,
+        cols: u32,
+        app: AppHandle,
+    ) -> Result<(), String> {
+        let (shell, conn, forwarded) =
+            session::spawn_exec(session_id.to_string(), params, cols, rows, app, command).await?;
+        self.sessions.lock().await.insert(
+            session_id.to_string(),
+            SessionHandle {
+                shell,
+                conn,
+                forwarded,
+            },
+        );
+        Ok(())
+    }
+
     pub async fn write_to_ssh(&self, session_id: &str, data: &[u8]) -> Result<(), String> {
         let tx = self
             .sessions

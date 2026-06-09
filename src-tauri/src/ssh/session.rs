@@ -132,6 +132,92 @@ pub async fn spawn(
     Ok((tx, session, forwarded))
 }
 
+/// Spawn an interactive exec session: connect, open PTY+exec-command, and pump I/O
+/// until close/EOF. Identical to `spawn` in every respect except the channel runs
+/// `exec(command)` instead of `request_shell`. Emits `ssh-data-{id}` / `ssh-exit-{id}`.
+pub async fn spawn_exec(
+    session_id: String,
+    params: ConnectParams,
+    cols: u32,
+    rows: u32,
+    app: AppHandle,
+    command: String,
+) -> Result<(mpsc::Sender<ShellCmd>, Arc<Handle<Client>>, ForwardTargets), String> {
+    let (handle, forwarded) = connect::establish(&params).await?;
+    let session = Arc::new(handle);
+    let channel = session
+        .channel_open_session()
+        .await
+        .map_err(|e| format!("Channel open failed: {}", e))?;
+    channel
+        .request_pty(false, "xterm-256color", cols, rows, 0, 0, &[])
+        .await
+        .map_err(|e| format!("PTY request failed: {}", e))?;
+
+    if params.agent_forward {
+        if let Err(e) = channel.agent_forward(false).await {
+            eprintln!("[gwshell] agent-forward request failed (continuing): {}", e);
+        }
+    }
+
+    channel
+        .exec(true, command.as_bytes())
+        .await
+        .map_err(|e| format!("Exec request failed: {}", e))?;
+
+    let (tx, mut rx) = mpsc::channel::<ShellCmd>(256);
+    let data_ev = format!("ssh-data-{}", session_id);
+    let exit_ev = format!("ssh-exit-{}", session_id);
+
+    let (mut read_half, write_half) = channel.split();
+
+    let writer_session = session.clone();
+    let writer = tokio::spawn(async move {
+        while let Some(cmd) = rx.recv().await {
+            match cmd {
+                ShellCmd::Data(bytes) => {
+                    if write_half.data(&bytes[..]).await.is_err() {
+                        break;
+                    }
+                }
+                ShellCmd::Resize { cols, rows } => {
+                    let _ = write_half.window_change(cols, rows, 0, 0).await;
+                }
+                ShellCmd::Close => break,
+            }
+        }
+        let _ = writer_session
+            .disconnect(russh::Disconnect::ByApplication, "", "English")
+            .await;
+    });
+
+    let reader_session = session.clone();
+    tokio::spawn(async move {
+        let mut decoder = encoding_rs::UTF_8.new_decoder();
+        loop {
+            match read_half.wait().await {
+                Some(ChannelMsg::Data { data }) => {
+                    emit_decoded(&mut decoder, &data, &app, &data_ev, false)
+                }
+                Some(ChannelMsg::ExtendedData { data, .. }) => {
+                    emit_decoded(&mut decoder, &data, &app, &data_ev, false)
+                }
+                Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | Some(ChannelMsg::Failure)
+                | None => break,
+                _ => {}
+            }
+        }
+        emit_decoded(&mut decoder, &[], &app, &data_ev, true);
+        let _ = app.emit(&exit_ev, ());
+        writer.abort();
+        let _ = reader_session
+            .disconnect(russh::Disconnect::ByApplication, "", "English")
+            .await;
+    });
+
+    Ok((tx, session, forwarded))
+}
+
 /// Decode bytes through a streaming UTF-8 decoder and emit a batched event.
 fn emit_decoded(
     decoder: &mut encoding_rs::Decoder,
