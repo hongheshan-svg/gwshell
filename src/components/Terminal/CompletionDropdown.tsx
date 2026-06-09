@@ -41,7 +41,7 @@ export const CompletionDropdown: React.FC<CompletionDropdownProps> = ({
           <span className="terminal-completion-cmd" style={{ fontFamily, fontSize }}>
             {it.text}
           </span>
-          {it.desc ? <span className="terminal-completion-desc">{it.desc}</span> : null}
+          {it.desc && <span className="terminal-completion-desc">{it.desc}</span>}
         </div>
       ))}
     </div>
