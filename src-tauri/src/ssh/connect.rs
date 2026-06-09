@@ -7,15 +7,25 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-fn make_config(idle_minutes: u32) -> Arc<client::Config> {
+fn make_config(p: &ConnectParams) -> Arc<client::Config> {
+    // Keepalive interval: honour the user's setting when present; 0 disables
+    // keepalives; absent/None falls back to the 30-second default.
+    let keepalive_interval = match p.keepalive_interval {
+        Some(0) => None,
+        Some(secs) => Some(Duration::from_secs(secs)),
+        None => Some(Duration::from_secs(30)),
+    };
+    // Max unanswered keepalives before disconnect; absent/None → default 3.
+    let keepalive_max = p.server_alive_count_max.unwrap_or(3) as usize;
+
     Arc::new(client::Config {
-        inactivity_timeout: if idle_minutes > 0 {
-            Some(Duration::from_secs(idle_minutes as u64 * 60))
+        inactivity_timeout: if p.idle_disconnect_minutes > 0 {
+            Some(Duration::from_secs(p.idle_disconnect_minutes as u64 * 60))
         } else {
             None
         },
-        keepalive_interval: Some(Duration::from_secs(30)),
-        keepalive_max: 3,
+        keepalive_interval,
+        keepalive_max,
         nodelay: true,
         ..Default::default()
     })
@@ -128,7 +138,7 @@ async fn connect_over(
         forwarded: forwarded.clone(),
         agent_forward: p.agent_forward,
     };
-    let config = make_config(p.idle_disconnect_minutes);
+    let config = make_config(p);
 
     let mut session = match client::connect_stream(config, stream, handler).await {
         Ok(s) => s,

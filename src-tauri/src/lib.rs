@@ -193,6 +193,8 @@ async fn ssh_connect(
     connection_timeout: Option<u32>,
     idle_disconnect_minutes: Option<u32>,
     agent_forward: Option<bool>,
+    keepalive_interval: Option<u64>,
+    server_alive_count_max: Option<u32>,
     rows: u32,
     cols: u32,
     state: State<'_, Arc<AppState>>,
@@ -219,6 +221,8 @@ async fn ssh_connect(
         connection_timeout: connection_timeout.unwrap_or(30),
         idle_disconnect_minutes: idle_disconnect_minutes.unwrap_or(0),
         agent_forward: agent_forward.unwrap_or(false),
+        keepalive_interval,
+        server_alive_count_max,
     };
     state
         .ssh_manager
@@ -554,6 +558,7 @@ async fn serial_open(
     data_bits: String,
     stop_bits: String,
     parity: String,
+    serial_encoding: Option<String>,
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
@@ -566,6 +571,7 @@ async fn serial_open(
             &data_bits,
             &stop_bits,
             &parity,
+            serial_encoding.as_deref(),
             app_handle,
         )
     })

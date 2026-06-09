@@ -22,4 +22,10 @@ pub struct ConnectParams {
     /// Enable SSH agent forwarding (`-A`): let the remote host use the local
     /// agent for onward authentication hops. Off by default.
     pub agent_forward: bool,
+    /// How often (in seconds) to send SSH keepalive packets. `None` uses the
+    /// compiled-in default (30 s). Set to `0` to disable keepalives.
+    pub keepalive_interval: Option<u64>,
+    /// Max consecutive unanswered keepalives before closing the connection.
+    /// `None` uses the compiled-in default (3).
+    pub server_alive_count_max: Option<u32>,
 }

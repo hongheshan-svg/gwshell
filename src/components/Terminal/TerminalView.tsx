@@ -1419,6 +1419,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         connectionTimeout: sess?.connection_timeout ?? 30,
         idleDisconnectMinutes: sess?.idle_disconnect_minutes ?? null,
         agentForward: sess?.agent_forward ?? false,
+        keepaliveInterval: (sess?.keepalive_interval != null && String(sess.keepalive_interval).trim() !== '')
+          ? Number(sess.keepalive_interval) : null,
+        serverAliveCountMax: (sess?.server_alive_count_max != null && String(sess.server_alive_count_max).trim() !== '')
+          ? Number(sess.server_alive_count_max) : null,
         rows: instance!.terminal.rows,
         cols: instance!.terminal.cols,
       });
@@ -1499,6 +1503,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               dataBits: freshSession.serial_data_bits || '8',
               stopBits: freshSession.serial_stop_bits || '1',
               parity: freshSession.serial_parity || 'None',
+              serialEncoding: freshSession.serial_encoding || null,
             });
           }
           connectedTabs.add(tab.id);
@@ -1653,6 +1658,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               dataBits: session.serial_data_bits || "8",
               stopBits: session.serial_stop_bits || "1",
               parity: session.serial_parity || "None",
+              serialEncoding: session.serial_encoding || null,
             });
             connectionReady = true;
             if (session.serial_init_commands) {

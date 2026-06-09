@@ -68,6 +68,7 @@ impl SerialManager {
         data_bits: &str,
         stop_bits: &str,
         parity: &str,
+        encoding: Option<&str>,
         app_handle: AppHandle,
     ) -> Result<(), String> {
         // Make open idempotent. Without this, a second open() for the same
@@ -113,11 +114,18 @@ impl SerialManager {
         let stop_flag = Arc::new(AtomicBool::new(false));
         let stop_clone = stop_flag.clone();
 
+        // Resolve the encoding name once before spawning the reader thread.
+        // Unknown/empty names fall back to UTF-8, matching the pty.rs pattern.
+        let resolved_encoding = encoding_rs::Encoding::for_label(
+            encoding.unwrap_or("").as_bytes(),
+        )
+        .unwrap_or(encoding_rs::UTF_8);
+
         let sid = session_id.to_string();
         let reader_thread = std::thread::spawn(move || {
             // Streaming decoder so a multi-byte character split across two reads
             // is not corrupted into replacement characters.
-            let mut decoder = encoding_rs::UTF_8.new_decoder();
+            let mut decoder = resolved_encoding.new_decoder();
             let data_ev = format!("serial-data-{}", sid);
             let exit_ev = format!("serial-exit-{}", sid);
             let mut buf = [0u8; 4096];
