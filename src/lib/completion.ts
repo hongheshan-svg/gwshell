@@ -23,6 +23,10 @@ export function buildCompletions(
 ): Completion[] {
   if (!line) return [];
   const out: Completion[] = [];
+  // Dedupe by exact text. History stores full command lines (e.g. 'ls -al');
+  // the dictionary stores bare command names (e.g. 'ls'). They collide only when a
+  // history entry IS a bare command, so both a full invocation and the bare command
+  // can legitimately appear together — that is intended.
   const seen = new Set<string>();
 
   for (const cmd of getSuggestions(line, ctx)) {

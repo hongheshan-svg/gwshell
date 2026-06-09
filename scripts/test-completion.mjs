@@ -97,6 +97,12 @@ function loadCompletion(dictMatches, historyMatches) {
 }
 
 {
+  // cap when history is empty and dictionary overflows
+  const c = loadCompletion([{ cmd: 'ls', desc: 'd' }, { cmd: 'ln', desc: 'd' }], []);
+  assert.equal(c.buildCompletions('l', {}, 'en', 1).length, 1, 'cap on dictionary-only results');
+}
+
+{
   // whitespace in line -> dictionary skipped, history only
   const c = loadTs('src/lib/completion.ts', {
     './commandDictionary': { lookupCommands: () => [{ cmd: 'X', desc: 'd' }] },
