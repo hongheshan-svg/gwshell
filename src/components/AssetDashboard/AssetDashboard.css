@@ -271,6 +271,14 @@
   padding-top: var(--space-1);
 }
 
+/* Type badge + (optional) latency badge sit together on the left */
+.dash-badges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
 .dash-ping-badge {
   display: inline-flex;
   align-items: center;

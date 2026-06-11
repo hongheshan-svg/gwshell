@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Play, Pencil, Box, Usb, TerminalSquare } from 'lucide-react';
+import { Play, Pencil, Box, Usb, TerminalSquare, Server } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { SessionConfig } from '../../types';
 import type { MetricsSnapshot } from '../../types/serverMetrics';
@@ -166,16 +166,20 @@ export const HostDashCard: React.FC<Props> = ({
     ? `${session.name} · ${t('dash_created_at', { date: createdDisplay })}`
     : session.name;
 
-  // Friendly type badge for non-pingable session types (latency/"timeout"
-  // would be misleading there — these have no ping concept).
+  // Every card gets a type badge so the session kind is identifiable at a
+  // glance. SSH additionally shows a latency badge alongside it (below); the
+  // non-pingable types only show the badge (latency would be meaningless).
   const typeBadge = (() => {
     switch (session.session_type) {
       case 'docker':     return { icon: <Box size={11} />,            label: t('newasset_docker') };
       case 'serial':     return { icon: <Usb size={11} />,            label: t('newasset_serial') };
       case 'localshell': return { icon: <TerminalSquare size={11} />, label: t('newasset_localshell') };
-      default:           return null;
+      default:           return { icon: <Server size={11} />,         label: t('newasset_ssh') };
     }
   })();
+
+  // Only SSH sessions have a meaningful TCP latency to display.
+  const isPingable = session.session_type === 'ssh';
 
   // Per-type connection summary for the sub row (raw lowercase type names
   // like "serial" tell the user nothing).
@@ -280,18 +284,19 @@ export const HostDashCard: React.FC<Props> = ({
             </div>
           </div>
         ) : (
-          /* Disconnected: type/ping badge + connect, on one compact row */
+          /* Disconnected: type badge (+ latency for SSH) + connect, one row */
           <div className="dash-offline">
-            {typeBadge ? (
+            <div className="dash-badges">
               <div className="dash-type-badge">
                 {typeBadge.icon}
                 {typeBadge.label}
               </div>
-            ) : (
-              <div className={`dash-ping-badge${latency != null ? ' live' : ''}`}>
-                {latency != null ? `${latency} ms` : t('dash_offline', 'timeout')}
-              </div>
-            )}
+              {isPingable && (
+                <div className={`dash-ping-badge${latency != null ? ' live' : ''}`}>
+                  {latency != null ? `${latency} ms` : t('dash_offline', 'timeout')}
+                </div>
+              )}
+            </div>
 
             <button
               className="dash-connect-btn"
