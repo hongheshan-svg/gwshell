@@ -595,6 +595,14 @@ async fn kill_remote_process(
     state.ssh_manager.ssh_exec(&session_id, &cmd).await.map(|_| ())
 }
 
+#[tauri::command]
+async fn detect_remote_os(
+    session_id: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<String, String> {
+    state.ssh_manager.detect_command_table(&session_id).await
+}
+
 // ---- Ping Command ----
 
 #[tauri::command]
@@ -1145,6 +1153,7 @@ pub fn run() {
             start_server_metrics,
             stop_server_metrics,
             kill_remote_process,
+            detect_remote_os,
             ping_host,
             serial_open,
             write_to_serial,

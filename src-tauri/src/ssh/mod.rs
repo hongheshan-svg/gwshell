@@ -7,6 +7,7 @@ mod forward;
 mod handler;
 mod known_hosts;
 pub(crate) mod params;
+mod probe;
 mod session;
 mod sftp;
 mod transport;
@@ -173,6 +174,24 @@ impl SshManager {
 
     pub async fn metrics_exec(&self, session_id: &str, command: &str) -> Result<String, String> {
         self.ssh_exec(session_id, command).await
+    }
+
+    /// Probe the remote shell and return the completion table identifier
+    /// ("unix" | "cmd" | "powershell"). Best-effort: any failure yields "unix".
+    pub async fn detect_command_table(&self, session_id: &str) -> Result<String, String> {
+        let uname = self
+            .ssh_exec(session_id, "uname -s")
+            .await
+            .unwrap_or_default();
+        // Short-circuit: a clear POSIX kernel needs no second probe.
+        if !uname.trim().is_empty() && probe::classify_command_table(&uname, "") == "unix" {
+            return Ok("unix".to_string());
+        }
+        let comspec = self
+            .ssh_exec(session_id, "echo %COMSPEC%")
+            .await
+            .unwrap_or_default();
+        Ok(probe::classify_command_table(&uname, &comspec).to_string())
     }
 
     // --- Local port forwarding ---
