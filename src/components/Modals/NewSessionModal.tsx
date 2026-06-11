@@ -140,6 +140,7 @@ export const NewSessionModal: React.FC = () => {
       idle_disconnect_minutes: form.idle_disconnect_minutes || undefined,
       compression: form.compression || undefined,
       agent_forward: form.agent_forward || undefined,
+      remote_shell: (form.remote_shell && form.remote_shell !== 'auto') ? form.remote_shell : undefined,
       // Env vars
       env_vars: form.env_vars || undefined,
       created_at: editingSession?.created_at || now,
@@ -677,6 +678,18 @@ export const NewSessionModal: React.FC = () => {
                     />
                     <span>{t('ssh_agent_forward')}</span>
                   </label>
+                </div>
+                <div className="ssh-form-group">
+                  <label>{t('ssh_remote_shell')}</label>
+                  <select
+                    value={form.remote_shell || 'auto'}
+                    onChange={(e) => setForm({ ...form, remote_shell: e.target.value as 'auto' | 'linux' | 'cmd' | 'powershell' })}
+                  >
+                    <option value="auto">{t('ssh_remote_shell_auto')}</option>
+                    <option value="linux">{t('ssh_remote_shell_linux')}</option>
+                    <option value="cmd">{t('ssh_remote_shell_cmd')}</option>
+                    <option value="powershell">{t('ssh_remote_shell_powershell')}</option>
+                  </select>
                 </div>
               </div>
 

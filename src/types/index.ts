@@ -43,6 +43,8 @@ export interface SessionConfig {
   // SSH agent forwarding (-A): let the remote host use the local agent for
   // onward authentication hops.
   agent_forward?: boolean;
+  // Command-completion table override for SSH: 'auto' probes the remote.
+  remote_shell?: 'auto' | 'linux' | 'cmd' | 'powershell';
   // Docker-specific
   docker_protocol?: 'unix' | 'tcp' | 'http' | 'https';
   docker_unix_path?: string;
