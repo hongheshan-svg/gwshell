@@ -25,10 +25,8 @@ const navCategories: { title?: TranslationKeys; items: { id: string; labelKey: T
     items: [
       { id: 'shortcut-basic', labelKey: 'settings_shortcut_basic' },
       { id: 'shortcut-ssh', labelKey: 'settings_shortcut_ssh' },
-      { id: 'shortcut-database', labelKey: 'settings_shortcut_db' },
     ],
   },
-  { items: [{ id: 'docker', labelKey: 'settings_docker' }] },
   { items: [{ id: 'vault', labelKey: 'vault_section' }] },
   { items: [{ id: 'storage', labelKey: 'settings_storage' }] },
 ];
@@ -124,46 +122,6 @@ const shortcutsSshRight: ShortcutItem[] = [
   { labelKey: 'settings_sc_chmod', keys: 'Ctrl Alt M' },
   { labelKey: 'settings_sc_broadcast', keys: 'Ctrl Shift B' },
 ];
-const shortcutsDbLeft: ShortcutItem[] = [
-  { labelKey: 'settings_sc_new_query', keys: 'Ctrl Shift Q' },
-  { labelKey: 'settings_sc_new_table', keys: 'Ctrl Shift T' },
-  { labelKey: 'settings_sc_table_list', keys: 'Ctrl Shift 1' },
-  { labelKey: 'settings_sc_query_list', keys: 'Ctrl Shift 3' },
-  { labelKey: 'settings_sc_structure', keys: 'Ctrl Shift S' },
-  { labelKey: 'settings_sc_run_sql', keys: 'Ctrl Enter' },
-  { labelKey: 'settings_sc_stop_sql', keys: 'Ctrl F2' },
-  { labelKey: 'settings_sc_show_ddl', keys: 'None' },
-];
-const shortcutsDbRight: ShortcutItem[] = [
-  { labelKey: 'settings_sc_new_view', keys: 'Ctrl Shift V' },
-  { labelKey: 'settings_sc_start_tx', keys: 'None' },
-  { labelKey: 'settings_sc_rollback', keys: 'None' },
-  { labelKey: 'settings_sc_commit', keys: 'None' },
-  { labelKey: 'settings_sc_table_data', keys: 'Ctrl Shift 0' },
-  { labelKey: 'settings_sc_filter', keys: 'None' },
-  { labelKey: 'settings_sc_insert', keys: 'Ctrl Insert' },
-  { labelKey: 'settings_sc_clone', keys: 'Ctrl Shift C' },
-  { labelKey: 'settings_sc_set_null', keys: 'Alt Delete' },
-];
-const shortcutsDockerLeft: ShortcutItem[] = [
-  { labelKey: 'settings_sc_container_list', keys: 'Ctrl Shift 1' },
-  { labelKey: 'settings_sc_image_list', keys: 'Ctrl Shift 2' },
-  { labelKey: 'settings_sc_container_detail', keys: 'Ctrl Shift C' },
-  { labelKey: 'settings_sc_container_terminal', keys: 'Ctrl Shift T' },
-  { labelKey: 'settings_sc_container_log', keys: 'Ctrl Shift L' },
-  { labelKey: 'settings_sc_container_image', keys: 'Ctrl Shift I' },
-  { labelKey: 'settings_sc_image_pull', keys: 'Ctrl Shift P' },
-];
-const shortcutsDockerRight: ShortcutItem[] = [
-  { labelKey: 'settings_sc_network_list', keys: 'Ctrl Shift 3' },
-  { labelKey: 'settings_sc_volume_list', keys: 'Ctrl Shift 4' },
-  { labelKey: 'settings_sc_start_container', keys: 'Ctrl Shift 0' },
-  { labelKey: 'settings_sc_stop_container', keys: 'Ctrl Shift W' },
-  { labelKey: 'settings_sc_restart_container', keys: 'Ctrl Shift R' },
-  { labelKey: 'settings_sc_pause_container', keys: 'Ctrl Shift E' },
-];
-
-
 /* ---- Sub-components ---- */
 const Toggle: React.FC<{ value: boolean; onChange: (v: boolean) => void }> = ({ value, onChange }) => (
   <button className={`settings-toggle ${value ? 'on' : ''}`} onClick={() => onChange(!value)} type="button">
@@ -358,6 +316,75 @@ const VaultSection: React.FC<{ open: boolean }> = ({ open }) => {
         )}
       </div>
     </>
+  );
+};
+
+/* ---- Hotkey recorder (Quake global shortcut) ---- */
+// Click to arm, press a combination; stored in Tauri accelerator format
+// ("CommandOrControl+Shift+Backquote") but displayed with friendly key names.
+// Raw accelerator strings overflowed the input and meant nothing to users.
+const ACCEL_DISPLAY: Record<string, string> = {
+  CommandOrControl: 'Ctrl',
+  Backquote: '`', Backslash: '\\', BracketLeft: '[', BracketRight: ']',
+  Comma: ',', Period: '.', Slash: '/', Semicolon: ';', Quote: "'",
+  Minus: '-', Equal: '=', Space: 'Space',
+};
+
+// KeyboardEvent.code → Tauri accelerator key name (punctuation/special keys).
+const ACCEL_FROM_CODE: Record<string, string> = {
+  Backquote: 'Backquote', Backslash: 'Backslash', BracketLeft: 'BracketLeft',
+  BracketRight: 'BracketRight', Comma: 'Comma', Period: 'Period', Slash: 'Slash',
+  Semicolon: 'Semicolon', Quote: 'Quote', Minus: 'Minus', Equal: 'Equal', Space: 'Space',
+};
+
+function displayAccel(accel: string): string {
+  return accel.split('+').map((p) => ACCEL_DISPLAY[p] ?? p).join('+');
+}
+
+const HotkeyRecorder: React.FC<{
+  value: string;
+  disabled?: boolean;
+  onChange: (accel: string) => void;
+}> = ({ value, disabled, onChange }) => {
+  const { t } = useTranslation();
+  const [recording, setRecording] = useState(false);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!recording) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === 'Escape') {
+      setRecording(false);
+      return;
+    }
+    if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return; // wait for the main key
+    const parts: string[] = [];
+    if (e.ctrlKey || e.metaKey) parts.push('CommandOrControl');
+    if (e.shiftKey) parts.push('Shift');
+    if (e.altKey) parts.push('Alt');
+    if (parts.length === 0) return; // a global hotkey needs at least one modifier
+    const code = e.code;
+    let key: string | null = null;
+    if (code.startsWith('Key')) key = code.slice(3);
+    else if (code.startsWith('Digit')) key = code.slice(5);
+    else if (/^F\d{1,2}$/.test(code)) key = code;
+    else key = ACCEL_FROM_CODE[code] ?? null;
+    if (!key) return; // unsupported main key
+    onChange([...parts, key].join('+'));
+    setRecording(false);
+  };
+
+  return (
+    <button
+      type="button"
+      className={`settings-input hotkey-recorder${recording ? ' recording' : ''}`}
+      disabled={disabled}
+      onClick={() => setRecording(true)}
+      onKeyDown={handleKeyDown}
+      onBlur={() => setRecording(false)}
+    >
+      {recording ? t('settings_hotkey_recording') : displayAccel(value)}
+    </button>
   );
 };
 
@@ -562,7 +589,7 @@ export const SettingsModal: React.FC = () => {
               <div className="settings-columns">
                 <div className="settings-col">
                   <SectionTitle>{t('settings_section_basic')}</SectionTitle>
-                  <Row label={t('settings_theme')}><Sel value={settings.theme === 'dark' ? 'Dark' : 'Light'} options={['Dark', 'Light']} onChange={(v) => u('theme', v === 'Dark' ? 'dark' : 'light')} /></Row>
+                  <Row label={t('settings_theme')}><Sel value={settings.theme} options={[{ value: 'dark', label: t('settings_theme_dark') }, { value: 'light', label: t('settings_theme_light') }]} onChange={(v) => u('theme', v as 'dark' | 'light')} /></Row>
                   <Row label={t('settings_middle_close')}><Toggle value={settings.middleClickCloseTab} onChange={(v) => u('middleClickCloseTab', v)} /></Row>
                   <Row label={t('settings_ui_font')}><Sel value={settings.uiFont} options={fonts} onChange={(v) => u('uiFont', v)} /></Row>
                   <Row label={t('settings_animation')}><Toggle value={settings.enableAnimation} onChange={(v) => u('enableAnimation', v)} /></Row>
@@ -576,7 +603,7 @@ export const SettingsModal: React.FC = () => {
                   <Row label={t('settings_zoom')}><Sel value={settings.zoomLevel} options={['80%', '90%', '100%', '110%', '120%', '150%']} onChange={(v) => u('zoomLevel', v)} /></Row>
                   <Row label={t('settings_session_tab_memory')} desc={t('settings_session_tab_memory_desc')}><Toggle value={settings.sessionTabMemory} onChange={(v) => u('sessionTabMemory', v)} /></Row>
                   <Row label={t('settings_quake_enabled')} desc={t('settings_quake_hint')}><Toggle value={settings.quakeEnabled} onChange={(v) => u('quakeEnabled', v)} /></Row>
-                  <Row label={t('settings_quake_hotkey')}><input type="text" className="settings-input" value={settings.quakeHotkey} onChange={(e) => u('quakeHotkey', e.target.value)} disabled={!settings.quakeEnabled} /></Row>
+                  <Row label={t('settings_quake_hotkey')}><HotkeyRecorder value={settings.quakeHotkey} disabled={!settings.quakeEnabled} onChange={(v) => u('quakeHotkey', v)} /></Row>
                 </div>
               </div>
             )}
@@ -632,22 +659,6 @@ export const SettingsModal: React.FC = () => {
               <>
                 <SectionTitle>SSH/SFTP</SectionTitle>
                 <ShortcutTable left={shortcutsSshLeft} right={shortcutsSshRight} t={t} />
-              </>
-            )}
-
-            {/* ===== 快捷键-数据库 ===== */}
-            {activeNav === 'shortcut-database' && (
-              <>
-                <SectionTitle>{t('settings_db_title')}</SectionTitle>
-                <ShortcutTable left={shortcutsDbLeft} right={shortcutsDbRight} t={t} />
-              </>
-            )}
-
-            {/* ===== Docker (快捷键) ===== */}
-            {activeNav === 'docker' && (
-              <>
-                <SectionTitle>Docker</SectionTitle>
-                <ShortcutTable left={shortcutsDockerLeft} right={shortcutsDockerRight} t={t} />
               </>
             )}
 

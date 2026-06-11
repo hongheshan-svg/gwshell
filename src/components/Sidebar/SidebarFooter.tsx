@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Code, Sun, Moon, PanelLeftClose, MoreVertical } from 'lucide-react';
+import { ScrollText, Sun, Moon, PanelLeftClose, MoreVertical } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 
 /**
@@ -20,7 +20,7 @@ export const SidebarFooter: React.FC = () => {
         onClick={() => setActiveNavItem(snippetsActive ? 'sessions' : 'snippets')}
         title={t('nav_snippets')}
       >
-        <Code size={18} />
+        <ScrollText size={18} />
       </button>
       <button className="nav-icon-btn" onClick={toggleTheme} title={t('nav_toggle_theme')}>
         {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}

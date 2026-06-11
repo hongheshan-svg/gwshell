@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Play, Pencil } from 'lucide-react';
+import { Play, Pencil, Box, Usb, TerminalSquare } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { SessionConfig } from '../../types';
 import type { MetricsSnapshot } from '../../types/serverMetrics';
@@ -158,13 +158,53 @@ export const HostDashCard: React.FC<Props> = ({
 
   const hasSnapshot = connected && snapshot != null;
 
-  // Format created_at for disconnected state
+  // Created date lives in the name tooltip — too low-value for a card row.
   const createdDisplay = session.created_at
     ? new Date(session.created_at).toLocaleDateString()
     : null;
+  const nameTooltip = createdDisplay
+    ? `${session.name} · ${t('dash_created_at', { date: createdDisplay })}`
+    : session.name;
+
+  // Friendly type badge for non-pingable session types (latency/"timeout"
+  // would be misleading there — these have no ping concept).
+  const typeBadge = (() => {
+    switch (session.session_type) {
+      case 'docker':     return { icon: <Box size={11} />,            label: t('newasset_docker') };
+      case 'serial':     return { icon: <Usb size={11} />,            label: t('newasset_serial') };
+      case 'localshell': return { icon: <TerminalSquare size={11} />, label: t('newasset_localshell') };
+      default:           return null;
+    }
+  })();
+
+  // Per-type connection summary for the sub row (raw lowercase type names
+  // like "serial" tell the user nothing).
+  const subLine = (() => {
+    if (session.username && session.host) {
+      return `${session.username}@${session.host}${session.port ? `:${session.port}` : ''}`;
+    }
+    if (session.host) return session.host;
+    switch (session.session_type) {
+      case 'serial':
+        return session.serial_port
+          ? `${session.serial_port}${session.serial_baud_rate ? ` @ ${session.serial_baud_rate}` : ''}`
+          : t('newasset_serial');
+      case 'localshell':
+        return session.shell_name || t('newasset_localshell');
+      case 'docker':
+        return session.docker_connect_method?.toLowerCase() === 'ssh'
+          ? 'docker via SSH'
+          : session.docker_unix_path || 'docker';
+      default:
+        return session.session_type;
+    }
+  })();
 
   return (
-    <div className={`dash-card${connected ? ' connected' : ''}`}>
+    <div
+      className={`dash-card${connected ? ' connected' : ''}`}
+      onDoubleClick={() => (connected ? onFocus?.(session) : onConnect(session))}
+    >
       {/* Left color stripe */}
       <div className="dash-stripe" style={{ background: stripeColor }} />
 
@@ -175,33 +215,21 @@ export const HostDashCard: React.FC<Props> = ({
             className={`dash-status-dot${connected ? ' online' : ''}`}
             aria-label={connected ? 'Connected' : 'Disconnected'}
           />
-          <span className="dash-name">{session.name}</span>
+          <span className="dash-name" title={nameTooltip}>{session.name}</span>
           <div className="dash-actions">
             <button
               className="dash-action-btn"
-              title="Edit"
+              title={t('table_edit')}
               onClick={() => onEdit(session)}
               aria-label="Edit session"
             >
               <Pencil size={13} />
             </button>
-            <button
-              className="dash-action-btn primary"
-              title={connected ? 'Focus' : t('dash_connect', 'Connect')}
-              onClick={() => connected ? onFocus?.(session) : onConnect(session)}
-              aria-label={connected ? 'Focus tab' : 'Connect'}
-            >
-              <Play size={13} />
-            </button>
           </div>
         </div>
 
-        {/* Sub row: username@host:port */}
-        <div className="dash-sub">
-          {session.username && session.host
-            ? `${session.username}@${session.host}${session.port ? `:${session.port}` : ''}`
-            : session.host ?? session.session_type}
-        </div>
+        {/* Sub row: connection summary */}
+        <div className="dash-sub">{subLine}</div>
 
         {/* Body */}
         {hasSnapshot ? (
@@ -252,18 +280,19 @@ export const HostDashCard: React.FC<Props> = ({
             </div>
           </div>
         ) : (
-          /* Disconnected: ping + connect affordance */
+          /* Disconnected: type/ping badge + connect, on one compact row */
           <div className="dash-offline">
-            {/* Ping latency badge */}
-            <div
-              className={`dash-ping-badge${latency != null ? ' live' : ''}`}
-            >
-              {latency != null
-                ? `${latency} ms`
-                : t('dash_offline', 'timeout')}
-            </div>
+            {typeBadge ? (
+              <div className="dash-type-badge">
+                {typeBadge.icon}
+                {typeBadge.label}
+              </div>
+            ) : (
+              <div className={`dash-ping-badge${latency != null ? ' live' : ''}`}>
+                {latency != null ? `${latency} ms` : t('dash_offline', 'timeout')}
+              </div>
+            )}
 
-            {/* Connect button */}
             <button
               className="dash-connect-btn"
               onClick={() => onConnect(session)}
@@ -271,13 +300,6 @@ export const HostDashCard: React.FC<Props> = ({
               <Play size={12} />
               {t('dash_connect', 'Connect')}
             </button>
-
-            {/* Created date */}
-            {createdDisplay && (
-              <div className="dash-created">
-                {createdDisplay}
-              </div>
-            )}
           </div>
         )}
       </div>

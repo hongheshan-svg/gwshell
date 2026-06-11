@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Plus, Menu, ChevronDown, FolderOpen, Columns2, PanelLeftOpen, Square, Grid2x2, LayoutGrid } from 'lucide-react';
+import { X, Plus, Menu, FolderOpen, Columns2, PanelLeftOpen, Square, Grid2x2, LayoutGrid } from 'lucide-react';
 import {
   DndContext,
   PointerSensor,
@@ -62,6 +62,9 @@ export const TabBar: React.FC = () => {
   const { t } = useTranslation();
   const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
   const [splitMenuOpen, setSplitMenuOpen] = useState(false);
+  // Tab awaiting in-app close confirmation (replaces window.confirm, whose
+  // native dialog clashes with the app's visual language).
+  const [confirmTabId, setConfirmTabId] = useState<string | null>(null);
   const addBtnRef = useRef<HTMLButtonElement>(null);
   const supportedQuickCreateTypes = new Set(['ssh', 'ssh-tunnel']);
 
@@ -72,20 +75,20 @@ export const TabBar: React.FC = () => {
     return !!tab.connected;
   };
 
-  const confirmClose = (tabId: string): boolean => {
-    const { tabCloseConfirm } = useSettingsStore.getState().settings;
-    if (tabCloseConfirm && isConnectedInteractiveTab(tabId)) {
-      return window.confirm(t('tab_close_confirm_msg'));
-    }
-    return true;
-  };
-
-  const handleCloseTab = (tabId: string) => {
-    if (!confirmClose(tabId)) return;
+  const doCloseTab = (tabId: string) => {
     import('../Terminal/TerminalView').then(({ destroyTerminal }) => {
       destroyTerminal(tabId);
     });
     removeTab(tabId);
+  };
+
+  const handleCloseTab = (tabId: string) => {
+    const { tabCloseConfirm } = useSettingsStore.getState().settings;
+    if (tabCloseConfirm && isConnectedInteractiveTab(tabId)) {
+      setConfirmTabId(tabId);
+      return;
+    }
+    doCloseTab(tabId);
   };
 
   const handleMiddleClick = (e: React.MouseEvent, tabId: string) => {
@@ -138,7 +141,6 @@ export const TabBar: React.FC = () => {
         >
           <Menu size={13} />
           <span>{t('tab_list')}</span>
-          <ChevronDown size={11} />
         </div>
       ))}
       <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -192,6 +194,32 @@ export const TabBar: React.FC = () => {
               </div>
             </>
           )}
+        </div>
+      )}
+      {/* In-app close confirmation (replaces native window.confirm) */}
+      {confirmTabId && (
+        <div
+          className="modal-overlay"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setConfirmTabId(null); }}
+        >
+          <div className="confirm-dialog" role="alertdialog" aria-modal="true">
+            <p className="confirm-dialog-text">{t('tab_close_confirm_msg')}</p>
+            <div className="confirm-dialog-actions">
+              <button className="settings-btn-outline" onClick={() => setConfirmTabId(null)} autoFocus>
+                {t('common_cancel')}
+              </button>
+              <button
+                className="settings-btn-danger"
+                onClick={() => {
+                  const id = confirmTabId;
+                  setConfirmTabId(null);
+                  doCloseTab(id);
+                }}
+              >
+                {t('tab_close_confirm_btn')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
       {/* SFTP toggle - only show when active tab is SSH */}

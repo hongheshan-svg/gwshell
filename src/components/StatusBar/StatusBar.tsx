@@ -37,6 +37,21 @@ export const StatusBar: React.FC = () => {
             <Wifi size={11} />
             <span>{activeTab.type.toUpperCase()}</span>
           </div>
+          {/* Active session target: user@host:port for SSH, port/shell otherwise */}
+          {(() => {
+            const sess = sessions.find((s) => s.id === activeTab.sessionId);
+            if (!sess) return null;
+            const target =
+              sess.username && sess.host
+                ? `${sess.username}@${sess.host}${sess.port ? `:${sess.port}` : ''}`
+                : sess.host || sess.serial_port || sess.shell_name || null;
+            if (!target) return null;
+            return (
+              <div className="status-item status-session-target" title={target}>
+                <span>{target}</span>
+              </div>
+            );
+          })()}
         </>
       )}
 

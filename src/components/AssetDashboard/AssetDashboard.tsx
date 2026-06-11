@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
-import { Server } from 'lucide-react';
+import { Server, Plus, Zap, FileInput } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import type { SessionConfig } from '../../types';
 import type { MetricsSnapshot } from '../../types/serverMetrics';
@@ -212,16 +212,9 @@ export const AssetDashboard: React.FC<Props> = ({ sessions, onConnect, onEdit })
     if (tab) setActiveTab(tab.id);
   };
 
-  // Empty state
+  // Empty state: instead of a bare "no assets" line, offer the three ways in.
   if (sessions.length === 0) {
-    return (
-      <div className="asset-dash-empty">
-        <div className="asset-empty-content">
-          <Server size={32} />
-          <p>{t('table_empty', 'No sessions yet')}</p>
-        </div>
-      </div>
-    );
+    return <EmptyStateCtas />;
   }
 
   return (
@@ -255,6 +248,53 @@ export const AssetDashboard: React.FC<Props> = ({ sessions, onConnect, onEdit })
           </div>
         </div>
       ))}
+    </div>
+  );
+};
+
+/** First-run guidance: three CTA cards covering the main ways to get assets. */
+export const EmptyStateCtas: React.FC = () => {
+  const { t } = useTranslation('gwshell');
+  const setShowNewSession = useAppStore((s) => s.setShowNewSession);
+  const setShowQuickConnect = useAppStore((s) => s.setShowQuickConnect);
+  const setSessions = useAppStore((s) => s.setSessions);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+
+  const handleImportSshConfig = async () => {
+    setImportMsg(null);
+    try {
+      const count = await invoke<number>('import_ssh_config', { path: null });
+      setSessions(await invoke<SessionConfig[]>('get_sessions'));
+      setImportMsg(t('settings_storage_imported', { count }));
+    } catch (e) {
+      setImportMsg(t('settings_storage_failed', { msg: String(e) }));
+    }
+  };
+
+  return (
+    <div className="asset-dash-empty">
+      <div className="asset-empty-content">
+        <Server size={32} />
+        <p>{t('table_empty', 'No sessions yet')}</p>
+        <div className="empty-cta-row">
+          <button className="empty-cta-card" onClick={() => setShowNewSession(true)}>
+            <Plus size={16} />
+            <span>{t('newasset_ssh')}</span>
+            <span className="empty-cta-desc">{t('empty_cta_ssh_desc')}</span>
+          </button>
+          <button className="empty-cta-card" onClick={() => setShowQuickConnect(true)}>
+            <Zap size={16} />
+            <span>{t('newasset_quickconnect')}</span>
+            <span className="empty-cta-desc">{t('empty_cta_quick_desc')}</span>
+          </button>
+          <button className="empty-cta-card" onClick={handleImportSshConfig}>
+            <FileInput size={16} />
+            <span>{t('empty_cta_import')}</span>
+            <span className="empty-cta-desc">{t('empty_cta_import_desc')}</span>
+          </button>
+        </div>
+        {importMsg && <p className="empty-cta-msg">{importMsg}</p>}
+      </div>
     </div>
   );
 };

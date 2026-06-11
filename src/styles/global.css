@@ -391,8 +391,11 @@ input, select, textarea, button {
   background: var(--success);
 }
 
+/* Disconnected is the normal resting state — neutral, not alarming.
+   Red is reserved for actual failures. */
 .session-status-dot.disconnected {
-  background: var(--danger);
+  background: var(--text-muted);
+  opacity: 0.55;
 }
 
 .sidebar-search-wrapper {
@@ -523,7 +526,7 @@ input, select, textarea, button {
 }
 
 .tab-dot.connected { background: var(--success); }
-.tab-dot.disconnected { background: var(--danger); }
+.tab-dot.disconnected { background: var(--text-muted); opacity: 0.55; }
 
 .tab-close {
   width: 18px;
@@ -1545,6 +1548,18 @@ input, select, textarea, button {
   border-radius: var(--radius-sm);
 }
 
+/* Active session target (user@host) — mono, truncated when narrow */
+.status-session-target {
+  font-family: var(--font-mono);
+  max-width: 260px;
+}
+
+.status-session-target span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .status-item:hover {
   background: var(--bg-tertiary);
   color: var(--text-secondary);
@@ -1567,6 +1582,30 @@ input, select, textarea, button {
 
 /* ========== Modal ========== */
 
+/* Small app-styled confirmation dialog (used instead of window.confirm) */
+.confirm-dialog {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-5);
+  min-width: 320px;
+  max-width: 420px;
+}
+
+.confirm-dialog-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: var(--space-4);
+  line-height: 1.5;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -1574,6 +1613,7 @@ input, select, textarea, button {
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2013,12 +2053,34 @@ input, select, textarea, button {
   cursor: pointer;
 }
 
-.col-name .asset-name-icon {
-  display: inline-flex;
-  align-items: center;
-  margin-right: 6px;
-  color: var(--accent-primary);
+/* Session color label as a small swatch before the name (mirrors the card
+   view's color stripe; more informative than a uniform server icon). */
+.col-name .asset-name-color {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 8px;
   vertical-align: middle;
+}
+
+/* Group section rows in the list view (parity with the card view's groups) */
+.asset-group-row td {
+  padding: 10px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  border-bottom: none;
+  background: transparent;
+}
+
+.asset-group-row .asset-group-count {
+  margin-left: 8px;
+  font-weight: 400;
+  color: var(--text-muted);
+  opacity: 0.7;
 }
 
 .col-latency {
@@ -3086,6 +3148,19 @@ a:focus-visible,
   cursor: not-allowed;
 }
 
+/* Hotkey recorder (button styled like an input; shows friendly key names) */
+.hotkey-recorder {
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-mono);
+  min-width: 180px;
+}
+
+.hotkey-recorder.recording {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
 /* Footer */
 .settings-footer {
   display: flex;
@@ -3688,7 +3763,8 @@ a:focus-visible,
   align-items: flex-start;
   justify-content: center;
   padding-top: 14vh;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(3px);
 }
 .command-palette-card {
   width: min(560px, 92%);
@@ -3776,6 +3852,14 @@ a:focus-visible,
   justify-content: center;
   border-radius: var(--radius-sm);
   flex-shrink: 0;
+  /* Only surface the per-group gear while the row is hovered/focused —
+     a persistent gear on every group row is visual noise. */
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.session-group-header:hover .session-group-defaults-btn,
+.session-group-defaults-btn:focus-visible {
+  opacity: 1;
 }
 .session-group-defaults-btn:hover { color: inherit; background: var(--hover-bg); }
 

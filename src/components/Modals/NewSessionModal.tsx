@@ -22,13 +22,12 @@ const configTabKeys: { id: string; labelKey: TranslationKeys }[] = [
 
 type AuthType = 'password' | 'publickey' | 'keyboardinteractive' | 'agent' | 'none';
 
-const authPrimary: { id: AuthType; labelKey: TranslationKeys }[] = [
+// All five methods on a single row (labels are kept short so they fit) —
+// the old two-row split read as ragged and implied a hierarchy that isn't there.
+const authMethods: { id: AuthType; labelKey: TranslationKeys }[] = [
   { id: 'password', labelKey: 'ssh_auth_password' },
   { id: 'publickey', labelKey: 'ssh_auth_publickey' },
   { id: 'keyboardinteractive', labelKey: 'ssh_auth_mfa' },
-];
-
-const authSecondary: { id: AuthType; labelKey: TranslationKeys }[] = [
   { id: 'agent', labelKey: 'ssh_auth_agent' },
   { id: 'none', labelKey: 'ssh_auth_none' },
 ];
@@ -191,7 +190,7 @@ export const NewSessionModal: React.FC = () => {
       <div className="ssh-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="ssh-modal-header">
-          <h2>{t('ssh_config_title')}</h2>
+          <h2>{editingSession ? t('ssh_config_title_edit', { name: editingSession.name }) : t('ssh_config_title_new')}</h2>
           <button className="modal-close" onClick={handleClose}>
             <X size={16} />
           </button>
@@ -230,7 +229,7 @@ export const NewSessionModal: React.FC = () => {
                   {nameError && <span className="field-error">{t('field_required')}</span>}
                 </div>
                 <div className="ssh-form-group">
-                  <label className={hostError ? 'label-error' : ''}>Host <span className="required-mark">*</span></label>
+                  <label className={hostError ? 'label-error' : ''}>{t('ssh_host')} <span className="required-mark">*</span></label>
                   <input
                     type="text"
                     value={form.host || ''}
@@ -245,7 +244,7 @@ export const NewSessionModal: React.FC = () => {
               {/* User + Port */}
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
-                  <label>User</label>
+                  <label>{t('ssh_user')}</label>
                   <input
                     type="text"
                     value={form.username || ''}
@@ -303,18 +302,7 @@ export const NewSessionModal: React.FC = () => {
               <div className="ssh-form-group">
                 <label>{t('ssh_auth_method')}</label>
                 <div className="ssh-auth-row">
-                  {authPrimary.map((btn) => (
-                    <button
-                      key={btn.id}
-                      className={`ssh-auth-btn ${form.auth_method === btn.id ? 'active' : ''}`}
-                      onClick={() => setForm({ ...form, auth_method: btn.id, password: '' })}
-                    >
-                      {t(btn.labelKey)}
-                    </button>
-                  ))}
-                </div>
-                <div className="ssh-auth-row" style={{ marginTop: 6 }}>
-                  {authSecondary.map((btn) => (
+                  {authMethods.map((btn) => (
                     <button
                       key={btn.id}
                       className={`ssh-auth-btn ${form.auth_method === btn.id ? 'active' : ''}`}

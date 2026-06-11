@@ -1,8 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Search,
-  Server,
   RefreshCw,
   Plus,
   Trash2,
@@ -15,7 +14,7 @@ import {
 import type { SessionConfig } from '../../types';
 import { useAssetData } from '../../hooks/useAssetData';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { AssetDashboard } from '../AssetDashboard/AssetDashboard';
+import { AssetDashboard, EmptyStateCtas } from '../AssetDashboard/AssetDashboard';
 
 export const AssetTable: React.FC = () => {
   const {
@@ -69,11 +68,45 @@ export const AssetTable: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [contextMenu]);
 
+  // Latency thresholds tuned for SSH over WAN: <100ms is healthy, 100–300ms
+  // noticeable, >300ms painful. (The old 50/150 cutoffs flagged perfectly
+  // fine links as degraded.)
   const formatLatency = (latency?: number | null) => {
     if (latency == null) return <span className="latency-na">-</span>;
-    const cls = latency <= 50 ? 'latency-good' : latency <= 150 ? 'latency-ok' : 'latency-bad';
+    const cls = latency <= 100 ? 'latency-good' : latency <= 300 ? 'latency-ok' : 'latency-bad';
     return <span className={cls}>{latency}ms</span>;
   };
+
+  // Type-aware connection info for the Host column (serial/local/docker
+  // sessions have no host, but they do have something meaningful to show).
+  const hostInfo = (s: SessionConfig): string => {
+    if (s.host) return s.host;
+    switch (s.session_type) {
+      case 'serial':     return s.serial_port || '-';
+      case 'localshell': return s.shell_name || t('newasset_localshell');
+      case 'docker':     return s.docker_connect_method?.toLowerCase() === 'ssh' ? 'docker (SSH)' : 'docker';
+      default:           return '-';
+    }
+  };
+
+  // Hide columns that carry no data for ANY visible row (到期时间/备注 are
+  // usually all "-": fixed empty columns just waste width).
+  const showExpired = useMemo(() => filteredSessions.some((s) => s.expired_at), [filteredSessions]);
+  const showRemark  = useMemo(() => filteredSessions.some((s) => s.remark),     [filteredSessions]);
+  const colCount = 7 + (showExpired ? 1 : 0) + (showRemark ? 1 : 0);
+
+  // Group rows like the card view does, so the list view keeps the same
+  // organizational context. Insertion order is preserved.
+  const groupedSessions = useMemo(() => {
+    const map = new Map<string, SessionConfig[]>();
+    filteredSessions.forEach((s) => {
+      const key = s.group?.trim() || '';
+      const arr = map.get(key);
+      if (arr) arr.push(s);
+      else map.set(key, [s]);
+    });
+    return Array.from(map.entries());
+  }, [filteredSessions]);
 
   return (
     <div className="asset-table-wrapper">
@@ -89,7 +122,6 @@ export const AssetTable: React.FC = () => {
           >
             {sidebarCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
           </button>
-          <span className="asset-toolbar-title">{t('table_title')}</span>
           <div className="home-view-seg" role="group" aria-label="View mode">
             <button
               type="button"
@@ -110,7 +142,10 @@ export const AssetTable: React.FC = () => {
           </div>
         </div>
         <div className="asset-toolbar-center">
-          <span className="asset-toolbar-info">{t('table_selected', { count: selectedSessionIds.length })}</span>
+          {/* "0 selected" is permanent noise — only surface this when a selection exists. */}
+          {selectedSessionIds.length > 0 && (
+            <span className="asset-toolbar-info">{t('table_selected', { count: selectedSessionIds.length })}</span>
+          )}
         </div>
         <div className="asset-toolbar-right">
           <div className="asset-search-box">
@@ -156,23 +191,30 @@ export const AssetTable: React.FC = () => {
                 <th className="col-host">{t('table_col_host')}</th>
                 <th className="col-user">{t('table_col_user')}</th>
                 <th className="col-created">{t('table_col_created')}</th>
-                <th className="col-expired">{t('table_col_expired')}</th>
-                <th className="col-remark">{t('table_col_remark')}</th>
+                {showExpired && <th className="col-expired">{t('table_col_expired')}</th>}
+                {showRemark && <th className="col-remark">{t('table_col_remark')}</th>}
                 <th className="col-actions">{t('table_col_actions')}</th>
               </tr>
             </thead>
             <tbody>
               {filteredSessions.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="asset-empty">
-                    <div className="asset-empty-content">
-                      <Server size={32} />
-                      <p>{t('table_empty')}</p>
-                    </div>
+                  <td colSpan={colCount} className="asset-empty">
+                    <EmptyStateCtas />
                   </td>
                 </tr>
               ) : (
-                filteredSessions.map((session) => (
+                groupedSessions.map(([groupName, groupSessions]) => (
+                  <React.Fragment key={groupName || '__ungrouped__'}>
+                    {(groupedSessions.length > 1 || groupName) && (
+                      <tr className="asset-group-row">
+                        <td colSpan={colCount}>
+                          {groupName || t('dash_ungrouped')}
+                          <span className="asset-group-count">{groupSessions.length}</span>
+                        </td>
+                      </tr>
+                    )}
+                    {groupSessions.map((session) => (
                   <tr
                     key={session.id}
                     className={selectedSessionIds.includes(session.id) ? 'selected' : ''}
@@ -187,15 +229,18 @@ export const AssetTable: React.FC = () => {
                       />
                     </td>
                     <td className="col-name">
-                      <span className="asset-name-icon"><Server size={13} /></span>
+                      <span
+                        className="asset-name-color"
+                        style={{ background: session.color_label || 'var(--border-color)' }}
+                      />
                       <span>{session.name}</span>
                     </td>
                     <td className="col-latency">{formatLatency(session.latency)}</td>
-                    <td className="col-host">{session.host || '-'}</td>
+                    <td className="col-host">{hostInfo(session)}</td>
                     <td className="col-user">{session.username || '-'}</td>
                     <td className="col-created">{session.created_at || '-'}</td>
-                    <td className="col-expired">{session.expired_at || '-'}</td>
-                    <td className="col-remark">{session.remark || '-'}</td>
+                    {showExpired && <td className="col-expired">{session.expired_at || '-'}</td>}
+                    {showRemark && <td className="col-remark">{session.remark || '-'}</td>}
                     <td className="col-actions">
                       <button
                         className="asset-action-btn"
@@ -227,6 +272,8 @@ export const AssetTable: React.FC = () => {
                       </button>
                     </td>
                   </tr>
+                    ))}
+                  </React.Fragment>
                 ))
               )}
             </tbody>

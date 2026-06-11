@@ -24,7 +24,7 @@
   /* ---- Text ---- */
   --text-primary:   #e7e9f0;
   --text-secondary: #9ca3b4;
-  --text-muted:     #5b6172;
+  --text-muted:     #6b7385;
 
   /* ---- Signature accent (indigo) ---- */
   --accent-primary: #6366f1;
@@ -99,8 +99,8 @@
   --border-light: #e6e9ee;
 
   --text-primary:   #1a1c23;
-  --text-secondary: #5b6172;
-  --text-muted:     #8a91a0;
+  --text-secondary: #555b6b;
+  --text-muted:     #667085;
 
   --accent-primary: #4f46e5;
   --accent-primary-rgb: 79, 70, 229;
