@@ -26,6 +26,7 @@ import { resolveTerminalTheme } from '../../lib/terminalThemes';
 import { runLoginScript } from '../../lib/sendScript';
 import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';
 import { buildCompletions, type Completion } from '../../lib/completion';
+import { tableForShellName, tableForRemoteShell, type CommandTable } from '../../lib/commandDictionary';
 import { CompletionDropdown } from './CompletionDropdown';
 import i18n from '../../i18n';
 import "@xterm/xterm/css/xterm.css";
@@ -179,6 +180,9 @@ const tabCompletionIdx  = new Map<string, number>();
 const completionNav     = new Map<string, boolean>(); // user moved selection with ↑/↓
 const tabInputSenders   = new Map<string, (data: string) => void>(); // populated by the snippet input-sender task
 const bracketedPaste    = new Map<string, boolean>();
+// Resolved completion table per tab. For SSH 'auto', filled in asynchronously
+// by detect_remote_os; for other types it is derived synchronously (see syncTable).
+const tabCommandTable   = new Map<string, CommandTable>();
 
 function isInteractiveTerminal(type: string): boolean {
   return type === 'ssh' || type === 'localshell' || type === 'serial' || type === 'docker';
@@ -209,6 +213,23 @@ function tabScope(
   if (type === 'serial') return session?.serial_port ?? 'serial';
   if (type === 'docker') return session?.name ?? 'docker';
   return '';
+}
+
+// Synchronous best-guess completion table for a tab. SSH with an 'auto'/unset
+// override returns 'unix' until the async probe (detect_remote_os) resolves and
+// writes the real value into tabCommandTable.
+function syncTable(
+  type: string,
+  session: { shell_name?: string; remote_shell?: string } | undefined,
+): CommandTable {
+  if (type === 'localshell') return tableForShellName(session?.shell_name);
+  if (type === 'ssh') return tableForRemoteShell(session?.remote_shell) ?? 'unix';
+  return 'unix'; // docker, serial
+}
+
+// Normalize a backend table string to a CommandTable (defensive against drift).
+function normalizeTable(s: string): CommandTable {
+  return s === 'cmd' || s === 'powershell' ? s : 'unix';
 }
 
 /** Remove event listeners for a tab (idempotent). */
@@ -248,6 +269,7 @@ export function destroyTerminal(tabId: string): void {
   connectedTabs.delete(tabId);
   reconnectableTabs.delete(tabId);
   inputBuffers.delete(tabId);
+  tabCommandTable.delete(tabId);
   completionSetters.delete(tabId);
   completionAccept.delete(tabId);
   tabCwd.delete(tabId);
@@ -1204,7 +1226,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                 hideCompletions();
                 return;
               }
-              const items = buildCompletions(buf, { scope, cwd, sessionType }, locale);
+              const table = tabCommandTable.get(tab.id) ?? syncTable(tab.type, sess);
+              const items = buildCompletions(buf, { scope, cwd, sessionType, table }, locale);
               tabCompletions.set(tab.id, items);
               tabCompletionIdx.set(tab.id, 0);
               completionNav.set(tab.id, false);
@@ -1520,6 +1543,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         clearBlockTab(tab.id);
         tabHasOsc133.delete(tab.id);
         tabHasOsc133Exec.delete(tab.id);
+        tabCommandTable.delete(tab.id);
         inputBuffers.set(tab.id, '');
         const rawFreshSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
         const freshSession = rawFreshSession ? applyGroupDefaults(rawFreshSession, loadGroupDefaults()) : rawFreshSession;
@@ -1548,6 +1572,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           connectedTabs.add(tab.id);
           useAppStore.getState().updateTabConnected(tab.id, true);
           reconnectableTabs.delete(tab.id);
+          if (tab.type === 'ssh' && freshSession && tableForRemoteShell(freshSession.remote_shell ?? null) === null) {
+            invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
+              .then((tbl) => { tabCommandTable.set(tab.id, normalizeTable(tbl)); })
+              .catch(() => {});
+          }
         } catch (err) {
           instance?.terminal.write(
             `\r\n\x1b[31m${String(err)}\x1b[0m\r\n` +
@@ -1637,6 +1666,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             // init_command. Fails silently — remote shell type is unknown.
             if (useSettingsStore.getState().settings.cmdHintShellIntegration) {
               invoke("write_to_ssh", { sessionId: tab.sessionId, data: SSH_OSC133_SNIPPET }).catch(() => {});
+            }
+
+            // Resolve the completion table: a concrete override is handled
+            // synchronously by syncTable; 'auto'/unset triggers a one-shot remote
+            // probe (best-effort, result cached per tab).
+            if (tableForRemoteShell(session.remote_shell ?? null) === null) {
+              invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
+                .then((tbl) => { tabCommandTable.set(tab.id, normalizeTable(tbl)); })
+                .catch(() => {});
             }
 
             // Dynamic (SOCKS) only needs a local port; local/remote need the full triple.
