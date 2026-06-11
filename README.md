@@ -27,10 +27,11 @@
 | **SSH** | SSH Agent forwarding | Use system SSH Agent (OpenSSH / Pageant) for authentication |
 | **SSH** | Jump Host (-J) | Proxy connections through a bastion/jump host |
 | **SSH** | SOCKS4/5, HTTP proxies | Route SSH connections through proxy servers |
-| **SSH** | Port Forwarding | Local port forwarding (SSH tunnel) |
+| **SSH** | Port Forwarding | Local (-L), remote (-R) and dynamic SOCKS5 (-D) forwarding |
 | **SSH** | Connection latency (ping) | Real-time TCP latency measurement for all sessions |
+| **SSH** | SSH config import | Import hosts from `~/.ssh/config` as assets |
 | **SFTP** | File browser | Navigate remote file systems with tree-based panel |
-| **SFTP** | Upload / Download | Transfer files between local and remote |
+| **SFTP** | Upload / Download | Files and folders (recursive), with transfer progress |
 | **SFTP** | Inline text editor | Edit remote files directly with syntax-aware editor |
 | **SFTP** | Permissions (chmod) | Change file permissions on remote servers |
 | **SFTP** | Rename / Delete / Mkdir | Full file management operations |
@@ -38,15 +39,20 @@
 | **Terminal** | Split screen | 1×1, 1×2, 2×2, 2×3, 2×4 split layouts |
 | **Terminal** | xterm.js rendering | GPU-accelerated terminal with web links, selection |
 | **Terminal** | Theme sync | Terminal colors follow app light/dark theme |
+| **Terminal** | Command palette & blocks | Ctrl+K palette, Warp-style command block navigation |
+| **Terminal** | Snippet manager | Save & replay command snippets |
+| **Terminal** | Session logging | Append terminal output to per-session daily log files |
+| **Monitoring** | Server panel | Live CPU / memory / disk / NIC / process metrics over SSH |
 | **Serial** | Serial port console | Connect to COM/ttyUSB devices with baud rate config |
-| **Docker** | Docker management | Connect to Docker hosts via SSH tunnel (WIP) |
-| **AI** | Provider management | Configure & switch AI CLI providers (Claude Code, Codex, Gemini, etc.) |
+| **Docker** | Docker management | List containers & exec shells, locally or via SSH |
 | **UI** | Dark / Light theme | System-aware theme with manual toggle |
 | **UI** | i18n (English, 中文) | Full bilingual interface |
 | **UI** | Collapsible sidebar | Drag-free sidebar with icon navigation |
+| **UI** | Tab drag & drop | Reorder terminal tabs by dragging |
 | **UI** | System tray | Minimize to tray, double-click to restore |
-| **Data** | SQLite persistence | All sessions, groups, and settings stored locally |
-| **Data** | Session groups | Organize connections by folder/category |
+| **Security** | Encrypted secrets & vault | Credentials encrypted at rest, optional master-passphrase lock |
+| **Data** | SQLite persistence | All sessions and settings stored locally |
+| **Data** | Import / Export | Backup and restore assets (exports never contain passwords) |
 | **Update** | Auto-update | In-app update checker with download & install |
 
 ### Planned 🚧
@@ -57,11 +63,8 @@
 | Telnet connections | Legacy telnet protocol |
 | VNC viewer | Embedded VNC client |
 | File sync (rsync) | Bi-directional file synchronization |
-| Snippet manager | Save & replay command snippets |
 | Session recording | Record terminal sessions (asciinema format) |
 | Multi-language i18n | Japanese, Korean, Spanish, French, German, Russian |
-| Tab drag & drop | Reorder tabs by dragging |
-| SSH config import | Import from `~/.ssh/config` |
 | Plugin system | Extend GWShell with community plugins |
 | WebDAV / S3 browser | Cloud storage file management |
 | Database client | Built-in MySQL/PostgreSQL/Redis client |
@@ -114,7 +117,7 @@ npm run tauri build    # Production build
 | Frontend | React 19, TypeScript 5.8, Vite 7 |
 | Backend | Rust, Tokio (async runtime) |
 | Terminal | [xterm.js](https://xtermjs.org/) 6.x |
-| SSH | libssh2 (via [ssh2](https://crates.io/crates/ssh2) crate) |
+| SSH | [russh](https://crates.io/crates/russh) (pure-Rust async SSH) |
 | Database | SQLite (via [rusqlite](https://crates.io/crates/rusqlite)) |
 | UI State | [Zustand](https://zustand-demo.pmnd.rs/) 5 |
 | Icons | [Lucide](https://lucide.dev/) |

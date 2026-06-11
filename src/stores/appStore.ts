@@ -44,6 +44,7 @@ interface AppStore {
   activeTabId: string | null;
   addTab: (tab: TabInfo) => void;
   removeTab: (id: string) => void;
+  reorderTabs: (fromId: string, toId: string) => void;
   setActiveTab: (id: string) => void;
   updateTabConnected: (id: string, connected: boolean) => void;
 
@@ -203,6 +204,19 @@ export const useAppStore = create<AppStore>((set, _get) => ({
       mainView: tab.type === 'asset-list' ? 'asset-list' : 'terminal',
       splitPanes: state.splitCount > 1 ? fillFirstEmpty(state.splitPanes, tab.id) : state.splitPanes,
     })),
+  // Move the tab `fromId` to the position currently held by `toId` (drag &
+  // drop reorder). The asset-list home tab is pinned and never moves.
+  reorderTabs: (fromId, toId) =>
+    set((state) => {
+      if (fromId === toId || fromId === 'asset-list' || toId === 'asset-list') return state;
+      const from = state.tabs.findIndex((t) => t.id === fromId);
+      const to = state.tabs.findIndex((t) => t.id === toId);
+      if (from < 0 || to < 0) return state;
+      const tabs = [...state.tabs];
+      const [moved] = tabs.splice(from, 1);
+      tabs.splice(to, 0, moved);
+      return { tabs };
+    }),
   removeTab: (id) =>
     set((state) => {
       if (id === 'asset-list') return state;

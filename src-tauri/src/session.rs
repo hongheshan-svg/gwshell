@@ -156,9 +156,3 @@ impl Default for SessionConfig {
         }
     }
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionGroup {
-    pub name: String,
-    pub sessions: Vec<SessionConfig>,
-}

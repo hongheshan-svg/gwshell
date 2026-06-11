@@ -1,27 +1,22 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { invoke } from '@tauri-apps/api/core';
 import { X } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { useEscapeClose } from '../../lib/useEscapeClose';
 import type { SessionConfig } from '../../types';
-import type { TranslationKeys } from '../../i18n';
 
 const colorLabels = [
   '#ef4444', '#f97316', '#eab308', '#22c55e', '#10b981',
   '#06b6d4', '#3b82f6', '#6366f1', '#a855f7', '#9ca3af', '#374151',
 ];
 
-const dockerTabKeys: { id: string; labelKey: TranslationKeys }[] = [
-  { id: 'standard', labelKey: 'docker_tab_standard' },
-  { id: 'proxy', labelKey: 'docker_tab_proxy' },
-];
-
 export const DockerModal: React.FC = () => {
   const { showDockerModal, setShowDockerModal, addSession, sessions } = useAppStore();
   const { t } = useTranslation();
 
-  const [activeTab, setActiveTab] = useState('standard');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [testState, setTestState] = useState<{ kind: 'idle' | 'busy' | 'ok' | 'err'; text?: string }>({ kind: 'idle' });
   const [form, setForm] = useState({
     name: '',
     color_label: '',
@@ -46,7 +41,7 @@ export const DockerModal: React.FC = () => {
         remark: '',
       });
       setTouched({});
-      setActiveTab('standard');
+      setTestState({ kind: 'idle' });
     }
   }, [showDockerModal]);
 
@@ -83,10 +78,23 @@ export const DockerModal: React.FC = () => {
     handleClose();
   };
 
-  const handleTest = () => {
-    setTouched({ name: true });
-    if (!form.name) return;
-    handleSave();
+  // Probe the configured Docker host with a one-shot `docker ps` (the same
+  // backend command the container picker uses) without saving the session.
+  const handleTest = async () => {
+    if (form.docker_connect_method === 'SSH' && !form.docker_ssh_tunnel) {
+      setTestState({ kind: 'err', text: t('docker_test_need_tunnel') });
+      return;
+    }
+    setTestState({ kind: 'busy' });
+    try {
+      const containers = await invoke<unknown[]>('docker_list_containers', {
+        connectMethod: form.docker_connect_method,
+        tunnelSessionId: form.docker_ssh_tunnel || null,
+      });
+      setTestState({ kind: 'ok', text: t('docker_test_ok', { count: containers.length }) });
+    } catch (e) {
+      setTestState({ kind: 'err', text: String(e) });
+    }
   };
 
   const nameError = touched.name && !form.name;
@@ -105,23 +113,9 @@ export const DockerModal: React.FC = () => {
           </button>
         </div>
 
-        {/* Tabs — centered pill style */}
-        <div className="ssh-modal-tabs" style={{ justifyContent: 'center' }}>
-          {dockerTabKeys.map((tab) => (
-            <button
-              key={tab.id}
-              className={`ssh-tab ${activeTab === tab.id ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {t(tab.labelKey)}
-            </button>
-          ))}
-        </div>
-
         {/* Body */}
         <div className="ssh-modal-body">
-          {activeTab === 'standard' && (
-            <>
+          <>
               {/* Color label + Environment */}
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
@@ -232,32 +226,28 @@ export const DockerModal: React.FC = () => {
                   onChange={(e) => setForm({ ...form, remark: e.target.value })}
                 />
               </div>
-            </>
-          )}
-
-          {activeTab === 'proxy' && (
-            <div className="ssh-tab-placeholder">
-              <p>{t('docker_proxy_dev')}</p>
-            </div>
-          )}
+          </>
         </div>
 
         {/* Footer */}
         <div className="ssh-modal-footer">
-          <button
-            className="ssh-footer-link"
-            style={{ fontSize: 12, opacity: 0.55, cursor: 'not-allowed' }}
-            disabled
-            title={t('docker_auto_config')}
-          >
-            {t('docker_auto_config')}
-          </button>
-          <div style={{ display: 'flex', gap: 12 }}>
+          {testState.kind !== 'idle' && (
+            <span
+              className="settings-desc"
+              style={{
+                fontSize: 12,
+                alignSelf: 'center',
+                color: testState.kind === 'err' ? 'var(--danger)' : testState.kind === 'ok' ? 'var(--success)' : undefined,
+              }}
+            >
+              {testState.kind === 'busy' ? t('docker_testing') : testState.text}
+            </span>
+          )}
+          <div style={{ display: 'flex', gap: 12, marginLeft: 'auto' }}>
             <button
               className="ssh-footer-link"
-              style={{ opacity: 0.55, cursor: 'not-allowed' }}
               onClick={handleTest}
-              disabled
+              disabled={testState.kind === 'busy'}
               title={t('docker_test')}
             >
               {t('docker_test')}

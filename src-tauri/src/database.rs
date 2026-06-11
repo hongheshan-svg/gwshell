@@ -1,4 +1,4 @@
-use crate::session::{SessionConfig, SessionGroup};
+use crate::session::SessionConfig;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -117,54 +117,6 @@ impl Database {
     pub fn delete_session(&self, session_id: &str) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         conn.execute("DELETE FROM sessions WHERE id = ?1", params![session_id])
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    }
-
-    // ---- Groups ----
-
-    pub fn save_group(&self, group: &SessionGroup) -> Result<(), String> {
-        // Encrypt secrets of any embedded session configs too.
-        let mut group = group.clone();
-        crate::crypto::encrypt_group_secrets(&mut group);
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        let data = serde_json::to_string(&group).map_err(|e| e.to_string())?;
-        conn.execute(
-            "INSERT OR REPLACE INTO groups (name, data) VALUES (?1, ?2)",
-            params![group.name, data],
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(())
-    }
-
-    pub fn get_groups(&self) -> Result<Vec<SessionGroup>, String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        let mut stmt = conn
-            .prepare("SELECT data FROM groups")
-            .map_err(|e| e.to_string())?;
-        let rows = stmt
-            .query_map([], |row| {
-                let data: String = row.get(0)?;
-                Ok(data)
-            })
-            .map_err(|e| e.to_string())?;
-        let mut groups = Vec::new();
-        for row in rows {
-            let data = row.map_err(|e| e.to_string())?;
-            match serde_json::from_str::<SessionGroup>(&data) {
-                Ok(mut group) => {
-                    crate::crypto::decrypt_group_secrets(&mut group);
-                    groups.push(group);
-                }
-                Err(e) => eprintln!("[gwshell] skipping unreadable group row: {}", e),
-            }
-        }
-        Ok(groups)
-    }
-
-    pub fn delete_group(&self, name: &str) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        conn.execute("DELETE FROM groups WHERE name = ?1", params![name])
             .map_err(|e| e.to_string())?;
         Ok(())
     }

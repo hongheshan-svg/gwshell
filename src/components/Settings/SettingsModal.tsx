@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { open as dialogOpen, save as dialogSave } from '@tauri-apps/plugin-dialog';
 import { X } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import type { SessionConfig } from '../../types';
 import { useSettingsStore, defaultSettings as persistedDefaultSettings } from '../../stores/settingsStore';
 import type { TranslationKeys } from '../../i18n';
 import { TERMINAL_SCHEME_OPTIONS } from '../../lib/terminalThemes';
@@ -29,7 +31,6 @@ const navCategories: { title?: TranslationKeys; items: { id: string; labelKey: T
   { items: [{ id: 'docker', labelKey: 'settings_docker' }] },
   { items: [{ id: 'vault', labelKey: 'vault_section' }] },
   { items: [{ id: 'storage', labelKey: 'settings_storage' }] },
-  { items: [{ id: 'referral', labelKey: 'settings_referral' }] },
 ];
 
 /* ---- Settings state ---- */
@@ -70,6 +71,7 @@ export interface AppSettings {
   quakeEnabled: boolean;
   quakeHotkey: string;
   homeView: 'card' | 'table';
+  sessionLogEnabled: boolean;
 }
 
 const CMD_TERMINAL_FONT = 'Consolas, "Cascadia Mono", "Courier New", monospace';
@@ -359,6 +361,140 @@ const VaultSection: React.FC<{ open: boolean }> = ({ open }) => {
   );
 };
 
+/* ---- Storage section (export / import / clear local data) ---- */
+// Self-contained: drives the storage IPC commands directly. Import and clear
+// refresh the in-memory session list so the sidebar reflects the change
+// immediately. Clear uses an inline two-step confirm (no extra dialog
+// capability needed).
+const StorageSection: React.FC = () => {
+  const { t } = useTranslation();
+  const setSessions = useAppStore((s) => s.setSessions);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  // Revert the danger button to its normal label if the user doesn't confirm.
+  useEffect(() => {
+    if (!confirmClear) return;
+    const timer = setTimeout(() => setConfirmClear(false), 4000);
+    return () => clearTimeout(timer);
+  }, [confirmClear]);
+
+  const refreshSessions = async () => {
+    setSessions(await invoke<SessionConfig[]>('get_sessions'));
+  };
+
+  const handleExport = async () => {
+    setMsg(null);
+    try {
+      const path = await dialogSave({
+        title: t('settings_storage_export'),
+        defaultPath: `gwshell-sessions-${new Date().toISOString().slice(0, 10)}.json`,
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      });
+      if (!path) return;
+      setBusy(true);
+      await invoke('export_sessions_data', { path });
+      setMsg({ kind: 'ok', text: t('settings_storage_exported', { path }) });
+    } catch (e) {
+      setMsg({ kind: 'err', text: t('settings_storage_failed', { msg: String(e) }) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleImport = async () => {
+    setMsg(null);
+    try {
+      const path = await dialogOpen({
+        title: t('settings_storage_import'),
+        multiple: false,
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      });
+      if (typeof path !== 'string' || !path) return;
+      setBusy(true);
+      const count = await invoke<number>('import_sessions_data', { path });
+      await refreshSessions();
+      setMsg({ kind: 'ok', text: t('settings_storage_imported', { count }) });
+    } catch (e) {
+      setMsg({ kind: 'err', text: t('settings_storage_failed', { msg: String(e) }) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleImportSshConfig = async () => {
+    setMsg(null);
+    try {
+      setBusy(true);
+      // No path → backend reads the default ~/.ssh/config.
+      const count = await invoke<number>('import_ssh_config', { path: null });
+      await refreshSessions();
+      setMsg({ kind: 'ok', text: t('settings_storage_imported', { count }) });
+    } catch (e) {
+      setMsg({ kind: 'err', text: t('settings_storage_failed', { msg: String(e) }) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleClear = async () => {
+    if (!confirmClear) {
+      setConfirmClear(true);
+      return;
+    }
+    setConfirmClear(false);
+    setMsg(null);
+    try {
+      setBusy(true);
+      await invoke('clear_local_data');
+      await refreshSessions();
+      setMsg({ kind: 'ok', text: t('settings_storage_cleared') });
+    } catch (e) {
+      setMsg({ kind: 'err', text: t('settings_storage_failed', { msg: String(e) }) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <SectionTitle>{t('settings_storage_sync')}</SectionTitle>
+      <div className="settings-col" style={{ maxWidth: 700 }}>
+        <div className="storage-row">
+          <span className="settings-label">{t('settings_storage_local_data')}</span>
+          <span className="settings-desc" style={{ flex: 1 }}>{t('settings_storage_local_data_desc')}</span>
+          <button className="settings-btn-danger" disabled={busy} onClick={handleClear}>
+            {confirmClear ? t('settings_storage_clear_confirm') : t('settings_storage_clear')}
+          </button>
+        </div>
+        <div className="storage-row">
+          <span className="settings-label">{t('settings_storage_import_export')}</span>
+          <span className="settings-desc" style={{ flex: 1 }}>{t('settings_storage_import_export_desc')}</span>
+          <button className="settings-btn-outline" style={{ marginRight: 6 }} disabled={busy} onClick={handleImport}>
+            {t('settings_storage_import')}
+          </button>
+          <button className="settings-btn-outline" disabled={busy} onClick={handleExport}>
+            {t('settings_storage_export')}
+          </button>
+        </div>
+        <div className="storage-row">
+          <span className="settings-label">{t('settings_storage_sshconfig')}</span>
+          <span className="settings-desc" style={{ flex: 1 }}>{t('settings_storage_sshconfig_desc')}</span>
+          <button className="settings-btn-outline" disabled={busy} onClick={handleImportSshConfig}>
+            {t('settings_storage_import')}
+          </button>
+        </div>
+        {msg && (
+          <p className="settings-desc" style={{ marginTop: 8, color: msg.kind === 'err' ? 'var(--danger)' : 'var(--success)' }}>
+            {msg.text}
+          </p>
+        )}
+      </div>
+    </>
+  );
+};
+
 /* ---- Main Component ---- */
 export const SettingsModal: React.FC = () => {
   const { showSettings, setShowSettings, theme, setTheme } = useAppStore();
@@ -473,6 +609,7 @@ export const SettingsModal: React.FC = () => {
                     <Row label={t('settings_line_height')}><NumInput value={settings.terminalLineHeight} onChange={(v) => u('terminalLineHeight', v)} prefix={t('settings_line_height_prefix')} /></Row>
                     <Row label={t('settings_letter_spacing')}><NumInput value={settings.terminalLetterSpacing} onChange={(v) => u('terminalLetterSpacing', v)} prefix={t('settings_letter_spacing_prefix')} /></Row>
                     <Row label={t('settings_max_scrollback')}><NumInput value={settings.terminalMaxScrollback} onChange={(v) => u('terminalMaxScrollback', v)} /></Row>
+                    <Row label={t('settings_session_log')} desc={t('settings_session_log_hint')}><Toggle value={settings.sessionLogEnabled} onChange={(v) => u('sessionLogEnabled', v)} /></Row>
                   </div>
                 </div>
               </>
@@ -518,50 +655,13 @@ export const SettingsModal: React.FC = () => {
             {activeNav === 'vault' && <VaultSection open={showSettings && activeNav === 'vault'} />}
 
             {/* ===== 储存仓库 ===== */}
-            {activeNav === 'storage' && (
-              <>
-                <SectionTitle>{t('settings_storage_sync')}</SectionTitle>
-                <div className="settings-col" style={{ maxWidth: 700 }}>
-                  <div className="storage-row">
-                    <span className="settings-label">{t('settings_storage_local_data')}</span>
-                    <span className="settings-desc" style={{ flex: 1 }}>{t('settings_storage_local_data_desc')}</span>
-                    <button className="settings-btn-danger">{t('settings_storage_clear')}</button>
-                  </div>
-                  <div className="storage-row">
-                    <span className="settings-label">{t('settings_storage_backup')}</span>
-                    <span className="settings-desc" style={{ flex: 1 }}>{t('settings_storage_backup_desc')}</span>
-                    <button className="settings-btn-outline">{t('settings_storage_restore')}</button>
-                  </div>
-                  <div className="storage-row">
-                    <span className="settings-label">{t('settings_storage_import_export')}</span>
-                    <span className="settings-desc" style={{ flex: 1 }}>{t('settings_storage_import_export_desc')}</span>
-                    <button className="settings-btn-outline" style={{ marginRight: 6 }}>{t('settings_storage_import')}</button>
-                    <button className="settings-btn-outline">{t('settings_storage_export')}</button>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* ===== 推介有奖 ===== */}
-            {activeNav === 'referral' && (
-              <div className="settings-placeholder">
-                <div style={{ textAlign: 'center' }}>
-                  <h3 style={{ marginBottom: 8 }}>{t('settings_referral_title')}</h3>
-                  <p>{t('settings_referral_desc')}</p>
-                  <p className="settings-desc" style={{ marginTop: 12 }}>{t('settings_referral_dev')}</p>
-                </div>
-              </div>
-            )}
+            {activeNav === 'storage' && <StorageSection />}
           </div>
         </div>
 
         {/* Footer */}
         <div className="settings-footer">
-          {activeNav === 'storage' ? (
-            <span className="settings-footer-hint">{t('settings_footer_storage')}</span>
-          ) : (
-            <span className="settings-footer-hint">{t('settings_footer_default')}</span>
-          )}
+          <span className="settings-footer-hint">{t('settings_footer_default')}</span>
           <div className="settings-footer-actions">
             <button className="settings-btn-outline" onClick={handleReset}>{t('settings_reset')}</button>
             <button className={`settings-btn-primary ${!dirty ? 'disabled' : ''}`} onClick={handleApply} disabled={!dirty}>

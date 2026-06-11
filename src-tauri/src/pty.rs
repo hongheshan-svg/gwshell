@@ -5,17 +5,14 @@ use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::sync::mpsc;
 use std::sync::{
-    atomic::{AtomicBool, AtomicU64, Ordering},
+    atomic::{AtomicBool, Ordering},
     Arc,
 };
-use std::time::{Duration, Instant, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
 #[cfg(unix)]
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
-
-/// Monotonic counter for unique temp-file naming (pid + counter).
-static SHELL_INTEGRATION_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 const PTY_INPUT_BUFFER_LIMIT: usize = 1024 * 1024;
 const PTY_CMD_QUEUE_LIMIT: usize = 64;

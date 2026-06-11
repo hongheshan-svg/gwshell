@@ -20,7 +20,7 @@ use aes_gcm::{
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use std::sync::OnceLock;
 
-use crate::session::{SessionConfig, SessionGroup};
+use crate::session::SessionConfig;
 
 const ENC_PREFIX: &str = "enc:v1:";
 const KEYRING_SERVICE: &str = "gwshell";
@@ -170,18 +170,6 @@ pub fn encrypt_session_secrets(config: &mut SessionConfig) {
 
 pub fn decrypt_session_secrets(config: &mut SessionConfig) {
     for_each_secret(config, dec_field);
-}
-
-pub fn encrypt_group_secrets(group: &mut SessionGroup) {
-    for s in &mut group.sessions {
-        encrypt_session_secrets(s);
-    }
-}
-
-pub fn decrypt_group_secrets(group: &mut SessionGroup) {
-    for s in &mut group.sessions {
-        decrypt_session_secrets(s);
-    }
 }
 
 #[cfg(test)]

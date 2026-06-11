@@ -7,13 +7,14 @@ mod pty;
 mod serial;
 mod session;
 mod ssh;
+mod ssh_config;
 mod vault;
 
 use database::Database;
 use parking_lot::Mutex;
 use pty::PtyManager;
 use serial::SerialManager;
-use session::{SessionConfig, SessionGroup};
+use session::SessionConfig;
 use ssh::SshManager;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager, State};
@@ -23,7 +24,6 @@ pub struct AppState {
     pub ssh_manager: Arc<SshManager>,
     pub serial_manager: SerialManager,
     pub sessions: Mutex<Vec<SessionConfig>>,
-    pub groups: Mutex<Vec<SessionGroup>>,
     pub db: Database,
     pub metrics: metrics::MetricsManager,
 }
@@ -386,16 +386,53 @@ async fn sftp_rename(
         .await
 }
 
+/// Build a throttled progress reporter that emits `sftp-progress-{session_id}`
+/// events. Chunk callbacks arrive every 256 KiB; intermediate updates are
+/// rate-limited to ~10/s, while each file's final chunk always goes through so
+/// the bar reaches 100%. The frontend treats the resolution of the invoke
+/// itself as the end-of-transfer signal.
+fn sftp_progress_emitter(
+    app: tauri::AppHandle,
+    session_id: &str,
+    kind: &'static str,
+) -> ssh::ProgressFn {
+    use tauri::Emitter;
+    let event = format!("sftp-progress-{}", session_id);
+    let mut last_emit = std::time::Instant::now() - std::time::Duration::from_secs(1);
+    Box::new(move |file, file_index, file_total, bytes, total| {
+        let now = std::time::Instant::now();
+        let file_finished = total > 0 && bytes >= total;
+        if !file_finished && now.duration_since(last_emit) < std::time::Duration::from_millis(100)
+        {
+            return;
+        }
+        last_emit = now;
+        let _ = app.emit(
+            &event,
+            serde_json::json!({
+                "kind": kind,
+                "file": file,
+                "fileIndex": file_index,
+                "fileTotal": file_total,
+                "bytes": bytes,
+                "total": total,
+            }),
+        );
+    })
+}
+
 #[tauri::command]
 async fn sftp_download(
     session_id: String,
     remote_path: String,
     local_path: String,
     state: State<'_, Arc<AppState>>,
+    app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
+    let progress = sftp_progress_emitter(app_handle, &session_id, "download");
     state
         .ssh_manager
-        .sftp_download(&session_id, &remote_path, &local_path)
+        .sftp_download(&session_id, &remote_path, &local_path, Some(progress))
         .await
 }
 
@@ -405,10 +442,48 @@ async fn sftp_upload(
     remote_path: String,
     local_path: String,
     state: State<'_, Arc<AppState>>,
+    app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
+    let progress = sftp_progress_emitter(app_handle, &session_id, "upload");
     state
         .ssh_manager
-        .sftp_upload(&session_id, &remote_path, &local_path)
+        .sftp_upload(&session_id, &remote_path, &local_path, Some(progress))
+        .await
+}
+
+/// Recursively download a remote directory into `local_dir` (the picked
+/// destination folder; a subfolder named after the remote dir is created).
+/// Returns the number of files transferred.
+#[tauri::command]
+async fn sftp_download_dir(
+    session_id: String,
+    remote_path: String,
+    local_dir: String,
+    state: State<'_, Arc<AppState>>,
+    app_handle: tauri::AppHandle,
+) -> Result<usize, String> {
+    let progress = sftp_progress_emitter(app_handle, &session_id, "download");
+    state
+        .ssh_manager
+        .sftp_download_dir(&session_id, &remote_path, &local_dir, Some(progress))
+        .await
+}
+
+/// Recursively upload a local directory into the remote directory
+/// `remote_path` (a subfolder named after the local dir is created). Returns
+/// the number of files transferred.
+#[tauri::command]
+async fn sftp_upload_dir(
+    session_id: String,
+    remote_path: String,
+    local_dir: String,
+    state: State<'_, Arc<AppState>>,
+    app_handle: tauri::AppHandle,
+) -> Result<usize, String> {
+    let progress = sftp_progress_emitter(app_handle, &session_id, "upload");
+    state
+        .ssh_manager
+        .sftp_upload_dir(&session_id, &remote_path, &local_dir, Some(progress))
         .await
 }
 
@@ -439,7 +514,7 @@ async fn sftp_open_file(
     let local_str = local_path.to_string_lossy().to_string();
     state
         .ssh_manager
-        .sftp_download(&session_id, &remote_path, &local_str)
+        .sftp_download(&session_id, &remote_path, &local_str, None)
         .await?;
     Ok(local_str)
 }
@@ -486,15 +561,6 @@ async fn sftp_create_file(
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
     state.ssh_manager.sftp_create_file(&session_id, &path).await
-}
-
-#[tauri::command]
-async fn ssh_exec(
-    session_id: String,
-    command: String,
-    state: State<'_, Arc<AppState>>,
-) -> Result<String, String> {
-    state.ssh_manager.ssh_exec(&session_id, &command).await
 }
 
 // ---- Server Panel (Metrics) Commands ----
@@ -665,9 +731,37 @@ fn toggle_quake_window(app: &AppHandle) {
     let _ = window.set_focus();
 }
 
+// ---- Session Logging ----
+
+/// Append a chunk of terminal output to this session's daily log file under
+/// `{data_local_dir}/gwshell/logs/{name}-{YYYY-MM-DD}.log`. The session name is
+/// sanitized so it can't escape the logs directory or hit reserved characters.
 #[tauri::command]
-fn toggle_quake_window_cmd(app: tauri::AppHandle) {
-    toggle_quake_window(&app);
+async fn append_session_log(session_name: String, data: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let safe: String = session_name
+            .chars()
+            .map(|c| if r#"\/:*?"<>|"#.contains(c) || c.is_control() { '_' } else { c })
+            .collect();
+        let safe = safe.trim().trim_matches('.');
+        let name = if safe.is_empty() { "session" } else { safe };
+        let dir = dirs::data_local_dir()
+            .ok_or("Cannot determine data directory")?
+            .join("gwshell")
+            .join("logs");
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let path = dir.join(format!("{}-{}.log", name, chrono_date_today()));
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .map_err(|e| e.to_string())?;
+        f.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
 }
 
 // ---- Command History Commands ----
@@ -733,22 +827,6 @@ async fn delete_snippet(id: String, state: State<'_, Arc<AppState>>) -> Result<(
         .map_err(|e| format!("task join: {}", e))?
 }
 
-// ---- Directory Picker ----
-
-#[tauri::command]
-async fn pick_directory(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
-    tokio::task::spawn_blocking(move || -> Result<Option<String>, String> {
-        Ok(app
-            .dialog()
-            .file()
-            .blocking_pick_folder()
-            .map(|p| p.to_string()))
-    })
-    .await
-    .map_err(|e| format!("task join: {}", e))?
-}
-
 // ---- Storage Operations ----
 
 #[tauri::command]
@@ -778,6 +856,84 @@ async fn import_sessions_data(
     })
     .await
     .map_err(|e| format!("task join: {}", e))?
+}
+
+/// Import hosts from an OpenSSH client config as SSH session assets.
+///
+/// `path` defaults to `~/.ssh/config`. Hosts whose alias matches an existing
+/// session name are skipped (idempotent re-import). Returns the number of
+/// sessions actually created.
+#[tauri::command]
+async fn import_ssh_config(
+    path: Option<String>,
+    state: State<'_, Arc<AppState>>,
+) -> Result<usize, String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || -> Result<usize, String> {
+        let config_path = match path {
+            Some(p) => std::path::PathBuf::from(p),
+            None => dirs::home_dir()
+                .ok_or("Cannot determine home directory")?
+                .join(".ssh")
+                .join("config"),
+        };
+        let content = std::fs::read_to_string(&config_path)
+            .map_err(|e| format!("{}: {}", config_path.display(), e))?;
+        let hosts = ssh_config::parse_ssh_config(&content);
+
+        let mut imported = 0usize;
+        let mut sessions = state.sessions.lock();
+        for h in hosts {
+            if sessions.iter().any(|s| s.name == h.alias) {
+                continue;
+            }
+            let auth_method = if h.identity_file.is_some() {
+                session::AuthMethod::PublicKey
+            } else {
+                session::AuthMethod::Password
+            };
+            let config = SessionConfig {
+                name: h.alias.clone(),
+                host: Some(h.host_name.unwrap_or(h.alias)),
+                port: h.port,
+                username: h.user,
+                auth_method,
+                private_key_path: h.identity_file.map(|p| ssh_config::expand_tilde(&p)),
+                jump_host: h.jump_host,
+                jump_port: h.jump_port,
+                jump_username: h.jump_user,
+                group: Some("SSH Config".to_string()),
+                created_at: Some(chrono_date_today()),
+                ..Default::default()
+            };
+            state.db.save_session(&config)?;
+            sessions.push(config);
+            imported += 1;
+        }
+        Ok(imported)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
+}
+
+/// Today's date as `YYYY-MM-DD` without pulling in a date crate: civil-date
+/// conversion from the Unix epoch (Howard Hinnant's algorithm).
+fn chrono_date_today() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let days = (secs / 86400) as i64 + 719_468;
+    let era = days.div_euclid(146_097);
+    let doe = days.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let year = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if month <= 2 { year + 1 } else { year };
+    format!("{:04}-{:02}-{:02}", year, month, day)
 }
 
 #[tauri::command]
@@ -835,28 +991,6 @@ async fn delete_session(session_id: String, state: State<'_, Arc<AppState>>) -> 
     })
     .await
     .map_err(|e| format!("task join: {}", e))?
-}
-
-#[tauri::command]
-async fn save_group(group: SessionGroup, state: State<'_, Arc<AppState>>) -> Result<(), String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || -> Result<(), String> {
-        state.db.save_group(&group)?;
-        let mut groups = state.groups.lock();
-        if let Some(existing) = groups.iter_mut().find(|g| g.name == group.name) {
-            *existing = group;
-        } else {
-            groups.push(group);
-        }
-        Ok(())
-    })
-    .await
-    .map_err(|e| format!("task join: {}", e))?
-}
-
-#[tauri::command]
-fn get_groups(state: State<'_, Arc<AppState>>) -> Vec<SessionGroup> {
-    state.groups.lock().clone()
 }
 
 /// Whether credentials can be encrypted at rest on this machine. When false, the
@@ -951,14 +1085,12 @@ pub fn run() {
 
     let db = Database::new().expect("Failed to initialize database");
     let initial_sessions = db.get_sessions().unwrap_or_default();
-    let initial_groups = db.get_groups().unwrap_or_default();
 
     let app_state = Arc::new(AppState {
         pty_manager: PtyManager::new(),
         ssh_manager: Arc::new(SshManager::new()),
         serial_manager: SerialManager::new(),
         sessions: Mutex::new(initial_sessions),
-        groups: Mutex::new(initial_groups),
         db,
         metrics: metrics::MetricsManager::new(),
     });
@@ -1003,12 +1135,13 @@ pub fn run() {
             sftp_rename,
             sftp_download,
             sftp_upload,
+            sftp_download_dir,
+            sftp_upload_dir,
             sftp_open_file,
             sftp_read_text,
             sftp_write_text,
             sftp_chmod,
             sftp_create_file,
-            ssh_exec,
             start_server_metrics,
             stop_server_metrics,
             kill_remote_process,
@@ -1019,22 +1152,20 @@ pub fn run() {
             list_serial_ports,
             save_app_settings,
             load_app_settings,
-            toggle_quake_window_cmd,
-            pick_directory,
             export_sessions_data,
             import_sessions_data,
+            import_ssh_config,
             clear_local_data,
             save_session,
             get_sessions,
             delete_session,
-            save_group,
-            get_groups,
             secret_storage_available,
             vault_set_passphrase,
             vault_verify,
             vault_clear,
             vault_is_enabled,
             vault_change_passphrase,
+            append_session_log,
             get_command_history,
             save_command_history,
             save_snippet,

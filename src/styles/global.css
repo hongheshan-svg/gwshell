@@ -1136,6 +1136,50 @@ input, select, textarea, button {
   flex-shrink: 0;
 }
 
+/* Transfer progress bar (above the status line while a transfer runs) */
+.sftp-progress {
+  padding: 5px 10px 6px;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.sftp-progress-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.sftp-progress-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sftp-progress-count,
+.sftp-progress-pct {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.sftp-progress-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
+
+.sftp-progress-bar {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent-color);
+  transition: width 0.12s linear;
+}
+
 .sftp-new-folder-item {
   background: var(--bg-hover);
 }
@@ -3040,16 +3084,6 @@ a:focus-visible,
 .settings-input:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-
-/* Placeholder for unbuilt sections */
-.settings-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 300px;
-  color: var(--text-muted);
-  font-size: 14px;
 }
 
 /* Footer */

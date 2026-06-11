@@ -1,12 +1,64 @@
 import React, { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Plus, Menu, ChevronDown, FolderOpen, Columns2, PanelLeftOpen, Square, Grid2x2, LayoutGrid } from 'lucide-react';
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import { SortableContext, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useAppStore } from '../../stores/appStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
+import type { TabInfo } from '../../types';
+
+// One draggable terminal tab. Sorting is pointer-driven with a small
+// activation distance so plain clicks (select) and middle clicks (close)
+// keep working without starting a drag.
+const SortableTab: React.FC<{
+  tab: TabInfo;
+  active: boolean;
+  onSelect: () => void;
+  onMiddleClick: (e: React.MouseEvent) => void;
+  onClose: () => void;
+}> = ({ tab, active, onSelect, onMiddleClick, onClose }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: tab.id });
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.6 : undefined,
+        zIndex: isDragging ? 10 : undefined,
+      }}
+      className={`tab-item ${active ? 'active' : ''}`}
+      onClick={onSelect}
+      onMouseDown={onMiddleClick}
+    >
+      <span className={`tab-dot ${tab.connected ? 'connected' : 'disconnected'}`} />
+      <span className="tab-title">{tab.title}</span>
+      <button
+        className="tab-close"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      >
+        <X size={10} />
+      </button>
+    </div>
+  );
+};
 
 export const TabBar: React.FC = () => {
-  const { tabs, activeTabId, setActiveTab, removeTab, setShowNewSession, setShowSerialModal, setShowDockerModal, setShowLocalTerminalModal, setShowQuickConnect, sftpPanelOpen, toggleSftpPanel, splitCount, setSplitCount, sidebarCollapsed, toggleSidebar } = useAppStore();
+  const { tabs, activeTabId, setActiveTab, removeTab, reorderTabs, setShowNewSession, setShowSerialModal, setShowDockerModal, setShowLocalTerminalModal, setShowQuickConnect, sftpPanelOpen, toggleSftpPanel, splitCount, setSplitCount, sidebarCollapsed, toggleSidebar } = useAppStore();
   const { t } = useTranslation();
   const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
   const [splitMenuOpen, setSplitMenuOpen] = useState(false);
@@ -60,6 +112,16 @@ export const TabBar: React.FC = () => {
 
   const terminalTabs = tabs.filter((tab) => tab.type !== 'asset-list');
 
+  // Drag starts only after the pointer moves a few pixels, so clicks still
+  // select and middle clicks still close.
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const handleDragEnd = (e: DragEndEvent) => {
+    const overId = e.over?.id;
+    if (overId && overId !== e.active.id) {
+      reorderTabs(String(e.active.id), String(overId));
+    }
+  };
+
   return (
     <div className="tab-bar">
       {sidebarCollapsed && (
@@ -67,36 +129,32 @@ export const TabBar: React.FC = () => {
           <PanelLeftOpen size={14} />
         </button>
       )}
-      {tabs.map((tab) => (
+      {/* The asset-list home tab is pinned first and not draggable. */}
+      {tabs.filter((tab) => tab.type === 'asset-list').map((tab) => (
         <div
           key={tab.id}
-          className={`tab-item ${tab.type === 'asset-list' ? 'asset-list-tab' : ''} ${tab.id === activeTabId ? 'active' : ''}`}
+          className={`tab-item asset-list-tab ${tab.id === activeTabId ? 'active' : ''}`}
           onClick={() => setActiveTab(tab.id)}
-          onMouseDown={(e) => handleMiddleClick(e, tab.id)}
         >
-          {tab.type === 'asset-list' ? (
-            <>
-              <Menu size={13} />
-              <span>{t('tab_list')}</span>
-              <ChevronDown size={11} />
-            </>
-          ) : (
-            <>
-              <span className={`tab-dot ${tab.connected ? 'connected' : 'disconnected'}`} />
-              <span className="tab-title">{tab.title}</span>
-              <button
-                className="tab-close"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCloseTab(tab.id);
-                }}
-              >
-                <X size={10} />
-              </button>
-            </>
-          )}
+          <Menu size={13} />
+          <span>{t('tab_list')}</span>
+          <ChevronDown size={11} />
         </div>
       ))}
+      <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={terminalTabs.map((tab) => tab.id)} strategy={horizontalListSortingStrategy}>
+          {terminalTabs.map((tab) => (
+            <SortableTab
+              key={tab.id}
+              tab={tab}
+              active={tab.id === activeTabId}
+              onSelect={() => setActiveTab(tab.id)}
+              onMiddleClick={(e) => handleMiddleClick(e, tab.id)}
+              onClose={() => handleCloseTab(tab.id)}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
       <button ref={addBtnRef} className="tab-add-btn" onClick={() => setShowNewAssetMenu(true)} title={t('tab_new')}>
         <Plus size={14} />
       </button>

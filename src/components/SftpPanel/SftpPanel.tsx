@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { openPath } from '@tauri-apps/plugin-opener';
 import {
@@ -43,6 +44,16 @@ interface SftpPanelProps {
   sessionId: string;
   username?: string;
   connected?: boolean;
+}
+
+/// Payload of the backend's `sftp-progress-{sessionId}` events.
+interface SftpProgress {
+  kind: 'upload' | 'download';
+  file: string;
+  fileIndex: number;
+  fileTotal: number;
+  bytes: number;
+  total: number;
 }
 
 export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, connected }) => {
@@ -92,6 +103,43 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
     } finally {
       busyRef.current = false;
       setBusy(false);
+    }
+  }, []);
+
+  // Transfer progress (driven by backend sftp-progress events). The listener
+  // stays armed for the panel's lifetime; events are only applied while a
+  // transfer started from this panel is running (transferActiveRef), so stray
+  // events (e.g. temp-file opens) don't flash a progress bar.
+  const [progress, setProgress] = useState<SftpProgress | null>(null);
+  const transferActiveRef = useRef(false);
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    listen<SftpProgress>(`sftp-progress-${sessionId}`, (e) => {
+      if (transferActiveRef.current) setProgress(e.payload);
+    }).then((un) => {
+      if (disposed) un();
+      else unlisten = un;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [sessionId]);
+
+  // Like runExclusive, but also scopes the progress bar to the transfer.
+  const runTransfer = useCallback(async (fn: () => Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    transferActiveRef.current = true;
+    try {
+      await fn();
+    } finally {
+      transferActiveRef.current = false;
+      busyRef.current = false;
+      setBusy(false);
+      setProgress(null);
     }
   }, []);
 
@@ -265,10 +313,20 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
     });
 
   const handleDownload = (entry: SftpEntry) =>
-    runExclusive(async () => {
+    runTransfer(async () => {
       try {
-        const localPath = await save({ defaultPath: entry.name });
-        if (localPath) {
+        if (entry.is_dir) {
+          // Pick a destination folder; the backend creates `{dest}/{entry.name}`.
+          const dir = await open({ directory: true });
+          if (typeof dir !== 'string' || !dir) return;
+          await invoke('sftp_download_dir', {
+            sessionId,
+            remotePath: entry.path,
+            localDir: dir,
+          });
+        } else {
+          const localPath = await save({ defaultPath: entry.name });
+          if (!localPath) return;
           await invoke('sftp_download', {
             sessionId,
             remotePath: entry.path,
@@ -281,7 +339,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
     });
 
   const handleUpload = () =>
-    runExclusive(async () => {
+    runTransfer(async () => {
       try {
         const selected = await open({ multiple: true });
         if (!selected) return;
@@ -298,15 +356,22 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
       }
     });
 
-  const handleUploadFolder = async () => {
-    try {
-      const selected = await open({ directory: true });
-      if (!selected) return;
-      setError(t('sftp_folder_upload_hint'));
-    } catch (err) {
-      setError(String(err));
-    }
-  };
+  const handleUploadFolder = () =>
+    runTransfer(async () => {
+      try {
+        const selected = await open({ directory: true });
+        if (typeof selected !== 'string' || !selected) return;
+        // The backend creates `{currentPath}/{local dir basename}` remotely.
+        await invoke('sftp_upload_dir', {
+          sessionId,
+          remotePath: currentPath,
+          localDir: selected,
+        });
+        loadDir(currentPath);
+      } catch (err) {
+        setError(String(err));
+      }
+    });
 
   const handleDelete = async (entry: SftpEntry) => {
     try {
@@ -401,7 +466,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
   };
 
   const downloadSelected = () => {
-    if (!selectedEntry || selectedEntry.is_dir) return;
+    if (!selectedEntry) return;
     handleDownload(selectedEntry);
   };
 
@@ -497,7 +562,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
             <Upload size={14} />
           </button>
           <div className="sftp-toolbar-sep" />
-          <button className="sftp-tool-btn" onClick={downloadSelected} disabled={!selectedEntry || selectedEntry.is_dir || busy} title={t('sftp_download')}>
+          <button className="sftp-tool-btn" onClick={downloadSelected} disabled={!selectedEntry || busy} title={t('sftp_download')}>
             <Download size={14} />
           </button>
           <button className="sftp-tool-btn sftp-tool-btn-danger" onClick={deleteSelected} disabled={!selectedEntry || busy} title={t('sftp_delete')}>
@@ -630,6 +695,31 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
           )}
         </div>
 
+        {/* Transfer progress */}
+        {progress && (
+          <div className="sftp-progress">
+            <div className="sftp-progress-info">
+              <span className="sftp-progress-name" title={progress.file}>
+                {(progress.kind === 'upload' ? '↑ ' : '↓ ') + (progress.file.split('/').pop() || progress.file)}
+              </span>
+              {progress.fileTotal > 1 && (
+                <span className="sftp-progress-count">{progress.fileIndex}/{progress.fileTotal}</span>
+              )}
+              <span className="sftp-progress-pct">
+                {progress.total > 0
+                  ? `${Math.min(100, Math.round((progress.bytes / progress.total) * 100))}%`
+                  : formatSize(progress.bytes)}
+              </span>
+            </div>
+            <div className="sftp-progress-track">
+              <div
+                className="sftp-progress-bar"
+                style={{ width: `${progress.total > 0 ? Math.min(100, (progress.bytes / progress.total) * 100) : 0}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Status */}
         <div className="sftp-status">
           {t('sftp_item_count', { count: entries.length })}
@@ -662,15 +752,15 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                       <ExternalLink size={13} />
                       <span>{t('sftp_open_local')}</span>
                     </div>
-                    <div
-                      className="sftp-context-item"
-                      onClick={() => { handleDownload(contextMenu.entry!); setContextMenu(null); }}
-                    >
-                      <Download size={13} />
-                      <span>{t('sftp_download_to')}</span>
-                    </div>
                   </>
                 )}
+                <div
+                  className="sftp-context-item"
+                  onClick={() => { handleDownload(contextMenu.entry!); setContextMenu(null); }}
+                >
+                  <Download size={13} />
+                  <span>{t('sftp_download_to')}</span>
+                </div>
                 <div
                   className="sftp-context-item"
                   onClick={() => { handleUpload(); setContextMenu(null); }}

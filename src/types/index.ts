@@ -1,7 +1,7 @@
 export interface SessionConfig {
   id: string;
   name: string;
-  session_type: 'ssh' | 'sftp' | 'localshell' | 'docker' | 'serial';
+  session_type: 'ssh' | 'localshell' | 'docker' | 'serial';
   group?: string;
   host?: string;
   port?: number;
@@ -67,16 +67,11 @@ export interface SessionConfig {
   _temporary?: boolean;
 }
 
-export interface SessionGroup {
-  name: string;
-  sessions: SessionConfig[];
-}
-
 export interface TabInfo {
   id: string;
   sessionId: string;
   title: string;
-  type: 'ssh' | 'sftp' | 'localshell' | 'docker' | 'serial' | 'asset-list';
+  type: 'ssh' | 'localshell' | 'docker' | 'serial' | 'asset-list';
   connected: boolean;
 }
 

@@ -13,7 +13,7 @@ mod transport;
 
 pub use known_hosts::trust_host;
 pub use params::ConnectParams;
-pub use sftp::SftpEntry;
+pub use sftp::{ProgressFn, SftpEntry};
 
 use crate::ssh::handler::{Client, ForwardTargets};
 use russh::client::Handle;
@@ -422,6 +422,7 @@ impl SshManager {
         session_id: &str,
         remote: &str,
         local: &str,
+        progress: Option<ProgressFn>,
     ) -> Result<(), String> {
         let conn = self
             .sessions
@@ -430,7 +431,7 @@ impl SshManager {
             .get(session_id)
             .map(|s| s.conn.clone());
         match conn {
-            Some(c) => sftp::download(&c, remote, local).await,
+            Some(c) => sftp::download(&c, remote, local, progress).await,
             None => Err("Session not found".into()),
         }
     }
@@ -440,6 +441,7 @@ impl SshManager {
         session_id: &str,
         remote: &str,
         local: &str,
+        progress: Option<ProgressFn>,
     ) -> Result<(), String> {
         let conn = self
             .sessions
@@ -448,7 +450,45 @@ impl SshManager {
             .get(session_id)
             .map(|s| s.conn.clone());
         match conn {
-            Some(c) => sftp::upload(&c, remote, local).await,
+            Some(c) => sftp::upload(&c, remote, local, progress).await,
+            None => Err("Session not found".into()),
+        }
+    }
+
+    pub async fn sftp_download_dir(
+        &self,
+        session_id: &str,
+        remote_dir: &str,
+        local_parent: &str,
+        progress: Option<ProgressFn>,
+    ) -> Result<usize, String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone());
+        match conn {
+            Some(c) => sftp::download_dir(&c, remote_dir, local_parent, progress).await,
+            None => Err("Session not found".into()),
+        }
+    }
+
+    pub async fn sftp_upload_dir(
+        &self,
+        session_id: &str,
+        remote_parent: &str,
+        local_dir: &str,
+        progress: Option<ProgressFn>,
+    ) -> Result<usize, String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone());
+        match conn {
+            Some(c) => sftp::upload_dir(&c, remote_parent, local_dir, progress).await,
             None => Err("Session not found".into()),
         }
     }

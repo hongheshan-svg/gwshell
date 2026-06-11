@@ -997,9 +997,36 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         if (!renderRaf) renderRaf = requestAnimationFrame(flushRender);
       };
 
+      // ── Session logging (optional) ─────────────────────────
+      // When enabled in settings, terminal output is appended (ANSI-stripped)
+      // to a per-session daily log file via the backend. Output is buffered
+      // and flushed on a 1s timer so logging adds no per-chunk IPC overhead.
+      const ANSI_RE =
+        // CSI sequences, OSC sequences (BEL or ST terminated), and other
+        // single/short ESC sequences.
+        /\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g;
+      const logName =
+        sessionsRef.current.find((s) => s.id === tab.sessionId)?.name || tab.title || tab.sessionId;
+      let logQueue = "";
+      let logTimer: ReturnType<typeof setTimeout> | null = null;
+      let logDisposed = false;
+      const flushLog = () => {
+        logTimer = null;
+        if (!logQueue) return;
+        const data = logQueue.replace(ANSI_RE, "");
+        logQueue = "";
+        if (!data) return;
+        invoke("append_session_log", { sessionName: logName, data }).catch(() => {});
+      };
+      const enqueueLog = (payload: string) => {
+        if (logDisposed || !useSettingsStore.getState().settings.sessionLogEnabled) return;
+        logQueue += payload;
+        if (!logTimer) logTimer = setTimeout(flushLog, 1000);
+      };
+
       const unlistenData = await listen<string>(
         `${eventPrefix}-data-${tab.sessionId}`,
-        (event) => { enqueueRender(event.payload); }
+        (event) => { enqueueRender(event.payload); enqueueLog(event.payload); }
       );
       if (cancelled) { unlistenData(); return; }
 
@@ -1374,6 +1401,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         unlistenData();
         unlistenExit();
         if (renderRaf) { cancelAnimationFrame(renderRaf); renderRaf = 0; }
+        // Flush any buffered log output before tearing the listeners down.
+        if (logTimer) { clearTimeout(logTimer); }
+        flushLog();
+        logDisposed = true;
         writeDisposed = true;
         if (writeTimer) { clearTimeout(writeTimer); writeTimer = null; }
         writeQueue = "";

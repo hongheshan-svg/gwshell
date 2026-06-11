@@ -48,21 +48,26 @@ GWShell is a **Tauri 2** desktop application: a React/TypeScript frontend render
 
 ### Backend (`src-tauri/src/`)
 
-- **`lib.rs`** — entry point, `AppState` struct, all `#[tauri::command]` handlers, tray icon setup, window close→hide behavior
-- **`ssh.rs`** — `SshManager`: SSH connections via `libssh2`, SFTP operations, port forwarding. Known hosts stored in `%LOCALAPPDATA%/gwshell/known_hosts.json`
+- **`lib.rs`** — entry point, `AppState` struct, all `#[tauri::command]` handlers, tray icon setup, Quake dropdown window, global shortcut, window close→hide behavior
+- **`ssh/`** — async SSH backend on **russh** (pure Rust). `mod.rs` holds `SshManager`; submodules: `connect`/`auth`/`transport` (connection + jump host + proxies), `session` (shell/exec I/O pumps), `sftp` (file ops, recursive dir transfer with progress callbacks), `forward` (-L local and -D SOCKS5 forwarding; -R lives in `handler`/`mod`), `exec`, `known_hosts` (stored in `%LOCALAPPDATA%/gwshell/known_hosts.json`), `params`
+- **`ssh_config.rs`** — `~/.ssh/config` parser for the asset import command (unit-tested)
 - **`pty.rs`** — `PtyManager`: local shell sessions via `portable_pty`. Per-OS shell resolution (PowerShell, CMD, Bash, Git Bash, WSL distros, Zsh, Fish)
 - **`serial.rs`** — `SerialManager`: serial port connections
-- **`session.rs`** — `SessionConfig` and `SessionGroup` data structures
-- **`database.rs`** — SQLite persistence via `rusqlite`, stored in the Tauri app data directory
+- **`docker.rs`** — list containers / exec into them, locally (PTY) or over SSH (unit-tested parsing)
+- **`metrics.rs`** — server panel poller: CPU/mem/disk/NIC/process stats over `ssh exec`
+- **`session.rs`** — `SessionConfig` data structure
+- **`database.rs`** — SQLite persistence via `rusqlite` (sessions, settings, command history, snippets), stored in `%LOCALAPPDATA%/gwshell/`
+- **`crypto.rs`** / **`vault.rs`** — secrets are encrypted before they touch SQLite (OS keyring master key); optional Argon2id master-passphrase app lock
+- **`history.rs`** — command history persistence helpers
 
 ### IPC Event Pattern
 
-Backend pushes terminal output to the frontend via Tauri events:
-- `pty-data-{session_id}` — PTY stdout chunks
-- `ssh-data-{session_id}` — SSH stdout chunks
-- `serial-data-{session_id}` — Serial port data
+Backend pushes data to the frontend via Tauri events:
+- `pty-data-{session_id}` / `ssh-data-{session_id}` / `serial-data-{session_id}` — terminal output chunks (matching `*-exit-{session_id}` events signal session end)
+- `sftp-progress-{session_id}` — throttled file-transfer progress (`kind`, `file`, `fileIndex`, `fileTotal`, `bytes`, `total`)
+- `server-metrics-{session_id}` — server panel metric snapshots
 
-`TerminalView` listens for these events and writes them to the xterm.js terminal instance.
+`TerminalView` listens for the data events and writes them to the xterm.js terminal instance. When the "session logging" setting is on, it also buffers output and appends it (ANSI-stripped) to `%LOCALAPPDATA%/gwshell/logs/{session}-{date}.log` via `append_session_log`.
 
 ### Split-Pane Architecture
 
@@ -70,7 +75,11 @@ The app tiles open terminal tabs in a grid. `splitCount` (1/2/4/6/8) in `appStor
 
 ### Session Types
 
-`session_type`: `ssh` | `sftp` | `localshell` | `docker` | `serial`. The `TabInfo.type` mirrors this plus `asset-list` for the session manager view.
+`session_type`: `ssh` | `localshell` | `docker` | `serial`. The `TabInfo.type` mirrors this plus `asset-list` for the session manager view. SFTP is not a session type — it is a side panel attached to the active SSH tab. Terminal tabs can be reordered by dragging (`@dnd-kit` in `TabBar`, `reorderTabs` in `appStore`); the asset-list home tab is pinned first.
+
+### i18n Rule
+
+Every user-facing string goes through i18next. `gwshell.en.json` and `gwshell.zh.json` must stay key-for-key identical — add/remove keys in both files together.
 
 ### Version Syncing
 

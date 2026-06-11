@@ -43,6 +43,8 @@ export interface AppSettings {
   quakeEnabled: boolean;
   quakeHotkey: string;
   homeView: 'card' | 'table';
+  // Append terminal output (ANSI-stripped) to per-session log files
+  sessionLogEnabled: boolean;
 }
 
 export const defaultSettings: AppSettings = {
@@ -80,6 +82,7 @@ export const defaultSettings: AppSettings = {
   quakeEnabled: false,
   quakeHotkey: 'CommandOrControl+Shift+Backquote',
   homeView: 'card',
+  sessionLogEnabled: false,
 };
 
 interface SettingsStore {
