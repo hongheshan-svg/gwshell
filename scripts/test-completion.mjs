@@ -157,4 +157,21 @@ function loadCompletion(dictMatches, historyMatches) {
   assert.deepEqual(c.buildCompletions('', {}, 'en', 8), [], 'empty line yields nothing');
 }
 
+{
+  // buildCompletions forwards ctx.table to lookupCommands
+  let receivedTable;
+  const c = loadTs('src/lib/completion.ts', {
+    './commandDictionary': {
+      lookupCommands: (prefix, _locale, table) => {
+        receivedTable = table;
+        return prefix === 'd' ? [{ cmd: 'dir', desc: 'List' }] : [];
+      },
+    },
+    './commandHistory': { getSuggestions: () => [] },
+  });
+  const r = c.buildCompletions('d', { table: 'cmd' }, 'en', 8);
+  assert.equal(receivedTable, 'cmd', 'ctx.table is forwarded to lookupCommands');
+  assert.ok(r.some((x) => x.kind === 'command' && x.text === 'dir'), 'cmd dictionary result surfaces');
+}
+
 console.log('completion tests passed');
