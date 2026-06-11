@@ -14,6 +14,18 @@ use tauri::{AppHandle, Emitter};
 #[cfg(unix)]
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 
+// Shell-integration temp-file naming entropy. Only the non-Windows bash/zsh
+// integration writers use these, so they are gated to match — on Windows the
+// integration functions are cfg'd out and these would otherwise be unused.
+#[cfg(not(target_os = "windows"))]
+use std::sync::atomic::AtomicU64;
+#[cfg(not(target_os = "windows"))]
+use std::time::UNIX_EPOCH;
+
+/// Monotonic counter for unique shell-integration temp file/dir names.
+#[cfg(not(target_os = "windows"))]
+static SHELL_INTEGRATION_COUNTER: AtomicU64 = AtomicU64::new(0);
+
 const PTY_INPUT_BUFFER_LIMIT: usize = 1024 * 1024;
 const PTY_CMD_QUEUE_LIMIT: usize = 64;
 const PTY_WRITE_CHUNK_SIZE: usize = 16 * 1024;
