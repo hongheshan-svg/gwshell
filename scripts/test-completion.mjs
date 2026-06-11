@@ -52,6 +52,45 @@ assert.deepEqual(gMatches, gSorted, 'g* matches are alphabetical');
 
 console.log('commandDictionary tests passed');
 
+// ---- system-specific tables ----
+const cmdMatches = dict.lookupCommands('d', 'en', 'cmd').map((x) => x.cmd);
+assert.ok(cmdMatches.includes('dir') && cmdMatches.includes('del'), 'cmd table has dir/del for "d"');
+assert.ok(!cmdMatches.includes('df') && !cmdMatches.includes('du'), 'cmd table excludes unix-only commands');
+
+const psMatches = dict.lookupCommands('Get-', 'en', 'powershell').map((x) => x.cmd);
+assert.ok(psMatches.includes('Get-ChildItem') && psMatches.includes('Get-Process'), 'powershell table has Get-* cmdlets');
+assert.ok(
+  dict.lookupCommands('ls', 'en', 'powershell').some((x) => x.cmd === 'ls') === false,
+  'exact-length alias excluded',
+);
+assert.ok(
+  dict.lookupCommands('l', 'en', 'powershell').some((x) => x.cmd === 'ls'),
+  'powershell table includes the ls alias',
+);
+
+// default table is unix (back-compat with two-arg callers)
+assert.deepEqual(
+  dict.lookupCommands('ls', 'en').map((x) => x.cmd),
+  dict.lookupCommands('ls', 'en', 'unix').map((x) => x.cmd),
+  'omitting table defaults to unix',
+);
+
+// pure mappers
+assert.equal(dict.tableForShellName('cmd'), 'cmd');
+assert.equal(dict.tableForShellName('powershell'), 'powershell');
+assert.equal(dict.tableForShellName('powershell7'), 'powershell');
+assert.equal(dict.tableForShellName('bash'), 'unix');
+assert.equal(dict.tableForShellName('wsl-Ubuntu'), 'unix');
+assert.equal(dict.tableForShellName(undefined), 'unix');
+
+assert.equal(dict.tableForRemoteShell('linux'), 'unix');
+assert.equal(dict.tableForRemoteShell('cmd'), 'cmd');
+assert.equal(dict.tableForRemoteShell('powershell'), 'powershell');
+assert.equal(dict.tableForRemoteShell('auto'), null, 'auto means "probe needed"');
+assert.equal(dict.tableForRemoteShell(undefined), null, 'unset means "probe needed"');
+
+console.log('system-table tests passed');
+
 // ---- buildCompletions ----
 function loadCompletion(dictMatches, historyMatches) {
   return loadTs('src/lib/completion.ts', {
