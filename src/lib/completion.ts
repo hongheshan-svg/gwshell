@@ -37,7 +37,7 @@ export function buildCompletions(
   }
 
   if (!/\s/.test(line)) {
-    for (const { cmd, desc } of lookupCommands(line, locale)) {
+    for (const { cmd, desc } of lookupCommands(line, locale, ctx.table ?? 'unix')) {
       if (seen.has(cmd)) continue;
       seen.add(cmd);
       out.push({ text: cmd, kind: 'command', desc });

@@ -51,6 +51,9 @@ pub struct SessionConfig {
     /// agent for onward authentication hops. `#[serde(default)]` on the struct
     /// makes this load as `None` for rows written before the field existed.
     pub agent_forward: Option<bool>,
+    /// Manual override for command-completion table selection on SSH sessions:
+    /// "auto" (or None) probes the remote, else "linux" | "cmd" | "powershell".
+    pub remote_shell: Option<String>,
     // Docker-specific
     pub docker_protocol: Option<String>,
     pub docker_unix_path: Option<String>,
@@ -137,6 +140,7 @@ impl Default for SessionConfig {
             idle_disconnect_minutes: None,
             compression: None,
             agent_forward: None,
+            remote_shell: None,
             docker_protocol: None,
             docker_unix_path: None,
             docker_connect_method: None,

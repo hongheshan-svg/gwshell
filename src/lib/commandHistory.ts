@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import type { CommandTable } from './commandDictionary';
 
 export interface HistoryEntry {
   command: string;
@@ -13,6 +14,7 @@ export interface SuggestCtx {
   scope?: string;
   cwd?: string;
   sessionType?: string;
+  table?: CommandTable;
 }
 
 // Aggregated entries loaded from the backend, plus in-session appends.
