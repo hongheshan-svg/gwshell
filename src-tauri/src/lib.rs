@@ -603,14 +603,18 @@ async fn detect_remote_os(
 // ---- Ping Command ----
 
 #[tauri::command]
-async fn ping_host(host: String, port: u16) -> Result<f64, String> {
+async fn ping_host(host: String, port: u16, timeout_secs: Option<u64>) -> Result<f64, String> {
     use std::time::Instant;
     use tokio::net::TcpStream;
     use tokio::time::{timeout, Duration};
 
     let addr = format!("{}:{}", host, port);
+    // Default 5s. Honor the session's configured connection timeout when given,
+    // clamped to a sane probe range so a slow host can't be reported as "down"
+    // on a 3s hair-trigger, nor hang the poller on a huge configured value.
+    let secs = timeout_secs.unwrap_or(5).clamp(2, 10);
     let start = Instant::now();
-    match timeout(Duration::from_secs(3), TcpStream::connect(&addr)).await {
+    match timeout(Duration::from_secs(secs), TcpStream::connect(&addr)).await {
         Ok(Ok(_)) => {
             let elapsed = start.elapsed().as_secs_f64() * 1000.0;
             Ok((elapsed * 10.0).round() / 10.0) // round to 0.1ms

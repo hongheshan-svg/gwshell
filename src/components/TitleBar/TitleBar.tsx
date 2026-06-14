@@ -20,21 +20,16 @@ export const TitleBar: React.FC = () => {
     appWindow.toggleMaximize();
   };
 
-  const handleTitlebarDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest('.titlebar-controls')) return;
-    appWindow.toggleMaximize().catch(() => {});
-  };
-
   const handleClose = () => {
     exit(0).catch(() => {});
     appWindow.close().catch(() => {});
   };
 
   return (
-    <div
-      className={`titlebar${IS_MACOS ? ' titlebar--macos' : ''}`}
-      onDoubleClick={handleTitlebarDoubleClick}
-    >
+    // Double-click-to-maximize is handled natively by Tauri via the
+    // `data-tauri-drag-region` elements below — do NOT add a manual
+    // onDoubleClick toggleMaximize here, or it fires twice and cancels out.
+    <div className={`titlebar${IS_MACOS ? ' titlebar--macos' : ''}`}>
       <div className="titlebar-title" data-tauri-drag-region>
         GWShell
       </div>

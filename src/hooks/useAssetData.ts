@@ -3,6 +3,14 @@ import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../stores/appStore';
 import type { SessionConfig } from '../types';
 
+// A session reached through a jump host or proxy is NOT directly TCP-reachable
+// from this machine, so a direct ping_host probe would always fail and render a
+// misleading "timeout" even when the real SSH connection works. Skip probing
+// these — the card shows a neutral "via relay" marker instead.
+export function needsRelay(s: SessionConfig): boolean {
+  return !!s.jump_host || (!!s.proxy_type && s.proxy_type !== 'none');
+}
+
 export function useAssetData() {
   const {
     sessions,
@@ -119,7 +127,7 @@ export function useAssetData() {
   const doPingRef = useRef(() => {});
   doPingRef.current = async () => {
     if (pingLoopRunningRef.current) return;
-    const targets = sessionsRef.current.filter((s) => s.host);
+    const targets = sessionsRef.current.filter((s) => s.host && !needsRelay(s));
     if (targets.length === 0) return;
 
     pingLoopRunningRef.current = true;
@@ -131,7 +139,11 @@ export function useAssetData() {
           await sleep(250);
         }
 
-        if (document.hidden || !document.hasFocus()) {
+        // Only bail when the window is actually hidden (minimized/occluded).
+        // A merely-unfocused but visible window must still refresh latency —
+        // checking !hasFocus() here meant an unfocused app never updated and
+        // every card stayed stuck on "timeout".
+        if (document.hidden) {
           break;
         }
 
@@ -139,6 +151,7 @@ export function useAssetData() {
           const latency = await invoke<number>('ping_host', {
             host: session.host!,
             port: session.port || 22,
+            timeoutSecs: session.connection_timeout,
           });
           updates.set(session.id, latency);
         } catch {
