@@ -11,21 +11,6 @@ use std::sync::{
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
-#[cfg(unix)]
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
-
-// Shell-integration temp-file naming entropy. Only the non-Windows bash/zsh
-// integration writers use these, so they are gated to match — on Windows the
-// integration functions are cfg'd out and these would otherwise be unused.
-#[cfg(not(target_os = "windows"))]
-use std::sync::atomic::AtomicU64;
-#[cfg(not(target_os = "windows"))]
-use std::time::UNIX_EPOCH;
-
-/// Monotonic counter for unique shell-integration temp file/dir names.
-#[cfg(not(target_os = "windows"))]
-static SHELL_INTEGRATION_COUNTER: AtomicU64 = AtomicU64::new(0);
-
 const PTY_INPUT_BUFFER_LIMIT: usize = 1024 * 1024;
 const PTY_CMD_QUEUE_LIMIT: usize = 64;
 const PTY_WRITE_CHUNK_SIZE: usize = 16 * 1024;
@@ -70,27 +55,6 @@ struct PtyHandle {
     input: Arc<Mutex<PtyInputBuffer>>,
     wake_pending: Arc<AtomicBool>,
     charset: String,
-    /// Temp shell-integration artifact (bash rcfile / zsh ZDOTDIR dir). Held
-    /// only for its Drop: removed when the session's last handle clone goes
-    /// away (close_pty / close_all / app exit). Arc-wrapped so the (Clone)
-    /// handle's brief read-path clones don't double-delete.
-    _integration: Option<Arc<TempIntegration>>,
-}
-
-/// A temp shell-integration file or directory that deletes itself on drop.
-struct TempIntegration {
-    path: std::path::PathBuf,
-    is_dir: bool,
-}
-
-impl Drop for TempIntegration {
-    fn drop(&mut self) {
-        let _ = if self.is_dir {
-            std::fs::remove_dir_all(&self.path)
-        } else {
-            std::fs::remove_file(&self.path)
-        };
-    }
 }
 
 pub struct PtyManager {
@@ -98,8 +62,7 @@ pub struct PtyManager {
 }
 
 #[cfg(target_os = "windows")]
-fn resolve_shell(name: Option<&str>, _shell_integration: bool) -> (CommandBuilder, Option<TempIntegration>) {
-    // Shell integration (OSC 133) is not injected on Windows for now.
+fn resolve_shell(name: Option<&str>) -> CommandBuilder {
     let c: CommandBuilder = match name {
         Some("cmd") => CommandBuilder::new("cmd.exe"),
         Some("bash") => CommandBuilder::new("bash.exe"),
@@ -118,7 +81,7 @@ fn resolve_shell(name: Option<&str>, _shell_integration: bool) -> (CommandBuilde
                     let mut c = CommandBuilder::new(path);
                     c.arg("--login");
                     c.arg("-i");
-                    return (c, None);
+                    return c;
                 }
             }
             CommandBuilder::new("bash.exe")
@@ -139,208 +102,22 @@ fn resolve_shell(name: Option<&str>, _shell_integration: bool) -> (CommandBuilde
             c
         }
     };
-    (c, None)
+    c
 }
 
 #[cfg(not(target_os = "windows"))]
-fn resolve_shell(name: Option<&str>, shell_integration: bool) -> (CommandBuilder, Option<TempIntegration>) {
+fn resolve_shell(name: Option<&str>) -> CommandBuilder {
     match name {
         Some("powershell7") | Some("powershell") => {
             let mut c = CommandBuilder::new("pwsh");
             c.arg("-NoLogo");
-            // No OSC 133 injection for pwsh on unix
-            (c, None)
+            c
         }
-        Some("zsh") => {
-            let mut c = CommandBuilder::new("zsh");
-            let mut temp = None;
-            if shell_integration {
-                if let Some(tmp_dir) = write_zsh_integration() {
-                    // Preserve original ZDOTDIR (or $HOME) so .zshrc can source it
-                    let original_zdotdir = std::env::var("ZDOTDIR")
-                        .unwrap_or_else(|_| {
-                            dirs::home_dir()
-                                .map(|h| h.to_string_lossy().into_owned())
-                                .unwrap_or_default()
-                        });
-                    c.env("ZDOTDIR", &tmp_dir);
-                    c.env("__gw_user_zdotdir", original_zdotdir);
-                    temp = Some(TempIntegration { path: tmp_dir, is_dir: true });
-                }
-            }
-            (c, temp)
-        }
-        Some("fish") => {
-            let mut c = CommandBuilder::new("fish");
-            if shell_integration {
-                let init_cmd = concat!(
-                    "function __gw_pre --on-event fish_preexec; printf '\\033]133;C\\007'; end; ",
-                    "function __gw_post --on-event fish_postexec; printf '\\033]133;D;%s\\007' $status; end; ",
-                    "function __gw_prompt --on-event fish_prompt; printf '\\033]133;A\\007'; end"
-                );
-                c.arg("--init-command");
-                c.arg(init_cmd);
-            }
-            (c, None)
-        }
-        Some("cmd") => (CommandBuilder::new("sh"), None), // fallback on unix
-        _ => {
-            // bash (default)
-            let mut c = CommandBuilder::new("bash");
-            let mut temp = None;
-            if shell_integration {
-                if let Some(rc_path) = write_bash_integration() {
-                    c.arg("--rcfile");
-                    c.arg(&rc_path);
-                    c.arg("-i");
-                    temp = Some(TempIntegration { path: rc_path, is_dir: false });
-                }
-            }
-            (c, temp)
-        }
+        Some("zsh") => CommandBuilder::new("zsh"),
+        Some("fish") => CommandBuilder::new("fish"),
+        Some("cmd") => CommandBuilder::new("sh"), // fallback on unix
+        _ => CommandBuilder::new("bash"), // bash (default)
     }
-}
-
-/// Write a bash rcfile with OSC 133 integration and return its path.
-/// Returns None on any I/O error (shell will start without integration).
-///
-/// Security: file is created with O_CREAT|O_EXCL (fails if path exists) and
-/// mode 0600 (owner-read/write only), using an unpredictable name that includes
-/// pid + monotonic counter + subsecond nanosecond timestamp entropy.
-#[cfg(not(target_os = "windows"))]
-fn write_bash_integration() -> Option<std::path::PathBuf> {
-    // NOTE: \033 and \007 are literal backslash sequences — the shell's
-    // `printf` builtin will interpret them as ESC (0x1b) and BEL (0x07).
-    // FIX 3: PS0 must NOT use \[ \] readline markers — bash doesn't strip
-    // them in PS0, leaking 0x01/0x02 bytes. PS1 keeps \[ \] (correct there).
-    let content = r#"[ -f ~/.bashrc ] && source ~/.bashrc
-__gw_precmd() { local e=$?; printf '\033]133;D;%s\007' "$e"; }
-case "$PROMPT_COMMAND" in *__gw_precmd*) ;; *) PROMPT_COMMAND='__gw_precmd'${PROMPT_COMMAND:+';'$PROMPT_COMMAND} ;; esac
-PS1='\[\033]133;A\007\]'"$PS1"'\[\033]133;B\007\]'
-PS0='\033]133;C\007'"$PS0"
-"#;
-
-    let pid = std::process::id();
-    let tmp = std::env::temp_dir();
-
-    // Retry a few times in case a name collision occurs (extremely unlikely).
-    for attempt in 0u64..8 {
-        let counter = SHELL_INTEGRATION_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let nanos = std::time::SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.subsec_nanos())
-            .unwrap_or(0);
-        let file_name = format!("gw_bash_rc_{}_{}_{}", pid, counter.wrapping_add(attempt), nanos);
-        let path = tmp.join(file_name);
-
-        // O_CREAT|O_EXCL: fails atomically if path already exists → defeats
-        // symlink/pre-create races. Mode 0600: owner-only read/write.
-        match std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(&path)
-        {
-            Ok(mut f) => {
-                if f.write_all(content.as_bytes()).is_ok() {
-                    return Some(path);
-                } else {
-                    // Write failed; clean up and give up.
-                    let _ = std::fs::remove_file(&path);
-                    return None;
-                }
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                // Name collision — try again with a fresh counter/nanos.
-                continue;
-            }
-            Err(_) => return None,
-        }
-    }
-    None
-}
-
-/// Write a zsh integration directory (containing .zshenv + .zshrc) and return the dir path.
-/// Returns None on any I/O error.
-///
-/// Security: directory is created with mode 0700 (owner-only) using DirBuilder
-/// with recursive=false on the final component, so creation fails atomically if
-/// the path already exists. Name includes pid + counter + subsecond nanos entropy.
-///
-/// FIX 2: We also write a .zshenv that sources the user's real .zshenv, because
-/// zsh reads $ZDOTDIR/.zshenv unconditionally and overriding ZDOTDIR would
-/// otherwise skip the user's env setup (PATH shims, Homebrew, asdf, fnm, etc.).
-#[cfg(not(target_os = "windows"))]
-fn write_zsh_integration() -> Option<std::path::PathBuf> {
-    // NOTE: \033 and \007 are literal backslash sequences for the shell's printf.
-    let zshenv_content = r#"[ -f "${__gw_user_zdotdir:-$HOME}/.zshenv" ] && source "${__gw_user_zdotdir:-$HOME}/.zshenv"
-"#;
-
-    let zshrc_content = r#"[ -f "${__gw_user_zdotdir:-$HOME}/.zshrc" ] && source "${__gw_user_zdotdir:-$HOME}/.zshrc"
-autoload -Uz add-zsh-hook
-__gw_preexec() { print -n '\033]133;C\007' }
-__gw_precmd()  { print -n "\033]133;D;$?\007\033]133;A\007" }
-add-zsh-hook preexec __gw_preexec
-add-zsh-hook precmd  __gw_precmd
-"#;
-
-    let pid = std::process::id();
-    let tmp = std::env::temp_dir();
-
-    // Retry a few times in case a name collision occurs (extremely unlikely).
-    for attempt in 0u64..8 {
-        let counter = SHELL_INTEGRATION_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let nanos = std::time::SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.subsec_nanos())
-            .unwrap_or(0);
-        let dir_name = format!("gw_zdotdir_{}_{}_{}", pid, counter.wrapping_add(attempt), nanos);
-        let dir_path = tmp.join(&dir_name);
-
-        // DirBuilder with mode 0700 + recursive=false on the final component:
-        // create() fails if the directory already exists → defeats pre-create races.
-        let created = std::fs::DirBuilder::new()
-            .recursive(false)
-            .mode(0o700)
-            .create(&dir_path);
-
-        match created {
-            Ok(()) => {
-                // Write .zshenv (sources user's real .zshenv before .zshrc runs).
-                let zshenv_ok = std::fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .mode(0o600)
-                    .open(dir_path.join(".zshenv"))
-                    .ok()
-                    .and_then(|mut f| f.write_all(zshenv_content.as_bytes()).ok())
-                    .is_some();
-
-                let zshrc_ok = std::fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .mode(0o600)
-                    .open(dir_path.join(".zshrc"))
-                    .ok()
-                    .and_then(|mut f| f.write_all(zshrc_content.as_bytes()).ok())
-                    .is_some();
-
-                if zshenv_ok && zshrc_ok {
-                    return Some(dir_path);
-                } else {
-                    // Partial write — clean up and give up.
-                    let _ = std::fs::remove_dir_all(&dir_path);
-                    return None;
-                }
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                // Name collision — try again.
-                continue;
-            }
-            Err(_) => return None,
-        }
-    }
-    None
 }
 
 /// Detect shells available on the current system.
@@ -466,9 +243,6 @@ impl PtyManager {
     ///
     /// * `charset_str`       — effective charset (e.g. "UTF-8", "GBK"); used
     ///                         for the reader decoder and stored on the handle.
-    /// * `integration_temp`  — optional shell-integration tempfile / tempdir
-    ///                         kept alive for the session lifetime via `Arc`.
-    ///                         Pass `None` for docker / any non-shell caller.
     fn spawn_in_pty(
         &self,
         session_id: &str,
@@ -477,7 +251,6 @@ impl PtyManager {
         cols: u16,
         cmd: CommandBuilder,
         charset_str: String,
-        integration_temp: Option<TempIntegration>,
     ) -> Result<(), String> {
         let pty_system = native_pty_system();
         let pair = pty_system
@@ -514,7 +287,6 @@ impl PtyManager {
             input: input_buffer,
             wake_pending,
             charset: charset_str.clone(),
-            _integration: integration_temp.map(Arc::new),
         };
 
         self.sessions.lock().insert(session_id.to_string(), handle);
@@ -656,11 +428,10 @@ impl PtyManager {
         shell_name: Option<String>,
         working_dir: Option<String>,
         charset: Option<String>,
-        shell_integration: bool,
     ) -> Result<(), String> {
         self.close_pty(session_id);
 
-        let (mut cmd, integration_temp) = resolve_shell(shell_name.as_deref(), shell_integration);
+        let mut cmd = resolve_shell(shell_name.as_deref());
 
         // Set charset-aware env vars
         let charset_str = charset.clone().unwrap_or_else(|| "UTF-8".to_string());
@@ -689,7 +460,7 @@ impl PtyManager {
             cmd.cwd(home);
         }
 
-        self.spawn_in_pty(session_id, app_handle, rows, cols, cmd, charset_str, integration_temp)
+        self.spawn_in_pty(session_id, app_handle, rows, cols, cmd, charset_str)
     }
 
     /// Spawn `docker exec -it <container_id> sh -c 'exec bash 2>/dev/null || exec sh'`
@@ -715,7 +486,7 @@ impl PtyManager {
         ]);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
-        self.spawn_in_pty(session_id, app_handle, rows, cols, cmd, "UTF-8".to_string(), None)
+        self.spawn_in_pty(session_id, app_handle, rows, cols, cmd, "UTF-8".to_string())
     }
 
     pub fn write_to_pty(&self, session_id: &str, data: &[u8]) -> Result<(), String> {
