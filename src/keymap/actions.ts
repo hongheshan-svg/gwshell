@@ -1,7 +1,6 @@
 import type { TranslationKeys } from '../i18n';
 import { useAppStore } from '../stores/appStore';
 import { IS_MACOS } from '../lib/platform';
-import { scrollToAdjacentBlock, focusViewportBlock } from '../components/Terminal/blockNav';
 
 export interface KeyAction { id: string; labelKey: TranslationKeys; defaultBinding: string; run: () => void }
 
@@ -40,9 +39,6 @@ export const KEY_ACTIONS: KeyAction[] = [
   },
   { id: 'settings.open', labelKey: 'action_settings_open', defaultBinding: 'Ctrl+Comma', run: () => useAppStore.getState().setShowSettings(true) },
   { id: 'terminal.search', labelKey: 'action_terminal_search', defaultBinding: 'Ctrl+Shift+H', run: () => useAppStore.getState().setShowTerminalSearch(true) },
-  { id: 'block.prev', labelKey: 'action_block_prev', defaultBinding: IS_MACOS ? 'Meta+Shift+ArrowUp' : 'Ctrl+Shift+ArrowUp', run: () => scrollToAdjacentBlock(-1) },
-  { id: 'block.next', labelKey: 'action_block_next', defaultBinding: IS_MACOS ? 'Meta+Shift+ArrowDown' : 'Ctrl+Shift+ArrowDown', run: () => scrollToAdjacentBlock(1) },
-  { id: 'block.focus', labelKey: 'action_block_focus', defaultBinding: IS_MACOS ? 'Meta+Shift+Enter' : 'Ctrl+Shift+Enter', run: () => focusViewportBlock() },
 ];
 
 export const ACTION_BY_ID = new Map(KEY_ACTIONS.map((a) => [a.id, a]));

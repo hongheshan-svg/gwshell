@@ -28,8 +28,6 @@ export interface AppSettings {
   pasteWarnMultiline: boolean;
   terminalColorScheme: string;
   cmdHintAllSessions: boolean;
-  cmdHintShellIntegration: boolean;
-  cmdHintDeferToRemote: boolean;
   cmdHintScopeByHost: boolean;
   terminalStripeBackground: boolean;
   middleClickAction: string;
@@ -67,8 +65,6 @@ export const defaultSettings: AppSettings = {
   pasteWarnMultiline: true,
   terminalColorScheme: 'auto',
   cmdHintAllSessions: true,
-  cmdHintShellIntegration: false,
-  cmdHintDeferToRemote: false,
   cmdHintScopeByHost: true,
   terminalStripeBackground: true,
   middleClickAction: 'none',

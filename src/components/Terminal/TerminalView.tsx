@@ -14,14 +14,6 @@ import { useAppStore } from "../../stores/appStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { terminalInstances } from "./terminalRegistry";
 import * as commandHistory from '../../lib/commandHistory';
-import { blocksFor, startBlock, markOutput, setCommand, finishBlock, clearTab as clearBlockTab } from './blocks';
-import { syncCards, rebuildCards } from './blockCards';
-import { BlockLiveFrame } from './BlockLiveFrame';
-import { BlockStickyHeader } from './BlockStickyHeader';
-import { BlockOverviewRuler } from './BlockOverviewRuler';
-import { resolveBindings } from '../../keymap/dispatch';
-import { matchStep } from '../../keymap/match';
-import { ACTION_BY_ID } from '../../keymap/actions';
 import { resolveTerminalTheme } from '../../lib/terminalThemes';
 import { runLoginScript } from '../../lib/sendScript';
 import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';
@@ -55,20 +47,6 @@ interface TerminalContextMenu {
 }
 
 const isPasteAction = (value: string) => value === "paste" || value === "Paste" || value === "\u7c98\u8d34";
-
-// OSC 133 shell-integration snippet injected into SSH sessions when
-// cmdHintShellIntegration is enabled (opt-in, best-effort).
-// bash only (no-ops on other remote shells).
-// The snippet will be echoed once in the terminal output \u2014 acceptable for an
-// opt-in best-effort feature.
-const SSH_OSC133_SNIPPET =
-  `if [ -n "$BASH_VERSION" ]; then ` +
-  `__gw_pc() { printf '\\033]133;D;%s\\007' "$?"; }; ` +
-  `case "$PROMPT_COMMAND" in *__gw_pc*) ;; ` +
-  `*) PROMPT_COMMAND="__gw_pc\${PROMPT_COMMAND:+;$PROMPT_COMMAND}";; esac; ` +
-  `PS1='\\[\\033]133;A\\007\\]'"$PS1"'\\[\\033]133;B\\007\\]'; ` +
-  `PS0='\\[\\033]133;C\\007\\]'"$PS0"'; fi` +
-  `\n`;
 
 const writeClipboardText = async (text: string) => {
   const browserWrite = navigator.clipboard?.writeText(text).catch(() => {});
@@ -170,11 +148,6 @@ const completionSetters    = new Map<string, (items: Completion[], index: number
 const completionAccept     = new Map<string, (suffix: string) => void>();
 
 const tabCwd            = new Map<string, string>();
-const tabHasOsc133      = new Map<string, boolean>();
-// True only when OSC 133 'C' (pre-exec) has been received for this tab.
-// Shells without PS0 (bash <4.4, macOS /bin/bash 3.2) emit A and D but
-// never C, so history must still be recorded in the Enter branch.
-const tabHasOsc133Exec  = new Map<string, boolean>();
 const tabCompletions    = new Map<string, Completion[]>();
 const tabCompletionIdx  = new Map<string, number>();
 const completionNav     = new Map<string, boolean>(); // user moved selection with ↑/↓
@@ -273,9 +246,6 @@ export function destroyTerminal(tabId: string): void {
   completionSetters.delete(tabId);
   completionAccept.delete(tabId);
   tabCwd.delete(tabId);
-  tabHasOsc133.delete(tabId);
-  tabHasOsc133Exec.delete(tabId);
-  clearBlockTab(tabId);
   tabCompletions.delete(tabId);
   tabCompletionIdx.delete(tabId);
   completionNav.delete(tabId);
@@ -502,10 +472,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           letterSpacing: parseFloat(s.terminalLetterSpacing) || 0,
           // Cursor is left to the running program: TUI apps (Claude Code,
           // Codex, vim) drive shape/blink/visibility via DECSCUSR (`\e[ q`)
-          // and DECTCEM (`\e[?25h/l`). We only set native-feeling defaults
-          // for the bare shell prompt and never re-impose them afterwards,
-          // otherwise focus/theme changes would fight the app's cursor.
-          cursorBlink: true,
+          // and DECTCEM (`\e[?25h/l`). We only set the fallback default for the
+          // bare shell prompt and never re-impose it afterwards, otherwise
+          // focus/theme changes would fight the app's cursor.
+          // Default is NON-blinking for cross-platform consistency: macOS passes
+          // the app's DECSCUSR through untouched, but Windows ConPTY does not
+          // reliably forward it — a blinking default would then leak through as a
+          // never-stopping blink on Windows. Apps still override this on macOS.
+          cursorBlink: false,
           cursorStyle: "block",
           theme: resolveTerminalTheme(useSettingsStore.getState().settings.terminalColorScheme, useAppStore.getState().theme),
           allowProposedApi: true,
@@ -771,21 +745,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               // actively navigated; otherwise fall through so the shell runs it.
               if (e.key === 'Enter' && completionNav.get(tab.id)) {
                 return accept(idx);
-              }
-            }
-          }
-
-          // Block navigation / focus — handle at the terminal level so a focused
-          // terminal doesn't swallow the chord (fixes the Phase A ⌘⇧↑/↓ leftover:
-          // the window-level dispatcher bails on defaultPrevented).
-          {
-            const overrides = useSettingsStore.getState().settings.keymapOverrides ?? {};
-            for (const b of resolveBindings(overrides)) {
-              if ((b.actionId === 'block.prev' || b.actionId === 'block.next' || b.actionId === 'block.focus')
-                  && b.chord.length === 1 && matchStep(e, b.chord[0])) {
-                e.preventDefault();
-                ACTION_BY_ID.get(b.actionId)?.run();
-                return false;
               }
             }
           }
@@ -1122,72 +1081,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         }
         if (writeQueue) scheduleWriteFlush(WRITE_RETRY_MS);
       };
-      // Hybrid capture: OSC 7 (cwd) + OSC 133 (prompt/command boundaries).
-      // When present, OSC 133 gives authoritative command capture; we still keep
-      // the heuristic onData buffer as the universal fallback.
+      // OSC 7 (cwd) reporting. Command capture is heuristic (onData buffer).
       const term133 = instance!.terminal;
       const osc7Dispose = term133.parser.registerOscHandler(7, (payload) => {
         // payload like file://host/abs/path
         const m = /^file:\/\/[^/]*(\/.*)$/.exec(payload);
         if (m) tabCwd.set(tab.id, decodeURIComponent(m[1]));
         return false; // let other handlers run
-      });
-      const osc133Dispose = term133.parser.registerOscHandler(133, (payload) => {
-        // FinalTerm/iTerm2: A=prompt-start, B=command-start, C=pre-exec, D=done
-        const kind = payload.charAt(0);
-        tabHasOsc133.set(tab.id, true);
-        if (kind === 'A' || kind === 'B') {
-          // New prompt / command start — reset the heuristic buffer & completions.
-          inputBuffers.set(tab.id, '');
-          tabCompletions.set(tab.id, []);
-          tabCompletionIdx.set(tab.id, 0);
-          completionNav.set(tab.id, false);
-          completionSetters.get(tab.id)?.([], 0, 0, 0, false);
-          // Block model: start a block on A (or on B when the shell only emits
-          // B without a preceding A). The gutter status bar is NOT created here —
-          // an idle prompt should show no indicator. It's created on 'C' below,
-          // once a command actually runs.
-          if (kind === 'A') {
-            startBlock(tab.id, term133);
-          } else {
-            const existing = blocksFor(tab.id);
-            const hasRunning = existing.length > 0 && existing[existing.length - 1].state === 'running';
-            if (!hasRunning) startBlock(tab.id, term133);
-          }
-          // P4 Phase B: a new prompt defines the previous block's bottom edge —
-          // finalize it into a finished card. The active (last) block stays
-          // un-decorated; the React live-frame overlay renders it.
-          syncCards(term133, { tabId: tab.id, tabType: tab.type, sessionId: tab.sessionId });
-        } else if (kind === 'C') {
-          // Mark that this shell emits the real pre-exec OSC 133 C sequence.
-          // Used by the Enter branch to avoid double-recording history on shells
-          // that do send C (i.e. bash ≥4.4 / zsh with PS0).
-          tabHasOsc133Exec.set(tab.id, true);
-          // Command submitted: record the authoritative line (heuristic buffer).
-          const sess = sessionsRef.current.find((s) => s.id === tab.sessionId);
-          const st = useSettingsStore.getState().settings;
-          const scope = st.cmdHintScopeByHost ? tabScope(tab.type, sess) : '';
-          const cwd = st.cmdHintScopeByHost ? (tabCwd.get(tab.id) ?? '') : '';
-          const line = (inputBuffers.get(tab.id) ?? '').trim();
-          if (st.sshHistoryCmd && line.length > 0) {
-            commandHistory.record(line, { scope, cwd, sessionType: tab.type });
-          }
-          inputBuffers.set(tab.id, '');
-          // Block model: mark start of output and capture command text.
-          // The card itself is drawn later — finished blocks by blockCards (on
-          // the next prompt), the active block by the React live-frame overlay.
-          markOutput(tab.id, term133);
-          setCommand(tab.id, line);
-        } else if (kind === 'D') {
-          // Block model: parse exit code from "D" or "D;N" payload and close the
-          // block. The live-frame overlay reflects running→done; it becomes a
-          // finished card on the next prompt (syncCards in the 'A' branch).
-          const m = payload.match(/^D(?:;(\d+))?/);
-          const exit = m && m[1] != null ? Number(m[1]) : undefined;
-          finishBlock(tab.id, exit);
-        }
-        // Other kinds: no action needed.
-        return false;
       });
 
       const dataDispose = instance!.terminal.onData((data) => {
@@ -1222,10 +1122,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             const locale = i18n.language?.startsWith('zh') ? 'zh' : 'en';
 
             const showCompletions = () => {
-              if (st.cmdHintDeferToRemote && tabHasOsc133.get(tab.id)) {
-                hideCompletions();
-                return;
-              }
               const table = tabCommandTable.get(tab.id) ?? syncTable(tab.type, sess);
               const items = buildCompletions(buf, { scope, cwd, sessionType, table }, locale);
               tabCompletions.set(tab.id, items);
@@ -1252,19 +1148,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               hideCompletions();
             } else if (data === '\r' || data === '\n') {
               const trimmed = buf.trim();
-              // Record history on Enter ONLY when the shell has NOT yet emitted
-              // OSC 133 C (pre-exec). Shells that do emit C (bash ≥4.4, zsh with
-              // PS0) will record via the authoritative 'C' handler instead.
-              // Shells without PS0 (bash <4.4, macOS /bin/bash 3.2) emit A+D but
-              // never C, so tabHasOsc133Exec stays false and we record here.
-              if (trimmed.length > 0 && !tabHasOsc133Exec.get(tab.id)) {
+              // Record command history on Enter (heuristic capture).
+              if (trimmed.length > 0) {
                 commandHistory.record(trimmed, { scope, cwd, sessionType });
               }
-              // With OSC 133 C active, the authoritative capture happens in the
-              // 'C' handler (fires AFTER this Enter keystroke). Keep the buffer so
-              // 'C' can read it; the 'C' (and next 'A') handler clears it.
-              // Without a real 'C', clear now so the buffer doesn't carry over.
-              if (!tabHasOsc133Exec.get(tab.id)) buf = '';
+              buf = '';
               hideCompletions();
             } else if (data === '\x7f' || data === '\b') {
               // Backspace
@@ -1396,25 +1284,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // Card frames bake in a fixed row-span at creation, so a width change that
       // rewraps lines leaves them stale. Rebuild on resize for ALL interactive
       // terminals — serial has no resizeCmd, so this can't live in that block.
-      let cardsResizeDispose: { dispose(): void } | null = null;
-      {
-        let pendingCardsResize: ReturnType<typeof setTimeout> | null = null;
-        cardsResizeDispose = instance!.terminal.onResize(() => {
-          if (pendingCardsResize) clearTimeout(pendingCardsResize);
-          pendingCardsResize = setTimeout(() => {
-            pendingCardsResize = null;
-            try { rebuildCards(instance!.terminal, { tabId: tab.id, tabType: tab.type, sessionId: tab.sessionId }); } catch {}
-          }, 60);
-        });
-      }
 
       if (cancelled) {
         unlistenData(); unlistenExit();
         try { dataDispose.dispose(); } catch {}
         try { resizeDispose?.dispose(); } catch {}
-        try { cardsResizeDispose?.dispose(); } catch {}
         try { osc7Dispose.dispose(); } catch {}
-        try { osc133Dispose.dispose(); } catch {}
         return;
       }
 
@@ -1435,9 +1310,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         if (pendingResize) { clearTimeout(pendingResize); pendingBackendResize.delete(tab.id); }
         try { dataDispose.dispose(); } catch {}
         try { resizeDispose?.dispose(); } catch {}
-        try { cardsResizeDispose?.dispose(); } catch {}
         try { osc7Dispose.dispose(); } catch {}
-        try { osc133Dispose.dispose(); } catch {}
         try { bellDispose.dispose(); } catch {}
         if (termElForWheel) {
           try { termElForWheel.removeEventListener('wheel', handleWheelZoom); } catch {}
@@ -1451,9 +1324,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         tabCompletionIdx.delete(tab.id);
         completionNav.delete(tab.id);
         bracketedPaste.delete(tab.id);
-        tabHasOsc133.delete(tab.id);
-        tabHasOsc133Exec.delete(tab.id);
-        clearBlockTab(tab.id);
       });
 
       const rawSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
@@ -1538,11 +1408,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // between disconnect and now). Failure re-arms so another keypress retries.
       const reconnect = async (): Promise<void> => {
         instance?.terminal.write(`\r\n\x1b[90m${t('term_reconnecting')}\x1b[0m\r\n`);
-        // Clear the stale block model so old decorations/markers don't persist
-        // against stale buffer lines after the new session starts (FIX 9).
-        clearBlockTab(tab.id);
-        tabHasOsc133.delete(tab.id);
-        tabHasOsc133Exec.delete(tab.id);
         tabCommandTable.delete(tab.id);
         inputBuffers.set(tab.id, '');
         const rawFreshSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
@@ -1619,7 +1484,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             shellName: session?.shell_name ?? null,
             workingDir: session?.working_dir ?? null,
             charset: session?.charset ?? null,
-            shellIntegration: useSettingsStore.getState().settings.cmdHintShellIntegration,
           });
           connectionReady = true;
           if (session?.init_command) {
@@ -1659,13 +1523,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               setTimeout(() => {
                 runLoginScript((d) => { invoke("write_to_ssh", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
               }, 300);
-            }
-
-            // Best-effort OSC 133 shell-integration: inject once on connect when
-            // the user has opted in. Uses the same write_to_ssh mechanism as
-            // init_command. Fails silently — remote shell type is unknown.
-            if (useSettingsStore.getState().settings.cmdHintShellIntegration) {
-              invoke("write_to_ssh", { sessionId: tab.sessionId, data: SSH_OSC133_SNIPPET }).catch(() => {});
             }
 
             // Resolve the completion table: a concrete override is handled
@@ -1989,10 +1846,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           fontSize={parseInt(terminalFontSize) || 13}
         />
       )}
-
-      {isActive && isInteractiveTerminal(tab.type) && <BlockLiveFrame tab={tab} />}
-      {isActive && isInteractiveTerminal(tab.type) && <BlockStickyHeader tab={tab} />}
-      {isActive && isInteractiveTerminal(tab.type) && <BlockOverviewRuler tab={tab} />}
 
       {contextMenu && isActive && (
         <div className="context-menu terminal-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>

@@ -41,7 +41,6 @@ const SecurityNotice = lazy(() => import('./components/SecurityNotice/SecurityNo
 const ServerPanel = lazy(() => import('./components/ServerPanel').then((m) => ({ default: m.ServerPanel })));
 const CommandPalette = lazy(() => import('./components/CommandPalette/CommandPalette').then((m) => ({ default: m.CommandPalette })));
 const GroupDefaultsModal = lazy(() => import('./components/Modals/GroupDefaultsModal').then((m) => ({ default: m.GroupDefaultsModal })));
-const BlockFocusPanel = lazy(() => import('./components/Terminal/BlockFocusPanel').then((m) => ({ default: m.BlockFocusPanel })));
 
 function App() {
   useSettingsEffects();
@@ -49,7 +48,6 @@ function App() {
     showNewSession, showQuickConnect, showDockerModal, showLocalTerminalModal, showSerialModal, showSettings, showAppMenu,
     showCommandPalette,
     showTerminalSearch,
-    focusedBlock,
     groupDefaultsTarget,
     dockerPicker, setDockerPicker,
     vaultLocked, setVaultLocked,
@@ -236,7 +234,6 @@ function App() {
           {showAppMenu && <AppMenu />}
           {showCommandPalette && <CommandPalette />}
           {groupDefaultsTarget !== null && <GroupDefaultsModal />}
-          {focusedBlock && <BlockFocusPanel />}
           <UpdateChecker />
           <SecurityNotice />
           <ServerPanel />

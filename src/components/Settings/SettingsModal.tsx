@@ -53,8 +53,6 @@ export interface AppSettings {
   pasteWarnMultiline: boolean;
   terminalColorScheme: string;
   cmdHintAllSessions: boolean;
-  cmdHintShellIntegration: boolean;
-  cmdHintDeferToRemote: boolean;
   cmdHintScopeByHost: boolean;
   terminalStripeBackground: boolean;
   middleClickAction: string;
@@ -621,8 +619,6 @@ export const SettingsModal: React.FC = () => {
                     <Row label={t('settings_ssh_history_count')}><NumInput value={settings.sshHistoryCmdLoadCount} onChange={(v) => u('sshHistoryCmdLoadCount', v)} /></Row>
                     <Row label={t('settings_cmd_hint_all_sessions')}><Toggle value={settings.cmdHintAllSessions} onChange={(v) => u('cmdHintAllSessions', v)} /></Row>
                     <Row label={t('settings_cmd_hint_scope_host')}><Toggle value={settings.cmdHintScopeByHost} onChange={(v) => u('cmdHintScopeByHost', v)} /></Row>
-                    <Row label={t('settings_cmd_hint_shell_integration')}><Toggle value={settings.cmdHintShellIntegration} onChange={(v) => u('cmdHintShellIntegration', v)} /></Row>
-                    <Row label={t('settings_cmd_hint_defer_remote')}><Toggle value={settings.cmdHintDeferToRemote} onChange={(v) => u('cmdHintDeferToRemote', v)} /></Row>
                     <Row label={t('settings_paste_warn_multiline')}><Toggle value={settings.pasteWarnMultiline} onChange={(v) => u('pasteWarnMultiline', v)} /></Row>
                     <Row label={t('settings_terminal_color_scheme')}><Sel value={settings.terminalColorScheme} options={TERMINAL_SCHEME_OPTIONS} onChange={(v) => u('terminalColorScheme', v)} /></Row>
                     <Row label={t('settings_stripe_bg')}><Toggle value={settings.terminalStripeBackground} onChange={(v) => u('terminalStripeBackground', v)} /></Row>
