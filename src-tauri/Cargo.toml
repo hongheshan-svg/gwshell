@@ -1,6 +1,6 @@
 [package]
 name = "gwshell"
-version = "0.5.2"
+version = "0.5.3"
 description = "GWShell - A modern SSH/Shell terminal"
 authors = ["you"]
 edition = "2021"
