@@ -180,6 +180,23 @@ export const HostDashCard: React.FC<Props> = ({
 
   // Only SSH sessions have a meaningful TCP latency to display.
   const isPingable = session.session_type === 'ssh';
+  // SSH reached via a jump host / proxy isn't directly TCP-reachable from here,
+  // so a direct probe is meaningless — show a neutral marker, not "timeout".
+  const viaRelay = !!session.jump_host
+    || (!!session.proxy_type && session.proxy_type !== 'none');
+
+  // Distinguish the three latency states so a not-yet-probed or relay-only host
+  // never renders the misleading "timeout":
+  //   number     → measured round-trip
+  //   null       → probed and failed (genuinely unreachable / timed out)
+  //   undefined  → not probed yet (initial render, or paused while unfocused)
+  const pingBadge: { cls: string; text: string; title?: string } | null = (() => {
+    if (!isPingable) return null;
+    if (viaRelay) return { cls: '', text: '—', title: t('dash_via_relay_hint') };
+    if (typeof latency === 'number') return { cls: ' live', text: `${latency} ms` };
+    if (latency === null) return { cls: '', text: t('dash_offline', 'Timeout'), title: t('dash_offline_hint') };
+    return { cls: '', text: '…', title: t('dash_checking_hint') };
+  })();
 
   // Per-type connection summary for the sub row (raw lowercase type names
   // like "serial" tell the user nothing).
@@ -291,9 +308,9 @@ export const HostDashCard: React.FC<Props> = ({
                 {typeBadge.icon}
                 {typeBadge.label}
               </div>
-              {isPingable && (
-                <div className={`dash-ping-badge${latency != null ? ' live' : ''}`}>
-                  {latency != null ? `${latency} ms` : t('dash_offline', 'timeout')}
+              {pingBadge && (
+                <div className={`dash-ping-badge${pingBadge.cls}`} title={pingBadge.title}>
+                  {pingBadge.text}
                 </div>
               )}
             </div>
