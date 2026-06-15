@@ -4,7 +4,6 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
-import { CanvasAddon } from "@xterm/addon-canvas/lib/xterm-addon-canvas.mjs";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { readText as clipboardRead, writeText as clipboardWrite } from "@tauri-apps/plugin-clipboard-manager";
@@ -817,28 +816,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         });
       }
 
-      // Attach a canvas renderer once the terminal is in the DOM.
-      // WebGL is fast, but it is more prone to stale cells in full-screen TUIs
-      // during reparent/focus/resize cycles. Canvas is still accelerated enough
-      // for normal shell output and clears Codex/Claude status rows reliably.
+      // Attach the WebGL renderer once the terminal is in the DOM. WebGL is
+      // xterm.js's preferred GPU renderer (fastest, scales best, and in v6
+      // supports DEC 2026 synchronized output that reduces TUI tearing). On
+      // WebGL context loss, dispose the addon so the terminal falls back to
+      // xterm's built-in DOM renderer.
       if (wasFreshlyOpened) {
-        // WebGL is xterm.js's preferred GPU renderer (fastest, scales best,
-        // and in v6 supports DEC 2026 synchronized output that reduces TUI
-        // tearing). Prefer it; fall back to Canvas, then to xterm's built-in
-        // DOM renderer if neither initializes. On WebGL context loss, dispose
-        // the addon so the terminal drops back to the DOM renderer.
         try {
           const webgl = new WebglAddon();
           webgl.onContextLoss(() => { try { webgl.dispose(); } catch {} });
           instance.terminal.loadAddon(webgl);
           instance.rendererAddon = webgl;
-        } catch {
-          try {
-            const canvas = new CanvasAddon();
-            instance.terminal.loadAddon(canvas);
-            instance.rendererAddon = canvas;
-          } catch {}
-        }
+        } catch {}
       }
 
       // Immediate fit attempt — reading offsetWidth triggers a synchronous
