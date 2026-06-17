@@ -458,9 +458,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       let instance = existingInstance;
 
       if (!instance) {
-        // Fetch platform info to configure windowsPty for ConPTY on Windows.
-        // This tells xterm.js how to interpret ConPTY escape sequences so that
-        // TUI apps (claude, vim, htop etc.) render correctly.
+        // Fetch platform info to configure windowsPty for the LOCAL ConPTY
+        // backend on Windows (see usesLocalConpty below). This tells xterm.js
+        // how to interpret ConPTY escape sequences so that local TUI apps
+        // (claude, vim, htop etc.) render correctly.
         const osInfo = await getOsInfo();
         if (cancelled) return;
 
@@ -487,7 +488,26 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           copyOnSelect: false,
         };
 
-        if (osInfo.os === "windows") {
+        // Only the LOCAL PTY backend (local shell, and Docker-over-local-PTY)
+        // runs through Windows ConPTY. SSH and serial sessions talk to a remote
+        // Unix PTY / a serial device and never touch the local ConPTY, so
+        // advertising `windowsPty` for them is wrong. On Windows builds < 21376
+        // (every Windows 10 release, plus any build whose number fails to parse
+        // and falls back to 0) that wrong flag switches on xterm.js's winpty
+        // wrapping heuristics, which corrupt full-screen TUIs (Codex, Claude
+        // Code): lines reflow incorrectly and the terminal cursor gets drawn
+        // over the app's own status rows / file tree instead of its input line.
+        // Restrict `windowsPty` to sessions that are genuinely local ConPTY.
+        const usesLocalConpty = (): boolean => {
+          if (osInfo.os !== "windows") return false;
+          if (tab.type === "localshell") return true;
+          if (tab.type === "docker") {
+            const dsess = sessionsRef.current.find((s) => s.id === tab.sessionId);
+            return (dsess?.docker_connect_method ?? "").toLowerCase() !== "ssh";
+          }
+          return false;
+        };
+        if (usesLocalConpty()) {
           termOpts.windowsPty = {
             backend: "conpty",
             buildNumber: osInfo.windowsBuild ?? 0,
