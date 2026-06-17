@@ -14,7 +14,7 @@
     "preview": "vite preview",
     "smoke:check": "node scripts/stability-smoke.mjs",
     "tauri": "tauri",
-    "postversion": "node -e \"const fs=require('fs');const v=require('./package.json').version;const c=fs.readFileSync('src-tauri/Cargo.toml','utf8').replace(/^version = \\\"[^\\\"]+\\\"/m,'version = \\\"'+v+'\\\"');fs.writeFileSync('src-tauri/Cargo.toml',c);console.log('Cargo.toml version synced to '+v);\""
+    "version": "node -e \"const fs=require('fs');const v=require('./package.json').version;const c=fs.readFileSync('src-tauri/Cargo.toml','utf8').replace(/^version = \\\"[^\\\"]+\\\"/m,'version = \\\"'+v+'\\\"');fs.writeFileSync('src-tauri/Cargo.toml',c);console.log('Cargo.toml version synced to '+v);\" && git add src-tauri/Cargo.toml"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
