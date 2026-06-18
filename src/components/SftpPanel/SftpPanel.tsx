@@ -616,6 +616,16 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
             <div className="sftp-loading">{t('sftp_loading')}</div>
           )}
 
+          {/* Column header — aligns with .sftp-file-item rows below */}
+          {!loading && entries.length > 0 && (
+            <div className="sftp-file-header">
+              <span className="sftp-file-header-icon" />
+              <span className="sftp-file-header-name">{t('sftp_col_name')}</span>
+              <span className="sftp-file-header-size">{t('sftp_col_size')}</span>
+              <span className="sftp-file-header-perm">{t('sftp_col_perm')}</span>
+            </div>
+          )}
+
           {/* New folder input */}
           {newFolderMode && (
             <div className="sftp-file-item sftp-new-folder-item">

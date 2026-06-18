@@ -1035,6 +1035,47 @@ input, select, textarea, button {
   border-radius: var(--radius-sm);
 }
 
+/* Column header — mirrors the .sftp-file-item flex layout so labels line up
+   with the Name / Size / Perm columns below. */
+.sftp-file-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
+  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.sftp-file-header-icon {
+  width: 18px;
+  flex-shrink: 0;
+}
+
+.sftp-file-header-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.sftp-file-header-size {
+  flex-shrink: 0;
+  width: 56px;
+  text-align: right;
+}
+
+.sftp-file-header-perm {
+  flex-shrink: 0;
+  width: 64px;
+  text-align: right;
+}
+
 .sftp-file-item {
   display: flex;
   align-items: center;
@@ -1045,6 +1086,12 @@ input, select, textarea, button {
   cursor: pointer;
   border-bottom: 1px solid transparent;
   min-height: 32px;
+}
+
+/* Zebra striping for readability in large directories. Odd rows (1st, 3rd, …)
+   get a faint tint; the header is sticky above them. */
+.sftp-file-item:nth-child(odd of .sftp-file-item) {
+  background: color-mix(in srgb, var(--bg-secondary) 35%, transparent);
 }
 
 .sftp-file-item:hover {
@@ -1100,7 +1147,7 @@ input, select, textarea, button {
   font-size: 11px;
   color: var(--text-muted);
   flex-shrink: 0;
-  min-width: 45px;
+  width: 56px;
   text-align: right;
 }
 
@@ -1108,6 +1155,8 @@ input, select, textarea, button {
   font-size: 10px;
   color: var(--text-muted);
   flex-shrink: 0;
+  width: 64px;
+  text-align: right;
   font-family: 'JetBrains Mono', 'Consolas', monospace;
 }
 
