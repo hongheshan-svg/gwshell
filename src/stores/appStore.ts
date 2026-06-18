@@ -113,7 +113,18 @@ function popInjectedSessions(): SessionConfig[] {
   const data = win.__GWSHELL_SESSIONS__;
   if (Array.isArray(data)) {
     delete win.__GWSHELL_SESSIONS__;
-    return data as SessionConfig[];
+    // Light shape validation: a malformed injected payload (missing id /
+    // session_type, or wrong types) could corrupt the store and crash later
+    // save_session / connect logic. Drop bad entries and warn.
+    const valid = data.filter((e): e is SessionConfig => {
+      if (!e || typeof e !== 'object') return false;
+      const o = e as Record<string, unknown>;
+      return typeof o.id === 'string' && typeof o.session_type === 'string';
+    });
+    if (valid.length !== data.length) {
+      console.warn(`popInjectedSessions: dropped ${data.length - valid.length} malformed entr(ies)`);
+    }
+    return valid;
   }
   return [];
 }

@@ -127,10 +127,17 @@ export function record(command: string, ctx: SuggestCtx = {}): void {
     });
   }
 
-  // Trim oldest when over the soft cap.
+  // Trim oldest when over the soft cap. Use a single O(n) min-last_used scan
+  // instead of a full sort — record runs on every Enter, so at steady state
+  // (entries.length == MAX_ENTRIES) every distinct command would otherwise
+  // trigger an O(n log n) sort on the main thread.
   if (entries.length > MAX_ENTRIES) {
-    entries.sort((a, b) => a.last_used - b.last_used);
-    entries = entries.slice(entries.length - MAX_ENTRIES);
+    let minIdx = 0;
+    let minVal = entries[0].last_used;
+    for (let i = 1; i < entries.length; i++) {
+      if (entries[i].last_used < minVal) { minVal = entries[i].last_used; minIdx = i; }
+    }
+    entries.splice(minIdx, 1);
   }
 
   invoke('save_command_history', {

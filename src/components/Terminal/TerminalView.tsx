@@ -159,6 +159,12 @@ const completionSetters    = new Map<string, (items: Completion[], index: number
 const completionAccept     = new Map<string, (suffix: string) => void>();
 
 const tabCwd            = new Map<string, string>();
+// Cache of remote-OS probe results keyed by host, so opening multiple SSH
+// tabs to the same host doesn't re-run `uname`/`%COMSPEC%` exec probes each
+// time. Entries expire after 5 minutes (a host's OS doesn't change often,
+// but a re-provisioned box should eventually be re-detected).
+const remoteOsCache     = new Map<string, { table: CommandTable; at: number }>();
+const REMOTE_OS_TTL_MS  = 5 * 60 * 1000;
 const tabCompletions    = new Map<string, Completion[]>();
 const tabCompletionIdx  = new Map<string, number>();
 const completionNav     = new Map<string, boolean>(); // user moved selection with ↑/↓
@@ -922,10 +928,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // Bell listener: plays a short WebAudio beep when terminalSound is enabled.
       // Registered here (before cleanupTabListeners) so it gets torn down with
       // the rest of the per-tab xterm listeners.
+      // Reuse a single AudioContext across bells instead of creating one per
+      // BEL — rapid bells (e.g. a script emitting several) would otherwise hit
+      // the browser's concurrent-AudioContext cap and silently drop sound.
+      let bellCtx: AudioContext | null = null;
       const bellDispose = instance!.terminal.onBell(() => {
         if (!useSettingsStore.getState().settings.terminalSound) return;
         try {
-          const ctx = new AudioContext();
+          if (!bellCtx || bellCtx.state === 'closed') bellCtx = new AudioContext();
+          const ctx = bellCtx;
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.connect(gain);
@@ -936,7 +947,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
           osc.start(ctx.currentTime);
           osc.stop(ctx.currentTime + 0.08);
-          osc.onended = () => { try { ctx.close(); } catch {} };
+          // The oscillator self-stops; leave the context open for reuse.
         } catch { /* AudioContext unavailable — silently skip */ }
       });
 
@@ -1408,6 +1419,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         try { resizeDispose?.dispose(); } catch {}
         try { osc7Dispose.dispose(); } catch {}
         try { bellDispose.dispose(); } catch {}
+        // Close the shared bell AudioContext so it isn't left running.
+        try { if (bellCtx) bellCtx.close(); } catch {}
         if (termElForWheel) {
           try { termElForWheel.removeEventListener('wheel', handleWheelZoom); } catch {}
         }
@@ -1549,9 +1562,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           useAppStore.getState().updateTabConnected(tab.id, true);
           reconnectableTabs.delete(tab.id);
           if (tab.type === 'ssh' && freshSession && tableForRemoteShell(freshSession.remote_shell ?? null) === null) {
-            invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
-              .then((tbl) => { tabCommandTable.set(tab.id, normalizeTable(tbl)); })
-              .catch(() => {});
+            // Prefer a cached probe result for this host (5-min TTL) so opening
+            // several tabs to the same host doesn't re-run exec probes each time.
+            const host = freshSession.host ?? '';
+            const cached = host ? remoteOsCache.get(host) : undefined;
+            if (cached && Date.now() - cached.at < REMOTE_OS_TTL_MS) {
+              tabCommandTable.set(tab.id, cached.table);
+            } else {
+              invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
+                .then((tbl) => {
+                  const norm = normalizeTable(tbl);
+                  tabCommandTable.set(tab.id, norm);
+                  if (host) remoteOsCache.set(host, { table: norm, at: Date.now() });
+                })
+                .catch(() => {});
+            }
           }
         } catch (err) {
           instance?.terminal.write(
@@ -1640,9 +1665,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             // synchronously by syncTable; 'auto'/unset triggers a one-shot remote
             // probe (best-effort, result cached per tab).
             if (tableForRemoteShell(session.remote_shell ?? null) === null) {
-              invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
-                .then((tbl) => { tabCommandTable.set(tab.id, normalizeTable(tbl)); })
-                .catch(() => {});
+              const host = session.host ?? '';
+              const cached = host ? remoteOsCache.get(host) : undefined;
+              if (cached && Date.now() - cached.at < REMOTE_OS_TTL_MS) {
+                tabCommandTable.set(tab.id, cached.table);
+              } else {
+                invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
+                  .then((tbl) => {
+                    const norm = normalizeTable(tbl);
+                    tabCommandTable.set(tab.id, norm);
+                    if (host) remoteOsCache.set(host, { table: norm, at: Date.now() });
+                  })
+                  .catch(() => {});
+              }
             }
 
             // Dynamic (SOCKS) only needs a local port; local/remote need the full triple.
