@@ -1,0 +1,73 @@
+name: CI
+
+# Fast pre-merge checks. The heavy 3-platform Tauri build lives in
+# release.yml and only runs on version tags / manual dispatch.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref so rapid pushes don't queue up.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Checks (type-check, smoke, cargo check)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # `npm run build` = tsc (type-check) + vite build. It also emits ../dist,
+      # which tauri-build (build.rs) requires for `cargo check` to succeed.
+      - name: Build frontend (type-check)
+        run: npm run build
+
+      - name: Smoke check
+        run: npm run smoke:check
+
+      # System libraries the tauri/-sys crates link against, so `cargo check`
+      # can resolve them at build-script time.
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            pkg-config \
+            libssh2-1-dev \
+            libudev-dev \
+            libdbus-1-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # Type-check / borrow-check the whole backend without codegen, linking, or
+      # bundling — minutes faster than a release build, and catches what matters
+      # before merge.
+      - name: Cargo check
+        working-directory: src-tauri
+        run: cargo check
