@@ -16,7 +16,11 @@ const INTERACTIVE_TERMINAL_TYPES = new Set(['ssh', 'localshell', 'serial', 'dock
 export const SnippetPanel: React.FC = () => {
   const { t } = useTranslation();
   const { snippets, loaded, load, add, update, remove } = useSnippetStore();
-  const { activeTabId, tabs } = useAppStore();
+  // Per-field selectors: snippet list/actions come from snippetStore; only the
+  // active tab id + tab list are needed from appStore, selected individually so
+  // an unrelated store change (latency, modal toggle) doesn't re-render the list.
+  const activeTabId = useAppStore((s) => s.activeTabId);
+  const tabs = useAppStore((s) => s.tabs);
   const [editing, setEditing] = useState<Snippet | null>(null);
   const [draftName, setDraftName] = useState('');
   const [draftCmd, setDraftCmd] = useState('');
@@ -126,7 +130,7 @@ export const SnippetPanel: React.FC = () => {
               <button className="snippet-icon-btn" onClick={() => startEdit(s)} title={t('snippet_edit')}>
                 <Edit size={14} />
               </button>
-              <button className="snippet-icon-btn" onClick={() => void remove(s.id)} title={t('snippet_delete')}>
+              <button className="snippet-icon-btn" onClick={() => { if (window.confirm(t('common_delete_confirm_body', { name: s.name }))) void remove(s.id); }} title={t('snippet_delete')}>
                 <Trash2 size={14} />
               </button>
             </div>

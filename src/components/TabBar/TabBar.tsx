@@ -39,6 +39,9 @@ const SortableTab: React.FC<{
         zIndex: isDragging ? 10 : undefined,
       }}
       className={`tab-item ${active ? 'active' : ''}`}
+      role="tab"
+      aria-selected={active}
+      tabIndex={active ? 0 : -1}
       onClick={onSelect}
       onMouseDown={onMiddleClick}
     >
@@ -126,7 +129,7 @@ export const TabBar: React.FC = () => {
   };
 
   return (
-    <div className="tab-bar">
+    <div className="tab-bar" role="tablist">
       {sidebarCollapsed && (
         <button className="tab-add-btn" onClick={toggleSidebar} title={t('nav_toggle_sidebar')}>
           <PanelLeftOpen size={14} />
