@@ -454,6 +454,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
     // Track init-script timers so they can be cancelled on unmount/reconnect,
     // preventing a deferred runLoginScript from writing to a closed/reused session.
     const initScriptTimers: ReturnType<typeof setTimeout>[] = [];
+    // runLoginScript schedules nested setTimeouts for delayed segments; collect
+    // their cancel functions too so teardown aborts the whole script, not just
+    // the outer 300ms trigger.
+    const initScriptCancels: Array<() => void> = [];
 
     const initTerminal = async () => {
       const existingInstance = terminalInstances.get(tab.id);
@@ -1521,7 +1525,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           if (session?.init_command) {
             const cmd = session.init_command;
             initScriptTimers.push(setTimeout(() => {
-              runLoginScript((d) => { invoke("write_to_pty", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
+              initScriptCancels.push(runLoginScript((d) => { invoke("write_to_pty", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd));
             }, 300));
           }
         } else if (tab.type === "ssh") {
@@ -1553,7 +1557,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             if (session.init_command) {
               const cmd = session.init_command;
               initScriptTimers.push(setTimeout(() => {
-                runLoginScript((d) => { invoke("write_to_ssh", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
+                initScriptCancels.push(runLoginScript((d) => { invoke("write_to_ssh", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd));
               }, 300));
             }
 
@@ -1630,7 +1634,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             if (session.serial_init_commands) {
               const cmd = session.serial_init_commands;
               initScriptTimers.push(setTimeout(() => {
-                runLoginScript((d) => { invoke("write_to_serial", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
+                initScriptCancels.push(runLoginScript((d) => { invoke("write_to_serial", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd));
               }, 300));
             }
           }
@@ -1721,6 +1725,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // Cancel any pending init-script injection so a deferred runLoginScript
       // can't write to a closed or reconnecting session.
       initScriptTimers.forEach(clearTimeout);
+      initScriptCancels.forEach((fn) => fn());
       // Unblock a docker-container picker that is open for this tab: remove the
       // two window listeners first (via cancelDockerPick / cleanup), then resolve
       // the awaited Promise to null so the async frame exits cleanly, and dismiss

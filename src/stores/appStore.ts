@@ -121,7 +121,7 @@ function popInjectedSessions(): SessionConfig[] {
 const _initialSessions = popInjectedSessions();
 
 
-export const useAppStore = create<AppStore>((set, _get) => ({
+export const useAppStore = create<AppStore>((set, get) => ({
   locale: initialLocale,
   setLocale: (locale) => {
     void i18n.changeLanguage(locale);
@@ -154,17 +154,27 @@ export const useAppStore = create<AppStore>((set, _get) => ({
         : [...state.sessions, session];
       return { sessions };
     });
-    // Persist to backend (fire-and-forget)
-    invoke('save_session', { config: session }).catch(() => {});
+    // Persist to backend; surface failures instead of silently dropping them.
+    invoke('save_session', { config: session }).catch((err) => {
+      console.error('Failed to save session, the UI may be out of sync:', err);
+    });
   },
   addTemporarySession: (session) =>
     set((state) => ({ sessions: [...state.sessions, session] })),
   removeSession: (id) => {
+    // Capture the removed session so it can be restored if the backend delete
+    // fails (otherwise the UI shows it gone but it reappears after restart).
+    const removed = get().sessions.find((s) => s.id === id);
     set((state) => ({
       sessions: state.sessions.filter((s) => s.id !== id),
       selectedSessionIds: state.selectedSessionIds.filter((sid) => sid !== id),
     }));
-    invoke('delete_session', { sessionId: id }).catch(() => {});
+    invoke('delete_session', { sessionId: id }).catch((err) => {
+      if (removed) {
+        set((state) => ({ sessions: [...state.sessions, removed] }));
+      }
+      console.error('Failed to delete session, rolled back:', err);
+    });
   },
   updateSessionLatency: (id, latency) => {
     set((state) => ({
