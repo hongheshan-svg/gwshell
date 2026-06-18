@@ -1035,6 +1035,47 @@ input, select, textarea, button {
   border-radius: var(--radius-sm);
 }
 
+/* Column header — mirrors the .sftp-file-item flex layout so labels line up
+   with the Name / Size / Perm columns below. */
+.sftp-file-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
+  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.sftp-file-header-icon {
+  width: 18px;
+  flex-shrink: 0;
+}
+
+.sftp-file-header-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.sftp-file-header-size {
+  flex-shrink: 0;
+  width: 56px;
+  text-align: right;
+}
+
+.sftp-file-header-perm {
+  flex-shrink: 0;
+  width: 64px;
+  text-align: right;
+}
+
 .sftp-file-item {
   display: flex;
   align-items: center;
@@ -1045,6 +1086,12 @@ input, select, textarea, button {
   cursor: pointer;
   border-bottom: 1px solid transparent;
   min-height: 32px;
+}
+
+/* Zebra striping for readability in large directories. Odd rows (1st, 3rd, …)
+   get a faint tint; the header is sticky above them. */
+.sftp-file-item:nth-child(odd of .sftp-file-item) {
+  background: color-mix(in srgb, var(--bg-secondary) 35%, transparent);
 }
 
 .sftp-file-item:hover {
@@ -1067,26 +1114,40 @@ input, select, textarea, button {
 
 .sftp-icon {
   flex-shrink: 0;
+  stroke-width: 1.75;
 }
 
+/* Folder: a solid two-tone amber glyph — darker outline over a lighter filled
+   body, the way modern file managers render folders. `color` drives the stroke,
+   `fill` the body (CSS fill overrides lucide's default fill="none"). */
 .sftp-icon-folder {
-  width: 18px;
-  height: 18px;
-  color: var(--warning);
-  fill: rgba(242, 181, 63, 0.26);
-  stroke-width: 2.15;
-}
-
-.sftp-icon-file {
-  width: 14px;
-  height: 14px;
-  color: var(--text-secondary);
+  color: #d9952a;
+  fill: #f3bd52;
+  stroke-width: 1.5;
 }
 
 .sftp-file-dir:hover .sftp-icon-folder {
-  color: var(--warning);
-  fill: rgba(255, 204, 102, 0.34);
+  color: #e8a833;
+  fill: #ffcf6b;
 }
+
+/* File-type tints. Mid-saturation hues that read on both dark and light
+   themes; the glyph itself comes from lib/fileIcons.ts. */
+.sftp-icon-file    { color: var(--text-secondary); }
+.sftp-icon-code    { color: #4ea1ff; }
+.sftp-icon-web     { color: #e0883a; }
+.sftp-icon-data    { color: #d6b34a; }
+.sftp-icon-doc     { color: #9aa4b2; }
+.sftp-icon-pdf     { color: #e5534b; }
+.sftp-icon-word    { color: #4a8cff; }
+.sftp-icon-image   { color: #b07cf0; }
+.sftp-icon-archive { color: #d98a3d; }
+.sftp-icon-media   { color: #e25f9e; }
+.sftp-icon-audio   { color: #2bb3c0; }
+.sftp-icon-sheet   { color: #3aa063; }
+.sftp-icon-shell   { color: #56c07a; }
+.sftp-icon-key     { color: #e0b341; }
+.sftp-icon-binary  { color: #8b95a6; }
 
 .sftp-file-name {
   flex: 1;
@@ -1100,7 +1161,7 @@ input, select, textarea, button {
   font-size: 11px;
   color: var(--text-muted);
   flex-shrink: 0;
-  min-width: 45px;
+  width: 56px;
   text-align: right;
 }
 
@@ -1108,6 +1169,8 @@ input, select, textarea, button {
   font-size: 10px;
   color: var(--text-muted);
   flex-shrink: 0;
+  width: 64px;
+  text-align: right;
   font-family: 'JetBrains Mono', 'Consolas', monospace;
 }
 

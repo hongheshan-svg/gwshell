@@ -21,13 +21,25 @@ export function parseQuickConnect(input: string): QuickTarget | null {
 
   let host = rest;
   let port = 22;
-  const colon = rest.lastIndexOf(':');
-  if (colon >= 0) {
-    const portStr = rest.slice(colon + 1);
-    const p = Number(portStr);
-    if (/^\d+$/.test(portStr) && p >= 1 && p <= 65535) {
-      host = rest.slice(0, colon);
-      port = p;
+
+  // IPv6 literal in bracketed form: [::1] or [::1]:22. Strip the brackets
+  // (SSH connects to the bare address) and parse an optional trailing port.
+  // Without this, lastIndexOf(':') would grab a colon inside the address.
+  if (rest.startsWith('[')) {
+    const m = /^\[([^\]]+)\](?::(\d+))?$/.exec(rest);
+    if (m) {
+      host = m[1];
+      if (m[2] !== undefined) port = Number(m[2]);
+    }
+  } else {
+    const colon = rest.lastIndexOf(':');
+    if (colon >= 0) {
+      const portStr = rest.slice(colon + 1);
+      const p = Number(portStr);
+      if (/^\d+$/.test(portStr) && p >= 1 && p <= 65535) {
+        host = rest.slice(0, colon);
+        port = p;
+      }
     }
   }
 

@@ -10,6 +10,7 @@ import {
   Shield, FilePlus, FolderUp, ExternalLink, FileEdit,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import { fileIconFor } from '../../lib/fileIcons';
 import { SftpEditor } from './SftpEditor';
 
 const TEXT_EXTENSIONS = new Set([
@@ -374,6 +375,10 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
     });
 
   const handleDelete = async (entry: SftpEntry) => {
+    // Remote deletion is irreversible (no recycle bin) — confirm first.
+    if (!window.confirm(t('common_delete_confirm_body', { name: entry.name }))) {
+      return;
+    }
     try {
       if (entry.is_dir) {
         await invoke('sftp_rmdir', { sessionId, path: entry.path });
@@ -612,10 +617,20 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
             <div className="sftp-loading">{t('sftp_loading')}</div>
           )}
 
+          {/* Column header — aligns with .sftp-file-item rows below */}
+          {!loading && entries.length > 0 && (
+            <div className="sftp-file-header">
+              <span className="sftp-file-header-icon" />
+              <span className="sftp-file-header-name">{t('sftp_col_name')}</span>
+              <span className="sftp-file-header-size">{t('sftp_col_size')}</span>
+              <span className="sftp-file-header-perm">{t('sftp_col_perm')}</span>
+            </div>
+          )}
+
           {/* New folder input */}
           {newFolderMode && (
             <div className="sftp-file-item sftp-new-folder-item">
-              <Folder size={18} className="sftp-icon sftp-icon-folder" />
+              <Folder size={17} className="sftp-icon sftp-icon-folder" />
               <input
                 className="sftp-rename-input"
                 value={newFolderName}
@@ -631,7 +646,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
           {/* New file input */}
           {newFileMode && (
             <div className="sftp-file-item sftp-new-folder-item">
-              <File size={14} className="sftp-icon sftp-icon-file" />
+              <File size={16} className="sftp-icon sftp-icon-file" />
               <input
                 className="sftp-rename-input"
                 value={newFileName}
@@ -650,7 +665,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
               className="sftp-file-item sftp-file-dir"
               onClick={() => { setSelectedEntry(null); goUp(); }}
             >
-              <FolderUp size={18} className="sftp-icon sftp-icon-folder" />
+              <FolderUp size={17} className="sftp-icon sftp-icon-folder" />
               <span className="sftp-file-name">..</span>
               <span className="sftp-file-size">-</span>
               <span className="sftp-file-perm" />
@@ -666,10 +681,11 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
               onContextMenu={(e) => handleContextMenu(e, entry)}
             >
               {entry.is_dir ? (
-                <Folder size={18} className="sftp-icon sftp-icon-folder" />
-              ) : (
-                <File size={14} className="sftp-icon sftp-icon-file" />
-              )}
+                <Folder size={17} className="sftp-icon sftp-icon-folder" />
+              ) : (() => {
+                const { Icon, cls } = fileIconFor(entry.name);
+                return <Icon size={16} className={`sftp-icon ${cls}`} />;
+              })()}
               {renamingEntry === entry.path ? (
                 <input
                   className="sftp-rename-input"

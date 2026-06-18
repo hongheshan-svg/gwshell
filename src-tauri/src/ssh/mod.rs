@@ -18,6 +18,7 @@ pub use sftp::{ProgressFn, SftpEntry};
 
 use crate::ssh::handler::{Client, ForwardTargets};
 use russh::client::Handle;
+use russh_sftp::client::SftpSession;
 use session::ShellCmd;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -34,6 +35,11 @@ struct SessionHandle {
     /// Shared with this session's `Client` handler: remote-forward targets keyed
     /// by the server-side listen port. `start_remote_forward` registers here.
     forwarded: ForwardTargets,
+    /// Lazily-opened SFTP subsystem, reused across every SFTP operation so each
+    /// call avoids the ~3-round-trip channel-open + subsystem + INIT handshake.
+    /// Cleared (set to `None`) when an operation fails, so the next call reopens
+    /// it on the same connection. Dropped with the session, which closes it.
+    sftp: Arc<Mutex<Option<Arc<SftpSession>>>>,
 }
 
 #[derive(Default)]
@@ -59,6 +65,11 @@ impl SshManager {
         cols: u32,
         app: AppHandle,
     ) -> Result<(), String> {
+        // If a session with this id already exists (e.g. a reconnect that
+        // didn't go through close_ssh first), close it before overwriting —
+        // otherwise the old Handle + reader/writer tasks leak. This mirrors
+        // PtyManager's close-before-create pattern.
+        self.close_existing(session_id).await;
         let (shell, conn, forwarded) =
             session::spawn(session_id.to_string(), params, cols, rows, app).await?;
         self.sessions.lock().await.insert(
@@ -67,6 +78,7 @@ impl SshManager {
                 shell,
                 conn,
                 forwarded,
+                sftp: Arc::new(Mutex::new(None)),
             },
         );
         Ok(())
@@ -82,6 +94,8 @@ impl SshManager {
         cols: u32,
         app: AppHandle,
     ) -> Result<(), String> {
+        // Same leak guard as `connect`: close any pre-existing session first.
+        self.close_existing(session_id).await;
         let (shell, conn, forwarded) =
             session::spawn_exec(session_id.to_string(), params, cols, rows, app, command).await?;
         self.sessions.lock().await.insert(
@@ -90,9 +104,18 @@ impl SshManager {
                 shell,
                 conn,
                 forwarded,
+                sftp: Arc::new(Mutex::new(None)),
             },
         );
         Ok(())
+    }
+
+    /// Remove and gracefully close a session already in the map (if any).
+    /// Used before inserting a replacement so the old connection/tasks don't leak.
+    async fn close_existing(&self, session_id: &str) {
+        if let Some(old) = self.sessions.lock().await.remove(session_id) {
+            let _ = old.shell.send(ShellCmd::Close).await;
+        }
     }
 
     pub async fn write_to_ssh(&self, session_id: &str, data: &[u8]) -> Result<(), String> {
@@ -318,73 +341,91 @@ impl SshManager {
     // connection. They are deliberately repeated (one method per op) so the
     // command layer can call them directly; the shape is identical.
 
+    /// Return this session's SFTP subsystem, opening + caching it on first use.
+    /// Subsequent calls reuse the same channel, skipping the channel-open +
+    /// subsystem + INIT handshake. The cache lock is held only across the open,
+    /// so operations themselves run concurrently on the shared session.
+    async fn sftp_session(&self, session_id: &str) -> Result<Arc<SftpSession>, String> {
+        let (conn, cache) = {
+            let sessions = self.sessions.lock().await;
+            let s = sessions.get(session_id).ok_or("Session not found")?;
+            (s.conn.clone(), s.sftp.clone())
+        };
+        let mut guard = cache.lock().await;
+        if let Some(existing) = guard.as_ref() {
+            return Ok(existing.clone());
+        }
+        let fresh = Arc::new(sftp::open_sftp(&conn).await?);
+        *guard = Some(fresh.clone());
+        Ok(fresh)
+    }
+
+    /// Drop the cached SFTP session so the next call reopens it. Called after an
+    /// operation fails, since the failure may mean the channel died.
+    async fn invalidate_sftp(&self, session_id: &str) {
+        let cache = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.sftp.clone());
+        if let Some(cache) = cache {
+            *cache.lock().await = None;
+        }
+    }
+
+    /// Run an SFTP operation on the cached session; if it fails, drop the cache,
+    /// reopen once on the same connection, and retry. This recovers transparently
+    /// when the cached channel has died (e.g. server-side idle timeout). The retry
+    /// is safe because every wrapped op is idempotent or self-correcting.
+    async fn with_sftp<T, F, Fut>(&self, session_id: &str, op: F) -> Result<T, String>
+    where
+        F: Fn(Arc<SftpSession>) -> Fut,
+        Fut: std::future::Future<Output = Result<T, String>>,
+    {
+        let sftp = self.sftp_session(session_id).await?;
+        match op(sftp).await {
+            Ok(v) => Ok(v),
+            Err(first) => {
+                self.invalidate_sftp(session_id).await;
+                match self.sftp_session(session_id).await {
+                    Ok(fresh) => op(fresh).await,
+                    Err(_) => Err(first),
+                }
+            }
+        }
+    }
+
     pub async fn sftp_list_dir(
         &self,
         session_id: &str,
         path: &str,
     ) -> Result<Vec<SftpEntry>, String> {
-        let conn = self
-            .sessions
-            .lock()
+        self.with_sftp(session_id, |sftp| async move { sftp::list_dir(&sftp, path).await })
             .await
-            .get(session_id)
-            .map(|s| s.conn.clone());
-        match conn {
-            Some(c) => sftp::list_dir(&c, path).await,
-            None => Err("Session not found".into()),
-        }
     }
 
     pub async fn sftp_realpath(&self, session_id: &str, path: &str) -> Result<String, String> {
-        let conn = self
-            .sessions
-            .lock()
-            .await
-            .get(session_id)
-            .map(|s| s.conn.clone());
-        match conn {
-            Some(c) => sftp::realpath(&c, path).await,
-            None => Err("Session not found".into()),
-        }
+        // No retry wrapper: realpath legitimately fails on servers that don't
+        // support it (the frontend falls back), so a reopen-and-retry would just
+        // pay the handshake twice for an expected failure.
+        let sftp = self.sftp_session(session_id).await?;
+        sftp::realpath(&sftp, path).await
     }
 
     pub async fn sftp_mkdir(&self, session_id: &str, path: &str) -> Result<(), String> {
-        let conn = self
-            .sessions
-            .lock()
+        self.with_sftp(session_id, |sftp| async move { sftp::mkdir(&sftp, path).await })
             .await
-            .get(session_id)
-            .map(|s| s.conn.clone());
-        match conn {
-            Some(c) => sftp::mkdir(&c, path).await,
-            None => Err("Session not found".into()),
-        }
     }
 
     pub async fn sftp_rmdir(&self, session_id: &str, path: &str) -> Result<(), String> {
-        let conn = self
-            .sessions
-            .lock()
+        self.with_sftp(session_id, |sftp| async move { sftp::rmdir(&sftp, path).await })
             .await
-            .get(session_id)
-            .map(|s| s.conn.clone());
-        match conn {
-            Some(c) => sftp::rmdir(&c, path).await,
-            None => Err("Session not found".into()),
-        }
     }
 
     pub async fn sftp_delete_file(&self, session_id: &str, path: &str) -> Result<(), String> {
-        let conn = self
-            .sessions
-            .lock()
+        self.with_sftp(session_id, |sftp| async move { sftp::delete_file(&sftp, path).await })
             .await
-            .get(session_id)
-            .map(|s| s.conn.clone());
-        match conn {
-            Some(c) => sftp::delete_file(&c, path).await,
-            None => Err("Session not found".into()),
-        }
     }
 
     pub async fn sftp_rename(
@@ -393,29 +434,13 @@ impl SshManager {
         old: &str,
         new: &str,
     ) -> Result<(), String> {
-        let conn = self
-            .sessions
-            .lock()
+        self.with_sftp(session_id, |sftp| async move { sftp::rename(&sftp, old, new).await })
             .await
-            .get(session_id)
-            .map(|s| s.conn.clone());
-        match conn {
-            Some(c) => sftp::rename(&c, old, new).await,
-            None => Err("Session not found".into()),
-        }
     }
 
     pub async fn sftp_read_text(&self, session_id: &str, path: &str) -> Result<String, String> {
-        let conn = self
-            .sessions
-            .lock()
+        self.with_sftp(session_id, |sftp| async move { sftp::read_text(&sftp, path).await })
             .await
-            .get(session_id)
-            .map(|s| s.conn.clone());
-        match conn {
-            Some(c) => sftp::read_text(&c, path).await,
-            None => Err("Session not found".into()),
-        }
     }
 
     pub async fn sftp_write_text(
@@ -424,16 +449,10 @@ impl SshManager {
         path: &str,
         content: &str,
     ) -> Result<(), String> {
-        let conn = self
-            .sessions
-            .lock()
-            .await
-            .get(session_id)
-            .map(|s| s.conn.clone());
-        match conn {
-            Some(c) => sftp::write_text(&c, path, content).await,
-            None => Err("Session not found".into()),
-        }
+        self.with_sftp(session_id, |sftp| async move {
+            sftp::write_text(&sftp, path, content).await
+        })
+        .await
     }
 
     pub async fn sftp_download(
@@ -518,28 +537,12 @@ impl SshManager {
         path: &str,
         mode: u32,
     ) -> Result<(), String> {
-        let conn = self
-            .sessions
-            .lock()
+        self.with_sftp(session_id, |sftp| async move { sftp::chmod(&sftp, path, mode).await })
             .await
-            .get(session_id)
-            .map(|s| s.conn.clone());
-        match conn {
-            Some(c) => sftp::chmod(&c, path, mode).await,
-            None => Err("Session not found".into()),
-        }
     }
 
     pub async fn sftp_create_file(&self, session_id: &str, path: &str) -> Result<(), String> {
-        let conn = self
-            .sessions
-            .lock()
+        self.with_sftp(session_id, |sftp| async move { sftp::create_file(&sftp, path).await })
             .await
-            .get(session_id)
-            .map(|s| s.conn.clone());
-        match conn {
-            Some(c) => sftp::create_file(&c, path).await,
-            None => Err("Session not found".into()),
-        }
     }
 }

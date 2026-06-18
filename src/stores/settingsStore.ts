@@ -135,7 +135,9 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
         const settings = normalizeSettings(saved);
         set({ settings, loaded: true, hasSaved: true });
         if (JSON.stringify(settings) !== JSON.stringify(merged)) {
-          invoke('save_app_settings', { value: JSON.stringify(settings) }).catch(() => {});
+          invoke('save_app_settings', { value: JSON.stringify(settings) }).catch((err) => {
+            console.error('Failed to persist settings:', err);
+          });
         }
       } else {
         set({ loaded: true, hasSaved: false });

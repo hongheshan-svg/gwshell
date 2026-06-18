@@ -26,7 +26,7 @@ pub struct SftpEntry {
 /// is by `&self`; `into_stream()` consumes the channel into an `AsyncRead + AsyncWrite`
 /// stream that `russh_sftp::client::SftpSession::new` accepts (it requires
 /// `'static`, which `ChannelStream` satisfies).
-async fn open_sftp(conn: &Handle<Client>) -> Result<SftpSession, String> {
+pub async fn open_sftp(conn: &Handle<Client>) -> Result<SftpSession, String> {
     let channel = conn
         .channel_open_session()
         .await
@@ -40,8 +40,7 @@ async fn open_sftp(conn: &Handle<Client>) -> Result<SftpSession, String> {
         .map_err(|e| format!("SFTP init failed: {}", e))
 }
 
-pub async fn list_dir(conn: &Handle<Client>, path: &str) -> Result<Vec<SftpEntry>, String> {
-    let sftp = open_sftp(conn).await?;
+pub async fn list_dir(sftp: &SftpSession, path: &str) -> Result<Vec<SftpEntry>, String> {
     let mut out = Vec::new();
     let dir = sftp
         .read_dir(path)
@@ -70,59 +69,75 @@ pub async fn list_dir(conn: &Handle<Client>, path: &str) -> Result<Vec<SftpEntry
     Ok(out)
 }
 
-pub async fn realpath(conn: &Handle<Client>, path: &str) -> Result<String, String> {
-    let sftp = open_sftp(conn).await?;
+pub async fn realpath(sftp: &SftpSession, path: &str) -> Result<String, String> {
     sftp.canonicalize(path)
         .await
         .map_err(|e| format!("SFTP realpath failed: {}", e))
 }
 
-pub async fn mkdir(conn: &Handle<Client>, path: &str) -> Result<(), String> {
-    let sftp = open_sftp(conn).await?;
+pub async fn mkdir(sftp: &SftpSession, path: &str) -> Result<(), String> {
     sftp.create_dir(path)
         .await
         .map_err(|e| format!("SFTP mkdir failed: {}", e))
 }
 
-pub async fn rmdir(conn: &Handle<Client>, path: &str) -> Result<(), String> {
-    let sftp = open_sftp(conn).await?;
+pub async fn rmdir(sftp: &SftpSession, path: &str) -> Result<(), String> {
     sftp.remove_dir(path)
         .await
         .map_err(|e| format!("SFTP rmdir failed: {}", e))
 }
 
-pub async fn delete_file(conn: &Handle<Client>, path: &str) -> Result<(), String> {
-    let sftp = open_sftp(conn).await?;
+pub async fn delete_file(sftp: &SftpSession, path: &str) -> Result<(), String> {
     sftp.remove_file(path)
         .await
         .map_err(|e| format!("SFTP delete failed: {}", e))
 }
 
-pub async fn rename(conn: &Handle<Client>, old: &str, new: &str) -> Result<(), String> {
-    let sftp = open_sftp(conn).await?;
+pub async fn rename(sftp: &SftpSession, old: &str, new: &str) -> Result<(), String> {
     sftp.rename(old, new)
         .await
         .map_err(|e| format!("SFTP rename failed: {}", e))
 }
 
-pub async fn read_text(conn: &Handle<Client>, path: &str) -> Result<String, String> {
+pub async fn read_text(sftp: &SftpSession, path: &str) -> Result<String, String> {
     use tokio::io::AsyncReadExt;
-    let sftp = open_sftp(conn).await?;
-    let mut f = sftp
+
+    // Guard against OOM: a multi-GB log file read via read_to_end would grow
+    // `buf` without bound. Cap at 16 MiB — anything larger isn't meant to be
+    // opened as in-app text and should be downloaded instead. Try metadata
+    // first (cheap, avoids reading anything); fall back to a capped read.
+    const MAX_TEXT_BYTES: u64 = 16 * 1024 * 1024;
+    if let Ok(meta) = sftp.metadata(path).await {
+        if meta.len() > MAX_TEXT_BYTES {
+            return Err(format!(
+                "File is too large to read as text (exceeds {} MiB). Use download instead.",
+                MAX_TEXT_BYTES / 1024 / 1024
+            ));
+        }
+    }
+
+    let f = sftp
         .open(path)
         .await
         .map_err(|e| format!("SFTP open failed: {}", e))?;
     let mut buf = Vec::new();
-    f.read_to_end(&mut buf)
+    // Cap the read itself so even without metadata we never allocate past the limit.
+    f.take(MAX_TEXT_BYTES)
+        .read_to_end(&mut buf)
         .await
         .map_err(|e| format!("SFTP read failed: {}", e))?;
+    if buf.len() as u64 >= MAX_TEXT_BYTES {
+        return Err(format!(
+            "File is too large to read as text (exceeds {} MiB). Use download instead.",
+            MAX_TEXT_BYTES / 1024 / 1024
+        ));
+    }
     String::from_utf8(buf).map_err(|_| "File is not valid UTF-8 text".into())
 }
 
-pub async fn write_text(conn: &Handle<Client>, path: &str, content: &str) -> Result<(), String> {
+pub async fn write_text(sftp: &SftpSession, path: &str, content: &str) -> Result<(), String> {
     use russh_sftp::protocol::OpenFlags;
     use tokio::io::AsyncWriteExt;
-    let sftp = open_sftp(conn).await?;
     let mut f = sftp
         .open_with_flags(
             path,
@@ -362,10 +377,9 @@ pub async fn upload_dir(
     Ok(total)
 }
 
-pub async fn chmod(conn: &Handle<Client>, path: &str, mode: u32) -> Result<(), String> {
+pub async fn chmod(sftp: &SftpSession, path: &str, mode: u32) -> Result<(), String> {
     // russh-sftp 2.3: `metadata` returns `Metadata` (= `FileAttributes` with a
     // `permissions: Option<u32>` field); `set_metadata(path, Metadata)` writes it back.
-    let sftp = open_sftp(conn).await?;
     let mut meta = sftp
         .metadata(path)
         .await
@@ -376,9 +390,8 @@ pub async fn chmod(conn: &Handle<Client>, path: &str, mode: u32) -> Result<(), S
         .map_err(|e| format!("SFTP chmod failed: {}", e))
 }
 
-pub async fn create_file(conn: &Handle<Client>, path: &str) -> Result<(), String> {
+pub async fn create_file(sftp: &SftpSession, path: &str) -> Result<(), String> {
     use russh_sftp::protocol::OpenFlags;
-    let sftp = open_sftp(conn).await?;
     let _ = sftp
         .open_with_flags(path, OpenFlags::CREATE | OpenFlags::WRITE)
         .await

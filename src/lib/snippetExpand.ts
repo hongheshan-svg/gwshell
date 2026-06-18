@@ -32,6 +32,9 @@ export function expandSnippet(raw: string): SendSegment[] {
         i += 3;
         continue;
       }
+      // \x not followed by two hex digits — warn so the author notices the
+      // typo (e.g. \x3 expecting Ctrl-C) instead of silently getting literal text.
+      console.warn(`snippet: \\x escape needs two hex digits near index ${i}; got "${raw.slice(i, i + 4)}"`);
     } else if (next === 's') {
       const m = /^(\d{1,4})/.exec(raw.slice(i + 2));
       if (m) {
@@ -40,6 +43,8 @@ export function expandSnippet(raw: string): SendSegment[] {
         i += 1 + m[1].length;
         continue;
       }
+      // \s not followed by digits — warn similarly.
+      console.warn(`snippet: \\s escape needs 1-4 digits near index ${i}; got "${raw.slice(i, i + 4)}"`);
     } else if (next === 'n') {
       buf += '\n'; i += 1; continue;
     } else if (next === 'r') {

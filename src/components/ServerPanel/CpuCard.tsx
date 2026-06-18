@@ -44,7 +44,7 @@ export const CpuCard: React.FC<Props> = ({ cpu }) => {
       </div>
       <div className="sp-corelist">
         {cpu.per_core.map((p, i) => (
-          <div key={i} className="sp-corerow">
+          <div key={`core-${i}`} className="sp-corerow">
             <span className="sp-corerow__name">CPU{i + 1}</span>
             <span className="sp-corerow__bar">
               <span

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ChevronRight,
@@ -19,9 +19,25 @@ import { useAppStore } from '../../stores/appStore';
 import { NewAssetMenu } from './NewAssetMenu';
 import type { SessionConfig } from '../../types';
 
+const SUPPORTED_QUICK_CREATE_TYPES = new Set(['ssh', 'ssh-tunnel']);
+
 export const SessionPanel: React.FC = () => {
-  const { sessions, setShowNewSession, setShowQuickConnect, setShowDockerModal, setShowLocalTerminalModal, setShowSerialModal, setEditingSession, addSession, removeSession, tabs, addTab, setActiveTab, setGroupDefaultsTarget } = useAppStore();
   const { t } = useTranslation();
+  // Sessions drive the list; subscribe to the array directly (it only changes
+  // on add/remove/edit/latency, all of which warrant a re-render here).
+  const sessions = useAppStore((s) => s.sessions);
+  // Action setters are stable references — selecting them individually never
+  // causes a re-render on their own.
+  const setShowNewSession = useAppStore((s) => s.setShowNewSession);
+  const setShowQuickConnect = useAppStore((s) => s.setShowQuickConnect);
+  const setShowDockerModal = useAppStore((s) => s.setShowDockerModal);
+  const setShowLocalTerminalModal = useAppStore((s) => s.setShowLocalTerminalModal);
+  const setShowSerialModal = useAppStore((s) => s.setShowSerialModal);
+  const setEditingSession = useAppStore((s) => s.setEditingSession);
+  const removeSession = useAppStore((s) => s.removeSession);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const setGroupDefaultsTarget = useAppStore((s) => s.setGroupDefaultsTarget);
+
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -55,43 +71,41 @@ export const SessionPanel: React.FC = () => {
     setExpandedGroups((prev) => ({ ...prev, [name]: !prev[name] }));
   };
 
-  const supportedQuickCreateTypes = new Set(['ssh', 'ssh-tunnel']);
-
-  const handleConnect = (session: SessionConfig) => {
-    const existingTab = tabs.find((t) => t.sessionId === session.id);
+  const handleConnect = useCallback((session: SessionConfig) => {
+    const existingTab = useAppStore.getState().tabs.find((t) => t.sessionId === session.id);
     if (existingTab) {
-      setActiveTab(existingTab.id);
+      useAppStore.getState().setActiveTab(existingTab.id);
       return;
     }
     const tabId = crypto.randomUUID();
-    addTab({
+    useAppStore.getState().addTab({
       id: tabId,
       sessionId: session.id,
       title: session.name,
       type: session.session_type,
       connected: false,
     });
-  };
+  }, []);
 
-  const handleCopySession = (session: SessionConfig) => {
+  const handleCopySession = useCallback((session: SessionConfig) => {
     const copied: SessionConfig = {
       ...session,
       id: crypto.randomUUID(),
-      name: `${session.name} - 副本`,
+      name: `${session.name} - ${t('common_copy_suffix')}`,
       created_at: new Date().toISOString().slice(0, 10),
       _temporary: undefined,
     };
-    addSession(copied);
-  };
+    useAppStore.getState().addSession(copied);
+  }, [t]);
 
-  const handleContextMenu = (e: React.MouseEvent, session: SessionConfig) => {
+  const handleContextMenu = useCallback((e: React.MouseEvent, session: SessionConfig) => {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, session });
-  };
+  }, []);
 
   const handleNewAssetSelect = (type: string) => {
     if (type === 'quickconnect') { setShowQuickConnect(true); return; }
-    if (supportedQuickCreateTypes.has(type)) {
+    if (SUPPORTED_QUICK_CREATE_TYPES.has(type)) {
       setShowNewSession(true);
     } else if (type === 'serial') {
       setShowSerialModal(true);
@@ -169,7 +183,16 @@ export const SessionPanel: React.FC = () => {
         ) : (
           Object.entries(groups).map(([groupName, groupSessions]) => (
             <div key={groupName} className="session-group">
-              <div className="session-group-header" onClick={() => toggleGroup(groupName)}>
+              <div
+                className="session-group-header"
+                role="button"
+                tabIndex={0}
+                aria-expanded={expandedGroups[groupName] !== false}
+                onClick={() => toggleGroup(groupName)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(groupName); }
+                }}
+              >
                 {expandedGroups[groupName] !== false ? (
                   <ChevronDown size={12} />
                 ) : (
@@ -214,18 +237,24 @@ export const SessionPanel: React.FC = () => {
           ref={contextMenuRef}
           className="asset-context-menu"
           style={{ top: contextMenu.y, left: contextMenu.x }}
+          role="menu"
         >
-          <button onClick={() => { handleConnect(contextMenu.session); setContextMenu(null); }}>
+          <button role="menuitem" onClick={() => { handleConnect(contextMenu.session); setContextMenu(null); }}>
             <Play size={12} /> {t('table_connect')}
           </button>
-          <button onClick={() => { setEditingSession(contextMenu.session); setShowNewSession(true); setContextMenu(null); }}>
+          <button role="menuitem" onClick={() => { setEditingSession(contextMenu.session); setShowNewSession(true); setContextMenu(null); }}>
             <Edit size={12} /> {t('table_edit')}
           </button>
-          <button onClick={() => { handleCopySession(contextMenu.session); setContextMenu(null); }}>
+          <button role="menuitem" onClick={() => { handleCopySession(contextMenu.session); setContextMenu(null); }}>
             <Copy size={12} /> {t('table_copy')}
           </button>
           <div className="context-menu-divider" />
-          <button className="danger" onClick={() => { removeSession(contextMenu.session.id); setContextMenu(null); }}>
+          <button role="menuitem" className="danger" onClick={() => {
+            if (window.confirm(t('common_delete_confirm_body', { name: contextMenu.session.name }))) {
+              removeSession(contextMenu.session.id);
+              setContextMenu(null);
+            }
+          }}>
             <Trash2 size={12} /> {t('table_delete')}
           </button>
         </div>
@@ -238,16 +267,24 @@ const SessionItem: React.FC<{
   session: SessionConfig;
   onConnect: (session: SessionConfig) => void;
   onContextMenu: (e: React.MouseEvent, session: SessionConfig) => void;
-}> = ({ session, onConnect, onContextMenu }) => {
-  const { activeTabId, tabs } = useAppStore();
-  const sessionTab = tabs.find((t) => t.sessionId === session.id);
+}> = React.memo(({ session, onConnect, onContextMenu }) => {
+  // Subscribe only to this session's tab + the active id, so a latency update
+  // on an unrelated session doesn't re-render this item.
+  const sessionTab = useAppStore((s) => s.tabs.find((t) => t.sessionId === session.id));
+  const activeTabId = useAppStore((s) => s.activeTabId);
   const isActive = sessionTab?.id === activeTabId;
   const isConnected = sessionTab?.connected === true;
 
   return (
     <div
       className={`session-item ${isActive ? 'active' : ''}`}
+      role="button"
+      tabIndex={0}
+      aria-label={session.name}
+      aria-pressed={isActive}
       onDoubleClick={() => onConnect(session)}
+      onClick={(e) => { if (e.detail === 1) onConnect(session); }}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onConnect(session); } }}
       onContextMenu={(e) => onContextMenu(e, session)}
     >
       <span className="session-item-icon"><Server size={14} /></span>
@@ -255,4 +292,4 @@ const SessionItem: React.FC<{
       <span className={`session-status-dot ${isConnected ? 'connected' : 'disconnected'}`} />
     </div>
   );
-};
+});

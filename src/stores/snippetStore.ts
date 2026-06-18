@@ -40,17 +40,40 @@ export const useSnippetStore = create<SnippetStore>((set, get) => ({
       createdAt: Date.now(),
       ...input,
     };
-    set({ snippets: [...get().snippets, snippet] });
-    await invoke('save_snippet', { id: snippet.id, data: JSON.stringify(snippet) }).catch(() => {});
+    // Functional update avoids the read-then-write race where two concurrent
+    // ops both read the same `get().snippets` snapshot and the second
+    // overwrites the first.
+    set((state) => ({ snippets: [...state.snippets, snippet] }));
+    try {
+      await invoke('save_snippet', { id: snippet.id, data: JSON.stringify(snippet) });
+    } catch (err) {
+      // Roll back the optimistic add so the UI matches the backend.
+      set((state) => ({ snippets: state.snippets.filter((s) => s.id !== snippet.id) }));
+      console.error('Failed to save snippet, rolled back:', err);
+    }
   },
 
   update: async (snippet) => {
-    set({ snippets: get().snippets.map((s) => (s.id === snippet.id ? snippet : s)) });
-    await invoke('save_snippet', { id: snippet.id, data: JSON.stringify(snippet) }).catch(() => {});
+    const prev = get().snippets;
+    set((state) => ({ snippets: state.snippets.map((s) => (s.id === snippet.id ? snippet : s)) }));
+    try {
+      await invoke('save_snippet', { id: snippet.id, data: JSON.stringify(snippet) });
+    } catch (err) {
+      // Roll back to the pre-update list.
+      set({ snippets: prev });
+      console.error('Failed to update snippet, rolled back:', err);
+    }
   },
 
   remove: async (id) => {
-    set({ snippets: get().snippets.filter((s) => s.id !== id) });
-    await invoke('delete_snippet', { id }).catch(() => {});
+    const prev = get().snippets;
+    set((state) => ({ snippets: state.snippets.filter((s) => s.id !== id) }));
+    try {
+      await invoke('delete_snippet', { id });
+    } catch (err) {
+      // Roll back the removed snippet so it reappears.
+      set({ snippets: prev });
+      console.error('Failed to delete snippet, rolled back:', err);
+    }
   },
 }));

@@ -265,7 +265,11 @@ export const AssetTable: React.FC = () => {
                       </button>
                       <button
                         className="asset-action-btn danger"
-                        onClick={() => removeSession(session.id)}
+                        onClick={() => {
+                          if (window.confirm(t('common_delete_confirm_body', { name: session.name }))) {
+                            removeSession(session.id);
+                          }
+                        }}
                         title={t('table_delete')}
                       >
                         <Trash2 size={12} />
@@ -298,7 +302,12 @@ export const AssetTable: React.FC = () => {
             <Copy size={12} /> {t('table_copy')}
           </button>
           <div className="context-menu-divider" />
-          <button className="danger" onClick={() => { removeSession(contextMenu.session.id); setContextMenu(null); }}>
+          <button className="danger" onClick={() => {
+            if (window.confirm(t('common_delete_confirm_body', { name: contextMenu.session.name }))) {
+              removeSession(contextMenu.session.id);
+              setContextMenu(null);
+            }
+          }}>
             <Trash2 size={12} /> {t('table_delete')}
           </button>
         </div>

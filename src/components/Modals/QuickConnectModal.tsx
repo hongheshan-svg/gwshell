@@ -56,6 +56,7 @@ export const QuickConnectModal: React.FC = () => {
         <input
           className="quick-connect-input"
           type="password"
+          autoComplete="off"
           placeholder={t('quickconnect_password')}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
