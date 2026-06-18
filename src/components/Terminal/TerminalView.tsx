@@ -50,8 +50,12 @@ const isPasteAction = (value: string) => value === "paste" || value === "Paste" 
 // Matches the tail of a terminal line that prompts for a secret. Covers
 // English + Chinese prompts from sudo/su/mysql/ssh-keygen/passphrase/TOTP etc.
 // Anchored to the end so a command like `echo password:` in earlier output
-// doesn't trigger it unless it's actually the last thing printed.
-const PASSWORD_PROMPT_RE = /(?:password|passphrase|passcode|verification code|enter passphrase|密码|口令|验证码)\s*[:：]\s*$/i;
+// doesn't trigger it unless it's actually the last thing printed. A short gap
+// is allowed between the keyword and the colon so real prompts that interpose
+// text still match — e.g. "[sudo] password for zhengshan:" and
+// "Enter passphrase for key '/home/x/.ssh/id_rsa':". A false positive here only
+// costs one un-recorded command, so we err toward catching more prompts.
+const PASSWORD_PROMPT_RE = /(?:password|passphrase|passcode|verification code|密码|口令|密钥|验证码)[^:：\n]{0,40}[:：]\s*$/i;
 
 const writeClipboardText = async (text: string) => {
   const browserWrite = navigator.clipboard?.writeText(text).catch(() => {});
