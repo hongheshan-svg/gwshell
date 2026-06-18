@@ -249,7 +249,12 @@ export const SessionPanel: React.FC = () => {
             <Copy size={12} /> {t('table_copy')}
           </button>
           <div className="context-menu-divider" />
-          <button role="menuitem" className="danger" onClick={() => { removeSession(contextMenu.session.id); setContextMenu(null); }}>
+          <button role="menuitem" className="danger" onClick={() => {
+            if (window.confirm(t('common_delete_confirm_body', { name: contextMenu.session.name }))) {
+              removeSession(contextMenu.session.id);
+              setContextMenu(null);
+            }
+          }}>
             <Trash2 size={12} /> {t('table_delete')}
           </button>
         </div>

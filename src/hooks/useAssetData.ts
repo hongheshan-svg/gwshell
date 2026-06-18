@@ -63,6 +63,11 @@ export function useAssetData() {
   };
 
   const handleDeleteSelected = () => {
+    if (selectedSessionIds.length === 0) return;
+    // Confirm before irreversible bulk deletion (matches the per-item guard).
+    if (!window.confirm(t('common_delete_confirm_multi', { count: selectedSessionIds.length }))) {
+      return;
+    }
     selectedSessionIds.forEach((id) => removeSession(id));
     setSelectedSessionIds([]);
   };

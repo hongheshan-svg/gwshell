@@ -272,8 +272,11 @@ export const NewSessionModal: React.FC = () => {
                     {colorLabels.map((color) => (
                       <button
                         key={color}
+                        type="button"
                         className={`color-dot ${form.color_label === color ? 'selected' : ''}`}
                         style={{ background: color }}
+                        aria-label={color}
+                        aria-pressed={form.color_label === color}
                         onClick={() => setForm({ ...form, color_label: color })}
                       />
                     ))}
@@ -322,6 +325,7 @@ export const NewSessionModal: React.FC = () => {
                   <div className="ssh-password-wrap">
                     <input
                       type={showPassword ? 'text' : 'password'}
+                      autoComplete="off"
                       value={form.password || ''}
                       onChange={(e) => setForm({ ...form, password: e.target.value })}
                     />
@@ -363,6 +367,7 @@ export const NewSessionModal: React.FC = () => {
                     <div className="ssh-password-wrap">
                       <input
                         type={showPassword ? 'text' : 'password'}
+                        autoComplete="off"
                         placeholder=""
                         value={form.password || ''}
                         onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -390,6 +395,7 @@ export const NewSessionModal: React.FC = () => {
                     <div className="ssh-password-wrap">
                       <input
                         type={showPassword ? 'text' : 'password'}
+                        autoComplete="off"
                         placeholder={t('ssh_mfa_password_placeholder')}
                         value={form.password || ''}
                         onChange={(e) => setForm({ ...form, password: e.target.value })}
