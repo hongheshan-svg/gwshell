@@ -451,6 +451,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
     let resolveDockerPick: ((id: string | null) => void) | null = null;
     let cancelDockerPick: (() => void) | null = null;
     const container = containerRef.current;
+    // Track init-script timers so they can be cancelled on unmount/reconnect,
+    // preventing a deferred runLoginScript from writing to a closed/reused session.
+    const initScriptTimers: ReturnType<typeof setTimeout>[] = [];
 
     const initTerminal = async () => {
       const existingInstance = terminalInstances.get(tab.id);
@@ -841,12 +844,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // supports DEC 2026 synchronized output that reduces TUI tearing). On
       // WebGL context loss, dispose the addon so the terminal falls back to
       // xterm's built-in DOM renderer.
-      if (wasFreshlyOpened) {
+      if (wasFreshlyOpened || instance.rendererLost) {
         try {
           const webgl = new WebglAddon();
-          webgl.onContextLoss(() => { try { webgl.dispose(); } catch {} });
+          webgl.onContextLoss(() => { instance.rendererLost = true; try { webgl.dispose(); } catch {} });
           instance.terminal.loadAddon(webgl);
           instance.rendererAddon = webgl;
+          instance.rendererLost = false;
         } catch {}
       }
 
@@ -1078,7 +1082,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           writesInFlight += 1;
           invokeWrite(payload)
             .catch((err) => {
-              if (tab.type === "ssh" && String(err).includes("input buffer full")) {
+              // SSH writes go through an mpsc channel that blocks (await) when
+              // full instead of returning "input buffer full", so an IPC timeout
+              // also means the chunk didn't make it — requeue and retry rather
+              // than silently dropping the bytes (which corrupts pasted input).
+              if (tab.type === "ssh" && (String(err).includes("input buffer full") || String(err).includes("timeout"))) {
                 writeQueue = payload + writeQueue;
                 scheduleWriteFlush(WRITE_RETRY_MS);
               }
@@ -1164,8 +1172,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               buf = '';
               hideCompletions();
             } else if (data === '\x7f' || data === '\b') {
-              // Backspace
-              buf = buf.slice(0, -1);
+              // Backspace — delete by code point so surrogate pairs (emoji,
+              // CJK outside the BMP) aren't split into half a character.
+              buf = Array.from(buf).slice(0, -1).join('');
               if (buf.length > 0) showCompletions();
               else hideCompletions();
             } else if (data === '\x17') {
@@ -1181,7 +1190,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               data === '\x1b[A' || data === '\x1b[B' || data === '\x1b[C' || data === '\x1b[D' ||
               data === '\x1b[H' || data === '\x1b[F' || data === '\x01' || data === '\x05'
             ) {
-              // Arrows / Home / End / Ctrl-A / Ctrl-E — cursor moves: hide the dropdown.
+              // Arrows / Home / End / Ctrl-A / Ctrl-E — cursor moves: the tracked
+              // buf can no longer reflect the real line (insertion point moved),
+              // so reset it and disable completions until the next full line.
+              // Otherwise backspace would delete the wrong position and Enter
+              // would record a command that doesn't match what actually ran.
+              buf = '';
+              inputBuffers.set(tab.id, buf);
               hideCompletions();
             } else if (data.startsWith('\x1b')) {
               // Other escape sequences — hide the dropdown.
@@ -1308,6 +1323,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         unlistenData();
         unlistenExit();
         if (renderRaf) { cancelAnimationFrame(renderRaf); renderRaf = 0; }
+        // Flush any bytes that arrived but were never rendered (the RAF was
+        // cancelled above). Dropping them would lose terminal output across a
+        // remount/split transition.
+        if (renderQueue) {
+          const chunk = renderQueue;
+          renderQueue = "";
+          try { instance?.terminal.write(chunk); } catch {}
+        }
         // Flush any buffered log output before tearing the listeners down.
         if (logTimer) { clearTimeout(logTimer); }
         flushLog();
@@ -1497,9 +1520,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           connectionReady = true;
           if (session?.init_command) {
             const cmd = session.init_command;
-            setTimeout(() => {
+            initScriptTimers.push(setTimeout(() => {
               runLoginScript((d) => { invoke("write_to_pty", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
-            }, 300);
+            }, 300));
           }
         } else if (tab.type === "ssh") {
           if (!session?.host) {
@@ -1529,9 +1552,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             connectionReady = true;
             if (session.init_command) {
               const cmd = session.init_command;
-              setTimeout(() => {
+              initScriptTimers.push(setTimeout(() => {
                 runLoginScript((d) => { invoke("write_to_ssh", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
-              }, 300);
+              }, 300));
             }
 
             // Resolve the completion table: a concrete override is handled
@@ -1606,9 +1629,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             connectionReady = true;
             if (session.serial_init_commands) {
               const cmd = session.serial_init_commands;
-              setTimeout(() => {
+              initScriptTimers.push(setTimeout(() => {
                 runLoginScript((d) => { invoke("write_to_serial", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd);
-              }, 300);
+              }, 300));
             }
           }
         } else if (tab.type === "docker") {
@@ -1695,6 +1718,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
 
     return () => {
       cancelled = true;
+      // Cancel any pending init-script injection so a deferred runLoginScript
+      // can't write to a closed or reconnecting session.
+      initScriptTimers.forEach(clearTimeout);
       // Unblock a docker-container picker that is open for this tab: remove the
       // two window listeners first (via cancelDockerPick / cleanup), then resolve
       // the awaited Promise to null so the async frame exits cleanly, and dismiss
