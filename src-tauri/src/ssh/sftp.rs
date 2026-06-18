@@ -108,14 +108,37 @@ pub async fn rename(conn: &Handle<Client>, old: &str, new: &str) -> Result<(), S
 pub async fn read_text(conn: &Handle<Client>, path: &str) -> Result<String, String> {
     use tokio::io::AsyncReadExt;
     let sftp = open_sftp(conn).await?;
-    let mut f = sftp
+
+    // Guard against OOM: a multi-GB log file read via read_to_end would grow
+    // `buf` without bound. Cap at 16 MiB — anything larger isn't meant to be
+    // opened as in-app text and should be downloaded instead. Try metadata
+    // first (cheap, avoids reading anything); fall back to a capped read.
+    const MAX_TEXT_BYTES: u64 = 16 * 1024 * 1024;
+    if let Ok(meta) = sftp.metadata(path).await {
+        if meta.len() > MAX_TEXT_BYTES {
+            return Err(format!(
+                "File is too large to read as text (exceeds {} MiB). Use download instead.",
+                MAX_TEXT_BYTES / 1024 / 1024
+            ));
+        }
+    }
+
+    let f = sftp
         .open(path)
         .await
         .map_err(|e| format!("SFTP open failed: {}", e))?;
     let mut buf = Vec::new();
-    f.read_to_end(&mut buf)
+    // Cap the read itself so even without metadata we never allocate past the limit.
+    f.take(MAX_TEXT_BYTES)
+        .read_to_end(&mut buf)
         .await
         .map_err(|e| format!("SFTP read failed: {}", e))?;
+    if buf.len() as u64 >= MAX_TEXT_BYTES {
+        return Err(format!(
+            "File is too large to read as text (exceeds {} MiB). Use download instead.",
+            MAX_TEXT_BYTES / 1024 / 1024
+        ));
+    }
     String::from_utf8(buf).map_err(|_| "File is not valid UTF-8 text".into())
 }
 

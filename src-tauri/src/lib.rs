@@ -86,12 +86,20 @@ async fn app_ready(window: tauri::WebviewWindow) {
 
 /// Best-effort cleanup on shutdown: stop metric pollers and kill local-shell
 /// child processes so they are not orphaned. SSH/serial sockets are reclaimed by
-/// the OS on process exit, so we intentionally do NOT block on network teardown
-/// (a dead connection's `wait_close` could otherwise hang shutdown).
+/// the OS on process exit, but we still tell live SSH sessions to close so their
+/// reader/writer tasks exit promptly and don't leave a half-open shell on the
+/// server. `close_all` only enqueues `ShellCmd::Close` (non-blocking) — it does
+/// not `await` the connection's `wait_close`, so it can't hang shutdown.
 fn shutdown_cleanup(state: &Arc<AppState>) {
     state.metrics.stop_all();
     state.pty_manager.close_all();
     state.serial_manager.close_all();
+    // Gracefully signal SSH sessions + port/SOCKS forwards to stop. Best-effort:
+    // if block_on can't run (runtime already torn down) we fall back to OS
+    // reclamation, matching the previous behavior.
+    tauri::async_runtime::block_on(async {
+        state.ssh_manager.close_all().await;
+    });
 }
 
 #[tauri::command]

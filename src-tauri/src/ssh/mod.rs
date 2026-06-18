@@ -59,6 +59,11 @@ impl SshManager {
         cols: u32,
         app: AppHandle,
     ) -> Result<(), String> {
+        // If a session with this id already exists (e.g. a reconnect that
+        // didn't go through close_ssh first), close it before overwriting —
+        // otherwise the old Handle + reader/writer tasks leak. This mirrors
+        // PtyManager's close-before-create pattern.
+        self.close_existing(session_id).await;
         let (shell, conn, forwarded) =
             session::spawn(session_id.to_string(), params, cols, rows, app).await?;
         self.sessions.lock().await.insert(
@@ -82,6 +87,8 @@ impl SshManager {
         cols: u32,
         app: AppHandle,
     ) -> Result<(), String> {
+        // Same leak guard as `connect`: close any pre-existing session first.
+        self.close_existing(session_id).await;
         let (shell, conn, forwarded) =
             session::spawn_exec(session_id.to_string(), params, cols, rows, app, command).await?;
         self.sessions.lock().await.insert(
@@ -93,6 +100,14 @@ impl SshManager {
             },
         );
         Ok(())
+    }
+
+    /// Remove and gracefully close a session already in the map (if any).
+    /// Used before inserting a replacement so the old connection/tasks don't leak.
+    async fn close_existing(&self, session_id: &str) {
+        if let Some(old) = self.sessions.lock().await.remove(session_id) {
+            let _ = old.shell.send(ShellCmd::Close).await;
+        }
     }
 
     pub async fn write_to_ssh(&self, session_id: &str, data: &[u8]) -> Result<(), String> {

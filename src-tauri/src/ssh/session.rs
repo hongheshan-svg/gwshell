@@ -29,14 +29,30 @@ pub async fn spawn(
     // connection. All of those methods take `&self`, so `Arc` is sufficient.
     let (handle, forwarded) = connect::establish(&params).await?;
     let session = Arc::new(handle);
-    let channel = session
-        .channel_open_session()
-        .await
-        .map_err(|e| format!("Channel open failed: {}", e))?;
-    channel
+
+    // If any setup step after the connection is established fails, disconnect
+    // before returning the error. Otherwise the live connection is never
+    // registered in SshManager.sessions, so close_ssh can never reach it and
+    // it leaks until the process exits (and a half-open shell may linger on
+    // the server). `disconnect` is best-effort — ignore its result.
+    let channel = match session.channel_open_session().await {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = session
+                .disconnect(russh::Disconnect::ByApplication, "", "English")
+                .await;
+            return Err(format!("Channel open failed: {}", e));
+        }
+    };
+    if let Err(e) = channel
         .request_pty(false, "xterm-256color", cols, rows, 0, 0, &[])
         .await
-        .map_err(|e| format!("PTY request failed: {}", e))?;
+    {
+        let _ = session
+            .disconnect(russh::Disconnect::ByApplication, "", "English")
+            .await;
+        return Err(format!("PTY request failed: {}", e));
+    }
 
     // Agent forwarding (`ssh -A`): ask the server to enable an agent channel on
     // this session. `Channel::agent_forward` (russh 0.61
@@ -56,10 +72,12 @@ pub async fn spawn(
         }
     }
 
-    channel
-        .request_shell(true)
-        .await
-        .map_err(|e| format!("Shell request failed: {}", e))?;
+    if let Err(e) = channel.request_shell(true).await {
+        let _ = session
+            .disconnect(russh::Disconnect::ByApplication, "", "English")
+            .await;
+        return Err(format!("Shell request failed: {}", e));
+    }
 
     let (tx, mut rx) = mpsc::channel::<ShellCmd>(256);
     let data_ev = format!("ssh-data-{}", session_id);
@@ -145,14 +163,27 @@ pub async fn spawn_exec(
 ) -> Result<(mpsc::Sender<ShellCmd>, Arc<Handle<Client>>, ForwardTargets), String> {
     let (handle, forwarded) = connect::establish(&params).await?;
     let session = Arc::new(handle);
-    let channel = session
-        .channel_open_session()
-        .await
-        .map_err(|e| format!("Channel open failed: {}", e))?;
-    channel
+
+    // Same leak guard as `spawn`: disconnect on any setup failure so the
+    // unregistered connection doesn't outlive the call.
+    let channel = match session.channel_open_session().await {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = session
+                .disconnect(russh::Disconnect::ByApplication, "", "English")
+                .await;
+            return Err(format!("Channel open failed: {}", e));
+        }
+    };
+    if let Err(e) = channel
         .request_pty(false, "xterm-256color", cols, rows, 0, 0, &[])
         .await
-        .map_err(|e| format!("PTY request failed: {}", e))?;
+    {
+        let _ = session
+            .disconnect(russh::Disconnect::ByApplication, "", "English")
+            .await;
+        return Err(format!("PTY request failed: {}", e));
+    }
 
     if params.agent_forward {
         if let Err(e) = channel.agent_forward(false).await {
@@ -160,10 +191,12 @@ pub async fn spawn_exec(
         }
     }
 
-    channel
-        .exec(true, command.as_bytes())
-        .await
-        .map_err(|e| format!("Exec request failed: {}", e))?;
+    if let Err(e) = channel.exec(true, command.as_bytes()).await {
+        let _ = session
+            .disconnect(russh::Disconnect::ByApplication, "", "English")
+            .await;
+        return Err(format!("Exec request failed: {}", e));
+    }
 
     let (tx, mut rx) = mpsc::channel::<ShellCmd>(256);
     let data_ev = format!("ssh-data-{}", session_id);
