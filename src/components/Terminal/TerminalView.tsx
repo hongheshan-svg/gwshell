@@ -47,6 +47,12 @@ interface TerminalContextMenu {
 
 const isPasteAction = (value: string) => value === "paste" || value === "Paste" || value === "\u7c98\u8d34";
 
+// Matches the tail of a terminal line that prompts for a secret. Covers
+// English + Chinese prompts from sudo/su/mysql/ssh-keygen/passphrase/TOTP etc.
+// Anchored to the end so a command like `echo password:` in earlier output
+// doesn't trigger it unless it's actually the last thing printed.
+const PASSWORD_PROMPT_RE = /(?:password|passphrase|passcode|verification code|enter passphrase|密码|口令|验证码)\s*[:：]\s*$/i;
+
 const writeClipboardText = async (text: string) => {
   const browserWrite = navigator.clipboard?.writeText(text).catch(() => {});
   await clipboardWrite(text).catch(() => browserWrite);
@@ -152,6 +158,12 @@ const tabCompletionIdx  = new Map<string, number>();
 const completionNav     = new Map<string, boolean>(); // user moved selection with ↑/↓
 const tabInputSenders   = new Map<string, (data: string) => void>(); // populated by the snippet input-sender task
 const bracketedPaste    = new Map<string, boolean>();
+// Set when the terminal's last output line looks like a password / passphrase
+// / verification-code prompt. While set, typed input is NOT recorded as command
+// history and completions are suppressed — otherwise a password entered at a
+// sudo/mysql/su prompt would be captured verbatim and later surfaced as a
+// completion suggestion.
+const awaitingPassword  = new Map<string, boolean>();
 // Resolved completion table per tab. For SSH 'auto', filled in asynchronously
 // by detect_remote_os; for other types it is derived synchronously (see syncTable).
 const tabCommandTable   = new Map<string, CommandTable>();
@@ -250,6 +262,7 @@ export function destroyTerminal(tabId: string): void {
   completionNav.delete(tabId);
   tabInputSenders.delete(tabId);
   bracketedPaste.delete(tabId);
+  awaitingPassword.delete(tabId);
   const inst = terminalInstances.get(tabId);
   if (inst) {
     try { inst.rendererAddon?.dispose(); } catch {}
@@ -986,6 +999,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         instance?.terminal.write(chunk);
       };
       const enqueueRender = (payload: string) => {
+        // Detect password / passphrase / verification prompts in the terminal's
+        // output so we can stop treating the user's next input as a command.
+        // sudo, su, mysql, ssh-keygen, TOTP, etc. all print a prompt ending in
+        // ':' on its own line; matching the tail of the (ANSI-stripped) payload
+        // keeps this cheap. The flag is cleared on the next Enter.
+        if (payload) {
+          const stripped = payload.replace(ANSI_RE, '');
+          if (PASSWORD_PROMPT_RE.test(stripped)) {
+            awaitingPassword.set(tab.id, true);
+          }
+        }
         renderQueue += payload;
         if (renderQueue.length >= RENDER_CAP) {
           if (renderRaf) { cancelAnimationFrame(renderRaf); renderRaf = 0; }
@@ -1143,6 +1167,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             const locale = i18n.language?.startsWith('zh') ? 'zh' : 'en';
 
             const showCompletions = () => {
+              // Suppress completions while the terminal is awaiting a password —
+              // the buffer holds a secret, not a command.
+              if (awaitingPassword.get(tab.id)) { hideCompletions(); return; }
               const table = tabCommandTable.get(tab.id) ?? syncTable(tab.type, sess);
               const items = buildCompletions(buf, { scope, cwd, sessionType, table }, locale);
               tabCompletions.set(tab.id, items);
@@ -1169,10 +1196,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               hideCompletions();
             } else if (data === '\r' || data === '\n') {
               const trimmed = buf.trim();
-              // Record command history on Enter (heuristic capture).
-              if (trimmed.length > 0) {
+              // Record command history on Enter (heuristic capture) — but NOT
+              // when the preceding output was a password prompt: the "command"
+              // here is actually a secret being typed into sudo/su/mysql/etc.
+              if (trimmed.length > 0 && !awaitingPassword.get(tab.id)) {
                 commandHistory.record(trimmed, { scope, cwd, sessionType });
               }
+              awaitingPassword.delete(tab.id);
               buf = '';
               hideCompletions();
             } else if (data === '\x7f' || data === '\b') {
@@ -1360,6 +1390,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         tabCompletionIdx.delete(tab.id);
         completionNav.delete(tab.id);
         bracketedPaste.delete(tab.id);
+        awaitingPassword.delete(tab.id);
       });
 
       const rawSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
