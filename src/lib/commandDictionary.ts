@@ -303,6 +303,11 @@ export function tableForRemoteShell(remoteShell: string | null | undefined): Com
  * Returns nothing when the prefix is empty or contains whitespace (the caller
  * is past the command name and into arguments, which the dictionary lacks).
  * Excludes exact-length matches so we never suggest an empty completion.
+ *
+ * Uses binary search to find the first entry >= prefix, then collects the
+ * contiguous run of prefix matches — O(log n + k) instead of O(n). The table
+ * is pre-sorted by cmd (case-insensitive localeCompare), and all command names
+ * are ASCII so a plain `<` comparison agrees with the sort order.
  */
 export function lookupCommands(
   prefix: string,
@@ -310,9 +315,21 @@ export function lookupCommands(
   table: CommandTable = 'unix',
 ): { cmd: string; desc: string }[] {
   if (!prefix || /\s/.test(prefix)) return [];
+  const arr = SORTED[table];
   const out: { cmd: string; desc: string }[] = [];
-  for (const d of SORTED[table]) {
-    if (d.cmd.startsWith(prefix) && d.cmd.length > prefix.length) {
+  // Binary search for the first entry whose cmd >= prefix.
+  let lo = 0;
+  let hi = arr.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (arr[mid].cmd < prefix) lo = mid + 1;
+    else hi = mid;
+  }
+  // Collect the contiguous run of prefix matches.
+  for (let i = lo; i < arr.length; i++) {
+    const d = arr[i];
+    if (!d.cmd.startsWith(prefix)) break; // sorted: first non-match ends the run
+    if (d.cmd.length > prefix.length) {
       out.push({ cmd: d.cmd, desc: locale === 'zh' ? d.zh : d.en });
     }
   }

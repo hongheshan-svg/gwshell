@@ -231,6 +231,19 @@ function normalizeTable(s: string): CommandTable {
   return s === 'cmd' || s === 'powershell' ? s : 'unix';
 }
 
+// Estimate how many terminal rows a completion dropdown will occupy, so the
+// `placeAbove` heuristic can decide whether it fits below the cursor. Command-
+// dictionary items carry a description line (~1.5x row height), history items
+// are single-row. Capped at 8 visible items.
+function estimateDropdownRows(items: Completion[]): number {
+  const visible = items.slice(0, 8);
+  let rows = 0;
+  for (const it of visible) {
+    rows += it.desc ? 1.5 : 1;
+  }
+  return Math.ceil(rows);
+}
+
 /** Remove event listeners for a tab (idempotent). */
 function cleanupTabListeners(tabId: string): void {
   const fn = tabListenerCleanups.get(tabId);
@@ -765,7 +778,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                 const cx = inst?.terminal.buffer.active.cursorX ?? 0;
                 const cy = inst?.terminal.buffer.active.cursorY ?? 0;
                 const rows = inst?.terminal.rows ?? 24;
-                const above = cy > rows - Math.min(items.length, 8) - 1;
+                const above = cy > rows - estimateDropdownRows(items) - 1;
                 completionSetters.get(tab.id)?.(items, i, cx, cy, above);
               };
 
@@ -1210,7 +1223,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               tabCompletions.set(tab.id, items);
               tabCompletionIdx.set(tab.id, 0);
               completionNav.set(tab.id, false);
-              const above = cursorY > rows - Math.min(items.length, 8) - 1;
+              const above = cursorY > rows - estimateDropdownRows(items) - 1;
               setter?.(items, 0, cursorX, cursorY, above);
             };
             const hideCompletions = () => {
@@ -1227,7 +1240,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               const chunk = (end >= 0 ? data.slice(0, end) : data)
                 .replace(/\x1b\[200~/g, '');
               buf += chunk;
-              if (end >= 0) bracketedPaste.set(tab.id, false);
+              if (end >= 0) {
+                bracketedPaste.set(tab.id, false);
+                // The pasted content (often multi-line) is not a reliable
+                // command prefix — reset buf so the next keystroke starts a
+                // fresh completion context instead of matching against the
+                // whole paste blob.
+                buf = '';
+              }
               hideCompletions();
             } else if (data === '\r' || data === '\n') {
               const trimmed = buf.trim();
@@ -1254,8 +1274,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               if (buf.length > 0) showCompletions();
               else hideCompletions();
             } else if (data === '\x15' || data === '\x0b' || data === '\x0c') {
-              // Ctrl+U / Ctrl+K / Ctrl+L — clear line / kill / clear screen
-              if (data === '\x15') buf = '';
+              // Ctrl+U (kill line) / Ctrl+K (kill to EOL) / Ctrl+L (clear screen)
+              // all change the line in a way the tracked buf can't reflect, so
+              // reset it and disable completions until the next fresh line.
+              buf = '';
               hideCompletions();
             } else if (
               data === '\x1b[A' || data === '\x1b[B' || data === '\x1b[C' || data === '\x1b[D' ||
