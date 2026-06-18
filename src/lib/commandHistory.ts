@@ -37,7 +37,11 @@ export async function init(limit: number): Promise<void> {
     const result = await invoke<HistoryEntry[]>('get_command_history', { limit });
     // Stale: a newer init was started after this one — discard our result.
     if (seq !== initSeq) return;
-    entries = result;
+    // One-time scrub of any legacy rows recorded before secret-filtering
+    // existed (the backend doesn't filter). Doing it here means the hot path
+    // in getSuggestions doesn't have to run containsSecret on every candidate
+    // on every keystroke.
+    entries = result.filter((e) => !containsSecret(e.command));
   } catch {
     if (seq === initSeq) entries = [];
   }
@@ -161,10 +165,8 @@ export function getSuggestions(prefix: string, ctx: SuggestCtx = {}): string[] {
   const best = new Map<string, number>(); // command -> best score
   for (const e of entries) {
     if (!e.command.startsWith(prefix) || e.command.length <= prefix.length) continue;
-    // Defensive: legacy rows recorded before secret-scrubbing existed may carry
-    // inline secrets. Filter them out of suggestions (cheap: only candidates that
-    // already match the prefix are checked).
-    if (containsSecret(e.command)) continue;
+    // Secret scrubbing is done once at init() and at record() time, so the
+    // hot path here doesn't re-run containsSecret on every candidate.
     let score = Math.log2(e.count + 1) * recencyDecay(now - e.last_used);
     if (ctx.scope && e.scope === ctx.scope) score += 2;
     if (ctx.cwd && e.cwd === ctx.cwd) score += 1;
