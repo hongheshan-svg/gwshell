@@ -663,7 +663,11 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
           {currentPath !== '/' && (
             <div
               className="sftp-file-item sftp-file-dir"
+              role="button"
+              tabIndex={0}
+              aria-label=".."
               onClick={() => { setSelectedEntry(null); goUp(); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedEntry(null); goUp(); } }}
             >
               <FolderUp size={17} className="sftp-icon sftp-icon-folder" />
               <span className="sftp-file-name">..</span>
@@ -676,8 +680,12 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
             <div
               key={entry.path}
               className={`sftp-file-item ${entry.is_dir ? 'sftp-file-dir' : ''} ${selectedEntry?.path === entry.path ? 'sftp-file-item-selected' : ''}`}
+              role="button"
+              tabIndex={0}
+              aria-label={entry.name}
               onClick={() => handleEntryClick(entry)}
               onDoubleClick={() => handleEntryDoubleClick(entry)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleEntryDoubleClick(entry); } }}
               onContextMenu={(e) => handleContextMenu(e, entry)}
             >
               {entry.is_dir ? (

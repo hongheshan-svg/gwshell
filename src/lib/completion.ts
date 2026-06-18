@@ -29,19 +29,27 @@ export function buildCompletions(
   // can legitimately appear together — that is intended.
   const seen = new Set<string>();
 
+  // Reserve roughly half the slots for dictionary commands so standard commands
+  // (docker, df, du, …) aren't entirely squeezed out when history already fills
+  // the list. Dictionary is only consulted while typing the command name.
+  const dictBudget = /\s/.test(line) ? 0 : Math.max(2, Math.floor(max / 2));
+  const historyBudget = max - dictBudget;
+
+  let histCount = 0;
   for (const cmd of getSuggestions(line, ctx)) {
     if (seen.has(cmd)) continue;
     seen.add(cmd);
     out.push({ text: cmd, kind: 'history' });
-    if (out.length >= max) return out;
+    histCount += 1;
+    if (histCount >= historyBudget) break;
   }
 
-  if (!/\s/.test(line)) {
+  if (dictBudget > 0) {
     for (const { cmd, desc } of lookupCommands(line, locale, ctx.table ?? 'unix')) {
       if (seen.has(cmd)) continue;
       seen.add(cmd);
       out.push({ text: cmd, kind: 'command', desc });
-      if (out.length >= max) return out;
+      if (out.length >= max) break;
     }
   }
 

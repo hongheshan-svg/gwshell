@@ -35,10 +35,14 @@ export const ServerPanel: React.FC = () => {
   // metrics task, restart it (a fresh SSH probe), and discard sparkline history.
   const tRef = useRef(t);
   tRef.current = t;
-  const { serverPanelOpen, toggleServerPanel, tabs, activeTabId, sessions } = useAppStore();
-
-  const activeTab = tabs.find((tt) => tt.id === activeTabId);
-  const activeSession = sessions.find((s) => s.id === activeTab?.sessionId);
+  // Fine-grained selectors: avoid re-rendering the whole metrics panel on
+  // unrelated store changes (latency updates, modal toggles, etc.).
+  const serverPanelOpen = useAppStore((s) => s.serverPanelOpen);
+  const toggleServerPanel = useAppStore((s) => s.toggleServerPanel);
+  const activeTab = useAppStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
+  const activeSession = useAppStore((s) =>
+    s.sessions.find((sess) => sess.id === s.tabs.find((t) => t.id === s.activeTabId)?.sessionId),
+  );
   const isSsh = activeTab?.type === 'ssh';
   const sessionId = isSsh ? activeTab!.sessionId : null;
   const hostIp = activeSession ? `${activeSession.host ?? ''}${activeSession.port ? `:${activeSession.port}` : ''}` : '';

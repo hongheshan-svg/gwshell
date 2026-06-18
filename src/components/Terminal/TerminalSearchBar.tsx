@@ -57,14 +57,25 @@ export const TerminalSearchBar: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabId]);
 
+  // Track the previous tab so we can clear its search decorations when the
+  // user switches tabs while the search bar stays open — otherwise the old
+  // tab keeps stale highlights and the new tab shows nothing.
+  const prevTabRef = useRef<string | null>(null);
+
   // Re-run search when any toggle changes (or query changes while toggles are
-  // active). query is included so the linter dep rule is satisfied; the early
-  // return when !query keeps it a no-op on empty input.
+  // active), AND when the active tab changes. query is included so the linter
+  // dep rule is satisfied; the early return when !query keeps it a no-op on
+  // empty input. On tab switch, clear the previous tab's decorations first.
   useEffect(() => {
+    const prev = prevTabRef.current;
+    if (prev && prev !== activeTabId) {
+      try { terminalInstances.get(prev)?.searchAddon?.clearDecorations?.(); } catch { /* noop */ }
+    }
+    prevTabRef.current = activeTabId;
     if (!query) return;
     safeFind(() => addon()?.findNext(query, buildOpts({ incremental: true })));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caseSensitive, useRegex, wholeWord, query]);
+  }, [caseSensitive, useRegex, wholeWord, query, activeTabId]);
 
   const findNext = () => { if (query) safeFind(() => addon()?.findNext(query, buildOpts())); };
   const findPrev = () => { if (query) safeFind(() => addon()?.findPrevious(query, buildOpts())); };

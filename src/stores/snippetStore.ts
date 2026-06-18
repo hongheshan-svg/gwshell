@@ -54,25 +54,31 @@ export const useSnippetStore = create<SnippetStore>((set, get) => ({
   },
 
   update: async (snippet) => {
-    const prev = get().snippets;
+    // Capture the pre-update object (not the whole list) so a rollback restores
+    // just this snippet without clobbering concurrent updates to others.
+    const oldSnippet = get().snippets.find((s) => s.id === snippet.id);
     set((state) => ({ snippets: state.snippets.map((s) => (s.id === snippet.id ? snippet : s)) }));
     try {
       await invoke('save_snippet', { id: snippet.id, data: JSON.stringify(snippet) });
     } catch (err) {
-      // Roll back to the pre-update list.
-      set({ snippets: prev });
+      if (oldSnippet) {
+        set((state) => ({ snippets: state.snippets.map((s) => (s.id === snippet.id ? oldSnippet : s)) }));
+      }
       console.error('Failed to update snippet, rolled back:', err);
     }
   },
 
   remove: async (id) => {
-    const prev = get().snippets;
+    // Capture the removed object so a rollback re-inserts just it, preserving
+    // any concurrent add/update of other snippets.
+    const removed = get().snippets.find((s) => s.id === id);
     set((state) => ({ snippets: state.snippets.filter((s) => s.id !== id) }));
     try {
       await invoke('delete_snippet', { id });
     } catch (err) {
-      // Roll back the removed snippet so it reappears.
-      set({ snippets: prev });
+      if (removed) {
+        set((state) => ({ snippets: [...state.snippets, removed] }));
+      }
       console.error('Failed to delete snippet, rolled back:', err);
     }
   },

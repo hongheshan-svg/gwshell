@@ -6,7 +6,10 @@ import type { SessionConfig } from '../../types';
 
 export const QuickConnectModal: React.FC = () => {
   const { t } = useTranslation();
-  const { setShowQuickConnect, addTemporarySession, addTab } = useAppStore();
+  // Action setters are stable references; select individually.
+  const setShowQuickConnect = useAppStore((s) => s.setShowQuickConnect);
+  const addTemporarySession = useAppStore((s) => s.addTemporarySession);
+  const addTab = useAppStore((s) => s.addTab);
   const [target, setTarget] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');

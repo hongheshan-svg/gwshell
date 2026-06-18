@@ -113,7 +113,18 @@ function popInjectedSessions(): SessionConfig[] {
   const data = win.__GWSHELL_SESSIONS__;
   if (Array.isArray(data)) {
     delete win.__GWSHELL_SESSIONS__;
-    return data as SessionConfig[];
+    // Light shape validation: a malformed injected payload (missing id /
+    // session_type, or wrong types) could corrupt the store and crash later
+    // save_session / connect logic. Drop bad entries and warn.
+    const valid = data.filter((e): e is SessionConfig => {
+      if (!e || typeof e !== 'object') return false;
+      const o = e as Record<string, unknown>;
+      return typeof o.id === 'string' && typeof o.session_type === 'string';
+    });
+    if (valid.length !== data.length) {
+      console.warn(`popInjectedSessions: dropped ${data.length - valid.length} malformed entr(ies)`);
+    }
+    return valid;
   }
   return [];
 }
@@ -259,10 +270,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
         };
       }
 
-      const newActiveId =
-        state.activeTabId === id
-          ? newTabs[newTabs.length - 1].id
-          : state.activeTabId;
+      // When closing the active tab, switch to the adjacent LEFT tab (common
+      // terminal/browser behavior) instead of always jumping to the rightmost.
+      let newActiveId = state.activeTabId;
+      if (state.activeTabId === id) {
+        const idx = terminalTabs.findIndex((t) => t.id === id);
+        const neighbor = terminalTabs[Math.max(0, idx - 1)] ?? terminalTabs[idx + 1];
+        newActiveId = neighbor ? neighbor.id : 'asset-list';
+      }
       const newMainView = newActiveId === 'asset-list' ? 'asset-list' : 'terminal';
 
       const collapsedCount = terminalTabs.length <= 1 ? 1 : state.splitCount;

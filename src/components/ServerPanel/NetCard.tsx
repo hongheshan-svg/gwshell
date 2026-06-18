@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { NetStats } from '../../types/serverMetrics';
 import { Sparkline, type SparkSeries } from './Sparkline';
@@ -30,12 +30,15 @@ function fmtRate(bps: number): string {
 export const NetCard: React.FC<Props> = ({ net, cpuHistory, memHistory, rxHistory, txHistory }) => {
   const { t } = useTranslation();
 
-  const series: SparkSeries[] = [
+  // Stabilize the series array reference so Sparkline (and its internal
+  // path memo) don't recompute on every parent render — the metrics panel
+  // refreshes frequently and the array was rebuilt each frame.
+  const series: SparkSeries[] = useMemo(() => [
     { label: t('serverPanel_net_legend_cpu'), color: '#3b82f6', data: cpuHistory },
     { label: t('serverPanel_net_legend_mem'), color: '#22c55e', data: memHistory },
     { label: t('serverPanel_net_legend_tx'), color: '#f59e0b', data: txHistory },
     { label: t('serverPanel_net_legend_rx'), color: '#10b981', data: rxHistory },
-  ];
+  ], [t, cpuHistory, memHistory, rxHistory, txHistory]);
 
   return (
     <div className="sp-card sp-card--net">

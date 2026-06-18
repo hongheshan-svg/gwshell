@@ -52,10 +52,12 @@ const isPasteAction = (value: string) => value === "paste" || value === "Paste" 
 // Anchored to the end so a command like `echo password:` in earlier output
 // doesn't trigger it unless it's actually the last thing printed. A short gap
 // is allowed between the keyword and the colon so real prompts that interpose
-// text still match — e.g. "[sudo] password for zhengshan:" and
-// "Enter passphrase for key '/home/x/.ssh/id_rsa':". A false positive here only
-// costs one un-recorded command, so we err toward catching more prompts.
-const PASSWORD_PROMPT_RE = /(?:password|passphrase|passcode|verification code|密码|口令|密钥|验证码)[^:：\n]{0,40}[:：]\s*$/i;
+// Matches the tail of a terminal line that prompts for a secret. Covers
+// English + Chinese prompts from sudo/su/mysql/ssh-keygen/passphrase/TOTP etc.
+// The keyword must be the last word-ish token before the colon (allowing only a
+// short trailing qualifier like "for user"), so MOTD/banner/help lines that
+// merely mention "password" don't trip it. Anchored to end-of-line.
+const PASSWORD_PROMPT_RE = /(?:password|passphrase|passcode|verification code|密码|口令|密钥短语|验证码)(?:\s+for\s+\S+)?[:：]\s*$/i;
 
 const writeClipboardText = async (text: string) => {
   const browserWrite = navigator.clipboard?.writeText(text).catch(() => {});
@@ -157,6 +159,12 @@ const completionSetters    = new Map<string, (items: Completion[], index: number
 const completionAccept     = new Map<string, (suffix: string) => void>();
 
 const tabCwd            = new Map<string, string>();
+// Cache of remote-OS probe results keyed by host, so opening multiple SSH
+// tabs to the same host doesn't re-run `uname`/`%COMSPEC%` exec probes each
+// time. Entries expire after 5 minutes (a host's OS doesn't change often,
+// but a re-provisioned box should eventually be re-detected).
+const remoteOsCache     = new Map<string, { table: CommandTable; at: number }>();
+const REMOTE_OS_TTL_MS  = 5 * 60 * 1000;
 const tabCompletions    = new Map<string, Completion[]>();
 const tabCompletionIdx  = new Map<string, number>();
 const completionNav     = new Map<string, boolean>(); // user moved selection with ↑/↓
@@ -168,6 +176,9 @@ const bracketedPaste    = new Map<string, boolean>();
 // sudo/mysql/su prompt would be captured verbatim and later surfaced as a
 // completion suggestion.
 const awaitingPassword  = new Map<string, boolean>();
+// Auto-clears awaitingPassword after a few seconds so a stale prompt (or a rare
+// false positive) can't permanently disable history/completions for a tab.
+const awaitingPasswordTimer = new Map<string, ReturnType<typeof setTimeout>>();
 // Resolved completion table per tab. For SSH 'auto', filled in asynchronously
 // by detect_remote_os; for other types it is derived synchronously (see syncTable).
 const tabCommandTable   = new Map<string, CommandTable>();
@@ -266,6 +277,8 @@ export function destroyTerminal(tabId: string): void {
   completionNav.delete(tabId);
   tabInputSenders.delete(tabId);
   bracketedPaste.delete(tabId);
+  const apTimer = awaitingPasswordTimer.get(tabId);
+  if (apTimer) { clearTimeout(apTimer); awaitingPasswordTimer.delete(tabId); }
   awaitingPassword.delete(tabId);
   const inst = terminalInstances.get(tabId);
   if (inst) {
@@ -915,10 +928,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // Bell listener: plays a short WebAudio beep when terminalSound is enabled.
       // Registered here (before cleanupTabListeners) so it gets torn down with
       // the rest of the per-tab xterm listeners.
+      // Reuse a single AudioContext across bells instead of creating one per
+      // BEL — rapid bells (e.g. a script emitting several) would otherwise hit
+      // the browser's concurrent-AudioContext cap and silently drop sound.
+      let bellCtx: AudioContext | null = null;
       const bellDispose = instance!.terminal.onBell(() => {
         if (!useSettingsStore.getState().settings.terminalSound) return;
         try {
-          const ctx = new AudioContext();
+          if (!bellCtx || bellCtx.state === 'closed') bellCtx = new AudioContext();
+          const ctx = bellCtx;
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.connect(gain);
@@ -929,7 +947,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
           osc.start(ctx.currentTime);
           osc.stop(ctx.currentTime + 0.08);
-          osc.onended = () => { try { ctx.close(); } catch {} };
+          // The oscillator self-stops; leave the context open for reuse.
         } catch { /* AudioContext unavailable — silently skip */ }
       });
 
@@ -1012,6 +1030,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           const stripped = payload.replace(ANSI_RE, '');
           if (PASSWORD_PROMPT_RE.test(stripped)) {
             awaitingPassword.set(tab.id, true);
+            // Auto-clear after 5s so a false positive (banner/help text) can't
+            // permanently suppress history/completions. Re-armed on each match.
+            const prev = awaitingPasswordTimer.get(tab.id);
+            if (prev) clearTimeout(prev);
+            awaitingPasswordTimer.set(tab.id, setTimeout(() => {
+              awaitingPassword.delete(tab.id);
+              awaitingPasswordTimer.delete(tab.id);
+            }, 5000));
           }
         }
         renderQueue += payload;
@@ -1087,7 +1113,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       const WRITE_RETRY_MS = 24;
       const WRITE_CHUNK_SIZE = 16 * 1024;
       const WRITE_INVOKE_TIMEOUT_MS = 1500;
-      const WRITE_MAX_IN_FLIGHT = 4;
+      // Serialize writes: only one chunk in flight at a time. Parallel dispatch
+      // (with >1 in-flight) reorders bytes on retry — a failed chunk is pushed
+      // back to the queue head while later chunks may already have landed,
+      // corrupting large pastes. Serial dispatch preserves byte order.
+      const WRITE_MAX_IN_FLIGHT = 1;
       const scheduleWriteFlush = (delayMs = WRITE_FLUSH_MS) => {
         if (writeTimer || writeDisposed) return;
         writeTimer = setTimeout(flushWrites, delayMs);
@@ -1114,11 +1144,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           writesInFlight += 1;
           invokeWrite(payload)
             .catch((err) => {
-              // SSH writes go through an mpsc channel that blocks (await) when
-              // full instead of returning "input buffer full", so an IPC timeout
-              // also means the chunk didn't make it — requeue and retry rather
-              // than silently dropping the bytes (which corrupts pasted input).
-              if (tab.type === "ssh" && (String(err).includes("input buffer full") || String(err).includes("timeout"))) {
+              // Any interactive backend can transiently reject a write when its
+              // input buffer is full (PTY/serial return "input buffer full";
+              // SSH's mpsc channel blocks until the 1.5s IPC timeout). Requeue
+              // the chunk and retry with backoff instead of dropping bytes,
+              // which would corrupt pasted input on any backend type.
+              if (isInteractiveTerminal(tab.type) && (String(err).includes("buffer full") || String(err).includes("timeout"))) {
                 writeQueue = payload + writeQueue;
                 scheduleWriteFlush(WRITE_RETRY_MS);
               }
@@ -1206,6 +1237,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               if (trimmed.length > 0 && !awaitingPassword.get(tab.id)) {
                 commandHistory.record(trimmed, { scope, cwd, sessionType });
               }
+              const apT = awaitingPasswordTimer.get(tab.id);
+              if (apT) { clearTimeout(apT); awaitingPasswordTimer.delete(tab.id); }
               awaitingPassword.delete(tab.id);
               buf = '';
               hideCompletions();
@@ -1378,10 +1411,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         writeQueue = "";
         const pendingResize = pendingBackendResize.get(tab.id);
         if (pendingResize) { clearTimeout(pendingResize); pendingBackendResize.delete(tab.id); }
+        // Reset the first-resize guard so a remount (split toggle, StrictMode)
+        // re-sends an immediate SIGWINCH instead of falling into the debounce
+        // branch — otherwise TUIs render at a stale size after reparenting.
+        sentFirstResize.delete(tab.id);
         try { dataDispose.dispose(); } catch {}
         try { resizeDispose?.dispose(); } catch {}
         try { osc7Dispose.dispose(); } catch {}
         try { bellDispose.dispose(); } catch {}
+        // Close the shared bell AudioContext so it isn't left running.
+        try { if (bellCtx) bellCtx.close(); } catch {}
         if (termElForWheel) {
           try { termElForWheel.removeEventListener('wheel', handleWheelZoom); } catch {}
         }
@@ -1394,6 +1433,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         tabCompletionIdx.delete(tab.id);
         completionNav.delete(tab.id);
         bracketedPaste.delete(tab.id);
+        const apT = awaitingPasswordTimer.get(tab.id);
+        if (apT) { clearTimeout(apT); awaitingPasswordTimer.delete(tab.id); }
         awaitingPassword.delete(tab.id);
       });
 
@@ -1479,8 +1520,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // between disconnect and now). Failure re-arms so another keypress retries.
       const reconnect = async (): Promise<void> => {
         instance?.terminal.write(`\r\n\x1b[90m${t('term_reconnecting')}\x1b[0m\r\n`);
+        // Reset ALL per-tab completion/prompt state — the new shell is a fresh
+        // login (possibly a different user/host), so stale cwd, a lingering
+        // password flag, or an unclosed bracketed-paste mode from the old
+        // session would corrupt completions or silently swallow input.
         tabCommandTable.delete(tab.id);
+        tabCwd.delete(tab.id);
+        tabCompletions.delete(tab.id);
+        tabCompletionIdx.delete(tab.id);
+        completionNav.delete(tab.id);
         inputBuffers.set(tab.id, '');
+        bracketedPaste.delete(tab.id);
+        const apTimer = awaitingPasswordTimer.get(tab.id);
+        if (apTimer) { clearTimeout(apTimer); awaitingPasswordTimer.delete(tab.id); }
+        awaitingPassword.delete(tab.id);
         const rawFreshSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
         const freshSession = rawFreshSession ? applyGroupDefaults(rawFreshSession, loadGroupDefaults()) : rawFreshSession;
         if (tab.type === 'ssh') {
@@ -1509,9 +1562,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           useAppStore.getState().updateTabConnected(tab.id, true);
           reconnectableTabs.delete(tab.id);
           if (tab.type === 'ssh' && freshSession && tableForRemoteShell(freshSession.remote_shell ?? null) === null) {
-            invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
-              .then((tbl) => { tabCommandTable.set(tab.id, normalizeTable(tbl)); })
-              .catch(() => {});
+            // Prefer a cached probe result for this host (5-min TTL) so opening
+            // several tabs to the same host doesn't re-run exec probes each time.
+            const host = freshSession.host ?? '';
+            const cached = host ? remoteOsCache.get(host) : undefined;
+            if (cached && Date.now() - cached.at < REMOTE_OS_TTL_MS) {
+              tabCommandTable.set(tab.id, cached.table);
+            } else {
+              invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
+                .then((tbl) => {
+                  const norm = normalizeTable(tbl);
+                  tabCommandTable.set(tab.id, norm);
+                  if (host) remoteOsCache.set(host, { table: norm, at: Date.now() });
+                })
+                .catch(() => {});
+            }
           }
         } catch (err) {
           instance?.terminal.write(
@@ -1600,9 +1665,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             // synchronously by syncTable; 'auto'/unset triggers a one-shot remote
             // probe (best-effort, result cached per tab).
             if (tableForRemoteShell(session.remote_shell ?? null) === null) {
-              invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
-                .then((tbl) => { tabCommandTable.set(tab.id, normalizeTable(tbl)); })
-                .catch(() => {});
+              const host = session.host ?? '';
+              const cached = host ? remoteOsCache.get(host) : undefined;
+              if (cached && Date.now() - cached.at < REMOTE_OS_TTL_MS) {
+                tabCommandTable.set(tab.id, cached.table);
+              } else {
+                invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
+                  .then((tbl) => {
+                    const norm = normalizeTable(tbl);
+                    tabCommandTable.set(tab.id, norm);
+                    if (host) remoteOsCache.set(host, { table: norm, at: Date.now() });
+                  })
+                  .catch(() => {});
+              }
             }
 
             // Dynamic (SOCKS) only needs a local port; local/remote need the full triple.

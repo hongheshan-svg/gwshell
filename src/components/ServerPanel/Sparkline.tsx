@@ -46,8 +46,8 @@ export const Sparkline: React.FC<Props> = ({
       height={height}
       preserveAspectRatio="none"
     >
-      {paths.map((p, i) => (
-        <path key={`series-${i}`} d={p.d} fill="none" stroke={p.color} strokeWidth={1.5} />
+      {paths.map((p) => (
+        <path key={p.color} d={p.d} fill="none" stroke={p.color} strokeWidth={1.5} />
       ))}
     </svg>
   );
