@@ -29,7 +29,12 @@ export function parseQuickConnect(input: string): QuickTarget | null {
     const m = /^\[([^\]]+)\](?::(\d+))?$/.exec(rest);
     if (m) {
       host = m[1];
-      if (m[2] !== undefined) port = Number(m[2]);
+      if (m[2] !== undefined) {
+        const p = Number(m[2]);
+        // Same range check as the non-bracket branch: an out-of-range port
+        // on an IPv6 literal should not silently produce an invalid config.
+        if (p >= 1 && p <= 65535) port = p;
+      }
     }
   } else {
     const colon = rest.lastIndexOf(':');

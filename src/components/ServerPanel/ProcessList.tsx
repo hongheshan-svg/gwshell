@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { X } from 'lucide-react';
@@ -20,15 +20,27 @@ export const ProcessList: React.FC<Props> = ({ sessionId, procs }) => {
   const { t } = useTranslation();
   const [pending, setPending] = useState<Set<number>>(new Set());
   const [armedPid, setArmedPid] = useState<number | null>(null);
+  // Track the armed-state reset timer so it can be cleared on unmount —
+  // otherwise a 3s deferred setArmedPid fires after the panel is gone.
+  const armedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (armedTimerRef.current) clearTimeout(armedTimerRef.current);
+    };
+  }, []);
 
   const handleKillClick = async (p: ProcInfo) => {
     if (armedPid !== p.pid) {
       setArmedPid(p.pid);
-      setTimeout(() => {
+      if (armedTimerRef.current) clearTimeout(armedTimerRef.current);
+      armedTimerRef.current = setTimeout(() => {
+        armedTimerRef.current = null;
         setArmedPid((cur) => (cur === p.pid ? null : cur));
       }, 3000);
       return;
     }
+    if (armedTimerRef.current) { clearTimeout(armedTimerRef.current); armedTimerRef.current = null; }
     setArmedPid(null);
     setPending((prev) => new Set(prev).add(p.pid));
     try {

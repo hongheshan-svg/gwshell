@@ -121,7 +121,7 @@ function normalizeSettings(saved: Partial<AppSettings>): AppSettings {
   return settings;
 }
 
-export const useSettingsStore = create<SettingsStore>((set) => ({
+export const useSettingsStore = create<SettingsStore>((set, get) => ({
   settings: { ...defaultSettings },
   loaded: false,
   hasSaved: false,
@@ -149,9 +149,13 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
 
   save: async (settings: AppSettings) => {
     const normalized = normalizeSettings(settings);
+    const prev = get().settings;
     set({ settings: normalized, hasSaved: true });
     await invoke('save_app_settings', { value: JSON.stringify(normalized) });
-    if (normalized.sshHistoryCmd) {
+    // Only re-pull history when the load count actually changed — otherwise
+    // every settings save wipes and reloads entries, making in-progress
+    // completion candidates flicker.
+    if (normalized.sshHistoryCmd && normalized.sshHistoryCmdLoadCount !== prev.sshHistoryCmdLoadCount) {
       commandHistory.init(parseInt(normalized.sshHistoryCmdLoadCount) || 100);
     }
   },

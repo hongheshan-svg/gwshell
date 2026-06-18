@@ -26,11 +26,20 @@ let entries: HistoryEntry[] = [];
 // hit the oldest entries (lowest last_used) are trimmed first.
 const MAX_ENTRIES = 5000;
 
+// Monotonic sequence for init(): if two in-flight inits interleave (App load +
+// settings save), only the most recent one's result is kept — a late-resolving
+// older init can't overwrite a newer one's entries.
+let initSeq = 0;
+
 export async function init(limit: number): Promise<void> {
+  const seq = ++initSeq;
   try {
-    entries = await invoke<HistoryEntry[]>('get_command_history', { limit });
+    const result = await invoke<HistoryEntry[]>('get_command_history', { limit });
+    // Stale: a newer init was started after this one — discard our result.
+    if (seq !== initSeq) return;
+    entries = result;
   } catch {
-    entries = [];
+    if (seq === initSeq) entries = [];
   }
 }
 
@@ -51,7 +60,10 @@ const SECRET_KNOWN_ENV_RE =
 const SECRET_URLCRED_RE = /\b[\w.+-]+:[^\s:@/]{2,}@[\w.-]+/;
 const SECRET_HEADER_RE = /authorization:\s*\S+/i;
 const SECRET_BEARER_RE = /\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}/i;
-const SECRET_PASSARG_RE = /\bpass(?:in|out)?[=:]\S+/i;
+// `pass=...` / `passin=...` / `passout=...` (openssl). Gated to a minimum value
+// length (8) so trivial assignments like `pass=1` or `echo pass=word` aren't
+// falsely treated as secret-bearing — those are common harmless variable names.
+const SECRET_PASSARG_RE = /\bpass(?:in|out)?[=:]\S{8,}/i;
 // Well-known token shapes.
 const SECRET_TOKEN_RES: RegExp[] = [
   /\bgh[oprsu]_[A-Za-z0-9]{20,}\b/, // GitHub
