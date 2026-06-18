@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../stores/appStore';
 import type { SessionConfig } from '../types';
 
@@ -12,22 +13,24 @@ export function needsRelay(s: SessionConfig): boolean {
 }
 
 export function useAssetData() {
-  const {
-    sessions,
-    selectedSessionIds,
-    setSelectedSessionIds,
-    toggleSelectSession,
-    setShowNewSession,
-    setEditingSession,
-    removeSession,
-    addSession,
-    addTab,
-    setActiveTab,
-    tabs,
-    batchUpdateLatency,
-    sidebarCollapsed,
-    toggleSidebar,
-  } = useAppStore();
+  const { t } = useTranslation();
+  // Fine-grained selectors: subscribe to each field individually so a latency
+  // update (which replaces `sessions`) doesn't re-render just because an
+  // unrelated action reference was re-read. Action setters are stable.
+  const sessions = useAppStore((s) => s.sessions);
+  const selectedSessionIds = useAppStore((s) => s.selectedSessionIds);
+  const setSelectedSessionIds = useAppStore((s) => s.setSelectedSessionIds);
+  const toggleSelectSession = useAppStore((s) => s.toggleSelectSession);
+  const setShowNewSession = useAppStore((s) => s.setShowNewSession);
+  const setEditingSession = useAppStore((s) => s.setEditingSession);
+  const removeSession = useAppStore((s) => s.removeSession);
+  const addSession = useAppStore((s) => s.addSession);
+  const addTab = useAppStore((s) => s.addTab);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const tabs = useAppStore((s) => s.tabs);
+  const batchUpdateLatency = useAppStore((s) => s.batchUpdateLatency);
+  const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
+  const toggleSidebar = useAppStore((s) => s.toggleSidebar);
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -68,16 +71,21 @@ export function useAssetData() {
     const copied: SessionConfig = {
       ...session,
       id: crypto.randomUUID(),
-      name: `${session.name} - 副本`,
+      name: `${session.name} - ${t('common_copy_suffix')}`,
       created_at: new Date().toISOString().slice(0, 10),
       _temporary: undefined,
     };
     addSession(copied);
   };
 
-  // Ping latency: fully async, batch-update to avoid blocking renders
+  // Ping latency: fully async, batch-update to avoid blocking renders.
+  // `mountedRef` guards against setState-after-unmount: if the component
+  // unmounts mid-loop (e.g. switching to the dashboard view), in-flight
+  // invoke() calls still resolve but their results are discarded instead of
+  // writing to the store of an unmounted component.
   const sessionsRef = useRef(realSessions);
   sessionsRef.current = realSessions;
+  const mountedRef = useRef(true);
 
   const idleCallbackRef = useRef<number | null>(null);
   const idleUsesTimeoutRef = useRef(false);
@@ -109,6 +117,7 @@ export function useAssetData() {
   };
 
   useEffect(() => {
+    mountedRef.current = true;
     const markInteraction = () => {
       lastInteractionRef.current = Date.now();
     };
@@ -118,6 +127,7 @@ export function useAssetData() {
     window.addEventListener('resize', markInteraction);
 
     return () => {
+      mountedRef.current = false;
       window.removeEventListener('pointerdown', markInteraction);
       window.removeEventListener('keydown', markInteraction);
       window.removeEventListener('resize', markInteraction);
@@ -126,7 +136,7 @@ export function useAssetData() {
 
   const doPingRef = useRef(() => {});
   doPingRef.current = async () => {
-    if (pingLoopRunningRef.current) return;
+    if (pingLoopRunningRef.current || !mountedRef.current) return;
     const targets = sessionsRef.current.filter((s) => s.host && !needsRelay(s));
     if (targets.length === 0) return;
 
@@ -135,6 +145,7 @@ export function useAssetData() {
 
     try {
       for (const session of targets) {
+        if (!mountedRef.current) break;
         while (Date.now() - lastInteractionRef.current < 1500) {
           await sleep(250);
         }
@@ -162,7 +173,7 @@ export function useAssetData() {
         await sleep(150);
       }
 
-      if (updates.size > 0) {
+      if (updates.size > 0 && mountedRef.current) {
         batchUpdateLatency(updates);
       }
     } finally {
