@@ -52,10 +52,12 @@ const isPasteAction = (value: string) => value === "paste" || value === "Paste" 
 // Anchored to the end so a command like `echo password:` in earlier output
 // doesn't trigger it unless it's actually the last thing printed. A short gap
 // is allowed between the keyword and the colon so real prompts that interpose
-// text still match — e.g. "[sudo] password for zhengshan:" and
-// "Enter passphrase for key '/home/x/.ssh/id_rsa':". A false positive here only
-// costs one un-recorded command, so we err toward catching more prompts.
-const PASSWORD_PROMPT_RE = /(?:password|passphrase|passcode|verification code|密码|口令|密钥|验证码)[^:：\n]{0,40}[:：]\s*$/i;
+// Matches the tail of a terminal line that prompts for a secret. Covers
+// English + Chinese prompts from sudo/su/mysql/ssh-keygen/passphrase/TOTP etc.
+// The keyword must be the last word-ish token before the colon (allowing only a
+// short trailing qualifier like "for user"), so MOTD/banner/help lines that
+// merely mention "password" don't trip it. Anchored to end-of-line.
+const PASSWORD_PROMPT_RE = /(?:password|passphrase|passcode|verification code|密码|口令|密钥短语|验证码)(?:\s+for\s+\S+)?[:：]\s*$/i;
 
 const writeClipboardText = async (text: string) => {
   const browserWrite = navigator.clipboard?.writeText(text).catch(() => {});
@@ -168,6 +170,9 @@ const bracketedPaste    = new Map<string, boolean>();
 // sudo/mysql/su prompt would be captured verbatim and later surfaced as a
 // completion suggestion.
 const awaitingPassword  = new Map<string, boolean>();
+// Auto-clears awaitingPassword after a few seconds so a stale prompt (or a rare
+// false positive) can't permanently disable history/completions for a tab.
+const awaitingPasswordTimer = new Map<string, ReturnType<typeof setTimeout>>();
 // Resolved completion table per tab. For SSH 'auto', filled in asynchronously
 // by detect_remote_os; for other types it is derived synchronously (see syncTable).
 const tabCommandTable   = new Map<string, CommandTable>();
@@ -266,6 +271,8 @@ export function destroyTerminal(tabId: string): void {
   completionNav.delete(tabId);
   tabInputSenders.delete(tabId);
   bracketedPaste.delete(tabId);
+  const apTimer = awaitingPasswordTimer.get(tabId);
+  if (apTimer) { clearTimeout(apTimer); awaitingPasswordTimer.delete(tabId); }
   awaitingPassword.delete(tabId);
   const inst = terminalInstances.get(tabId);
   if (inst) {
@@ -1012,6 +1019,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           const stripped = payload.replace(ANSI_RE, '');
           if (PASSWORD_PROMPT_RE.test(stripped)) {
             awaitingPassword.set(tab.id, true);
+            // Auto-clear after 5s so a false positive (banner/help text) can't
+            // permanently suppress history/completions. Re-armed on each match.
+            const prev = awaitingPasswordTimer.get(tab.id);
+            if (prev) clearTimeout(prev);
+            awaitingPasswordTimer.set(tab.id, setTimeout(() => {
+              awaitingPassword.delete(tab.id);
+              awaitingPasswordTimer.delete(tab.id);
+            }, 5000));
           }
         }
         renderQueue += payload;
@@ -1087,7 +1102,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       const WRITE_RETRY_MS = 24;
       const WRITE_CHUNK_SIZE = 16 * 1024;
       const WRITE_INVOKE_TIMEOUT_MS = 1500;
-      const WRITE_MAX_IN_FLIGHT = 4;
+      // Serialize writes: only one chunk in flight at a time. Parallel dispatch
+      // (with >1 in-flight) reorders bytes on retry — a failed chunk is pushed
+      // back to the queue head while later chunks may already have landed,
+      // corrupting large pastes. Serial dispatch preserves byte order.
+      const WRITE_MAX_IN_FLIGHT = 1;
       const scheduleWriteFlush = (delayMs = WRITE_FLUSH_MS) => {
         if (writeTimer || writeDisposed) return;
         writeTimer = setTimeout(flushWrites, delayMs);
@@ -1114,11 +1133,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           writesInFlight += 1;
           invokeWrite(payload)
             .catch((err) => {
-              // SSH writes go through an mpsc channel that blocks (await) when
-              // full instead of returning "input buffer full", so an IPC timeout
-              // also means the chunk didn't make it — requeue and retry rather
-              // than silently dropping the bytes (which corrupts pasted input).
-              if (tab.type === "ssh" && (String(err).includes("input buffer full") || String(err).includes("timeout"))) {
+              // Any interactive backend can transiently reject a write when its
+              // input buffer is full (PTY/serial return "input buffer full";
+              // SSH's mpsc channel blocks until the 1.5s IPC timeout). Requeue
+              // the chunk and retry with backoff instead of dropping bytes,
+              // which would corrupt pasted input on any backend type.
+              if (isInteractiveTerminal(tab.type) && (String(err).includes("buffer full") || String(err).includes("timeout"))) {
                 writeQueue = payload + writeQueue;
                 scheduleWriteFlush(WRITE_RETRY_MS);
               }
@@ -1206,6 +1226,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               if (trimmed.length > 0 && !awaitingPassword.get(tab.id)) {
                 commandHistory.record(trimmed, { scope, cwd, sessionType });
               }
+              const apT = awaitingPasswordTimer.get(tab.id);
+              if (apT) { clearTimeout(apT); awaitingPasswordTimer.delete(tab.id); }
               awaitingPassword.delete(tab.id);
               buf = '';
               hideCompletions();
@@ -1378,6 +1400,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         writeQueue = "";
         const pendingResize = pendingBackendResize.get(tab.id);
         if (pendingResize) { clearTimeout(pendingResize); pendingBackendResize.delete(tab.id); }
+        // Reset the first-resize guard so a remount (split toggle, StrictMode)
+        // re-sends an immediate SIGWINCH instead of falling into the debounce
+        // branch — otherwise TUIs render at a stale size after reparenting.
+        sentFirstResize.delete(tab.id);
         try { dataDispose.dispose(); } catch {}
         try { resizeDispose?.dispose(); } catch {}
         try { osc7Dispose.dispose(); } catch {}
@@ -1394,6 +1420,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         tabCompletionIdx.delete(tab.id);
         completionNav.delete(tab.id);
         bracketedPaste.delete(tab.id);
+        const apT = awaitingPasswordTimer.get(tab.id);
+        if (apT) { clearTimeout(apT); awaitingPasswordTimer.delete(tab.id); }
         awaitingPassword.delete(tab.id);
       });
 
@@ -1479,8 +1507,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // between disconnect and now). Failure re-arms so another keypress retries.
       const reconnect = async (): Promise<void> => {
         instance?.terminal.write(`\r\n\x1b[90m${t('term_reconnecting')}\x1b[0m\r\n`);
+        // Reset ALL per-tab completion/prompt state — the new shell is a fresh
+        // login (possibly a different user/host), so stale cwd, a lingering
+        // password flag, or an unclosed bracketed-paste mode from the old
+        // session would corrupt completions or silently swallow input.
         tabCommandTable.delete(tab.id);
+        tabCwd.delete(tab.id);
+        tabCompletions.delete(tab.id);
+        tabCompletionIdx.delete(tab.id);
+        completionNav.delete(tab.id);
         inputBuffers.set(tab.id, '');
+        bracketedPaste.delete(tab.id);
+        const apTimer = awaitingPasswordTimer.get(tab.id);
+        if (apTimer) { clearTimeout(apTimer); awaitingPasswordTimer.delete(tab.id); }
+        awaitingPassword.delete(tab.id);
         const rawFreshSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
         const freshSession = rawFreshSession ? applyGroupDefaults(rawFreshSession, loadGroupDefaults()) : rawFreshSession;
         if (tab.type === 'ssh') {
