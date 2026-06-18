@@ -393,6 +393,7 @@
   "sftp_editor_save": "保存",
   "sftp_editor_saving": "保存中...",
   "sftp_editor_revert": "撤销修改",
+  "sftp_editor_discard_confirm": "有未保存的修改，确定放弃并关闭吗？",
   "sftp_editor_lines": "{{count}} 行",
   "sftp_editor_size": "{{size}} 字节",
   "update_available": "发现新版本",

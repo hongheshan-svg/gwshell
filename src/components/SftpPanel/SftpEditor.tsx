@@ -55,6 +55,14 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({ sessionId, remotePath, f
     setContent(originalContent);
   };
 
+  // Guard close so unsaved edits aren't silently lost via the X button.
+  const handleClose = () => {
+    if (isModified && !window.confirm(t('sftp_editor_discard_confirm'))) {
+      return;
+    }
+    onClose();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
@@ -79,7 +87,7 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({ sessionId, remotePath, f
   const lineCount = content.split('\n').length;
 
   return (
-    <div className="sftp-editor-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget && !isModified) onClose(); }}>
+    <div className="sftp-editor-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
       <div className="sftp-editor-dialog">
         {/* Header */}
         <div className="sftp-editor-header">
@@ -107,7 +115,7 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({ sessionId, remotePath, f
             </button>
             <button
               className="sftp-editor-btn"
-              onClick={onClose}
+              onClick={handleClose}
               title={t('sftp_close')}
             >
               <X size={14} />

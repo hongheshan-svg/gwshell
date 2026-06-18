@@ -374,6 +374,10 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
     });
 
   const handleDelete = async (entry: SftpEntry) => {
+    // Remote deletion is irreversible (no recycle bin) — confirm first.
+    if (!window.confirm(t('common_delete_confirm_body', { name: entry.name }))) {
+      return;
+    }
     try {
       if (entry.is_dir) {
         await invoke('sftp_rmdir', { sessionId, path: entry.path });

@@ -393,6 +393,7 @@
   "sftp_editor_save": "Save",
   "sftp_editor_saving": "Saving...",
   "sftp_editor_revert": "Revert Changes",
+  "sftp_editor_discard_confirm": "Discard unsaved changes and close?",
   "sftp_editor_lines": "{{count}} lines",
   "sftp_editor_size": "{{size}} bytes",
   "update_available": "Update Available",
