@@ -6,6 +6,15 @@ use std::sync::Arc;
 use tokio::time::{timeout, Duration};
 
 pub async fn execute_tool(ssh: Arc<SshManager>, call: AgentToolCall) -> AgentToolResult {
+    let command = if call.tool == AgentToolName::RunCommand {
+        match call.payload.get("command").and_then(|value| value.as_str()) {
+            Some(command) if !command.trim().is_empty() => Some(command.to_string()),
+            _ => return failed_result(call.id, "missing or invalid command".to_string()),
+        }
+    } else {
+        None
+    };
+
     let actual_risk = classify_tool_call(&call);
     if actual_risk == AgentRisk::Blocked || actual_risk == AgentRisk::High {
         return failed_result(call.id, format!("blocked by policy: {:?}", actual_risk));
@@ -13,14 +22,10 @@ pub async fn execute_tool(ssh: Arc<SshManager>, call: AgentToolCall) -> AgentToo
 
     match call.tool {
         AgentToolName::RunCommand => {
-            let command = call
-                .payload
-                .get("command")
-                .and_then(|value| value.as_str())
-                .unwrap_or("");
+            let command = command.unwrap_or_default();
             match timeout(
                 Duration::from_secs(20),
-                ssh.ssh_exec(&call.target_session_id, command),
+                ssh.ssh_exec(&call.target_session_id, &command),
             )
             .await
             {
@@ -75,6 +80,62 @@ mod tests {
         assert_eq!(result.call_id, "call-1");
         assert_eq!(result.output, "");
         assert_eq!(result.error.as_deref(), Some("blocked by policy: High"));
+        assert!(result.verification.is_none());
+    }
+
+    #[tokio::test]
+    async fn invalid_run_command_payload_fails_before_ssh_execution() {
+        let payloads = [
+            serde_json::json!({}),
+            serde_json::json!({ "command": 42 }),
+            serde_json::json!({ "command": "   " }),
+        ];
+
+        for (idx, payload) in payloads.into_iter().enumerate() {
+            let call_id = format!("call-invalid-{}", idx);
+            let call = AgentToolCall {
+                id: call_id.clone(),
+                tool: AgentToolName::RunCommand,
+                target_session_id: "missing-session".into(),
+                payload,
+                risk: AgentRisk::ReadOnly,
+                reason: "invalid command".into(),
+                expected_result: None,
+                verify: None,
+            };
+
+            let result = execute_tool(Arc::new(SshManager::new()), call).await;
+
+            assert!(!result.ok);
+            assert_eq!(result.call_id, call_id);
+            assert_eq!(result.output, "");
+            assert_eq!(result.error.as_deref(), Some("missing or invalid command"));
+            assert!(result.verification.is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn unsupported_tool_fails_without_ssh_execution() {
+        let call = AgentToolCall {
+            id: "call-3".into(),
+            tool: AgentToolName::StreamLog,
+            target_session_id: "missing-session".into(),
+            payload: serde_json::json!({}),
+            risk: AgentRisk::ReadOnly,
+            reason: "stream logs".into(),
+            expected_result: None,
+            verify: None,
+        };
+
+        let result = execute_tool(Arc::new(SshManager::new()), call).await;
+
+        assert!(!result.ok);
+        assert_eq!(result.call_id, "call-3");
+        assert_eq!(result.output, "");
+        assert_eq!(
+            result.error.as_deref(),
+            Some("unsupported tool for this action path")
+        );
         assert!(result.verification.is_none());
     }
 }

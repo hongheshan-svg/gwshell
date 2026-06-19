@@ -23,6 +23,7 @@ use tauri::{AppHandle, Manager, State};
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent::types::{AgentAutonomyLevel, AgentSessionStart};
     use session::{AuthMethod, SessionType};
 
     #[test]
@@ -58,6 +59,20 @@ mod tests {
         assert!(redacted.totp_code.is_none());
         assert!(redacted.jump_password.is_none());
         assert!(redacted.proxy_password.is_none());
+    }
+
+    #[test]
+    fn agent_session_start_validation_rejects_blank_target_session() {
+        let request = AgentSessionStart {
+            target_session_id: "  ".into(),
+            objective: "inspect disk".into(),
+            autonomy: AgentAutonomyLevel::Observe,
+        };
+
+        assert_eq!(
+            validate_agent_session_start(&request),
+            Err("Target session is required".to_string())
+        );
     }
 }
 
@@ -839,10 +854,18 @@ async fn start_agent_session(
     request: agent::types::AgentSessionStart,
     state: State<'_, Arc<AppState>>,
 ) -> Result<agent::types::AgentSessionInfo, String> {
+    validate_agent_session_start(&request)?;
+    Ok(state.agent_manager.start_session(request))
+}
+
+fn validate_agent_session_start(request: &agent::types::AgentSessionStart) -> Result<(), String> {
+    if request.target_session_id.trim().is_empty() {
+        return Err("Target session is required".into());
+    }
     if request.objective.trim().is_empty() {
         return Err("Objective is required".into());
     }
-    Ok(state.agent_manager.start_session(request))
+    Ok(())
 }
 
 #[tauri::command]

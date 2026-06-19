@@ -28,12 +28,7 @@ impl AgentManager {
     }
 
     pub fn cancel_session(&self, agent_session_id: &str) -> bool {
-        let mut sessions = self.sessions.lock();
-        let Some(info) = sessions.get_mut(agent_session_id) else {
-            return false;
-        };
-        info.status = AgentSessionStatus::Cancelled;
-        true
+        self.sessions.lock().remove(agent_session_id).is_some()
     }
 }
 
@@ -67,6 +62,7 @@ mod tests {
         assert!(info.started_at > 0);
         assert_eq!(info.status, AgentSessionStatus::Running);
         assert!(manager.cancel_session(&info.id));
+        assert!(!manager.cancel_session(&info.id));
         assert!(!manager.cancel_session("missing"));
     }
 }
