@@ -49,8 +49,8 @@ export interface AgentToolCall {
   payload: Record<string, unknown>;
   risk: AgentRisk;
   reason: string;
-  expected_result?: string;
-  verify?: AgentToolCall;
+  expected_result?: string | null;
+  verify?: AgentToolCall | null;
 }
 
 export interface AgentToolResult {
