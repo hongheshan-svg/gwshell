@@ -111,15 +111,10 @@ fn normalized_command(command: &str) -> Option<NormalizedCommand<'_>> {
 
     while idx < tokens.len() {
         match command_word_name(tokens[idx]) {
-            "sudo" | "command" => idx += 1,
+            "sudo" => idx = skip_sudo_prefix(&tokens, idx + 1),
+            "command" => idx += 1,
             "env" => {
-                idx += 1;
-                while tokens
-                    .get(idx)
-                    .is_some_and(|token| is_env_assignment(token))
-                {
-                    idx += 1;
-                }
+                idx = skip_env_prefix(&tokens, idx + 1);
             }
             _ => break,
         }
@@ -150,6 +145,47 @@ fn is_env_assignment(token: &str) -> bool {
     token
         .split_once('=')
         .is_some_and(|(key, _)| !key.is_empty() && key.chars().all(is_env_key_char))
+}
+
+fn skip_sudo_prefix(tokens: &[&str], mut idx: usize) -> usize {
+    while let Some(token) = tokens.get(idx) {
+        match *token {
+            "--" => return idx + 1,
+            "-n" | "--non-interactive" => idx += 1,
+            "-u" | "--user" | "-g" | "--group" | "-h" | "--host" | "-p" | "--prompt" => idx += 2,
+            _ if token.starts_with("--user=")
+                || token.starts_with("--group=")
+                || token.starts_with("--host=")
+                || token.starts_with("--prompt=") =>
+            {
+                idx += 1
+            }
+            _ if short_sudo_option_with_attached_value(token) => idx += 1,
+            _ if token.starts_with('-') => idx += 1,
+            _ => break,
+        }
+    }
+    idx
+}
+
+fn short_sudo_option_with_attached_value(token: &str) -> bool {
+    token.len() > 2
+        && ["-u", "-g", "-h", "-p"]
+            .iter()
+            .any(|prefix| token.starts_with(prefix))
+}
+
+fn skip_env_prefix(tokens: &[&str], mut idx: usize) -> usize {
+    while let Some(token) = tokens.get(idx) {
+        match *token {
+            "-i" | "--ignore-environment" => idx += 1,
+            "-u" | "--unset" | "-C" | "--chdir" => idx += 2,
+            _ if token.starts_with("--unset=") || token.starts_with("--chdir=") => idx += 1,
+            _ if is_env_assignment(token) => idx += 1,
+            _ => break,
+        }
+    }
+    idx
 }
 
 fn is_env_key_char(ch: char) -> bool {
@@ -260,6 +296,9 @@ fn is_mutating_journalctl_command(command: &str) -> bool {
 }
 
 fn classify_read_file_payload(payload: &serde_json::Value) -> AgentRisk {
+    let mut saw_recognized_field = false;
+    let mut risk = None;
+
     for key in [
         "path",
         "file",
@@ -268,11 +307,21 @@ fn classify_read_file_payload(payload: &serde_json::Value) -> AgentRisk {
         "target",
         "target_path",
     ] {
-        if let Some(path) = payload.get(key).and_then(|value| value.as_str()) {
-            return classify_file_read_path(path);
+        if let Some(value) = payload.get(key) {
+            saw_recognized_field = true;
+            let field_risk = value
+                .as_str()
+                .map(classify_file_read_path)
+                .unwrap_or(AgentRisk::High);
+            risk = Some(stronger_risk(risk, field_risk));
         }
     }
-    AgentRisk::ReadOnly
+
+    if saw_recognized_field {
+        risk.unwrap_or(AgentRisk::High)
+    } else {
+        AgentRisk::High
+    }
 }
 
 fn classify_file_read_path(path: &str) -> AgentRisk {
@@ -324,8 +373,9 @@ fn classify_proc_cat_command(command: &str) -> Option<AgentRisk> {
 fn sensitive_path_risk(path: &str) -> Option<AgentRisk> {
     let path = path
         .trim_matches(|ch| ch == '\'' || ch == '"')
+        .replace('\\', "/")
         .to_ascii_lowercase();
-    let file_name = path.rsplit('/').next().unwrap_or(&path);
+    let file_name = path.rsplit('/').next().unwrap_or(path.as_str());
 
     if path.starts_with("/proc/")
         && (path.contains("/../") || path.ends_with("/..") || path.contains("/environ"))
@@ -517,6 +567,79 @@ mod tests {
     }
 
     #[test]
+    fn wrapper_options_do_not_bypass_sensitive_read_policy() {
+        assert_eq!(
+            classify_command("sudo -n cat ~/.ssh/id_rsa"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("sudo -u app cat /proc/self/environ"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("sudo -- cat ~/.ssh/id_rsa"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("env -i cat ~/.ssh/id_rsa"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("sudo systemctl reload nginx"),
+            AgentRisk::Low
+        );
+        assert_eq!(
+            classify_command("sudo systemctl stop sshd"),
+            AgentRisk::High
+        );
+    }
+
+    #[test]
+    fn read_file_payloads_fail_closed_and_use_strongest_path_risk() {
+        assert_eq!(
+            classify_tool_call(&read_file_call_payload(serde_json::json!({}))),
+            AgentRisk::High
+        );
+        assert_eq!(
+            classify_tool_call(&read_file_call_payload(serde_json::json!({
+                "path": "/var/log/app.log",
+                "target_path": "~/.ssh/id_rsa"
+            }))),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_tool_call(&read_file_call_payload(serde_json::json!({
+                "path": ["~/.ssh/id_rsa"]
+            }))),
+            AgentRisk::High
+        );
+        assert_eq!(
+            classify_tool_call(&read_file_call_payload(serde_json::json!({
+                "path": "/var/log/app.log"
+            }))),
+            AgentRisk::ReadOnly
+        );
+    }
+
+    #[test]
+    fn windows_secret_paths_are_not_read_only() {
+        assert_eq!(
+            classify_command("cat C:\\Users\\me\\.ssh\\id_rsa"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("cat C:\\Users\\me\\.aws\\credentials"),
+            AgentRisk::High
+        );
+        assert_eq!(
+            classify_tool_call(&read_file_call_payload(serde_json::json!({
+                "path": "C:\\Users\\me\\.kube\\config"
+            }))),
+            AgentRisk::High
+        );
+    }
+
+    #[test]
     fn dangerous_commands_are_blocked_or_high() {
         assert_eq!(classify_command("rm -rf /"), AgentRisk::Blocked);
         assert_eq!(classify_command("iptables -F"), AgentRisk::Blocked);
@@ -631,11 +754,15 @@ mod tests {
     }
 
     fn read_file_call(path: &str) -> AgentToolCall {
+        read_file_call_payload(serde_json::json!({ "path": path }))
+    }
+
+    fn read_file_call_payload(payload: serde_json::Value) -> AgentToolCall {
         AgentToolCall {
             id: "c1".into(),
             tool: AgentToolName::ReadFile,
             target_session_id: "s1".into(),
-            payload: serde_json::json!({ "path": path }),
+            payload,
             risk: AgentRisk::ReadOnly,
             reason: "read file".into(),
             expected_result: None,
