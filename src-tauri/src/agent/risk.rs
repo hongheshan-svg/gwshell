@@ -53,34 +53,33 @@ pub fn classify_command(command: &str) -> AgentRisk {
     if let Some(risk) = classify_proc_cat_command(&c) {
         return risk;
     }
-    if matches_command(&c, "df")
-        || matches_command(&c, "free")
-        || matches_command(&c, "journalctl")
-        || matches_command(&c, "systemctl status")
-        || matches_command(&c, "ss")
-        || matches_command(&c, "ps")
-        || matches_command(&c, "docker logs")
-        || matches_command(&c, "docker ps")
-        || c.starts_with("cat /proc/")
-        || matches_command(&c, "tail")
-        || matches_command(&c, "grep")
+    if matches_normalized_command(&c, &["df"])
+        || matches_normalized_command(&c, &["free"])
+        || matches_normalized_command(&c, &["journalctl"])
+        || matches_normalized_command(&c, &["systemctl", "status"])
+        || matches_normalized_command(&c, &["ss"])
+        || matches_normalized_command(&c, &["ps"])
+        || matches_normalized_command(&c, &["docker", "logs"])
+        || matches_normalized_command(&c, &["docker", "ps"])
+        || matches_normalized_command(&c, &["tail"])
+        || matches_normalized_command(&c, &["grep"])
     {
         return AgentRisk::ReadOnly;
     }
-    if matches_command(&c, "systemctl reload") {
+    if matches_normalized_command(&c, &["systemctl", "reload"]) {
         return AgentRisk::Low;
     }
-    if matches_command(&c, "systemctl restart")
-        || matches_command(&c, "docker restart")
-        || matches_command(&c, "kill")
+    if matches_normalized_command(&c, &["systemctl", "restart"])
+        || matches_normalized_command(&c, &["docker", "restart"])
+        || matches_normalized_command(&c, &["kill"])
     {
         return AgentRisk::Medium;
     }
-    if matches_command(&c, "rm")
-        || matches_command(&c, "truncate")
-        || matches_command(&c, "reboot")
-        || matches_command(&c, "shutdown")
-        || matches_command(&c, "systemctl stop")
+    if matches_normalized_command(&c, &["rm"])
+        || matches_normalized_command(&c, &["truncate"])
+        || matches_normalized_command(&c, &["reboot"])
+        || matches_normalized_command(&c, &["shutdown"])
+        || matches_normalized_command(&c, &["systemctl", "stop"])
     {
         return AgentRisk::High;
     }
@@ -101,12 +100,60 @@ fn has_shell_control_syntax(command: &str) -> bool {
         || command.contains('<')
 }
 
-fn matches_command(command: &str, prefix: &str) -> bool {
-    command == prefix
-        || command
-            .strip_prefix(prefix)
-            .and_then(|rest| rest.chars().next())
-            .is_some_and(char::is_whitespace)
+struct NormalizedCommand<'a> {
+    name: &'a str,
+    args: Vec<&'a str>,
+}
+
+fn normalized_command(command: &str) -> Option<NormalizedCommand<'_>> {
+    let tokens: Vec<&str> = command.split_whitespace().map(clean_token).collect();
+    let mut idx = 0;
+
+    while idx < tokens.len() {
+        match command_word_name(tokens[idx]) {
+            "sudo" | "command" => idx += 1,
+            "env" => {
+                idx += 1;
+                while tokens
+                    .get(idx)
+                    .is_some_and(|token| is_env_assignment(token))
+                {
+                    idx += 1;
+                }
+            }
+            _ => break,
+        }
+    }
+
+    let token = tokens.get(idx)?;
+    Some(NormalizedCommand {
+        name: command_word_name(token),
+        args: tokens[idx + 1..].to_vec(),
+    })
+}
+
+fn matches_normalized_command(command: &str, words: &[&str]) -> bool {
+    let Some((name, args)) = words.split_first() else {
+        return false;
+    };
+    let Some(command) = normalized_command(command) else {
+        return false;
+    };
+    command.name == *name
+        && args
+            .iter()
+            .enumerate()
+            .all(|(idx, expected)| command.args.get(idx).is_some_and(|arg| arg == expected))
+}
+
+fn is_env_assignment(token: &str) -> bool {
+    token
+        .split_once('=')
+        .is_some_and(|(key, _)| !key.is_empty() && key.chars().all(is_env_key_char))
+}
+
+fn is_env_key_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || ch == '_'
 }
 
 fn contains_destructive_dd_command(command: &str) -> bool {
@@ -200,14 +247,16 @@ fn classify_wrapped_destructive_command(command: &str) -> Option<AgentRisk> {
 }
 
 fn is_mutating_journalctl_command(command: &str) -> bool {
-    matches_command(command, "journalctl")
-        && command.split_whitespace().skip(1).any(|part| {
-            part == "--rotate"
-                || part == "--flush"
-                || part.starts_with("--vacuum-time")
-                || part.starts_with("--vacuum-size")
-                || part.starts_with("--vacuum-files")
-        })
+    normalized_command(command).is_some_and(|command| {
+        command.name == "journalctl"
+            && command.args.iter().any(|part| {
+                *part == "--rotate"
+                    || *part == "--flush"
+                    || part.starts_with("--vacuum-time")
+                    || part.starts_with("--vacuum-size")
+                    || part.starts_with("--vacuum-files")
+            })
+    })
 }
 
 fn classify_read_file_payload(payload: &serde_json::Value) -> AgentRisk {
@@ -231,16 +280,14 @@ fn classify_file_read_path(path: &str) -> AgentRisk {
 }
 
 fn classify_sensitive_read_command(command: &str) -> Option<AgentRisk> {
-    if !(matches_command(command, "cat")
-        || matches_command(command, "tail")
-        || matches_command(command, "grep"))
-    {
+    let command = normalized_command(command)?;
+    if !matches!(command.name, "cat" | "tail" | "grep") {
         return None;
     }
 
-    let is_grep = matches_command(command, "grep");
+    let is_grep = command.name == "grep";
     let mut risk = None;
-    for token in command.split_whitespace().skip(1) {
+    for token in command.args {
         let token = token.trim_matches(|ch| ch == '\'' || ch == '"');
         if let Some(path_risk) = sensitive_path_risk(token) {
             risk = Some(stronger_risk(risk, path_risk));
@@ -252,12 +299,13 @@ fn classify_sensitive_read_command(command: &str) -> Option<AgentRisk> {
 }
 
 fn classify_proc_cat_command(command: &str) -> Option<AgentRisk> {
-    if !matches_command(command, "cat") {
+    let command = normalized_command(command)?;
+    if command.name != "cat" {
         return None;
     }
 
     let mut proc_risk = None;
-    for token in command.split_whitespace().skip(1) {
+    for token in command.args {
         let token = clean_token(token);
         if !token.starts_with("/proc/") {
             continue;
@@ -444,6 +492,31 @@ mod tests {
     }
 
     #[test]
+    fn wrapped_read_commands_use_sensitive_path_policy() {
+        assert_eq!(
+            classify_command("sudo cat /proc/self/environ"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("/bin/tail /proc/self/environ"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("sudo grep AWS_SECRET_ACCESS_KEY ~/.config"),
+            AgentRisk::High
+        );
+        assert_eq!(
+            classify_command("/usr/bin/cat ~/.ssh/id_rsa"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(classify_command("cat /proc/cpuinfo"), AgentRisk::ReadOnly);
+        assert_eq!(
+            classify_command("grep cpu /proc/cpuinfo"),
+            AgentRisk::ReadOnly
+        );
+    }
+
+    #[test]
     fn dangerous_commands_are_blocked_or_high() {
         assert_eq!(classify_command("rm -rf /"), AgentRisk::Blocked);
         assert_eq!(classify_command("iptables -F"), AgentRisk::Blocked);
@@ -481,6 +554,26 @@ mod tests {
         assert_eq!(
             classify_command("sudo systemctl stop sshd"),
             AgentRisk::High
+        );
+    }
+
+    #[test]
+    fn wrapped_reload_commands_remain_low_risk() {
+        assert_eq!(
+            classify_command("sudo systemctl reload nginx"),
+            AgentRisk::Low
+        );
+        assert_eq!(
+            classify_command("/bin/systemctl reload nginx"),
+            AgentRisk::Low
+        );
+        assert_eq!(
+            classify_command("sudo systemctl stop sshd"),
+            AgentRisk::High
+        );
+        assert_eq!(
+            classify_command("systemctl restart nginx"),
+            AgentRisk::Medium
         );
     }
 
