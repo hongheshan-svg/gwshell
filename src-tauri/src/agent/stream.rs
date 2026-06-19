@@ -54,4 +54,64 @@ mod tests {
             "docker logs --tail=500 -f 'web'\\''app'"
         );
     }
+
+    #[test]
+    fn escapes_journal_unit_metacharacters_as_one_argument() {
+        assert_eq!(
+            journal_tail_command(Some("nginx;$(touch /tmp/pwn)`whoami`\nnext"), 20),
+            "journalctl -u 'nginx;$(touch /tmp/pwn)`whoami`\nnext' -n 20 -f --no-pager"
+        );
+    }
+
+    #[test]
+    fn escapes_docker_container_metacharacters_as_one_argument() {
+        assert_eq!(
+            docker_logs_tail_command("web'app;$(id)`whoami`", 20),
+            "docker logs --tail=20 -f 'web'\\''app;$(id)`whoami`'"
+        );
+    }
+
+    #[test]
+    fn escapes_file_path_metacharacters_as_one_argument() {
+        assert_eq!(
+            file_tail_command("/var/log/$(id)\napp.log", 20),
+            "tail -n 20 -F '/var/log/$(id)\napp.log'"
+        );
+    }
+
+    #[test]
+    fn clamps_journal_lines_to_supported_range() {
+        assert_eq!(
+            journal_tail_command(None, 0),
+            "journalctl -n 20 -f --no-pager"
+        );
+        assert_eq!(
+            journal_tail_command(None, 999),
+            "journalctl -n 500 -f --no-pager"
+        );
+    }
+
+    #[test]
+    fn clamps_docker_lines_to_supported_range() {
+        assert_eq!(
+            docker_logs_tail_command("web", 0),
+            "docker logs --tail=20 -f 'web'"
+        );
+        assert_eq!(
+            docker_logs_tail_command("web", 999),
+            "docker logs --tail=500 -f 'web'"
+        );
+    }
+
+    #[test]
+    fn clamps_file_lines_to_supported_range() {
+        assert_eq!(
+            file_tail_command("/var/log/app.log", 0),
+            "tail -n 20 -F '/var/log/app.log'"
+        );
+        assert_eq!(
+            file_tail_command("/var/log/app.log", 999),
+            "tail -n 500 -F '/var/log/app.log'"
+        );
+    }
 }

@@ -60,7 +60,11 @@ where
     let mut channel = channel;
     loop {
         tokio::select! {
-            _ = stop.notified() => break,
+            _ = stop.notified() => {
+                // Stopping a stream should terminate this channel and its remote tail process.
+                let _ = channel.close().await;
+                break;
+            }
             msg = channel.wait() => {
                 match msg {
                     Some(ChannelMsg::Data { data }) | Some(ChannelMsg::ExtendedData { data, .. }) => {
