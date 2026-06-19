@@ -27,6 +27,9 @@ pub fn classify_command(command: &str) -> AgentRisk {
     if contains_root_destructive_rm_command(&c) {
         return AgentRisk::Blocked;
     }
+    if contains_blocked_passwd_command(&c) {
+        return AgentRisk::Blocked;
+    }
     if c.contains("rm -rf /")
         || c.contains("mkfs")
         || c.contains("userdel ")
@@ -35,9 +38,6 @@ pub fn classify_command(command: &str) -> AgentRisk {
         || c.contains("ufw ")
         || c.contains("firewall-cmd")
     {
-        return AgentRisk::Blocked;
-    }
-    if matches_normalized_command(&c, &["passwd"]) {
         return AgentRisk::Blocked;
     }
     if let Some(risk) = classify_wrapped_destructive_command(&c) {
@@ -237,6 +237,16 @@ fn contains_root_destructive_rm_command(command: &str) -> bool {
     command
         .split(is_shell_segment_separator)
         .any(segment_contains_root_destructive_rm)
+}
+
+fn contains_blocked_passwd_command(command: &str) -> bool {
+    command
+        .split(is_shell_segment_separator)
+        .any(segment_contains_blocked_passwd)
+}
+
+fn segment_contains_blocked_passwd(segment: &str) -> bool {
+    normalized_command(segment).is_some_and(|command| command.name == "passwd")
 }
 
 fn segment_contains_root_destructive_rm(segment: &str) -> bool {
@@ -795,6 +805,19 @@ mod tests {
         assert_eq!(
             classify_command("systemctl restart nginx"),
             AgentRisk::Medium
+        );
+    }
+
+    #[test]
+    fn composed_passwd_commands_are_blocked() {
+        assert_eq!(classify_command("true; passwd"), AgentRisk::Blocked);
+        assert_eq!(
+            classify_command("echo ok && /usr/bin/passwd"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("sudo sh -c 'passwd root'"),
+            AgentRisk::Blocked
         );
     }
 

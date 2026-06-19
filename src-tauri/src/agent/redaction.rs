@@ -35,7 +35,8 @@ pub fn redact_secrets(input: &str) -> String {
 
 fn redact_sensitive_line(line: &str) -> String {
     let redacted_authorization = redact_authorization_line(line);
-    redact_assignment_line(&redacted_authorization)
+    let redacted_assignment = redact_assignment_line(&redacted_authorization);
+    redact_standalone_bearer_tokens(&redacted_assignment)
 }
 
 fn redact_authorization_line(line: &str) -> String {
@@ -136,6 +137,61 @@ fn authorization_value_range(line: &str, lower: &str, idx: usize) -> Option<(usi
     }
 
     None
+}
+
+fn redact_standalone_bearer_tokens(line: &str) -> String {
+    let lower = line.to_ascii_lowercase();
+    let mut out = String::new();
+    let mut last = 0;
+    let mut idx = 0;
+
+    while idx < line.len() {
+        if !line.is_char_boundary(idx) {
+            idx += 1;
+            continue;
+        }
+
+        if let Some((value_start, value_end)) = standalone_bearer_value_range(line, &lower, idx) {
+            out.push_str(&line[last..value_start]);
+            out.push_str("[redacted]");
+            last = value_end;
+            idx = value_end;
+        } else {
+            idx = next_char_index(line, idx);
+        }
+    }
+
+    out.push_str(&line[last..]);
+    out
+}
+
+fn standalone_bearer_value_range(line: &str, lower: &str, idx: usize) -> Option<(usize, usize)> {
+    let bytes = line.as_bytes();
+    let lower_bytes = lower.as_bytes();
+
+    if !has_key_boundary_before(bytes, idx) || !lower_bytes.get(idx..)?.starts_with(b"bearer") {
+        return None;
+    }
+
+    let after_bearer = idx + "bearer".len();
+    if bytes
+        .get(after_bearer)
+        .is_some_and(|byte| is_unquoted_key_char(*byte))
+    {
+        return None;
+    }
+
+    let value_start = skip_ascii_whitespace(bytes, after_bearer);
+    if value_start == after_bearer || value_start >= line.len() {
+        return None;
+    }
+
+    let value_end = find_standalone_bearer_value_end(line, value_start);
+    if value_end == value_start {
+        return None;
+    }
+
+    Some((value_start, value_end))
 }
 
 fn redact_assignment_line(line: &str) -> String {
@@ -320,6 +376,15 @@ fn find_unquoted_value_end(line: &str, start: usize) -> usize {
     line.len()
 }
 
+fn find_standalone_bearer_value_end(line: &str, start: usize) -> usize {
+    for (offset, ch) in line[start..].char_indices() {
+        if ch.is_whitespace() || matches!(ch, '&' | ',' | '}' | '\'' | '"') {
+            return start + offset;
+        }
+    }
+    line.len()
+}
+
 fn next_char_index(line: &str, idx: usize) -> usize {
     line[idx..]
         .chars()
@@ -367,6 +432,15 @@ mod tests {
         assert!(!redacted.contains("dXNlcjpwYXNz"));
         assert!(!redacted.contains("Basic abc"));
         assert!(!redacted.contains("keep-redacting"));
+    }
+
+    #[test]
+    fn redacts_standalone_bearer_tokens() {
+        let text = "Bearer abc123\ncurl -H 'Authorization: Bearer sk-test'";
+        let redacted = redact_secrets(text);
+        assert!(redacted.contains("Bearer [redacted]"));
+        assert!(!redacted.contains("abc123"));
+        assert!(!redacted.contains("sk-test"));
     }
 
     #[test]
