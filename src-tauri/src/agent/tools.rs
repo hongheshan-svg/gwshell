@@ -6,6 +6,11 @@ use std::sync::Arc;
 use tokio::time::{timeout, Duration};
 
 pub async fn execute_tool(ssh: Arc<SshManager>, call: AgentToolCall) -> AgentToolResult {
+    let actual_risk = classify_tool_call(&call);
+    if actual_risk == AgentRisk::Blocked || actual_risk == AgentRisk::High {
+        return failed_result(call.id, format!("blocked by policy: {:?}", actual_risk));
+    }
+
     let command = if call.tool == AgentToolName::RunCommand {
         match call.payload.get("command").and_then(|value| value.as_str()) {
             Some(command) if !command.trim().is_empty() => Some(command.to_string()),
@@ -14,11 +19,6 @@ pub async fn execute_tool(ssh: Arc<SshManager>, call: AgentToolCall) -> AgentToo
     } else {
         None
     };
-
-    let actual_risk = classify_tool_call(&call);
-    if actual_risk == AgentRisk::Blocked || actual_risk == AgentRisk::High {
-        return failed_result(call.id, format!("blocked by policy: {:?}", actual_risk));
-    }
 
     match call.tool {
         AgentToolName::RunCommand => {
@@ -84,7 +84,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn invalid_run_command_payload_fails_before_ssh_execution() {
+    async fn invalid_run_command_payload_is_policy_blocked_before_ssh_execution() {
         let payloads = [
             serde_json::json!({}),
             serde_json::json!({ "command": 42 }),
@@ -109,7 +109,7 @@ mod tests {
             assert!(!result.ok);
             assert_eq!(result.call_id, call_id);
             assert_eq!(result.output, "");
-            assert_eq!(result.error.as_deref(), Some("missing or invalid command"));
+            assert_eq!(result.error.as_deref(), Some("blocked by policy: Blocked"));
             assert!(result.verification.is_none());
         }
     }
