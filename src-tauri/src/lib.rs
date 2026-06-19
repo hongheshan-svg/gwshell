@@ -64,6 +64,7 @@ mod tests {
 pub struct AppState {
     pub pty_manager: PtyManager,
     pub ssh_manager: Arc<SshManager>,
+    pub agent_manager: Arc<agent::manager::AgentManager>,
     pub serial_manager: SerialManager,
     pub sessions: Mutex<Vec<SessionConfig>>,
     pub db: Database,
@@ -833,6 +834,25 @@ async fn clear_ai_provider_api_key(state: State<'_, Arc<AppState>>) -> Result<()
         .map_err(|e| format!("task join: {}", e))?
 }
 
+#[tauri::command]
+async fn start_agent_session(
+    request: agent::types::AgentSessionStart,
+    state: State<'_, Arc<AppState>>,
+) -> Result<agent::types::AgentSessionInfo, String> {
+    if request.objective.trim().is_empty() {
+        return Err("Objective is required".into());
+    }
+    Ok(state.agent_manager.start_session(request))
+}
+
+#[tauri::command]
+async fn cancel_agent_session(
+    agent_session_id: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<bool, String> {
+    Ok(state.agent_manager.cancel_session(&agent_session_id))
+}
+
 // ---- Quake (dropdown console) ----
 
 /// Toggle the "main" window between hidden and a top-docked "Quake" dropdown.
@@ -1244,6 +1264,7 @@ pub fn run() {
     let app_state = Arc::new(AppState {
         pty_manager: PtyManager::new(),
         ssh_manager: Arc::new(SshManager::new()),
+        agent_manager: Arc::new(agent::manager::AgentManager::new()),
         serial_manager: SerialManager::new(),
         sessions: Mutex::new(initial_sessions),
         db,
@@ -1313,6 +1334,8 @@ pub fn run() {
             save_ai_provider_settings,
             set_ai_provider_api_key,
             clear_ai_provider_api_key,
+            start_agent_session,
+            cancel_agent_session,
             export_sessions_data,
             import_sessions_data,
             import_ssh_config,
