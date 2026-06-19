@@ -67,6 +67,168 @@ Every agent session follows the same loop:
 Observe -> Analyze -> Plan -> Approve/Policy -> Act -> Verify -> Record
 ```
 
+## Architecture Reorganization
+
+The Agent Runtime should be a first-class subsystem beside SSH, PTY, SFTP,
+Docker, metrics, and database. It should not be implemented inside
+`TerminalView`, `ServerPanel`, or ad hoc command handlers.
+
+### Backend Boundary
+
+Current backend shape:
+
+- `src-tauri/src/lib.rs` owns IPC command registration and `AppState`.
+- `AppState` owns `SshManager`, `PtyManager`, `SerialManager`, `Database`, and
+  `MetricsManager`.
+- SSH, SFTP, Docker, metrics, vault, and settings are already separated into
+  backend modules.
+
+Agent shape:
+
+- Add `src-tauri/src/agent/` as a module tree.
+- Add `agent_manager: Arc<AgentManager>` to `AppState`.
+- Keep IPC wrappers in `lib.rs`, but move real agent behavior into
+  `agent/*`.
+- AgentManager owns active agent sessions, cancellation, live log streams, and
+  analysis tasks.
+- Agent tools call existing managers (`SshManager`, SFTP methods, Docker
+  commands, metrics snapshots) instead of duplicating connection logic.
+
+Recommended backend modules:
+
+- `agent/types.rs`
+  - shared serializable structs: sessions, events, evidence, findings, actions,
+    policy, provider settings, audit records
+- `agent/manager.rs`
+  - starts/stops agent sessions, routes events, owns task handles
+- `agent/tools.rs`
+  - typed tool registry over SSH/SFTP/Docker/log sources
+- `agent/stream.rs`
+  - bounded SSH exec streaming for log tails such as `journalctl -f`,
+    `docker logs -f`, and `tail -F`
+- `agent/provider.rs`
+  - OpenAI-compatible streaming client and provider settings
+- `agent/prompt.rs`
+  - fixed system prompt and model request construction
+- `agent/redaction.rs`
+  - secret redaction before persistence or provider calls
+- `agent/risk.rs`
+  - deterministic action risk classifier
+- `agent/policy.rs`
+  - autonomy levels and approval decisions
+- `agent/audit.rs`
+  - report/audit persistence helpers
+
+### Frontend Boundary
+
+Current frontend shape:
+
+- `App.tsx` composes global drawers, modals, terminal/SFTP panes, and lazy
+  feature chunks.
+- `appStore.ts` holds global UI state and session/tab state.
+- `settingsStore.ts` holds user settings.
+- Large feature UIs live under focused component folders.
+
+Agent shape:
+
+- Add `src/stores/agentStore.ts` for Agent-specific state. Do not inflate
+  `appStore.ts` with live model text, evidence, action queues, and audits.
+- Add `src/components/Agent/` as a lazy feature chunk rendered from `App.tsx`.
+- Keep `TerminalView` responsible for terminal I/O only. It may expose an
+  "insert command" callback, but Agent execution goes through backend tools.
+- Add `src/components/Settings/AiSettingsSection.tsx` and keep API-key
+  management out of `settingsStore.ts` because the key is backend-secret state.
+
+Recommended frontend modules:
+
+- `src/types/agent.ts`
+  - TypeScript mirror of Rust serializable structs
+- `src/stores/agentStore.ts`
+  - active agent session id, live status, evidence, analysis stream, action
+    queue, approvals, audit summary
+- `src/lib/agentEvents.ts`
+  - Tauri event subscription helpers with cleanup
+- `src/components/Agent/AgentPanel.tsx`
+  - shell for the right-side panel
+- `src/components/Agent/AgentObjective.tsx`
+  - objective input and autonomy selector
+- `src/components/Agent/AgentSources.tsx`
+  - log/source attachment controls
+- `src/components/Agent/AgentAnalysisStream.tsx`
+  - live model text and structured updates
+- `src/components/Agent/AgentEvidence.tsx`
+  - evidence cards and raw snippets
+- `src/components/Agent/AgentActionQueue.tsx`
+  - proposed actions, risk labels, approval buttons
+- `src/components/Agent/AgentAuditTimeline.tsx`
+  - action and verification history
+
+### Data Flow
+
+```text
+User objective
+  -> start_agent_session IPC
+  -> AgentManager creates AgentSession
+  -> ToolRegistry collects probes/log frames
+  -> Redaction caps and scrubs evidence
+  -> Provider streams AI analysis
+  -> Policy normalizes proposed actions
+  -> Frontend shows action queue
+  -> User approval or policy approval
+  -> ToolRegistry executes
+  -> Verification tool runs
+  -> Audit persists result
+```
+
+### Event Contract
+
+Agent events should be namespaced by agent session id, not terminal tab id:
+
+- `agent-status-{agentSessionId}`
+- `agent-evidence-{agentSessionId}`
+- `agent-analysis-delta-{agentSessionId}`
+- `agent-analysis-update-{agentSessionId}`
+- `agent-action-proposed-{agentSessionId}`
+- `agent-action-result-{agentSessionId}`
+- `agent-audit-{agentSessionId}`
+- `agent-error-{agentSessionId}`
+
+The frontend maps an agent session to its target GWShell session id and active
+tab, but the event identity remains the agent session id. This avoids mixing
+multiple agent runs attached to the same server.
+
+### Database Shape
+
+Extend SQLite with focused tables:
+
+- `agent_provider_settings`
+  - non-secret provider configuration
+- `agent_provider_secret`
+  - encrypted API key
+- `agent_audit`
+  - completed or failed agent session reports
+- `agent_runbooks`
+  - later reusable maintenance plans
+
+Do not store API keys in the main frontend settings blob.
+
+### First Implementation Boundary
+
+The first implementation should build a vertical slice:
+
+1. Configure AI provider.
+2. Start one Agent session on one connected SSH host.
+3. Attach one real-time log source.
+4. Stream redacted evidence to the model.
+5. Show live analysis.
+6. Accept typed read-only tool calls.
+7. Require approval for mutating tool calls.
+8. Verify after execution.
+9. Save an audit report.
+
+This is enough to prove the Agent architecture without prematurely building
+fleet automation, background daemons, or unrestricted auto-maintenance.
+
 ### Observe
 
 The agent gathers bounded, redacted context from tools:
