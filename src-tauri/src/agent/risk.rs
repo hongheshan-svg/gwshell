@@ -314,6 +314,10 @@ fn classify_wrapped_destructive_command(command: &str) -> Option<AgentRisk> {
 
 fn classify_interpreter_command(command: &str) -> Option<AgentRisk> {
     let command = normalized_command(command)?;
+    if is_powershell_command(&command.name) && has_powershell_encoded_command(&command.args) {
+        return Some(AgentRisk::High);
+    }
+
     let inner = match command.name.as_str() {
         "sh" | "bash" | "zsh" => shell_c_command(&command.args),
         "cmd" | "cmd.exe" => command_after_flag(&command.args, &["/c"]),
@@ -334,6 +338,19 @@ fn classify_interpreter_command(command: &str) -> Option<AgentRisk> {
         .map(|risk| stronger_risk(Some(inner_risk), risk))
         .unwrap_or(inner_risk);
     Some(at_least_high(strongest))
+}
+
+fn is_powershell_command(name: &str) -> bool {
+    matches!(name, "pwsh" | "pwsh.exe" | "powershell" | "powershell.exe")
+}
+
+fn has_powershell_encoded_command(args: &[&str]) -> bool {
+    args.iter().any(|arg| {
+        matches!(
+            clean_token(arg),
+            "-encodedcommand" | "-enc" | "-e" | "/encodedcommand" | "/enc" | "/e"
+        )
+    })
 }
 
 fn shell_c_command(args: &[&str]) -> Option<String> {
@@ -535,9 +552,12 @@ fn sensitive_path_risk(path: &str) -> Option<AgentRisk> {
 }
 
 fn normalize_path(path: &str) -> String {
-    path.trim_matches(|ch| ch == '\'' || ch == '"')
-        .replace('\\', "/")
-        .to_ascii_lowercase()
+    let unquoted: String = path
+        .trim_matches(|ch| ch == '\'' || ch == '"')
+        .chars()
+        .filter(|ch| *ch != '\'' && *ch != '"')
+        .collect();
+    unquoted.replace('\\', "/").to_ascii_lowercase()
 }
 
 fn is_sensitive_search_token(token: &str) -> bool {
@@ -624,6 +644,24 @@ mod tests {
     }
 
     #[test]
+    fn quote_spliced_sensitive_paths_are_not_read_only() {
+        assert_eq!(
+            classify_command("cat ~/'.aws'/credentials"),
+            AgentRisk::High
+        );
+        assert_eq!(classify_command("cat ~/'.kube'/config"), AgentRisk::High);
+        assert_eq!(classify_command("cat ~/'.ssh'/config"), AgentRisk::Blocked);
+        assert_eq!(
+            classify_command("cat ~/'.docker'/config.json"),
+            AgentRisk::High
+        );
+        assert_eq!(
+            classify_command("cat ~/'.config'/app/token"),
+            AgentRisk::High
+        );
+    }
+
+    #[test]
     fn proc_environ_and_traversal_reads_are_blocked() {
         assert_eq!(classify_command("cat /proc/cpuinfo"), AgentRisk::ReadOnly);
         assert_eq!(
@@ -704,6 +742,18 @@ mod tests {
             classify_command("pwsh -Command 'Get-Content C:\\Users\\me\\.aws\\credentials'"),
             AgentRisk::High
         );
+    }
+
+    #[test]
+    fn opaque_powershell_encoded_commands_are_high_risk() {
+        for command in [
+            "powershell -EncodedCommand abc",
+            "pwsh -EncodedCommand abc",
+            "powershell -enc abc",
+            "pwsh -e abc",
+        ] {
+            assert_eq!(classify_command(command), AgentRisk::High, "{command}");
+        }
     }
 
     #[test]
