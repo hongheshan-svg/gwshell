@@ -348,7 +348,7 @@ fn has_powershell_encoded_command(args: &[&str]) -> bool {
     args.iter().any(|arg| {
         matches!(
             clean_token(arg),
-            "-encodedcommand" | "-enc" | "-e" | "/encodedcommand" | "/enc" | "/e"
+            "-encodedcommand" | "-enc" | "-ec" | "-e" | "/encodedcommand" | "/enc" | "/ec" | "/e"
         )
     })
 }
@@ -510,6 +510,17 @@ fn sensitive_path_risk(path: &str) -> Option<AgentRisk> {
         return Some(AgentRisk::Blocked);
     }
 
+    if matches!(
+        path.as_str(),
+        "/etc/shadow" | "/etc/gshadow" | "/etc/sudoers"
+    ) {
+        return Some(AgentRisk::Blocked);
+    }
+
+    if path.starts_with("/etc/security/") {
+        return Some(AgentRisk::High);
+    }
+
     if path.contains("/.ssh/")
         || path.starts_with("~/.ssh")
         || path == ".ssh"
@@ -605,6 +616,10 @@ mod tests {
             AgentRisk::Blocked
         );
         assert_eq!(
+            classify_tool_call(&read_file_call("/etc/shadow")),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
             classify_tool_call(&read_file_call("~/.bash_history")),
             AgentRisk::Blocked
         );
@@ -640,6 +655,7 @@ mod tests {
             classify_command("cat /home/app/.aws/credentials"),
             AgentRisk::High
         );
+        assert_eq!(classify_command("cat /etc/shadow"), AgentRisk::Blocked);
         assert_eq!(classify_command("cat /proc/cpuinfo"), AgentRisk::ReadOnly);
     }
 
@@ -751,6 +767,12 @@ mod tests {
             "pwsh -EncodedCommand abc",
             "powershell -enc abc",
             "pwsh -e abc",
+            "pwsh -ec abc",
+            "powershell -ec abc",
+            "powershell /encodedcommand abc",
+            "pwsh /enc abc",
+            "powershell /e abc",
+            "pwsh /ec abc",
         ] {
             assert_eq!(classify_command(command), AgentRisk::High, "{command}");
         }
