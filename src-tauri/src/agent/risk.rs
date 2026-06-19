@@ -30,6 +30,9 @@ pub fn classify_command(command: &str) -> AgentRisk {
     if contains_blocked_passwd_command(&c) {
         return AgentRisk::Blocked;
     }
+    if contains_blocked_destructive_command(&c) {
+        return AgentRisk::Blocked;
+    }
     if c.contains("rm -rf /")
         || c.contains("mkfs")
         || c.contains("userdel ")
@@ -264,8 +267,36 @@ fn contains_blocked_passwd_command(command: &str) -> bool {
         .any(segment_contains_blocked_passwd)
 }
 
+fn contains_blocked_destructive_command(command: &str) -> bool {
+    command
+        .split(is_shell_segment_separator)
+        .any(segment_contains_blocked_destructive)
+}
+
 fn segment_contains_blocked_passwd(segment: &str) -> bool {
     normalized_command(segment).is_some_and(|command| command.name == "passwd")
+}
+
+fn segment_contains_blocked_destructive(segment: &str) -> bool {
+    normalized_command(segment).is_some_and(|command| match command.name.as_str() {
+        "userdel" | "iptables" | "ufw" | "firewall-cmd" => true,
+        "chmod" => is_root_recursive_world_writable_chmod(&command.args),
+        _ => false,
+    })
+}
+
+fn is_root_recursive_world_writable_chmod(args: &[&str]) -> bool {
+    let recursive = args.iter().any(|arg| is_chmod_recursive_flag(arg));
+    let mode_777 = args.iter().any(|arg| *arg == "777");
+    let root = args.iter().any(|arg| *arg == "/");
+    recursive && mode_777 && root
+}
+
+fn is_chmod_recursive_flag(arg: &str) -> bool {
+    arg == "--recursive"
+        || (arg.starts_with('-')
+            && !arg.starts_with("--")
+            && arg.chars().skip(1).any(|ch| ch == 'r' || ch == 'R'))
 }
 
 fn segment_contains_root_destructive_rm(segment: &str) -> bool {
@@ -597,7 +628,11 @@ fn collapse_path_aliases(path: &str) -> String {
     {
         (&path[..2], &path[3..])
     } else {
-        return path.split('/').filter(|part| !part.is_empty()).collect::<Vec<_>>().join("/");
+        return path
+            .split('/')
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join("/");
     };
 
     let mut parts = Vec::new();
@@ -984,6 +1019,21 @@ mod tests {
             classify_command("systemctl restart nginx"),
             AgentRisk::Medium
         );
+    }
+
+    #[test]
+    fn blocked_destructive_commands_allow_shell_whitespace_and_bare_forms() {
+        for command in [
+            "userdel\tbob",
+            "iptables\t-F",
+            "ufw\tenable",
+            "chmod -r\t777 /",
+            "userdel",
+            "iptables",
+            "ufw",
+        ] {
+            assert_eq!(classify_command(command), AgentRisk::Blocked, "{command:?}");
+        }
     }
 
     #[test]
