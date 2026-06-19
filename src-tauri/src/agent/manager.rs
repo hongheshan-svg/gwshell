@@ -20,6 +20,10 @@ impl AgentManager {
         Self::default()
     }
 
+    pub fn event_name(kind: &str, agent_session_id: &str) -> String {
+        format!("agent-{}-{}", kind, agent_session_id)
+    }
+
     pub fn start_session(&self, req: AgentSessionStart) -> AgentSessionInfo {
         let info = AgentSessionInfo {
             id: Uuid::new_v4().to_string(),
@@ -147,5 +151,13 @@ mod tests {
                 Some(AgentSessionStatus::Cancelled)
             );
         }
+    }
+
+    #[test]
+    fn event_name_scopes_event_kind_to_agent_session() {
+        assert_eq!(
+            AgentManager::event_name("evidence", "agent-1"),
+            "agent-evidence-agent-1"
+        );
     }
 }

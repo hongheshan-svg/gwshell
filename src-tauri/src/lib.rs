@@ -850,6 +850,23 @@ async fn clear_ai_provider_api_key(state: State<'_, Arc<AppState>>) -> Result<()
 }
 
 #[tauri::command]
+async fn list_agent_audits(
+    target_session_id: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<agent::types::AgentAuditRecord>, String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let rows = state.db.list_agent_audits_raw(&target_session_id)?;
+        Ok(rows
+            .into_iter()
+            .filter_map(|row| serde_json::from_str::<agent::types::AgentAuditRecord>(&row).ok())
+            .collect())
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
+}
+
+#[tauri::command]
 async fn start_agent_session(
     request: agent::types::AgentSessionStart,
     state: State<'_, Arc<AppState>>,
@@ -1357,6 +1374,7 @@ pub fn run() {
             save_ai_provider_settings,
             set_ai_provider_api_key,
             clear_ai_provider_api_key,
+            list_agent_audits,
             start_agent_session,
             cancel_agent_session,
             export_sessions_data,

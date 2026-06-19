@@ -1,3 +1,4 @@
+pub mod audit;
 pub mod manager;
 pub mod prompt;
 pub mod provider;

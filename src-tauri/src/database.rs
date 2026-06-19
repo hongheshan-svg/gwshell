@@ -259,6 +259,62 @@ impl Database {
         Ok(())
     }
 
+    // ---- Agent Audit ----
+
+    pub fn save_agent_audit_raw(
+        &self,
+        id: &str,
+        agent_session_id: &str,
+        target_session_id: &str,
+        started_at: i64,
+        finished_at: Option<i64>,
+        objective: &str,
+        status: &str,
+        report_json: &str,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT OR REPLACE INTO agent_audit
+             (id, agent_session_id, target_session_id, started_at, finished_at, objective, status, report_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                id,
+                agent_session_id,
+                target_session_id,
+                started_at,
+                finished_at,
+                objective,
+                status,
+                report_json
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn list_agent_audits_raw(&self, target_session_id: &str) -> Result<Vec<String>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT report_json FROM agent_audit
+                 WHERE target_session_id = ?1
+                 ORDER BY started_at DESC
+                 LIMIT 50",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![target_session_id], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        let mut reports = Vec::new();
+        for row in rows {
+            match row {
+                Ok(report) => reports.push(report),
+                Err(e) => eprintln!("[gwshell] skipping unreadable agent audit row: {}", e),
+            }
+        }
+        Ok(reports)
+    }
+
     // ---- Command History ----
 
     pub fn load_command_history(&self, limit: u32) -> Vec<crate::history::HistoryEntry> {
@@ -312,5 +368,72 @@ impl Database {
         conn.execute("DELETE FROM snippets WHERE id = ?1", params![id])
             .map_err(|e| e.to_string())?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent::audit::save_audit;
+    use crate::agent::types::{AgentAuditRecord, AgentSessionStatus};
+
+    fn audit_record(id: &str, target_session_id: &str, started_at: i64) -> AgentAuditRecord {
+        AgentAuditRecord {
+            id: id.to_string(),
+            agent_session_id: format!("agent-{}", id),
+            target_session_id: target_session_id.to_string(),
+            started_at,
+            finished_at: Some(started_at + 10),
+            objective: format!("objective {}", id),
+            status: AgentSessionStatus::Completed,
+            report_json: format!(r#"{{"summary":"{}"}}"#, id),
+        }
+    }
+
+    #[test]
+    fn agent_audit_save_and_list_round_trips_json_for_target_session() {
+        let db = Database::new_in_memory_for_tests().unwrap();
+        let expected = audit_record("newer", "target-1", 200);
+        let older = audit_record("older", "target-1", 100);
+        let other_target = audit_record("other", "target-2", 300);
+
+        save_audit(&db, &older).unwrap();
+        save_audit(&db, &other_target).unwrap();
+        save_audit(&db, &expected).unwrap();
+
+        let rows = db.list_agent_audits_raw("target-1").unwrap();
+        assert_eq!(rows.len(), 2);
+
+        let records = rows
+            .iter()
+            .map(|row| serde_json::from_str::<AgentAuditRecord>(row).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(records[0].id, expected.id);
+        assert_eq!(records[0].target_session_id, "target-1");
+        assert_eq!(records[0].report_json, expected.report_json);
+        assert_eq!(records[1].id, older.id);
+        assert!(records
+            .iter()
+            .all(|record| record.target_session_id == "target-1"));
+    }
+
+    #[test]
+    fn list_agent_audits_raw_returns_newest_first_and_limits_to_50() {
+        let db = Database::new_in_memory_for_tests().unwrap();
+
+        for idx in 0..55 {
+            let record = audit_record(&format!("audit-{idx}"), "target-1", idx);
+            save_audit(&db, &record).unwrap();
+        }
+
+        let rows = db.list_agent_audits_raw("target-1").unwrap();
+        assert_eq!(rows.len(), 50);
+
+        let ids = rows
+            .iter()
+            .map(|row| serde_json::from_str::<AgentAuditRecord>(row).unwrap().id)
+            .collect::<Vec<_>>();
+        assert_eq!(ids.first().map(String::as_str), Some("audit-54"));
+        assert_eq!(ids.last().map(String::as_str), Some("audit-5"));
     }
 }
