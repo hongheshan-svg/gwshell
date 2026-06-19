@@ -218,7 +218,10 @@ fn segment_contains_destructive_dd(segment: &str) -> bool {
 
 fn command_word_name(word: &str) -> &str {
     let trimmed = clean_token(word);
-    trimmed.rsplit('/').next().unwrap_or(trimmed)
+    trimmed
+        .rsplit(|ch| ch == '/' || ch == '\\')
+        .next()
+        .unwrap_or(trimmed)
 }
 
 fn clean_token(token: &str) -> &str {
@@ -298,6 +301,7 @@ fn is_mutating_journalctl_command(command: &str) -> bool {
 fn classify_read_file_payload(payload: &serde_json::Value) -> AgentRisk {
     let mut saw_recognized_field = false;
     let mut risk = None;
+    let mut paths = Vec::new();
 
     for key in [
         "path",
@@ -311,16 +315,27 @@ fn classify_read_file_payload(payload: &serde_json::Value) -> AgentRisk {
             saw_recognized_field = true;
             let field_risk = value
                 .as_str()
-                .map(classify_file_read_path)
+                .map(|path| {
+                    let normalized = normalize_path(path);
+                    if !paths.contains(&normalized) {
+                        paths.push(normalized);
+                    }
+                    classify_file_read_path(path)
+                })
                 .unwrap_or(AgentRisk::High);
             risk = Some(stronger_risk(risk, field_risk));
         }
     }
 
-    if saw_recognized_field {
-        risk.unwrap_or(AgentRisk::High)
-    } else {
+    if !saw_recognized_field {
+        return AgentRisk::High;
+    }
+
+    let risk = risk.unwrap_or(AgentRisk::High);
+    if risk == AgentRisk::ReadOnly && paths.len() > 1 {
         AgentRisk::High
+    } else {
+        risk
     }
 }
 
@@ -371,10 +386,7 @@ fn classify_proc_cat_command(command: &str) -> Option<AgentRisk> {
 }
 
 fn sensitive_path_risk(path: &str) -> Option<AgentRisk> {
-    let path = path
-        .trim_matches(|ch| ch == '\'' || ch == '"')
-        .replace('\\', "/")
-        .to_ascii_lowercase();
+    let path = normalize_path(path);
     let file_name = path.rsplit('/').next().unwrap_or(path.as_str());
 
     if path.starts_with("/proc/")
@@ -422,6 +434,12 @@ fn sensitive_path_risk(path: &str) -> Option<AgentRisk> {
     }
 
     None
+}
+
+fn normalize_path(path: &str) -> String {
+    path.trim_matches(|ch| ch == '\'' || ch == '"')
+        .replace('\\', "/")
+        .to_ascii_lowercase()
 }
 
 fn is_sensitive_search_token(token: &str) -> bool {
@@ -602,6 +620,13 @@ mod tests {
         );
         assert_eq!(
             classify_tool_call(&read_file_call_payload(serde_json::json!({
+                "path": "/var/log/a",
+                "target_path": "/var/log/b"
+            }))),
+            AgentRisk::High
+        );
+        assert_eq!(
+            classify_tool_call(&read_file_call_payload(serde_json::json!({
                 "path": "/var/log/app.log",
                 "target_path": "~/.ssh/id_rsa"
             }))),
@@ -636,6 +661,22 @@ mod tests {
                 "path": "C:\\Users\\me\\.kube\\config"
             }))),
             AgentRisk::High
+        );
+    }
+
+    #[test]
+    fn windows_path_qualified_read_commands_use_basename() {
+        assert_eq!(
+            classify_command("C:\\Windows\\System32\\cat C:\\Users\\me\\.ssh\\id_rsa"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("C:\\Windows\\System32\\tail /proc/self/environ"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("C:\\Windows\\System32\\grep cpu /proc/cpuinfo"),
+            AgentRisk::ReadOnly
         );
     }
 
