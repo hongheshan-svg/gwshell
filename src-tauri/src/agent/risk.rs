@@ -226,13 +226,17 @@ fn segment_contains_destructive_dd(segment: &str) -> bool {
 
 fn command_word_name(word: &str) -> String {
     let trimmed = clean_token(word);
-    let basename = trimmed
-        .rsplit(|ch| ch == '/' || ch == '\\')
-        .next()
-        .unwrap_or(trimmed);
+    let basename = if trimmed.contains('/') || trimmed.contains(':') || trimmed.starts_with('\\') {
+        trimmed
+            .rsplit(|ch| ch == '/' || ch == '\\')
+            .next()
+            .unwrap_or(trimmed)
+    } else {
+        trimmed.rsplit('/').next().unwrap_or(trimmed)
+    };
     let name: String = basename
         .chars()
-        .filter(|ch| *ch != '\'' && *ch != '"')
+        .filter(|ch| *ch != '\'' && *ch != '"' && *ch != '\\')
         .collect();
     normalize_known_command_word(&name).to_string()
 }
@@ -578,7 +582,53 @@ fn normalize_path(path: &str) -> String {
         .chars()
         .filter(|ch| *ch != '\'' && *ch != '"')
         .collect();
-    unquoted.replace('\\', "/").to_ascii_lowercase()
+    collapse_path_aliases(&unquoted.replace('\\', "/").to_ascii_lowercase())
+}
+
+fn collapse_path_aliases(path: &str) -> String {
+    let (prefix, rest) = if let Some(rest) = path.strip_prefix("~/") {
+        ("~", rest)
+    } else if path.starts_with('/') {
+        ("", path.trim_start_matches('/'))
+    } else if path.len() >= 3
+        && path.as_bytes()[1] == b':'
+        && path.as_bytes()[2] == b'/'
+        && path.as_bytes()[0].is_ascii_alphabetic()
+    {
+        (&path[..2], &path[3..])
+    } else {
+        return path.split('/').filter(|part| !part.is_empty()).collect::<Vec<_>>().join("/");
+    };
+
+    let mut parts = Vec::new();
+    for part in rest.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            _ => parts.push(part),
+        }
+    }
+
+    let joined = parts.join("/");
+    match prefix {
+        "" => format!("/{joined}"),
+        "~" => {
+            if joined.is_empty() {
+                "~".to_string()
+            } else {
+                format!("~/{joined}")
+            }
+        }
+        drive => {
+            if joined.is_empty() {
+                format!("{drive}/")
+            } else {
+                format!("{drive}/{joined}")
+            }
+        }
+    }
 }
 
 fn is_sensitive_search_token(token: &str) -> bool {
@@ -667,6 +717,28 @@ mod tests {
         );
         assert_eq!(classify_command("cat /etc/shadow"), AgentRisk::Blocked);
         assert_eq!(classify_command("cat /proc/cpuinfo"), AgentRisk::ReadOnly);
+    }
+
+    #[test]
+    fn path_alias_sensitive_reads_are_not_read_only() {
+        assert_eq!(classify_command("tail /etc/./shadow"), AgentRisk::Blocked);
+        assert_eq!(classify_command("tail /etc//shadow"), AgentRisk::Blocked);
+        assert_eq!(
+            classify_command("tail /etc/../etc/shadow"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_tool_call(&read_file_call("/etc/./shadow")),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("cat /home/me/.ssh/./id_rsa"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("tail /home/me/.bash_history/../.bash_history"),
+            AgentRisk::Blocked
+        );
     }
 
     #[test]
@@ -988,6 +1060,13 @@ mod tests {
         ] {
             assert_eq!(classify_command(command), AgentRisk::Blocked, "{command}");
         }
+    }
+
+    #[test]
+    fn backslash_spliced_command_words_are_blocked() {
+        assert_eq!(classify_command(r"r\m -rf /"), AgentRisk::Blocked);
+        assert_eq!(classify_command(r"pa\sswd"), AgentRisk::Blocked);
+        assert_eq!(classify_command(r"sh -c 'r\m -rf /'"), AgentRisk::Blocked);
     }
 
     #[test]
