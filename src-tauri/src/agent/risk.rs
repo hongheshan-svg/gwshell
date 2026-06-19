@@ -129,6 +129,7 @@ fn is_mutating_journalctl_command(command: &str) -> bool {
                 || part == "--flush"
                 || part.starts_with("--vacuum-time")
                 || part.starts_with("--vacuum-size")
+                || part.starts_with("--vacuum-files")
         })
 }
 
@@ -180,6 +181,7 @@ mod tests {
         for command in [
             "journalctl --vacuum-time=1d",
             "journalctl --vacuum-size=1G",
+            "journalctl --vacuum-files=1",
             "journalctl --rotate",
             "journalctl --flush",
         ] {
