@@ -106,7 +106,7 @@ fn has_shell_control_syntax(command: &str) -> bool {
 }
 
 struct NormalizedCommand<'a> {
-    name: &'a str,
+    name: String,
     args: Vec<&'a str>,
 }
 
@@ -115,7 +115,7 @@ fn normalized_command(command: &str) -> Option<NormalizedCommand<'_>> {
     let mut idx = 0;
 
     while idx < tokens.len() {
-        match command_word_name(tokens[idx]) {
+        match command_word_name(tokens[idx]).as_str() {
             "sudo" => idx = skip_sudo_prefix(&tokens, idx + 1),
             "command" => idx += 1,
             "env" => {
@@ -221,12 +221,24 @@ fn segment_contains_destructive_dd(segment: &str) -> bool {
     false
 }
 
-fn command_word_name(word: &str) -> &str {
+fn command_word_name(word: &str) -> String {
     let trimmed = clean_token(word);
-    trimmed
+    let basename = trimmed
         .rsplit(|ch| ch == '/' || ch == '\\')
         .next()
-        .unwrap_or(trimmed)
+        .unwrap_or(trimmed);
+    let name: String = basename
+        .chars()
+        .filter(|ch| *ch != '\'' && *ch != '"')
+        .collect();
+    normalize_known_command_word(&name).to_string()
+}
+
+fn normalize_known_command_word(name: &str) -> &str {
+    match name {
+        "paswd" => "passwd",
+        _ => name,
+    }
 }
 
 fn clean_token(token: &str) -> &str {
@@ -288,7 +300,7 @@ fn classify_wrapped_destructive_command(command: &str) -> Option<AgentRisk> {
     for segment in command.split(is_shell_segment_separator) {
         let tokens: Vec<&str> = segment.split_whitespace().map(clean_token).collect();
         for (idx, token) in tokens.iter().enumerate() {
-            match command_word_name(token) {
+            match command_word_name(token).as_str() {
                 "rm" | "shutdown" | "reboot" | "truncate" => return Some(AgentRisk::High),
                 "systemctl" if tokens.get(idx + 1).is_some_and(|arg| *arg == "stop") => {
                     return Some(AgentRisk::High);
@@ -302,7 +314,7 @@ fn classify_wrapped_destructive_command(command: &str) -> Option<AgentRisk> {
 
 fn classify_interpreter_command(command: &str) -> Option<AgentRisk> {
     let command = normalized_command(command)?;
-    let inner = match command.name {
+    let inner = match command.name.as_str() {
         "sh" | "bash" | "zsh" => shell_c_command(&command.args),
         "cmd" | "cmd.exe" => command_after_flag(&command.args, &["/c"]),
         "pwsh" | "pwsh.exe" | "powershell" | "powershell.exe" => {
@@ -429,7 +441,7 @@ fn classify_file_read_path(path: &str) -> AgentRisk {
 fn classify_sensitive_read_command(command: &str) -> Option<AgentRisk> {
     let command = normalized_command(command)?;
     if !matches!(
-        command.name,
+        command.name.as_str(),
         "cat" | "tail" | "grep" | "type" | "get-content"
     ) {
         return None;
@@ -811,10 +823,12 @@ mod tests {
     #[test]
     fn composed_passwd_commands_are_blocked() {
         assert_eq!(classify_command("true; passwd"), AgentRisk::Blocked);
+        assert_eq!(classify_command("true; pas''wd"), AgentRisk::Blocked);
         assert_eq!(
             classify_command("echo ok && /usr/bin/passwd"),
             AgentRisk::Blocked
         );
+        assert_eq!(classify_command("echo ok && p'a'sswd"), AgentRisk::Blocked);
         assert_eq!(
             classify_command("sudo sh -c 'passwd root'"),
             AgentRisk::Blocked
