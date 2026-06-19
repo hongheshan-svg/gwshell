@@ -401,6 +401,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn cap_text_respects_exact_over_and_multibyte_limits() {
+        assert_eq!(cap_text("abc", 3), "abc");
+        assert_eq!(cap_text("abcd", 3), "abc\n[truncated]");
+        assert_eq!(cap_text("é中🙂x", 3), "é中🙂\n[truncated]");
+    }
+
+    #[test]
     fn redacts_bearer_tokens_and_password_assignments() {
         let text = "Authorization: Bearer abc123\nDB password=secret\nurl?token=abc";
         let redacted = redact_secrets(text);

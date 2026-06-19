@@ -331,7 +331,9 @@ fn has_recursive_force_flags(args: &[&str]) -> bool {
 }
 
 fn is_root_rm_target(arg: &str) -> bool {
-    matches!(arg, "/" | "/*")
+    normalize_path_variants(arg)
+        .iter()
+        .any(|path| matches!(path.as_str(), "/" | "/*"))
 }
 
 fn classify_wrapped_destructive_command(command: &str) -> Option<AgentRisk> {
@@ -546,19 +548,44 @@ fn classify_proc_cat_command(command: &str) -> Option<AgentRisk> {
 }
 
 fn sensitive_path_risk(path: &str) -> Option<AgentRisk> {
-    let path = normalize_path(path);
-    let file_name = path.rsplit('/').next().unwrap_or(path.as_str());
+    let mut risk = None;
+    for path in normalize_path_variants(path) {
+        if let Some(path_risk) = sensitive_normalized_path_risk(&path) {
+            risk = Some(stronger_risk(risk, path_risk));
+        }
+    }
+    risk
+}
 
+fn sensitive_normalized_path_risk(path: &str) -> Option<AgentRisk> {
+    if let Some(rest) = leading_relative_traversal_suffix(path) {
+        if rest.is_empty() {
+            return Some(AgentRisk::High);
+        }
+        let suffix_risk = sensitive_normalized_path_risk(&format!("/{rest}"));
+        return Some(
+            suffix_risk
+                .map(|risk| stronger_risk(Some(AgentRisk::High), risk))
+                .unwrap_or(AgentRisk::High),
+        );
+    }
+
+    if let Some(rest) = proc_symlink_alias_suffix(path) {
+        if rest.is_empty() {
+            return Some(AgentRisk::High);
+        }
+        let target_risk = sensitive_normalized_path_risk(&format!("/{rest}"));
+        return Some(target_risk.unwrap_or(AgentRisk::High));
+    }
+
+    let file_name = path.rsplit('/').next().unwrap_or(path);
     if path.starts_with("/proc/")
         && (path.contains("/../") || path.ends_with("/..") || path.contains("/environ"))
     {
         return Some(AgentRisk::Blocked);
     }
 
-    if matches!(
-        path.as_str(),
-        "/etc/shadow" | "/etc/gshadow" | "/etc/sudoers"
-    ) {
+    if matches!(path, "/etc/shadow" | "/etc/gshadow" | "/etc/sudoers") {
         return Some(AgentRisk::Blocked);
     }
 
@@ -607,6 +634,42 @@ fn sensitive_path_risk(path: &str) -> Option<AgentRisk> {
     None
 }
 
+fn leading_relative_traversal_suffix(path: &str) -> Option<String> {
+    let mut saw_traversal = false;
+    let mut rest = Vec::new();
+    for part in path.split('/') {
+        if part.is_empty() || part == "." {
+            continue;
+        }
+        if part == ".." {
+            if rest.is_empty() {
+                saw_traversal = true;
+            }
+            continue;
+        }
+        if !saw_traversal {
+            return None;
+        }
+        rest.push(part);
+    }
+
+    saw_traversal.then(|| rest.join("/"))
+}
+
+fn proc_symlink_alias_suffix(path: &str) -> Option<String> {
+    let rest = path.strip_prefix("/proc/")?;
+    let mut parts = rest.split('/');
+    let pid = parts.next()?;
+    if pid.is_empty() {
+        return None;
+    }
+    let alias = parts.next()?;
+    if !matches!(alias, "root" | "cwd") {
+        return None;
+    }
+    Some(parts.collect::<Vec<_>>().join("/"))
+}
+
 fn normalize_path(path: &str) -> String {
     let unquoted: String = path
         .trim_matches(|ch| ch == '\'' || ch == '"')
@@ -614,6 +677,22 @@ fn normalize_path(path: &str) -> String {
         .filter(|ch| *ch != '\'' && *ch != '"')
         .collect();
     collapse_path_aliases(&unquoted.replace('\\', "/").to_ascii_lowercase())
+}
+
+fn normalize_path_variants(path: &str) -> Vec<String> {
+    let unquoted: String = path
+        .trim_matches(|ch| ch == '\'' || ch == '"')
+        .chars()
+        .filter(|ch| *ch != '\'' && *ch != '"')
+        .collect();
+    let windows = collapse_path_aliases(&unquoted.replace('\\', "/").to_ascii_lowercase());
+    let shell_escaped = collapse_path_aliases(&unquoted.replace('\\', "").to_ascii_lowercase());
+
+    if windows == shell_escaped {
+        vec![windows]
+    } else {
+        vec![windows, shell_escaped]
+    }
 }
 
 fn collapse_path_aliases(path: &str) -> String {
@@ -821,6 +900,35 @@ mod tests {
     }
 
     #[test]
+    fn proc_root_and_cwd_sensitive_aliases_are_not_read_only() {
+        assert_eq!(
+            classify_command("cat /proc/self/root/etc/shadow"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("tail /proc/1/root/etc/shadow"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("grep x /proc/self/cwd/.ssh/id_rsa"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("grep x /proc/self/cwd/.aws/credentials"),
+            AgentRisk::High
+        );
+    }
+
+    #[test]
+    fn shell_escaped_sensitive_paths_are_not_read_only() {
+        assert_eq!(classify_command(r"tail /et\c/shadow"), AgentRisk::Blocked);
+        assert_eq!(
+            classify_command(r"grep x ~/.s\sh/id_rsa"),
+            AgentRisk::Blocked
+        );
+    }
+
+    #[test]
     fn tail_and_grep_proc_sensitive_paths_are_not_read_only() {
         assert_eq!(
             classify_command("tail /proc/self/environ"),
@@ -963,6 +1071,18 @@ mod tests {
         );
         assert_eq!(
             classify_tool_call(&read_file_call_payload(serde_json::json!({
+                "path": "../../etc/shadow"
+            }))),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_tool_call(&read_file_call_payload(serde_json::json!({
+                "path": "../var/log/app.log"
+            }))),
+            AgentRisk::High
+        );
+        assert_eq!(
+            classify_tool_call(&read_file_call_payload(serde_json::json!({
                 "path": "/var/log/app.log"
             }))),
             AgentRisk::ReadOnly
@@ -1061,6 +1181,8 @@ mod tests {
             "rm -rf /*",
             "/bin/rm -rf /",
             "sudo rm -rf /",
+            "rm -r -f //",
+            "rm --recursive --force /var/..",
         ] {
             assert_eq!(classify_command(command), AgentRisk::Blocked, "{command}");
         }
@@ -1134,21 +1256,21 @@ mod tests {
 
     #[test]
     fn shell_composition_is_not_read_only() {
-        for command in [
-            "df -h; shutdown now",
-            "docker ps && docker restart web",
-            "journalctl -u nginx || shutdown now",
-            "df -h | sh",
-            "df -h\nshutdown now",
-            "df -h $(shutdown now)",
-            "df -h `shutdown now`",
-            "grep x file > /etc/app.conf",
-            "cat /proc/cpuinfo < /tmp/input",
-            "df -h & shutdown now",
-            "cat /proc/cpuinfo&true",
-            "cat /proc/cpuinfo&rm -rf /tmp/x",
+        for (command, expected) in [
+            ("df -h; shutdown now", AgentRisk::High),
+            ("docker ps && docker restart web", AgentRisk::High),
+            ("journalctl -u nginx || shutdown now", AgentRisk::High),
+            ("df -h | sh", AgentRisk::High),
+            ("df -h\nshutdown now", AgentRisk::High),
+            ("df -h $(shutdown now)", AgentRisk::High),
+            ("df -h `shutdown now`", AgentRisk::High),
+            ("grep x file > /etc/app.conf", AgentRisk::High),
+            ("cat /proc/cpuinfo < /tmp/input", AgentRisk::High),
+            ("df -h & shutdown now", AgentRisk::High),
+            ("cat /proc/cpuinfo&true", AgentRisk::High),
+            ("cat /proc/cpuinfo&rm -rf /tmp/x", AgentRisk::Blocked),
         ] {
-            assert_ne!(classify_command(command), AgentRisk::ReadOnly, "{command}");
+            assert_eq!(classify_command(command), expected, "{command}");
         }
     }
 
