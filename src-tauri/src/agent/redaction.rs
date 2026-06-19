@@ -34,11 +34,11 @@ pub fn redact_secrets(input: &str) -> String {
 }
 
 fn redact_sensitive_line(line: &str) -> String {
-    let redacted_bearer = redact_bearer_line(line);
-    redact_assignment_line(&redacted_bearer)
+    let redacted_authorization = redact_authorization_line(line);
+    redact_assignment_line(&redacted_authorization)
 }
 
-fn redact_bearer_line(line: &str) -> String {
+fn redact_authorization_line(line: &str) -> String {
     let lower = line.to_ascii_lowercase();
     let mut out = String::new();
     let mut last = 0;
@@ -50,7 +50,7 @@ fn redact_bearer_line(line: &str) -> String {
             continue;
         }
 
-        if let Some((value_start, value_end)) = bearer_value_range(line, &lower, idx) {
+        if let Some((value_start, value_end)) = authorization_value_range(line, &lower, idx) {
             out.push_str(&line[last..value_start]);
             out.push_str("[redacted]");
             last = value_end;
@@ -64,7 +64,7 @@ fn redact_bearer_line(line: &str) -> String {
     out
 }
 
-fn bearer_value_range(line: &str, lower: &str, idx: usize) -> Option<(usize, usize)> {
+fn authorization_value_range(line: &str, lower: &str, idx: usize) -> Option<(usize, usize)> {
     let bytes = line.as_bytes();
     let lower_bytes = lower.as_bytes();
     let quoted_key = matches!(bytes.get(idx), Some(b'"') | Some(b'\''));
@@ -75,7 +75,12 @@ fn bearer_value_range(line: &str, lower: &str, idx: usize) -> Option<(usize, usi
         return None;
     }
 
-    for key in ["authorization", "http_authorization"] {
+    for key in [
+        "authorization",
+        "proxy-authorization",
+        "http_authorization",
+        "proxy_authorization",
+    ] {
         let key_bytes = key.as_bytes();
         if !lower_bytes.get(key_start..)?.starts_with(key_bytes) {
             continue;
@@ -108,20 +113,24 @@ fn bearer_value_range(line: &str, lower: &str, idx: usize) -> Option<(usize, usi
             value_idx
         };
 
-        if !lower_bytes.get(bearer_idx..)?.starts_with(b"bearer") {
-            continue;
+        if lower_bytes.get(bearer_idx..)?.starts_with(b"bearer") {
+            let after_bearer = bearer_idx + "bearer".len();
+            let value_start = skip_ascii_whitespace(bytes, after_bearer);
+            if value_start != after_bearer {
+                let value_end = if let Some(quote) = value_quote {
+                    find_closing_quote(line, value_start, quote)
+                } else {
+                    find_unquoted_value_end(line, value_start)
+                };
+                return Some((value_start, value_end));
+            }
         }
 
-        let after_bearer = bearer_idx + "bearer".len();
-        let value_start = skip_ascii_whitespace(bytes, after_bearer);
-        if value_start == after_bearer {
-            continue;
-        }
-
+        let value_start = bearer_idx;
         let value_end = if let Some(quote) = value_quote {
             find_closing_quote(line, value_start, quote)
         } else {
-            find_unquoted_value_end(line, value_start)
+            line.len()
         };
         return Some((value_start, value_end));
     }
@@ -346,6 +355,18 @@ mod tests {
         assert!(!redacted.contains("def"));
         assert!(!redacted.contains("ghi"));
         assert!(!redacted.contains("jkl"));
+    }
+
+    #[test]
+    fn redacts_authorization_headers_for_any_scheme() {
+        let text = "Authorization: Basic dXNlcjpwYXNz\nProxy-Authorization: Basic abc\nAuthorization: Bearer keep-redacting";
+        let redacted = redact_secrets(text);
+        assert!(redacted.contains("Authorization: [redacted]"));
+        assert!(redacted.contains("Proxy-Authorization: [redacted]"));
+        assert!(redacted.contains("Authorization: Bearer [redacted]"));
+        assert!(!redacted.contains("dXNlcjpwYXNz"));
+        assert!(!redacted.contains("Basic abc"));
+        assert!(!redacted.contains("keep-redacting"));
     }
 
     #[test]

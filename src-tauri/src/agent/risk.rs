@@ -29,7 +29,6 @@ pub fn classify_command(command: &str) -> AgentRisk {
     }
     if c.contains("rm -rf /")
         || c.contains("mkfs")
-        || c.contains("passwd ")
         || c.contains("userdel ")
         || c.contains("chmod -r 777 /")
         || c.contains("iptables ")
@@ -38,7 +37,13 @@ pub fn classify_command(command: &str) -> AgentRisk {
     {
         return AgentRisk::Blocked;
     }
+    if matches_normalized_command(&c, &["passwd"]) {
+        return AgentRisk::Blocked;
+    }
     if let Some(risk) = classify_wrapped_destructive_command(&c) {
+        return risk;
+    }
+    if let Some(risk) = classify_interpreter_command(&c) {
         return risk;
     }
     if has_shell_control_syntax(&c) {
@@ -285,6 +290,74 @@ fn classify_wrapped_destructive_command(command: &str) -> Option<AgentRisk> {
     None
 }
 
+fn classify_interpreter_command(command: &str) -> Option<AgentRisk> {
+    let command = normalized_command(command)?;
+    let inner = match command.name {
+        "sh" | "bash" | "zsh" => shell_c_command(&command.args),
+        "cmd" | "cmd.exe" => command_after_flag(&command.args, &["/c"]),
+        "pwsh" | "pwsh.exe" | "powershell" | "powershell.exe" => {
+            command_after_flag(&command.args, &["-command", "-c"])
+        }
+        _ => None,
+    }?;
+
+    let inner = inner.trim();
+    if inner.is_empty() {
+        return Some(AgentRisk::High);
+    }
+
+    let inner_risk = classify_command(inner);
+    let path_risk = classify_sensitive_paths_in_command_text(inner);
+    let strongest = path_risk
+        .map(|risk| stronger_risk(Some(inner_risk), risk))
+        .unwrap_or(inner_risk);
+    Some(at_least_high(strongest))
+}
+
+fn shell_c_command(args: &[&str]) -> Option<String> {
+    for (idx, arg) in args.iter().enumerate() {
+        let arg = clean_token(arg);
+        if arg.starts_with('-') && arg.contains('c') {
+            return Some(join_command_args(args, idx + 1));
+        }
+    }
+    None
+}
+
+fn command_after_flag(args: &[&str], flags: &[&str]) -> Option<String> {
+    args.iter()
+        .position(|arg| flags.iter().any(|flag| clean_token(arg) == *flag))
+        .map(|idx| join_command_args(args, idx + 1))
+}
+
+fn join_command_args(args: &[&str], start: usize) -> String {
+    let joined = args.get(start..).unwrap_or_default().join(" ");
+    clean_token(&joined).to_string()
+}
+
+fn classify_sensitive_paths_in_command_text(command: &str) -> Option<AgentRisk> {
+    let mut risk = None;
+    for token in command.split_whitespace() {
+        let token = token.trim_matches(|ch| {
+            matches!(
+                ch,
+                '\'' | '"' | ';' | ',' | ')' | '(' | '[' | ']' | '{' | '}'
+            )
+        });
+        if let Some(path_risk) = sensitive_path_risk(token) {
+            risk = Some(stronger_risk(risk, path_risk));
+        }
+    }
+    risk
+}
+
+fn at_least_high(risk: AgentRisk) -> AgentRisk {
+    match risk {
+        AgentRisk::Blocked => AgentRisk::Blocked,
+        _ => AgentRisk::High,
+    }
+}
+
 fn is_mutating_journalctl_command(command: &str) -> bool {
     normalized_command(command).is_some_and(|command| {
         command.name == "journalctl"
@@ -345,7 +418,10 @@ fn classify_file_read_path(path: &str) -> AgentRisk {
 
 fn classify_sensitive_read_command(command: &str) -> Option<AgentRisk> {
     let command = normalized_command(command)?;
-    if !matches!(command.name, "cat" | "tail" | "grep") {
+    if !matches!(
+        command.name,
+        "cat" | "tail" | "grep" | "type" | "get-content"
+    ) {
         return None;
     }
 
@@ -585,6 +661,30 @@ mod tests {
     }
 
     #[test]
+    fn shell_interpreter_wrappers_preserve_sensitive_read_risk() {
+        assert_eq!(
+            classify_command("sh -c 'cat /proc/self/environ'"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("bash -lc 'cat ~/.ssh/id_rsa'"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("zsh -c 'tail /proc/self/environ'"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("cmd /c type C:\\Users\\me\\.ssh\\id_rsa"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("pwsh -Command 'Get-Content C:\\Users\\me\\.aws\\credentials'"),
+            AgentRisk::High
+        );
+    }
+
+    #[test]
     fn wrapper_options_do_not_bypass_sensitive_read_policy() {
         assert_eq!(
             classify_command("sudo -n cat ~/.ssh/id_rsa"),
@@ -684,6 +784,9 @@ mod tests {
     fn dangerous_commands_are_blocked_or_high() {
         assert_eq!(classify_command("rm -rf /"), AgentRisk::Blocked);
         assert_eq!(classify_command("iptables -F"), AgentRisk::Blocked);
+        assert_eq!(classify_command("passwd"), AgentRisk::Blocked);
+        assert_eq!(classify_command("/usr/bin/passwd"), AgentRisk::Blocked);
+        assert_eq!(classify_command("sudo passwd root"), AgentRisk::Blocked);
         assert_eq!(
             classify_command("dd bs=1M of=/dev/sda if=/dev/zero"),
             AgentRisk::Blocked
