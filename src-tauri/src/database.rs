@@ -24,6 +24,16 @@ impl Database {
         Ok(db)
     }
 
+    #[cfg(test)]
+    pub fn new_in_memory_for_tests() -> Result<Self, String> {
+        let conn = Connection::open_in_memory().map_err(|e| e.to_string())?;
+        let db = Self {
+            conn: Mutex::new(conn),
+        };
+        db.init_tables()?;
+        Ok(db)
+    }
+
     fn db_path() -> Option<PathBuf> {
         dirs::data_local_dir().map(|d| d.join("gwshell").join("gwshell.db"))
     }
