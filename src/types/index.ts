@@ -87,3 +87,5 @@ export interface Snippet {
 
 export type ThemeMode = 'dark' | 'light';
 export type MainView = 'asset-list' | 'terminal';
+
+export * from './agent';
