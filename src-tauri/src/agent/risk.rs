@@ -34,40 +34,62 @@ pub fn classify_command(command: &str) -> AgentRisk {
     {
         return AgentRisk::Blocked;
     }
-    if c.starts_with("df ")
-        || c == "df"
-        || c.starts_with("free ")
-        || c == "free"
-        || c.starts_with("journalctl ")
-        || c.starts_with("systemctl status ")
-        || c.starts_with("ss ")
-        || c.starts_with("ps ")
-        || c.starts_with("docker logs ")
-        || c.starts_with("docker ps")
+    if has_shell_control_syntax(&c) {
+        return AgentRisk::High;
+    }
+    if matches_command(&c, "df")
+        || matches_command(&c, "free")
+        || matches_command(&c, "journalctl")
+        || matches_command(&c, "systemctl status")
+        || matches_command(&c, "ss")
+        || matches_command(&c, "ps")
+        || matches_command(&c, "docker logs")
+        || matches_command(&c, "docker ps")
         || c.starts_with("cat /proc/")
-        || c.starts_with("tail ")
-        || c.starts_with("grep ")
+        || matches_command(&c, "tail")
+        || matches_command(&c, "grep")
     {
         return AgentRisk::ReadOnly;
     }
-    if c.starts_with("systemctl reload ") {
+    if matches_command(&c, "systemctl reload") {
         return AgentRisk::Low;
     }
-    if c.starts_with("systemctl restart ")
-        || c.starts_with("docker restart ")
-        || c.starts_with("kill ")
+    if matches_command(&c, "systemctl restart")
+        || matches_command(&c, "docker restart")
+        || matches_command(&c, "kill")
     {
         return AgentRisk::Medium;
     }
-    if c.starts_with("rm ")
-        || c.starts_with("truncate ")
-        || c.starts_with("reboot")
-        || c.starts_with("shutdown")
-        || c.starts_with("systemctl stop ")
+    if matches_command(&c, "rm")
+        || matches_command(&c, "truncate")
+        || matches_command(&c, "reboot")
+        || matches_command(&c, "shutdown")
+        || matches_command(&c, "systemctl stop")
     {
         return AgentRisk::High;
     }
     AgentRisk::Medium
+}
+
+fn has_shell_control_syntax(command: &str) -> bool {
+    command.contains(';')
+        || command.contains("&&")
+        || command.contains("||")
+        || command.contains('|')
+        || command.contains('\n')
+        || command.contains('\r')
+        || command.contains("$(")
+        || command.contains('`')
+        || command.contains('>')
+        || command.contains('<')
+}
+
+fn matches_command(command: &str, prefix: &str) -> bool {
+    command == prefix
+        || command
+            .strip_prefix(prefix)
+            .and_then(|rest| rest.chars().next())
+            .is_some_and(char::is_whitespace)
 }
 
 #[cfg(test)]
@@ -96,5 +118,27 @@ mod tests {
             classify_command("systemctl restart nginx"),
             AgentRisk::Medium
         );
+    }
+
+    #[test]
+    fn shell_composition_is_not_read_only() {
+        for command in [
+            "df -h; shutdown now",
+            "docker ps && docker restart web",
+            "journalctl -u nginx || shutdown now",
+            "df -h | sh",
+            "df -h\nshutdown now",
+            "df -h $(shutdown now)",
+            "df -h `shutdown now`",
+            "grep x file > /etc/app.conf",
+            "cat /proc/cpuinfo < /tmp/input",
+        ] {
+            assert_ne!(classify_command(command), AgentRisk::ReadOnly, "{command}");
+        }
+    }
+
+    #[test]
+    fn read_only_matching_respects_command_boundaries() {
+        assert_eq!(classify_command("docker psx"), AgentRisk::Medium);
     }
 }
