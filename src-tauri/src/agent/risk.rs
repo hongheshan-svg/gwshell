@@ -24,6 +24,9 @@ pub fn classify_command(command: &str) -> AgentRisk {
     if contains_destructive_dd_command(&c) {
         return AgentRisk::Blocked;
     }
+    if contains_root_destructive_rm_command(&c) {
+        return AgentRisk::Blocked;
+    }
     if c.contains("rm -rf /")
         || c.contains("mkfs")
         || c.contains("passwd ")
@@ -35,6 +38,9 @@ pub fn classify_command(command: &str) -> AgentRisk {
     {
         return AgentRisk::Blocked;
     }
+    if let Some(risk) = classify_wrapped_destructive_command(&c) {
+        return risk;
+    }
     if has_shell_control_syntax(&c) {
         return AgentRisk::High;
     }
@@ -42,6 +48,9 @@ pub fn classify_command(command: &str) -> AgentRisk {
         return AgentRisk::Medium;
     }
     if let Some(risk) = classify_sensitive_read_command(&c) {
+        return risk;
+    }
+    if let Some(risk) = classify_proc_cat_command(&c) {
         return risk;
     }
     if matches_command(&c, "df")
@@ -125,8 +134,69 @@ fn segment_contains_destructive_dd(segment: &str) -> bool {
 }
 
 fn command_word_name(word: &str) -> &str {
-    let trimmed = word.trim_matches(|ch| ch == '\'' || ch == '"');
+    let trimmed = clean_token(word);
     trimmed.rsplit('/').next().unwrap_or(trimmed)
+}
+
+fn clean_token(token: &str) -> &str {
+    token.trim_matches(|ch| ch == '\'' || ch == '"')
+}
+
+fn contains_root_destructive_rm_command(command: &str) -> bool {
+    command
+        .split(is_shell_segment_separator)
+        .any(segment_contains_root_destructive_rm)
+}
+
+fn segment_contains_root_destructive_rm(segment: &str) -> bool {
+    let tokens: Vec<&str> = segment.split_whitespace().map(clean_token).collect();
+    for (idx, token) in tokens.iter().enumerate() {
+        if command_word_name(token) != "rm" {
+            continue;
+        }
+        let args = &tokens[idx + 1..];
+        if has_recursive_force_flags(args) && args.iter().any(|arg| is_root_rm_target(arg)) {
+            return true;
+        }
+    }
+    false
+}
+
+fn has_recursive_force_flags(args: &[&str]) -> bool {
+    let mut recursive = false;
+    let mut force = false;
+    for arg in args {
+        match *arg {
+            "--recursive" => recursive = true,
+            "--force" => force = true,
+            _ if arg.starts_with('-') => {
+                recursive |= arg.contains('r') || arg.contains('R');
+                force |= arg.contains('f');
+            }
+            _ => {}
+        }
+    }
+    recursive && force
+}
+
+fn is_root_rm_target(arg: &str) -> bool {
+    matches!(arg, "/" | "/*")
+}
+
+fn classify_wrapped_destructive_command(command: &str) -> Option<AgentRisk> {
+    for segment in command.split(is_shell_segment_separator) {
+        let tokens: Vec<&str> = segment.split_whitespace().map(clean_token).collect();
+        for (idx, token) in tokens.iter().enumerate() {
+            match command_word_name(token) {
+                "rm" | "shutdown" | "reboot" | "truncate" => return Some(AgentRisk::High),
+                "systemctl" if tokens.get(idx + 1).is_some_and(|arg| *arg == "stop") => {
+                    return Some(AgentRisk::High);
+                }
+                _ => {}
+            }
+        }
+    }
+    None
 }
 
 fn is_mutating_journalctl_command(command: &str) -> bool {
@@ -175,6 +245,28 @@ fn classify_sensitive_read_command(command: &str) -> Option<AgentRisk> {
         }
     }
     risk
+}
+
+fn classify_proc_cat_command(command: &str) -> Option<AgentRisk> {
+    if !matches_command(command, "cat") {
+        return None;
+    }
+
+    let mut proc_risk = None;
+    for token in command.split_whitespace().skip(1) {
+        let token = clean_token(token);
+        if !token.starts_with("/proc/") {
+            continue;
+        }
+        let risk = if token.contains("/../") || token.ends_with("/..") || token.contains("/environ")
+        {
+            AgentRisk::Blocked
+        } else {
+            AgentRisk::ReadOnly
+        };
+        proc_risk = Some(stronger_risk(proc_risk, risk));
+    }
+    proc_risk
 }
 
 fn sensitive_path_risk(path: &str) -> Option<AgentRisk> {
@@ -298,6 +390,20 @@ mod tests {
     }
 
     #[test]
+    fn proc_environ_and_traversal_reads_are_blocked() {
+        assert_eq!(classify_command("cat /proc/cpuinfo"), AgentRisk::ReadOnly);
+        assert_eq!(
+            classify_command("cat /proc/self/environ"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(classify_command("cat /proc/1/environ"), AgentRisk::Blocked);
+        assert_eq!(
+            classify_command("cat /proc/../../etc/shadow"),
+            AgentRisk::Blocked
+        );
+    }
+
+    #[test]
     fn dangerous_commands_are_blocked_or_high() {
         assert_eq!(classify_command("rm -rf /"), AgentRisk::Blocked);
         assert_eq!(classify_command("iptables -F"), AgentRisk::Blocked);
@@ -309,6 +415,32 @@ mod tests {
         assert_eq!(
             classify_command("systemctl restart nginx"),
             AgentRisk::Medium
+        );
+    }
+
+    #[test]
+    fn root_destructive_rm_variants_are_blocked() {
+        for command in [
+            "rm -fr /",
+            "rm -r -f /",
+            "rm --recursive --force /",
+            "sh -c 'rm -fr /'",
+            "rm -rf /*",
+            "/bin/rm -rf /",
+            "sudo rm -rf /",
+        ] {
+            assert_eq!(classify_command(command), AgentRisk::Blocked, "{command}");
+        }
+    }
+
+    #[test]
+    fn command_wrappers_preserve_destructive_risk() {
+        assert_eq!(classify_command("sudo rm /tmp/file"), AgentRisk::High);
+        assert_eq!(classify_command("/bin/rm /tmp/file"), AgentRisk::High);
+        assert_eq!(classify_command("sudo shutdown now"), AgentRisk::High);
+        assert_eq!(
+            classify_command("sudo systemctl stop sshd"),
+            AgentRisk::High
         );
     }
 

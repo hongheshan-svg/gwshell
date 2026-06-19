@@ -130,7 +130,6 @@ fn bearer_value_range(line: &str, lower: &str, idx: usize) -> Option<(usize, usi
 }
 
 fn redact_assignment_line(line: &str) -> String {
-    let lower = line.to_ascii_lowercase();
     let mut out = String::new();
     let mut last = 0;
     let mut idx = 0;
@@ -141,7 +140,7 @@ fn redact_assignment_line(line: &str) -> String {
             continue;
         }
 
-        if let Some((value_start, value_end)) = assignment_value_range(line, &lower, idx) {
+        if let Some((value_start, value_end)) = assignment_value_range(line, idx) {
             out.push_str(&line[last..value_start]);
             out.push_str("[redacted]");
             last = value_end;
@@ -155,7 +154,7 @@ fn redact_assignment_line(line: &str) -> String {
     out
 }
 
-fn assignment_value_range(line: &str, lower: &str, idx: usize) -> Option<(usize, usize)> {
+fn assignment_value_range(line: &str, idx: usize) -> Option<(usize, usize)> {
     let bytes = line.as_bytes();
     let key_quote = match bytes.get(idx) {
         Some(b'"') | Some(b'\'') => Some(bytes[idx]),
@@ -179,7 +178,7 @@ fn assignment_value_range(line: &str, lower: &str, idx: usize) -> Option<(usize,
         (key_end, key_end)
     };
 
-    let key = lower.get(key_start..key_end)?;
+    let key = line.get(key_start..key_end)?;
     if !is_sensitive_assignment_key(key) {
         return None;
     }
@@ -216,8 +215,9 @@ fn find_unquoted_key_end(bytes: &[u8], mut idx: usize) -> usize {
 }
 
 fn is_sensitive_assignment_key(key: &str) -> bool {
+    let key = normalize_key(key);
     matches!(
-        key,
+        key.as_str(),
         "api_key"
             | "apikey"
             | "token"
@@ -236,6 +236,33 @@ fn is_sensitive_assignment_key(key: &str) -> bool {
         || key.ends_with("_secret_key")
         || key.ends_with("_access_key")
         || key.ends_with("_private_key")
+}
+
+fn normalize_key(key: &str) -> String {
+    let mut normalized = String::new();
+    let mut prev_was_lower_or_digit = false;
+
+    for ch in key.chars() {
+        if ch == '-' || ch == '.' {
+            if !normalized.ends_with('_') {
+                normalized.push('_');
+            }
+            prev_was_lower_or_digit = false;
+            continue;
+        }
+        if ch.is_ascii_uppercase() {
+            if prev_was_lower_or_digit && !normalized.ends_with('_') {
+                normalized.push('_');
+            }
+            normalized.push(ch.to_ascii_lowercase());
+            prev_was_lower_or_digit = false;
+        } else {
+            normalized.push(ch.to_ascii_lowercase());
+            prev_was_lower_or_digit = ch.is_ascii_lowercase() || ch.is_ascii_digit();
+        }
+    }
+
+    normalized
 }
 
 fn has_key_boundary_before(bytes: &[u8], idx: usize) -> bool {
@@ -372,6 +399,20 @@ mod tests {
             "tls-private",
             "dict-secret",
         ] {
+            assert!(!redacted.contains(secret), "{secret}");
+        }
+    }
+
+    #[test]
+    fn redacts_camel_case_and_hyphenated_secret_keys() {
+        let text = "clientSecret=abc\nrefreshToken=def\n\"secretKey\": \"ghi\"\n\"x-api-key\": \"jkl\"\naccess-token: mno";
+        let redacted = redact_secrets(text);
+        assert!(redacted.contains("clientSecret=[redacted]"));
+        assert!(redacted.contains("refreshToken=[redacted]"));
+        assert!(redacted.contains("\"secretKey\": \"[redacted]\""));
+        assert!(redacted.contains("\"x-api-key\": \"[redacted]\""));
+        assert!(redacted.contains("access-token: [redacted]"));
+        for secret in ["abc", "def", "ghi", "jkl", "mno"] {
             assert!(!redacted.contains(secret), "{secret}");
         }
     }
