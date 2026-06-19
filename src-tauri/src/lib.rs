@@ -793,6 +793,46 @@ async fn load_app_settings(state: State<'_, Arc<AppState>>) -> Result<Option<Str
         .map_err(|e| format!("task join: {}", e))?
 }
 
+#[tauri::command]
+async fn load_ai_provider_settings(
+    state: State<'_, Arc<AppState>>,
+) -> Result<agent::types::AiProviderSettings, String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || agent::provider::load_settings(&state.db))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
+}
+
+#[tauri::command]
+async fn save_ai_provider_settings(
+    settings: agent::types::AiProviderSettings,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || agent::provider::save_settings(&state.db, settings))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
+}
+
+#[tauri::command]
+async fn set_ai_provider_api_key(
+    api_key: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || agent::provider::set_api_key(&state.db, &api_key))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
+}
+
+#[tauri::command]
+async fn clear_ai_provider_api_key(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || agent::provider::clear_api_key(&state.db))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
+}
+
 // ---- Quake (dropdown console) ----
 
 /// Toggle the "main" window between hidden and a top-docked "Quake" dropdown.
@@ -1269,6 +1309,10 @@ pub fn run() {
             list_serial_ports,
             save_app_settings,
             load_app_settings,
+            load_ai_provider_settings,
+            save_ai_provider_settings,
+            set_ai_provider_api_key,
+            clear_ai_provider_api_key,
             export_sessions_data,
             import_sessions_data,
             import_ssh_config,

@@ -43,6 +43,17 @@ impl Database {
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS agent_audit (
+                id TEXT PRIMARY KEY,
+                agent_session_id TEXT NOT NULL,
+                target_session_id TEXT NOT NULL,
+                started_at INTEGER NOT NULL,
+                finished_at INTEGER,
+                objective TEXT NOT NULL,
+                status TEXT NOT NULL,
+                report_json TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_agent_audit_target ON agent_audit(target_session_id, started_at DESC);
             CREATE TABLE IF NOT EXISTS command_history (
                 id      INTEGER PRIMARY KEY AUTOINCREMENT,
                 command TEXT NOT NULL,
@@ -143,6 +154,35 @@ impl Database {
             .optional()
             .map_err(|e| e.to_string())?;
         Ok(result)
+    }
+
+    pub fn save_app_setting_key(&self, key: &str, value: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?1, ?2)",
+            params![key, value],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn load_app_setting_key(&self, key: &str) -> Result<Option<String>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare("SELECT value FROM app_settings WHERE key = ?1")
+            .map_err(|e| e.to_string())?;
+        let result = stmt
+            .query_row(params![key], |row| row.get::<_, String>(0))
+            .optional()
+            .map_err(|e| e.to_string())?;
+        Ok(result)
+    }
+
+    pub fn delete_app_setting_key(&self, key: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM app_settings WHERE key = ?1", params![key])
+            .map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     // ---- Vault Verifier (Argon2id PHC string for the app-lock passphrase) ----
