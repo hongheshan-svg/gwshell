@@ -3,8 +3,22 @@
 本文件记录 GWShell 的版本变更。格式参考 [Keep a Changelog](https://keepachangelog.com/)，
 版本号遵循 [语义化版本](https://semver.org/)。
 
-发布说明由 CI（`.github/workflows/build.yml`）按标签版本号自动从本文件提取，
+发布说明由 CI（`.github/workflows/release.yml`）按标签版本号自动从本文件提取，
 因此每个版本的小节标题必须形如 `## vX.Y.Z - YYYY-MM-DD`。
+
+## v0.5.5 - 2026-06-19
+
+### 🐛 修复
+- **Windows 本地终端 Codex / Claude Code 光标残影**：调整 xterm.js 的 Windows ConPTY 兼容参数，避免旧版 wrapping heuristic 在全屏 TUI 高频重绘时误判行状态，减少 working 状态光标跳动、目录 / 状态区域出现假光标的问题，并保持 macOS / Windows / Linux 渲染路径更一致。
+- **SFTP 初始目录 `~` 解析错误**：修复进入 SFTP 后落到 `/root/~` 并触发 `SFTP readdir failed: No such file` 的路径拼接问题，统一处理 home、root 与相对路径导航。
+- **SFTP 操作体验**：加宽 SFTP 文件列表滚动条，改善拖拽命中；复用 SFTP 会话以减少反复打开目录时的等待。
+- **SSH 凭据安全**：前端连接已保存 SSH 资产时不再把明文凭据重新经 IPC 发送，改由后端按保存的会话配置读取并解密。
+
+### 🎨 界面
+- **主题一致性**：暗色主题更贴近终端配色，亮色主题更贴近 Codex app 风格；标题栏、菜单、全局背景与终端/SFTP 区域的色彩层级更统一。
+
+### 🔧 发布 / CI
+- 拆分快速 CI 与重型三平台 Release 构建：日常 push / PR 运行 type-check、smoke check、cargo check；版本 tag 触发 Windows / Linux / macOS 产物构建与草稿发布。
 
 ## v0.5.3 - 2026-06-14
 
