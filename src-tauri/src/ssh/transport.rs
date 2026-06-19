@@ -30,13 +30,17 @@ pub async fn build_direct_or_proxied(p: &ConnectParams) -> Result<SshStream, Str
     match p.proxy_type.as_deref().unwrap_or("none") {
         "socks5" => {
             let std_stream = socks5_connect(p)?;
-            std_stream.set_nonblocking(true).map_err(|e| e.to_string())?;
+            std_stream
+                .set_nonblocking(true)
+                .map_err(|e| e.to_string())?;
             let tok = TokioTcp::from_std(std_stream).map_err(|e| e.to_string())?;
             Ok(Box::new(tok))
         }
         "http" => {
             let std_stream = http_connect(p)?;
-            std_stream.set_nonblocking(true).map_err(|e| e.to_string())?;
+            std_stream
+                .set_nonblocking(true)
+                .map_err(|e| e.to_string())?;
             let tok = TokioTcp::from_std(std_stream).map_err(|e| e.to_string())?;
             Ok(Box::new(tok))
         }
@@ -51,7 +55,9 @@ pub async fn build_direct_or_proxied(p: &ConnectParams) -> Result<SshStream, Str
                 .map_err(|_| format!("Connection to {} timed out", addr))?
                 .map_err(|e| format!("Connection to {} failed: {}", addr, e))?
             } else {
-                TokioTcp::connect(&addr).await.map_err(|e| format!("Connection to {} failed: {}", addr, e))?
+                TokioTcp::connect(&addr)
+                    .await
+                    .map_err(|e| format!("Connection to {} failed: {}", addr, e))?
             };
             Ok(Box::new(tok))
         }
@@ -62,7 +68,9 @@ fn socks5_connect(p: &ConnectParams) -> Result<TcpStream, String> {
     let proxy = format!("{}:{}", p.proxy_host.as_deref().unwrap_or(""), p.proxy_port);
     let target = format!("{}:{}", p.host, p.port);
     let s = match (p.proxy_username.as_deref(), p.proxy_password.as_deref()) {
-        (Some(u), Some(pw)) => socks::Socks5Stream::connect_with_password(proxy.as_str(), target.as_str(), u, pw),
+        (Some(u), Some(pw)) => {
+            socks::Socks5Stream::connect_with_password(proxy.as_str(), target.as_str(), u, pw)
+        }
         _ => socks::Socks5Stream::connect(proxy.as_str(), target.as_str()),
     }
     .map_err(|e| format!("SOCKS5 proxy failed: {}", e))?;
@@ -71,23 +79,35 @@ fn socks5_connect(p: &ConnectParams) -> Result<TcpStream, String> {
 
 fn http_connect(p: &ConnectParams) -> Result<TcpStream, String> {
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-    let mut stream = TcpStream::connect(format!("{}:{}", p.proxy_host.as_deref().unwrap_or(""), p.proxy_port))
-        .map_err(|e| format!("HTTP proxy connection failed: {}", e))?;
+    let mut stream = TcpStream::connect(format!(
+        "{}:{}",
+        p.proxy_host.as_deref().unwrap_or(""),
+        p.proxy_port
+    ))
+    .map_err(|e| format!("HTTP proxy connection failed: {}", e))?;
     let mut req = format!(
         "CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n",
-        host = p.host, port = p.port
+        host = p.host,
+        port = p.port
     );
     if let (Some(u), Some(pw)) = (p.proxy_username.as_deref(), p.proxy_password.as_deref()) {
         let creds = BASE64.encode(format!("{}:{}", u, pw).as_bytes());
         req.push_str(&format!("Proxy-Authorization: Basic {}\r\n", creds));
     }
     req.push_str("\r\n");
-    stream.write_all(req.as_bytes()).map_err(|e| format!("HTTP CONNECT request failed: {}", e))?;
+    stream
+        .write_all(req.as_bytes())
+        .map_err(|e| format!("HTTP CONNECT request failed: {}", e))?;
     let mut resp = [0u8; 4096];
-    let n = stream.read(&mut resp).map_err(|e| format!("HTTP proxy response failed: {}", e))?;
+    let n = stream
+        .read(&mut resp)
+        .map_err(|e| format!("HTTP proxy response failed: {}", e))?;
     let s = String::from_utf8_lossy(&resp[..n]);
     if !s.contains("200") {
-        return Err(format!("HTTP proxy refused: {}", s.lines().next().unwrap_or("")));
+        return Err(format!(
+            "HTTP proxy refused: {}",
+            s.lines().next().unwrap_or("")
+        ));
     }
     Ok(stream)
 }

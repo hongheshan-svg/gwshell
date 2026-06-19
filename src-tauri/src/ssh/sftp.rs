@@ -212,7 +212,10 @@ async fn upload_one(
 ) -> Result<(), String> {
     use russh_sftp::protocol::OpenFlags;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let total = tokio::fs::metadata(local).await.map(|m| m.len()).unwrap_or(0);
+    let total = tokio::fs::metadata(local)
+        .await
+        .map(|m| m.len())
+        .unwrap_or(0);
     let mut lf = tokio::fs::File::open(local)
         .await
         .map_err(|e| format!("Local read {} failed: {}", local.display(), e))?;
@@ -248,35 +251,32 @@ async fn upload_one(
 }
 
 pub async fn download(
-    conn: &Handle<Client>,
+    sftp: &SftpSession,
     remote: &str,
     local: &str,
     mut progress: Option<ProgressFn>,
 ) -> Result<(), String> {
-    let sftp = open_sftp(conn).await?;
-    download_one(&sftp, remote, Path::new(local), 1, 1, &mut progress).await
+    download_one(sftp, remote, Path::new(local), 1, 1, &mut progress).await
 }
 
 pub async fn upload(
-    conn: &Handle<Client>,
+    sftp: &SftpSession,
     remote: &str,
     local: &str,
     mut progress: Option<ProgressFn>,
 ) -> Result<(), String> {
-    let sftp = open_sftp(conn).await?;
-    upload_one(&sftp, remote, Path::new(local), 1, 1, &mut progress).await
+    upload_one(sftp, remote, Path::new(local), 1, 1, &mut progress).await
 }
 
 /// Recursively download `remote_dir` into `local_parent` (a `{remote dir
 /// basename}` folder is created inside it). One SFTP session is reused for the
 /// whole walk + transfer. Returns the number of files transferred.
 pub async fn download_dir(
-    conn: &Handle<Client>,
+    sftp: &SftpSession,
     remote_dir: &str,
     local_parent: &str,
     mut progress: Option<ProgressFn>,
 ) -> Result<usize, String> {
-    let sftp = open_sftp(conn).await?;
     let remote_dir = remote_dir.trim_end_matches('/');
     let base_name = remote_dir.rsplit('/').next().unwrap_or(remote_dir);
     if base_name.is_empty() {
@@ -318,12 +318,11 @@ pub async fn download_dir(
 /// (a `{local dir basename}` folder is created inside it). Returns the number
 /// of files transferred.
 pub async fn upload_dir(
-    conn: &Handle<Client>,
+    sftp: &SftpSession,
     remote_parent: &str,
     local_dir: &str,
     mut progress: Option<ProgressFn>,
 ) -> Result<usize, String> {
-    let sftp = open_sftp(conn).await?;
     let local_root = PathBuf::from(local_dir);
     let base_name = local_root
         .file_name()

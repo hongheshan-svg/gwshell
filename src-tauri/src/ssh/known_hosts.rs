@@ -12,8 +12,14 @@ pub struct KnownHostEntry {
 #[derive(Debug, PartialEq)]
 pub enum HostKeyVerdict {
     Trusted,
-    Unknown { fingerprint: String, key_type: String },
-    Mismatch { fingerprint: String, key_type: String },
+    Unknown {
+        fingerprint: String,
+        key_type: String,
+    },
+    Mismatch {
+        fingerprint: String,
+        key_type: String,
+    },
 }
 
 /// Normalize a `SHA256:<base64>` fingerprint for comparison by dropping any
@@ -175,7 +181,10 @@ mod tests {
         let mut store = HashMap::new();
         store.insert(
             "h:22".to_string(),
-            KnownHostEntry { fingerprint: "SHA256:OLD".into(), key_type: "Ecdsa256".into() },
+            KnownHostEntry {
+                fingerprint: "SHA256:OLD".into(),
+                key_type: "Ecdsa256".into(),
+            },
         );
         assert!(matches!(
             verify(&store, "h", 22, "SHA256:NEW", "ssh-ed25519"),
@@ -191,7 +200,10 @@ mod tests {
         let mut store = HashMap::new();
         store.insert(
             "h:22".to_string(),
-            KnownHostEntry { fingerprint: "SHA256:OLD".into(), key_type: "Ecdsa256".into() },
+            KnownHostEntry {
+                fingerprint: "SHA256:OLD".into(),
+                key_type: "Ecdsa256".into(),
+            },
         );
         assert!(matches!(
             verify(&store, "h", 22, "SHA256:NEW", "ecdsa-sha2-nistp256"),
@@ -210,7 +222,10 @@ mod tests {
         let hash = [0u8; 32];
         // What the russh handler / ssh_key Display produces (unpadded).
         let unpadded = sha256_fp(&hash);
-        assert!(!unpadded.ends_with('='), "handler fingerprint must be unpadded");
+        assert!(
+            !unpadded.ends_with('='),
+            "handler fingerprint must be unpadded"
+        );
         // What the legacy ssh.rs STANDARD encoder wrote to the shared store.
         let padded = format!(
             "SHA256:{}",
@@ -222,16 +237,28 @@ mod tests {
         let mut store = HashMap::new();
         store.insert(
             "h:22".to_string(),
-            KnownHostEntry { fingerprint: padded.clone(), key_type: "Ed25519".into() },
+            KnownHostEntry {
+                fingerprint: padded.clone(),
+                key_type: "Ed25519".into(),
+            },
         );
-        assert_eq!(verify(&store, "h", 22, &unpadded, "Ed25519"), HostKeyVerdict::Trusted);
+        assert_eq!(
+            verify(&store, "h", 22, &unpadded, "Ed25519"),
+            HostKeyVerdict::Trusted
+        );
 
         // And the reverse: store holds UNPADDED, handler presents PADDED.
         let mut store2 = HashMap::new();
         store2.insert(
             "h:22".to_string(),
-            KnownHostEntry { fingerprint: unpadded, key_type: "Ed25519".into() },
+            KnownHostEntry {
+                fingerprint: unpadded,
+                key_type: "Ed25519".into(),
+            },
         );
-        assert_eq!(verify(&store2, "h", 22, &padded, "Ed25519"), HostKeyVerdict::Trusted);
+        assert_eq!(
+            verify(&store2, "h", 22, &padded, "Ed25519"),
+            HostKeyVerdict::Trusted
+        );
     }
 }

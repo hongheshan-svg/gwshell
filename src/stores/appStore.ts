@@ -131,6 +131,16 @@ function popInjectedSessions(): SessionConfig[] {
 
 const _initialSessions = popInjectedSessions();
 
+function redactSessionSecrets(session: SessionConfig): SessionConfig {
+  const {
+    password: _password,
+    totp_code: _totpCode,
+    jump_password: _jumpPassword,
+    proxy_password: _proxyPassword,
+    ...safeSession
+  } = session;
+  return safeSession;
+}
 
 export const useAppStore = create<AppStore>((set, get) => ({
   locale: initialLocale,
@@ -155,14 +165,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setActiveNavItem: (item) => set({ activeNavItem: item }),
 
   sessions: _initialSessions,
-  setSessions: (sessions) => set({ sessions }),
+  setSessions: (sessions) => set({ sessions: sessions.map(redactSessionSecrets) }),
   addSession: (session) => {
     set((state) => {
+      const safeSession = redactSessionSecrets(session);
       // Update or insert
-      const exists = state.sessions.some((s) => s.id === session.id);
+      const exists = state.sessions.some((s) => s.id === safeSession.id);
       const sessions = exists
-        ? state.sessions.map((s) => (s.id === session.id ? session : s))
-        : [...state.sessions, session];
+        ? state.sessions.map((s) => (s.id === safeSession.id ? safeSession : s))
+        : [...state.sessions, safeSession];
       return { sessions };
     });
     // Persist to backend; surface failures instead of silently dropping them.
@@ -274,8 +285,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
       // terminal/browser behavior) instead of always jumping to the rightmost.
       let newActiveId = state.activeTabId;
       if (state.activeTabId === id) {
-        const idx = terminalTabs.findIndex((t) => t.id === id);
-        const neighbor = terminalTabs[Math.max(0, idx - 1)] ?? terminalTabs[idx + 1];
+        const previousTerminalTabs = state.tabs.filter((t) => t.type !== 'asset-list');
+        const idx = previousTerminalTabs.findIndex((t) => t.id === id);
+        const leftNeighbor = idx > 0 ? previousTerminalTabs[idx - 1] : undefined;
+        const rightNeighbor = idx >= 0 ? previousTerminalTabs[idx + 1] : undefined;
+        const neighbor = leftNeighbor ?? rightNeighbor;
         newActiveId = neighbor ? neighbor.id : 'asset-list';
       }
       const newMainView = newActiveId === 'asset-list' ? 'asset-list' : 'terminal';

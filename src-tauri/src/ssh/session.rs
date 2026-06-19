@@ -132,7 +132,9 @@ pub async fn spawn(
                 }
                 // Eof/Close end the session; Failure surfaces a rejected shell
                 // request as session-ended rather than a silent dead terminal.
-                Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | Some(ChannelMsg::Failure)
+                Some(ChannelMsg::Eof)
+                | Some(ChannelMsg::Close)
+                | Some(ChannelMsg::Failure)
                 | None => break,
                 _ => {}
             }
@@ -235,7 +237,9 @@ pub async fn spawn_exec(
                 Some(ChannelMsg::ExtendedData { data, .. }) => {
                     emit_decoded(&mut decoder, &data, &app, &data_ev, false)
                 }
-                Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | Some(ChannelMsg::Failure)
+                Some(ChannelMsg::Eof)
+                | Some(ChannelMsg::Close)
+                | Some(ChannelMsg::Failure)
                 | None => break,
                 _ => {}
             }

@@ -45,10 +45,17 @@ async fn build_transport_stream(p: &ConnectParams) -> Result<SshStream, String> 
         let jump_params = ConnectParams {
             host: jh.to_string(),
             port: p.jump_port,
-            username: p.jump_username.clone().unwrap_or_else(|| p.username.clone()),
+            username: p
+                .jump_username
+                .clone()
+                .unwrap_or_else(|| p.username.clone()),
             password: p.jump_password.clone().or_else(|| p.password.clone()),
             private_key_path: p.jump_private_key_path.clone(),
-            auth_method: if p.jump_private_key_path.as_deref().is_some_and(|s| !s.is_empty()) {
+            auth_method: if p
+                .jump_private_key_path
+                .as_deref()
+                .is_some_and(|s| !s.is_empty())
+            {
                 "publickey".into()
             } else {
                 "password".into()
@@ -146,10 +153,16 @@ async fn connect_over(
             // Host-key rejection surfaces as the exact frontend-parsed strings.
             if let Some(rej) = rejection.lock().unwrap().take() {
                 return Err(match rej {
-                    HostKeyError::Unknown { fingerprint, key_type } => {
+                    HostKeyError::Unknown {
+                        fingerprint,
+                        key_type,
+                    } => {
                         format!("FINGERPRINT_UNKNOWN:{}:{}", fingerprint, key_type)
                     }
-                    HostKeyError::Mismatch { fingerprint, key_type } => {
+                    HostKeyError::Mismatch {
+                        fingerprint,
+                        key_type,
+                    } => {
                         format!("FINGERPRINT_MISMATCH:{}:{}", fingerprint, key_type)
                     }
                 });

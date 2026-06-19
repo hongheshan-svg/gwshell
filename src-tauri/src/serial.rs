@@ -116,10 +116,8 @@ impl SerialManager {
 
         // Resolve the encoding name once before spawning the reader thread.
         // Unknown/empty names fall back to UTF-8, matching the pty.rs pattern.
-        let resolved_encoding = encoding_rs::Encoding::for_label(
-            encoding.unwrap_or("").as_bytes(),
-        )
-        .unwrap_or(encoding_rs::UTF_8);
+        let resolved_encoding = encoding_rs::Encoding::for_label(encoding.unwrap_or("").as_bytes())
+            .unwrap_or(encoding_rs::UTF_8);
 
         let sid = session_id.to_string();
         let reader_thread = std::thread::spawn(move || {

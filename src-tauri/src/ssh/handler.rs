@@ -11,8 +11,14 @@ use tokio::net::TcpStream;
 /// the frontend already parses.
 #[derive(Debug, Clone)]
 pub enum HostKeyError {
-    Unknown { fingerprint: String, key_type: String },
-    Mismatch { fingerprint: String, key_type: String },
+    Unknown {
+        fingerprint: String,
+        key_type: String,
+    },
+    Mismatch {
+        fingerprint: String,
+        key_type: String,
+    },
 }
 
 /// Maps a remote-forwarded server port to the local `(host, port)` target that
@@ -54,14 +60,24 @@ impl client::Handler for Client {
 
         match known_hosts::verify(&known_hosts::load(), &self.host, self.port, &fp, &key_type) {
             HostKeyVerdict::Trusted => Ok(true),
-            HostKeyVerdict::Unknown { fingerprint, key_type } => {
-                *self.rejection.lock().unwrap() =
-                    Some(HostKeyError::Unknown { fingerprint, key_type });
+            HostKeyVerdict::Unknown {
+                fingerprint,
+                key_type,
+            } => {
+                *self.rejection.lock().unwrap() = Some(HostKeyError::Unknown {
+                    fingerprint,
+                    key_type,
+                });
                 Ok(false)
             }
-            HostKeyVerdict::Mismatch { fingerprint, key_type } => {
-                *self.rejection.lock().unwrap() =
-                    Some(HostKeyError::Mismatch { fingerprint, key_type });
+            HostKeyVerdict::Mismatch {
+                fingerprint,
+                key_type,
+            } => {
+                *self.rejection.lock().unwrap() = Some(HostKeyError::Mismatch {
+                    fingerprint,
+                    key_type,
+                });
                 Ok(false)
             }
         }

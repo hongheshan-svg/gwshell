@@ -11,8 +11,9 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { useEscapeClose } from '../../lib/useEscapeClose';
+import { isTauriRuntime } from '../../lib/platform';
 
-const appWindow = getCurrentWindow();
+const getAppWindow = () => (isTauriRuntime() ? getCurrentWindow() : null);
 
 export const AppMenu: React.FC = () => {
   const { showAppMenu, setShowAppMenu, setShowSettings, setShowCommandPalette, locale, setLocale } = useAppStore();
@@ -37,13 +38,16 @@ export const AppMenu: React.FC = () => {
 
   const handleQuit = () => {
     setShowAppMenu(false);
-    exit(0).catch(() => {});
-    invoke('quit_app').catch(() => {});
-    setTimeout(() => {
-      appWindow.destroy().catch(() => {
-        appWindow.close().catch(() => {});
-      });
-    }, 800);
+    if (isTauriRuntime()) {
+      exit(0).catch(() => {});
+      invoke('quit_app').catch(() => {});
+      setTimeout(() => {
+        const appWindow = getAppWindow();
+        appWindow?.destroy().catch(() => {
+          getAppWindow()?.close().catch(() => {});
+        });
+      }, 800);
+    }
   };
 
   return (

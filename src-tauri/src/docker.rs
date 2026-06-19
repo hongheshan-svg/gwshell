@@ -40,7 +40,12 @@ pub fn parse_docker_ps(out: &str) -> Vec<DockerContainer> {
             if id.is_empty() {
                 return None;
             }
-            Some(DockerContainer { id, name, image, status })
+            Some(DockerContainer {
+                id,
+                name,
+                image,
+                status,
+            })
         })
         .collect()
 }
@@ -154,7 +159,7 @@ fn split_exec_rc(out: &str) -> (String, i32) {
 
 #[tauri::command]
 pub async fn docker_list_containers(
-    connect_method: String,            // "Local" | "SSH"
+    connect_method: String, // "Local" | "SSH"
     tunnel_session_id: Option<String>,
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<DockerContainer>, String> {
@@ -224,11 +229,11 @@ pub async fn docker_list_containers(
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn docker_exec(
-    session_id: String,                // the DOCKER tab's session id (event/resize/close key)
+    session_id: String, // the DOCKER tab's session id (event/resize/close key)
     container_id: String,
     rows: u32,
     cols: u32,
-    connect_method: String,            // "Local" | "SSH"
+    connect_method: String, // "Local" | "SSH"
     tunnel_session_id: Option<String>,
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
@@ -240,8 +245,7 @@ pub async fn docker_exec(
     }
 
     if connect_method.eq_ignore_ascii_case("ssh") {
-        let tunnel_id = tunnel_session_id
-            .ok_or_else(|| "No SSH session selected".to_string())?;
+        let tunnel_id = tunnel_session_id.ok_or_else(|| "No SSH session selected".to_string())?;
 
         let sess = {
             let guard = state.sessions.lock();
@@ -253,10 +257,7 @@ pub async fn docker_exec(
 
         // Build the command with `--` to prevent argv flag smuggling from the
         // container_id (already validated, but belt-and-suspenders).
-        let cmd = format!(
-            "docker exec -it -- {} sh -c '{}'",
-            container_id, EXEC_SHELL
-        );
+        let cmd = format!("docker exec -it -- {} sh -c '{}'", container_id, EXEC_SHELL);
 
         state
             .ssh_manager

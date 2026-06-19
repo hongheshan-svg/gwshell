@@ -19,6 +19,47 @@ use ssh::SshManager;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager, State};
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use session::{AuthMethod, SessionType};
+
+    #[test]
+    fn redacted_session_for_frontend_removes_all_inline_secrets() {
+        let session = SessionConfig {
+            id: "s1".to_string(),
+            name: "server".to_string(),
+            session_type: SessionType::Ssh,
+            host: Some("example.com".to_string()),
+            auth_method: AuthMethod::KeyboardInteractive,
+            password: Some("password".to_string()),
+            totp_code: Some("123456".to_string()),
+            jump_password: Some("jump".to_string()),
+            proxy_password: Some("proxy".to_string()),
+            private_key_path: Some("~/.ssh/id_ed25519".to_string()),
+            jump_private_key_path: Some("~/.ssh/jump".to_string()),
+            ..Default::default()
+        };
+
+        let redacted = redacted_session_for_frontend(&session);
+
+        assert_eq!(redacted.id, "s1");
+        assert_eq!(redacted.host.as_deref(), Some("example.com"));
+        assert_eq!(
+            redacted.private_key_path.as_deref(),
+            Some("~/.ssh/id_ed25519")
+        );
+        assert_eq!(
+            redacted.jump_private_key_path.as_deref(),
+            Some("~/.ssh/jump")
+        );
+        assert!(redacted.password.is_none());
+        assert!(redacted.totp_code.is_none());
+        assert!(redacted.jump_password.is_none());
+        assert!(redacted.proxy_password.is_none());
+    }
+}
+
 pub struct AppState {
     pub pty_manager: PtyManager,
     pub ssh_manager: Arc<SshManager>,
@@ -26,6 +67,19 @@ pub struct AppState {
     pub sessions: Mutex<Vec<SessionConfig>>,
     pub db: Database,
     pub metrics: metrics::MetricsManager,
+}
+
+fn redacted_session_for_frontend(session: &SessionConfig) -> SessionConfig {
+    let mut redacted = session.clone();
+    redacted.password = None;
+    redacted.totp_code = None;
+    redacted.jump_password = None;
+    redacted.proxy_password = None;
+    redacted
+}
+
+fn redacted_sessions_for_frontend(sessions: &[SessionConfig]) -> Vec<SessionConfig> {
+    sessions.iter().map(redacted_session_for_frontend).collect()
 }
 
 // ---- Platform Info ----
@@ -237,6 +291,31 @@ async fn ssh_connect(
 }
 
 #[tauri::command]
+async fn ssh_connect_saved(
+    session_id: String,
+    rows: u32,
+    cols: u32,
+    state: State<'_, Arc<AppState>>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let config = state
+        .sessions
+        .lock()
+        .iter()
+        .find(|session| session.id == session_id)
+        .cloned()
+        .ok_or_else(|| "Session not found".to_string())?;
+    let params = docker::connect_params_from_session(&config);
+    if params.host.trim().is_empty() {
+        return Err("SSH host is empty".to_string());
+    }
+    state
+        .ssh_manager
+        .connect(&session_id, params, rows, cols, app_handle)
+        .await
+}
+
+#[tauri::command]
 async fn ssh_trust_host(host: String, port: u16, fingerprint: String, key_type: String) {
     let _ = tokio::task::spawn_blocking(move || {
         ssh::trust_host(&host, port, &fingerprint, &key_type);
@@ -284,7 +363,12 @@ async fn start_tunnel(
                 .await
         }
         // Dynamic (-D): SOCKS5 proxy on local_port; remote_host/remote_port unused.
-        Some("dynamic") => state.ssh_manager.start_socks_forward(&session_id, local_port).await,
+        Some("dynamic") => {
+            state
+                .ssh_manager
+                .start_socks_forward(&session_id, local_port)
+                .await
+        }
         // Local (-L) — default and any other value.
         _ => {
             state
@@ -407,8 +491,7 @@ fn sftp_progress_emitter(
     Box::new(move |file, file_index, file_total, bytes, total| {
         let now = std::time::Instant::now();
         let file_finished = total > 0 && bytes >= total;
-        if !file_finished && now.duration_since(last_emit) < std::time::Duration::from_millis(100)
-        {
+        if !file_finished && now.duration_since(last_emit) < std::time::Duration::from_millis(100) {
             return;
         }
         last_emit = now;
@@ -597,7 +680,11 @@ async fn kill_remote_process(
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
     let cmd = format!("kill {}", pid);
-    state.ssh_manager.ssh_exec(&session_id, &cmd).await.map(|_| ())
+    state
+        .ssh_manager
+        .ssh_exec(&session_id, &cmd)
+        .await
+        .map(|_| ())
 }
 
 #[tauri::command]
@@ -758,7 +845,13 @@ async fn append_session_log(session_name: String, data: String) -> Result<(), St
     tokio::task::spawn_blocking(move || -> Result<(), String> {
         let safe: String = session_name
             .chars()
-            .map(|c| if r#"\/:*?"<>|"#.contains(c) || c.is_control() { '_' } else { c })
+            .map(|c| {
+                if r#"\/:*?"<>|"#.contains(c) || c.is_control() {
+                    '_'
+                } else {
+                    c
+                }
+            })
             .collect();
         let safe = safe.trim().trim_matches('.');
         let name = if safe.is_empty() { "session" } else { safe };
@@ -807,7 +900,9 @@ async fn save_command_history(
     let scope = scope.unwrap_or_default();
     let session_type = session_type.unwrap_or_default();
     tokio::task::spawn_blocking(move || {
-        state.db.save_command_history(&command, &cwd, &scope, &session_type);
+        state
+            .db
+            .save_command_history(&command, &cwd, &scope, &session_type);
         Ok(())
     })
     .await
@@ -993,7 +1088,9 @@ async fn save_session(
 #[tauri::command]
 fn get_sessions(state: State<'_, Arc<AppState>>) -> Vec<SessionConfig> {
     // Pure in-memory clone — keep sync to avoid spawn_blocking overhead.
-    state.sessions.lock().clone()
+    // Secrets stay in the Rust process; the WebView receives only metadata.
+    let sessions = state.sessions.lock();
+    redacted_sessions_for_frontend(&sessions)
 }
 
 #[tauri::command]
@@ -1139,6 +1236,7 @@ pub fn run() {
             resize_pty,
             close_pty,
             ssh_connect,
+            ssh_connect_saved,
             ssh_trust_host,
             start_tunnel,
             write_to_ssh,
@@ -1203,7 +1301,8 @@ pub fn run() {
             let sessions_json = {
                 let state = app.state::<Arc<AppState>>();
                 let sessions = state.sessions.lock();
-                serde_json::to_string(&*sessions).unwrap_or_else(|_| "[]".to_string())
+                let redacted = redacted_sessions_for_frontend(&sessions);
+                serde_json::to_string(&redacted).unwrap_or_else(|_| "[]".to_string())
             };
             // Inject sessions AND fire a cheap IPC call to warm up the
             // __TAURI_INTERNALS__ → Rust pipeline before the user clicks anything.

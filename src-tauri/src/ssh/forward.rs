@@ -38,7 +38,12 @@ pub async fn start_local(
             let stop_inner = stop.clone();
             tokio::spawn(async move {
                 let Ok(channel) = conn
-                    .channel_open_direct_tcpip(rhost, remote_port as u32, "127.0.0.1".to_string(), 0)
+                    .channel_open_direct_tcpip(
+                        rhost,
+                        remote_port as u32,
+                        "127.0.0.1".to_string(),
+                        0,
+                    )
                     .await
                 else {
                     return;

@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { openPath } from '@tauri-apps/plugin-opener';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   Folder, File, Upload, Download, Trash2, FolderPlus,
   RefreshCw, ChevronUp, Home, Edit3, X, Copy,
@@ -11,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { fileIconFor } from '../../lib/fileIcons';
+import { getSftpHomeCandidates, normalizeResolvedSftpDirectory } from '../../lib/sftpPaths';
 import { SftpEditor } from './SftpEditor';
 
 const TEXT_EXTENSIONS = new Set([
@@ -90,6 +92,8 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
   const initializedRef = useRef(false);
   const homePathRef = useRef<string | null>(null);
   const initRunRef = useRef(0);
+  // Scroll container for the virtualized file list.
+  const listScrollRef = useRef<HTMLDivElement>(null);
   // Guards file transfers so overlapping operations (double-click during a
   // transfer, spammed download/upload) can't run concurrently and corrupt
   // each other. The ref gives an immediate synchronous gate; `busy` drives UI.
@@ -161,24 +165,18 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
 
   const resolveReadableDir = useCallback(
     async (path: string): Promise<string | null> => {
-      let resolvedPath = path;
+      // Use sftp_realpath (one lightweight round-trip, and it does NOT go
+      // through the reopen-and-retry with_sftp path) to canonicalize a
+      // candidate and confirm it exists. We deliberately do NOT sftp_list here:
+      // a full directory read just to verify readability was the main cause of
+      // slow first-load (several candidates × list round-trips, with the result
+      // discarded). loadDir() does the one real list after we pick a home.
       try {
-        resolvedPath = await invoke<string>('sftp_realpath', { sessionId, path });
+        const resolved = await invoke<string>('sftp_realpath', { sessionId, path });
+        return normalizeResolvedSftpDirectory(resolved || path);
       } catch {
-        // Some SFTP servers don't expand "~"; verify the original candidate below.
+        return null;
       }
-
-      const candidates = resolvedPath === path ? [path] : [resolvedPath, path];
-      for (const candidate of candidates) {
-        if (!candidate) continue;
-        try {
-          await invoke<unknown[]>('sftp_list', { sessionId, path: candidate });
-          return candidate;
-        } catch {
-          // Try the next candidate.
-        }
-      }
-      return null;
     },
     [sessionId],
   );
@@ -186,26 +184,47 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
   const resolveHomePath = useCallback(async (): Promise<string> => {
     if (homePathRef.current) return homePathRef.current;
 
-    const candidates = username === 'root'
-      ? ['/root', '~']
-      : username
-        ? [`/home/${username}`, '~']
-        : ['~'];
-    candidates.push('.', '/');
+    const candidates = getSftpHomeCandidates(username);
 
-    const seen = new Set<string>();
-    for (const candidate of candidates) {
-      if (seen.has(candidate)) continue;
-      seen.add(candidate);
-      const readable = await resolveReadableDir(candidate);
-      if (readable) {
-        homePathRef.current = readable;
-        return readable;
+    // Probe candidates IN PARALLEL and take the first that resolves, instead
+    // of awaiting them serially. Each probe is a single realpath round-trip, so
+    // the whole detection finishes in ~1 RTT instead of N×RTT. (Implemented
+    // without Promise.any — the TS lib target is ES2020.)
+    const probes = candidates;
+    try {
+      const resolved = await new Promise<string>((resolve, reject) => {
+        let remaining = probes.length;
+        if (remaining === 0) { reject(new Error('no candidates')); return; }
+        for (const c of probes) {
+          resolveReadableDir(c).then((r) => {
+            if (r) resolve(r);
+            else if (--remaining === 0) reject(new Error('all unresolved'));
+          }).catch(() => {
+            if (--remaining === 0) reject(new Error('all unresolved'));
+          });
+        }
+      });
+      homePathRef.current = resolved;
+      return resolved;
+    } catch {
+      // Some servers don't support canonicalize/realpath for otherwise
+      // readable directories. Fall back to list probes, but still never use a
+      // literal "~" path; SFTP is not a shell and many servers treat it as a
+      // real child directory name.
+      // Fall back to serial lightweight list probes so we don't accept an
+      // unreadable candidate from a failed realpath.
+      for (const candidate of probes) {
+        try {
+          await invoke<unknown[]>('sftp_list', { sessionId, path: candidate });
+          homePathRef.current = candidate;
+          return candidate;
+        } catch {
+          // Try next candidate.
+        }
       }
+      homePathRef.current = '/';
+      return '/';
     }
-
-    homePathRef.current = '/';
-    return '/';
   }, [resolveReadableDir, username]);
 
   // Detect the initial directory once the SSH session is actually connected.
@@ -533,8 +552,27 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
     return mode.toString(8);
   };
 
-  const fileCount = entries.filter((e) => !e.is_dir).length;
-  const folderCount = entries.filter((e) => e.is_dir).length;
+  // Counts are memoized so a re-render triggered by something other than the
+  // entries list (e.g. resizing the panel width) doesn't re-scan the whole list.
+  const { fileCount, folderCount } = useMemo(() => {
+    let files = 0;
+    let folders = 0;
+    for (const e of entries) {
+      if (e.is_dir) folders += 1;
+      else files += 1;
+    }
+    return { fileCount: files, folderCount: folders };
+  }, [entries]);
+
+  // Virtualize the file list so large directories (thousands of entries) only
+  // render the visible rows instead of mounting the whole list as DOM.
+  const rowVirtualizer = useVirtualizer({
+    count: entries.length,
+    getScrollElement: () => listScrollRef.current,
+    estimateSize: () => 32, // matches .sftp-file-item min-height
+    overscan: 8,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
 
   return (
     <>
@@ -611,6 +649,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
         {/* File list */}
         <div
           className="sftp-file-list"
+          ref={listScrollRef}
           onContextMenu={(e) => handleContextMenu(e, null)}
         >
           {loading && entries.length === 0 && (
@@ -676,43 +715,53 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
             </div>
           )}
 
-          {entries.map((entry) => (
-            <div
-              key={entry.path}
-              className={`sftp-file-item ${entry.is_dir ? 'sftp-file-dir' : ''} ${selectedEntry?.path === entry.path ? 'sftp-file-item-selected' : ''}`}
-              role="button"
-              tabIndex={0}
-              aria-label={entry.name}
-              onClick={() => handleEntryClick(entry)}
-              onDoubleClick={() => handleEntryDoubleClick(entry)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleEntryDoubleClick(entry); } }}
-              onContextMenu={(e) => handleContextMenu(e, entry)}
-            >
-              {entry.is_dir ? (
-                <Folder size={17} className="sftp-icon sftp-icon-folder" />
-              ) : (() => {
-                const { Icon, cls } = fileIconFor(entry.name);
-                return <Icon size={16} className={`sftp-icon ${cls}`} />;
-              })()}
-              {renamingEntry === entry.path ? (
-                <input
-                  className="sftp-rename-input"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onBlur={() => handleRename(entry)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleRename(entry); if (e.key === 'Escape') setRenamingEntry(null); }}
-                  autoFocus
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ) : (
-                <>
-                  <span className="sftp-file-name" title={entry.name}>{entry.name}</span>
-                  <span className="sftp-file-size">{entry.is_dir ? '' : formatSize(entry.size)}</span>
-                  <span className="sftp-file-perm">{formatPermissions(entry.permissions)}</span>
-                </>
-              )}
-            </div>
-          ))}
+          <div
+            className="sftp-virtual-list"
+            style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+          >
+            {virtualRows.map((virtualRow) => {
+              const entry = entries[virtualRow.index];
+              if (!entry) return null;
+              return (
+                <div
+                  key={entry.path}
+                  className={`sftp-file-item sftp-virtual-row ${entry.is_dir ? 'sftp-file-dir' : ''} ${selectedEntry?.path === entry.path ? 'sftp-file-item-selected' : ''}`}
+                  style={{ transform: `translateY(${virtualRow.start}px)` }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={entry.name}
+                  onClick={() => handleEntryClick(entry)}
+                  onDoubleClick={() => handleEntryDoubleClick(entry)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleEntryDoubleClick(entry); } }}
+                  onContextMenu={(e) => handleContextMenu(e, entry)}
+                >
+                  {entry.is_dir ? (
+                    <Folder size={17} className="sftp-icon sftp-icon-folder" />
+                  ) : (() => {
+                    const { Icon, cls } = fileIconFor(entry.name);
+                    return <Icon size={16} className={`sftp-icon ${cls}`} />;
+                  })()}
+                  {renamingEntry === entry.path ? (
+                    <input
+                      className="sftp-rename-input"
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onBlur={() => handleRename(entry)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleRename(entry); if (e.key === 'Escape') setRenamingEntry(null); }}
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <>
+                      <span className="sftp-file-name" title={entry.name}>{entry.name}</span>
+                      <span className="sftp-file-size">{entry.is_dir ? '' : formatSize(entry.size)}</span>
+                      <span className="sftp-file-perm">{formatPermissions(entry.permissions)}</span>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
 
           {!loading && entries.length === 0 && !error && (
             <div className="sftp-empty">{t('sftp_empty')}</div>

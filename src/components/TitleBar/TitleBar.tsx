@@ -4,25 +4,27 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { exit } from '@tauri-apps/plugin-process';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../stores/appStore';
-import { IS_MACOS } from '../../lib/platform';
+import { IS_MACOS, isTauriRuntime } from '../../lib/platform';
 
-const appWindow = getCurrentWindow();
+const getAppWindow = () => (isTauriRuntime() ? getCurrentWindow() : null);
 
 export const TitleBar: React.FC = () => {
   const { t } = useTranslation();
   const { serverPanelOpen, toggleServerPanel, setShowCommandPalette } = useAppStore();
 
   const handleMinimize = () => {
-    appWindow.minimize();
+    getAppWindow()?.minimize().catch(() => {});
   };
 
   const handleMaximize = () => {
-    appWindow.toggleMaximize();
+    getAppWindow()?.toggleMaximize().catch(() => {});
   };
 
   const handleClose = () => {
-    exit(0).catch(() => {});
-    appWindow.close().catch(() => {});
+    if (isTauriRuntime()) {
+      exit(0).catch(() => {});
+      getAppWindow()?.close().catch(() => {});
+    }
   };
 
   return (

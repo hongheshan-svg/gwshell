@@ -24,8 +24,8 @@ html, body, #root {
 }
 
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -33,12 +33,14 @@ html, body, #root {
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: var(--border-light);
+  background-color: color-mix(in srgb, var(--text-muted) 62%, transparent);
+  background-clip: padding-box;
+  border: 2px solid transparent;
   border-radius: var(--radius-sm);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: var(--text-muted);
+  background-color: color-mix(in srgb, var(--text-secondary) 74%, transparent);
 }
 
 input, select, textarea, button {
@@ -1024,15 +1026,26 @@ input, select, textarea, button {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-gutter: stable;
+  scrollbar-width: auto;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 62%, transparent) transparent;
 }
 
 .sftp-file-list::-webkit-scrollbar {
-  width: 4px;
+  width: 14px;
 }
 
 .sftp-file-list::-webkit-scrollbar-thumb {
-  background: var(--text-tertiary);
-  border-radius: var(--radius-sm);
+  min-height: 40px;
+  background: color-mix(in srgb, var(--text-muted) 70%, transparent);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: var(--radius-pill);
+}
+
+.sftp-file-list::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-secondary) 84%, transparent);
+  background-clip: padding-box;
 }
 
 /* Column header — mirrors the .sftp-file-item flex layout so labels line up
@@ -1105,6 +1118,19 @@ input, select, textarea, button {
 
 .sftp-file-item-selected:hover {
   background: color-mix(in srgb, var(--accent-primary) 22%, transparent);
+}
+
+.sftp-virtual-list {
+  position: relative;
+  width: 100%;
+}
+
+.sftp-virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
 }
 
 .sftp-file-dir {

@@ -116,7 +116,7 @@ fn resolve_shell(name: Option<&str>) -> CommandBuilder {
         Some("zsh") => CommandBuilder::new("zsh"),
         Some("fish") => CommandBuilder::new("fish"),
         Some("cmd") => CommandBuilder::new("sh"), // fallback on unix
-        _ => CommandBuilder::new("bash"), // bash (default)
+        _ => CommandBuilder::new("bash"),         // bash (default)
     }
 }
 
@@ -481,8 +481,13 @@ impl PtyManager {
         // `-` cannot smuggle flags into `docker exec` (defense-in-depth; the id
         // is also format-validated at the `docker_exec` command layer).
         cmd.args([
-            "exec", "-it", "--", container_id,
-            "sh", "-c", "exec bash 2>/dev/null || exec sh",
+            "exec",
+            "-it",
+            "--",
+            container_id,
+            "sh",
+            "-c",
+            "exec bash 2>/dev/null || exec sh",
         ]);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");

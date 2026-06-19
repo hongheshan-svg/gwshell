@@ -137,7 +137,9 @@ pub fn parse_ssh_config(content: &str) -> Vec<SshConfigHost> {
                 };
                 match key.as_str() {
                     "hostname" => {
-                        block.host_name.get_or_insert_with(|| strip_quotes(&value).to_string());
+                        block
+                            .host_name
+                            .get_or_insert_with(|| strip_quotes(&value).to_string());
                     }
                     "port" => {
                         if block.port.is_none() {
@@ -145,7 +147,9 @@ pub fn parse_ssh_config(content: &str) -> Vec<SshConfigHost> {
                         }
                     }
                     "user" => {
-                        block.user.get_or_insert_with(|| strip_quotes(&value).to_string());
+                        block
+                            .user
+                            .get_or_insert_with(|| strip_quotes(&value).to_string());
                     }
                     "identityfile" => {
                         // OpenSSH allows several IdentityFile lines; keep the first.
@@ -262,6 +266,9 @@ mod tests {
     fn quoted_values_are_unwrapped() {
         let cfg = "Host q\n  IdentityFile \"C:\\Users\\me\\my key\"\n";
         let hosts = parse_ssh_config(cfg);
-        assert_eq!(hosts[0].identity_file.as_deref(), Some("C:\\Users\\me\\my key"));
+        assert_eq!(
+            hosts[0].identity_file.as_deref(),
+            Some("C:\\Users\\me\\my key")
+        );
     }
 }

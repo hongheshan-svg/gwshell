@@ -10,27 +10,27 @@
    ============================================================================ */
 
 :root {
-  /* ---- Surfaces (neutral slate) ---- */
-  --bg-primary:   #0d0e12;   /* app / deepest background */
-  --bg-secondary: #16171d;   /* chrome surfaces: titlebar, sidebar, tabbar */
-  --bg-tertiary:  #1c1d25;   /* raised: inputs, nested panels */
-  --bg-hover:     #22232c;
-  --bg-active:    #2a2b36;
-  --bg-card:      #14151a;    /* cards / list rows */
+  /* ---- Surfaces (terminal dark) ---- */
+  --bg-primary:   #0c0c0c;   /* app / deepest background */
+  --bg-secondary: #111111;   /* chrome surfaces: titlebar, sidebar, tabbar */
+  --bg-tertiary:  #181818;   /* raised: inputs, nested panels */
+  --bg-hover:     #222222;
+  --bg-active:    #2d2d2d;
+  --bg-card:      #151515;    /* cards / list rows */
 
-  --border-color: #24262e;
-  --border-light: #2e3039;
+  --border-color: #262626;
+  --border-light: #3a3a3a;
 
   /* ---- Text ---- */
-  --text-primary:   #e7e9f0;
-  --text-secondary: #9ca3b4;
-  --text-muted:     #6b7385;
+  --text-primary:   #f2f2f2;
+  --text-secondary: #cccccc;
+  --text-muted:     #858585;
 
-  /* ---- Signature accent (indigo) ---- */
-  --accent-primary: #6366f1;
-  --accent-primary-rgb: 99, 102, 241;
-  --accent-hover:   #818cf8;
-  --accent-bg:      rgba(99, 102, 241, 0.14);
+  /* ---- Signature accent (terminal blue) ---- */
+  --accent-primary: #3a96dd;
+  --accent-primary-rgb: 58, 150, 221;
+  --accent-hover:   #5ab5ff;
+  --accent-bg:      rgba(58, 150, 221, 0.18);
 
   /* ---- Semantic ---- */
   --success: #4ade80;  --success-rgb: 74, 222, 128;
@@ -62,8 +62,8 @@
 
   /* ---- Translucency (B-level: CSS only, no native window changes) ---- */
   --surface-blur: 10px;
-  --chrome-bg: rgba(22, 23, 29, 0.72);   /* translucent chrome surfaces */
-  --term-bg:   rgba(8, 9, 12, 0.96);      /* terminal: kept near-opaque for readability */
+  --chrome-bg: rgba(17, 17, 17, 0.82);   /* translucent chrome surfaces */
+  --term-bg:   rgba(12, 12, 12, 0.98);    /* terminal: kept near-opaque for readability */
 
   /* ---- Motion ---- */
   --transition-fast: 110ms ease;
@@ -79,6 +79,7 @@
           that were never defined and silently fell back to hardcoded colors.
           Point them at the real theme-aware tokens. ---- */
   --accent: var(--accent-primary);
+  --accent-color: var(--accent-primary);
   --accent-subtle: var(--accent-bg);
   --border: var(--border-color);
   --hover-bg: var(--bg-hover);
@@ -88,24 +89,24 @@
 }
 
 [data-theme='light'] {
-  --bg-primary:   #f7f8fa;
-  --bg-secondary: #eef0f4;
-  --bg-tertiary:  #e4e7ec;
-  --bg-hover:     #e0e3e9;
-  --bg-active:    #d6dae2;
+  --bg-primary:   #ffffff;
+  --bg-secondary: #f7f7f8;
+  --bg-tertiary:  #f1f1f3;
+  --bg-hover:     #ececf0;
+  --bg-active:    #e3e3e8;
   --bg-card:      #ffffff;
 
-  --border-color: #d8dce3;
-  --border-light: #e6e9ee;
+  --border-color: #dedee4;
+  --border-light: #ececf0;
 
-  --text-primary:   #1a1c23;
-  --text-secondary: #555b6b;
-  --text-muted:     #667085;
+  --text-primary:   #171717;
+  --text-secondary: #4f4f55;
+  --text-muted:     #777780;
 
-  --accent-primary: #4f46e5;
-  --accent-primary-rgb: 79, 70, 229;
-  --accent-hover:   #4338ca;
-  --accent-bg:      rgba(79, 70, 229, 0.10);
+  --accent-primary: #111111;
+  --accent-primary-rgb: 17, 17, 17;
+  --accent-hover:   #333333;
+  --accent-bg:      rgba(17, 17, 17, 0.08);
 
   --success: #16a34a;  --success-rgb: 22, 163, 74;
   --warning: #ca8a04;  --warning-rgb: 202, 138, 4;
@@ -115,6 +116,6 @@
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.10);
   --shadow-lg: 0 12px 40px -8px rgba(0, 0, 0, 0.16);
 
-  --chrome-bg: rgba(247, 248, 250, 0.72);
+  --chrome-bg: rgba(255, 255, 255, 0.78);
   --term-bg:   rgba(255, 255, 255, 0.98);
 }

@@ -18,6 +18,7 @@ import { runLoginScript } from '../../lib/sendScript';
 import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';
 import { buildCompletions, type Completion } from '../../lib/completion';
 import { tableForShellName, tableForRemoteShell, type CommandTable } from '../../lib/commandDictionary';
+import { getXtermWindowsPty } from '../../lib/terminalPtyOptions';
 import { CompletionDropdown } from './CompletionDropdown';
 import i18n from '../../i18n';
 import "@xterm/xterm/css/xterm.css";
@@ -540,15 +541,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         // Only the LOCAL PTY backend (local shell, and Docker-over-local-PTY)
         // runs through Windows ConPTY. SSH and serial sessions talk to a remote
         // Unix PTY / a serial device and never touch the local ConPTY, so
-        // advertising `windowsPty` for them is wrong. On Windows builds < 21376
-        // (every Windows 10 release, plus any build whose number fails to parse
-        // and falls back to 0) that wrong flag switches on xterm.js's winpty
-        // wrapping heuristics, which corrupt full-screen TUIs (Codex, Claude
-        // Code): lines reflow incorrectly and the terminal cursor gets drawn
-        // over the app's own status rows / file tree instead of its input line.
-        // Restrict `windowsPty` to sessions that are genuinely local ConPTY.
+        // advertising `windowsPty` for them is wrong.
         const usesLocalConpty = (): boolean => {
-          if (osInfo.os !== "windows") return false;
           if (tab.type === "localshell") return true;
           if (tab.type === "docker") {
             const dsess = sessionsRef.current.find((s) => s.id === tab.sessionId);
@@ -556,12 +550,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           }
           return false;
         };
-        if (usesLocalConpty()) {
-          termOpts.windowsPty = {
-            backend: "conpty",
-            buildNumber: osInfo.windowsBuild ?? 0,
-          };
-        }
+        const windowsPty = getXtermWindowsPty(osInfo, usesLocalConpty());
+        if (windowsPty) termOpts.windowsPty = windowsPty;
 
         // Wait for the configured terminal font to load before constructing the
         // terminal. xterm measures character cell width once, on construction;
@@ -1493,9 +1483,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         cols: instance!.terminal.cols,
       });
 
+      const shouldUseSavedSshConfig = (sess: typeof session): boolean =>
+        !!sess && !sess._temporary;
+
+      const invokeSshConnect = (sess: typeof session): Promise<void> => {
+        if (shouldUseSavedSshConfig(sess)) {
+          return invoke("ssh_connect_saved", {
+            sessionId: tab.sessionId,
+            rows: instance!.terminal.rows,
+            cols: instance!.terminal.cols,
+          });
+        }
+        return invoke("ssh_connect", buildSshParams(sess));
+      };
+
       const doSshConnect = async (sess: typeof session): Promise<void> => {
         try {
-          await invoke("ssh_connect", buildSshParams(sess));
+          await invokeSshConnect(sess);
         } catch (rawErr) {
           const errStr = String(rawErr);
           if (errStr.startsWith("FINGERPRINT_UNKNOWN:") || errStr.startsWith("FINGERPRINT_MISMATCH:")) {
@@ -1520,7 +1524,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
 
             if (accepted && !isMismatch) {
               await invoke("ssh_trust_host", { host, port, fingerprint, keyType });
-              await invoke("ssh_connect", buildSshParams(sess));
+              await invokeSshConnect(sess);
             } else if (isMismatch) {
               instance?.terminal.write(
                 `\r\n\x1b[31m[SECURITY] ${t('fp_mismatch_warning')}\x1b[0m\r\n` +
@@ -1712,22 +1716,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               try {
                 const actualPort = await invoke<number>("start_tunnel", {
                   sessionId: tab.sessionId,
-                  host: session.host,
-                  port: session.port ?? 22,
-                  username: session.username ?? "root",
-                  password: session.password ?? null,
-                  privateKeyPath: session.private_key_path ?? null,
-                  authMethod: session.auth_method ?? "password",
-                  jumpHost: session.jump_host ?? null,
-                  jumpPort: session.jump_port ?? 22,
-                  jumpUsername: session.jump_username ?? null,
-                  jumpPassword: session.jump_password ?? null,
-                  jumpPrivateKeyPath: session.jump_private_key_path ?? null,
-                  proxyType: session.proxy_type ?? null,
-                  proxyHost: session.proxy_host ?? null,
-                  proxyPort: session.proxy_port ?? 1080,
-                  proxyUsername: session.proxy_username ?? null,
-                  proxyPassword: session.proxy_password ?? null,
+                  host: "",
+                  port: 22,
+                  username: "",
+                  password: null,
+                  privateKeyPath: null,
+                  authMethod: "none",
+                  jumpHost: null,
+                  jumpPort: 22,
+                  jumpUsername: null,
+                  jumpPassword: null,
+                  jumpPrivateKeyPath: null,
+                  proxyType: null,
+                  proxyHost: null,
+                  proxyPort: 1080,
+                  proxyUsername: null,
+                  proxyPassword: null,
                   localPort: session.tunnel_local_port ?? 0,
                   // Backend expects non-null host/port; dynamic (SOCKS) ignores them.
                   remoteHost: session.tunnel_remote_host ?? "",

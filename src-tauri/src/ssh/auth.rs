@@ -39,14 +39,22 @@ pub async fn authenticate(session: &mut Handle<Client>, p: &ConnectParams) -> Re
 }
 
 async fn try_pubkey(session: &mut Handle<Client>, p: &ConnectParams) -> Result<bool, String> {
-    let path = p.private_key_path.as_deref().ok_or("Private key path is required")?;
+    let path = p
+        .private_key_path
+        .as_deref()
+        .ok_or("Private key path is required")?;
     let key_path = expand_tilde(path);
     if !key_path.exists() {
         return Err(format!("SSH key file not found: {}", key_path.display()));
     }
     let key = russh::keys::load_secret_key(&key_path, p.password.as_deref())
         .map_err(|e| format!("Public key load failed ({}): {}", key_path.display(), e))?;
-    let hash = session.best_supported_rsa_hash().await.ok().flatten().flatten();
+    let hash = session
+        .best_supported_rsa_hash()
+        .await
+        .ok()
+        .flatten()
+        .flatten();
     let res = session
         .authenticate_publickey(
             p.username.clone(),

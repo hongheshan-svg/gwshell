@@ -159,24 +159,12 @@ impl SshManager {
     }
 
     pub async fn close_all(&self) {
-        let mut stops: Vec<_> = self
-            .forwards
-            .lock()
-            .await
-            .drain()
-            .map(|(_, v)| v)
-            .collect();
+        let mut stops: Vec<_> = self.forwards.lock().await.drain().map(|(_, v)| v).collect();
         stops.extend(self.socks.lock().await.drain().map(|(_, v)| v));
         for stop in stops {
             stop.notify_waiters();
         }
-        let sessions: Vec<_> = self
-            .sessions
-            .lock()
-            .await
-            .drain()
-            .map(|(_, v)| v)
-            .collect();
+        let sessions: Vec<_> = self.sessions.lock().await.drain().map(|(_, v)| v).collect();
         for s in sessions {
             let _ = s.shell.send(ShellCmd::Close).await;
         }
@@ -374,10 +362,16 @@ impl SshManager {
         }
     }
 
-    /// Run an SFTP operation on the cached session; if it fails, drop the cache,
-    /// reopen once on the same connection, and retry. This recovers transparently
-    /// when the cached channel has died (e.g. server-side idle timeout). The retry
-    /// is safe because every wrapped op is idempotent or self-correcting.
+    /// Run an SFTP operation on the cached session; if it fails with a
+    /// *channel-died* error, drop the cache, reopen once, and retry. This
+    /// recovers transparently when the cached channel has died (e.g. server-side
+    /// idle timeout). The retry is safe because every wrapped op is idempotent or
+    /// self-correcting.
+    ///
+    /// Expected failures (permission denied, not found, etc.) are NOT retried:
+    /// reopening the channel for them would just pay the handshake twice for an
+    /// error that will recur. This matters during home-path probing where several
+    /// unreadable candidates each fail.
     async fn with_sftp<T, F, Fut>(&self, session_id: &str, op: F) -> Result<T, String>
     where
         F: Fn(Arc<SftpSession>) -> Fut,
@@ -387,6 +381,17 @@ impl SshManager {
         match op(sftp).await {
             Ok(v) => Ok(v),
             Err(first) => {
+                // Only retry on errors that suggest the channel itself is dead
+                // (IO / closed / eof), not on expected SFTP status errors.
+                let lower = first.to_lowercase();
+                let channel_died = lower.contains("channel")
+                    || lower.contains("closed")
+                    || lower.contains("eof")
+                    || lower.contains("broken pipe")
+                    || lower.contains("connection reset");
+                if !channel_died {
+                    return Err(first);
+                }
                 self.invalidate_sftp(session_id).await;
                 match self.sftp_session(session_id).await {
                     Ok(fresh) => op(fresh).await,
@@ -401,8 +406,10 @@ impl SshManager {
         session_id: &str,
         path: &str,
     ) -> Result<Vec<SftpEntry>, String> {
-        self.with_sftp(session_id, |sftp| async move { sftp::list_dir(&sftp, path).await })
-            .await
+        self.with_sftp(session_id, |sftp| async move {
+            sftp::list_dir(&sftp, path).await
+        })
+        .await
     }
 
     pub async fn sftp_realpath(&self, session_id: &str, path: &str) -> Result<String, String> {
@@ -414,33 +421,40 @@ impl SshManager {
     }
 
     pub async fn sftp_mkdir(&self, session_id: &str, path: &str) -> Result<(), String> {
-        self.with_sftp(session_id, |sftp| async move { sftp::mkdir(&sftp, path).await })
-            .await
+        self.with_sftp(
+            session_id,
+            |sftp| async move { sftp::mkdir(&sftp, path).await },
+        )
+        .await
     }
 
     pub async fn sftp_rmdir(&self, session_id: &str, path: &str) -> Result<(), String> {
-        self.with_sftp(session_id, |sftp| async move { sftp::rmdir(&sftp, path).await })
-            .await
+        self.with_sftp(
+            session_id,
+            |sftp| async move { sftp::rmdir(&sftp, path).await },
+        )
+        .await
     }
 
     pub async fn sftp_delete_file(&self, session_id: &str, path: &str) -> Result<(), String> {
-        self.with_sftp(session_id, |sftp| async move { sftp::delete_file(&sftp, path).await })
-            .await
+        self.with_sftp(session_id, |sftp| async move {
+            sftp::delete_file(&sftp, path).await
+        })
+        .await
     }
 
-    pub async fn sftp_rename(
-        &self,
-        session_id: &str,
-        old: &str,
-        new: &str,
-    ) -> Result<(), String> {
-        self.with_sftp(session_id, |sftp| async move { sftp::rename(&sftp, old, new).await })
-            .await
+    pub async fn sftp_rename(&self, session_id: &str, old: &str, new: &str) -> Result<(), String> {
+        self.with_sftp(session_id, |sftp| async move {
+            sftp::rename(&sftp, old, new).await
+        })
+        .await
     }
 
     pub async fn sftp_read_text(&self, session_id: &str, path: &str) -> Result<String, String> {
-        self.with_sftp(session_id, |sftp| async move { sftp::read_text(&sftp, path).await })
-            .await
+        self.with_sftp(session_id, |sftp| async move {
+            sftp::read_text(&sftp, path).await
+        })
+        .await
     }
 
     pub async fn sftp_write_text(
@@ -462,16 +476,18 @@ impl SshManager {
         local: &str,
         progress: Option<ProgressFn>,
     ) -> Result<(), String> {
-        let conn = self
-            .sessions
-            .lock()
-            .await
-            .get(session_id)
-            .map(|s| s.conn.clone());
-        match conn {
-            Some(c) => sftp::download(&c, remote, local, progress).await,
-            None => Err("Session not found".into()),
+        // Reuse the cached SFTP session instead of opening a fresh channel
+        // (a new subsystem handshake is ~3 round-trips). We use sftp_session
+        // directly rather than with_sftp because with_sftp retries the op on
+        // failure — but progress (Box<dyn FnMut>) can't be called twice, and a
+        // partial transfer retry would need resume logic. On error we still
+        // invalidate the cached channel so the user's next retry starts fresh.
+        let sftp = self.sftp_session(session_id).await?;
+        let result = sftp::download(&sftp, remote, local, progress).await;
+        if result.is_err() {
+            self.invalidate_sftp(session_id).await;
         }
+        result
     }
 
     pub async fn sftp_upload(
@@ -481,16 +497,12 @@ impl SshManager {
         local: &str,
         progress: Option<ProgressFn>,
     ) -> Result<(), String> {
-        let conn = self
-            .sessions
-            .lock()
-            .await
-            .get(session_id)
-            .map(|s| s.conn.clone());
-        match conn {
-            Some(c) => sftp::upload(&c, remote, local, progress).await,
-            None => Err("Session not found".into()),
+        let sftp = self.sftp_session(session_id).await?;
+        let result = sftp::upload(&sftp, remote, local, progress).await;
+        if result.is_err() {
+            self.invalidate_sftp(session_id).await;
         }
+        result
     }
 
     pub async fn sftp_download_dir(
@@ -500,16 +512,12 @@ impl SshManager {
         local_parent: &str,
         progress: Option<ProgressFn>,
     ) -> Result<usize, String> {
-        let conn = self
-            .sessions
-            .lock()
-            .await
-            .get(session_id)
-            .map(|s| s.conn.clone());
-        match conn {
-            Some(c) => sftp::download_dir(&c, remote_dir, local_parent, progress).await,
-            None => Err("Session not found".into()),
+        let sftp = self.sftp_session(session_id).await?;
+        let result = sftp::download_dir(&sftp, remote_dir, local_parent, progress).await;
+        if result.is_err() {
+            self.invalidate_sftp(session_id).await;
         }
+        result
     }
 
     pub async fn sftp_upload_dir(
@@ -519,30 +527,25 @@ impl SshManager {
         local_dir: &str,
         progress: Option<ProgressFn>,
     ) -> Result<usize, String> {
-        let conn = self
-            .sessions
-            .lock()
-            .await
-            .get(session_id)
-            .map(|s| s.conn.clone());
-        match conn {
-            Some(c) => sftp::upload_dir(&c, remote_parent, local_dir, progress).await,
-            None => Err("Session not found".into()),
+        let sftp = self.sftp_session(session_id).await?;
+        let result = sftp::upload_dir(&sftp, remote_parent, local_dir, progress).await;
+        if result.is_err() {
+            self.invalidate_sftp(session_id).await;
         }
+        result
     }
 
-    pub async fn sftp_chmod(
-        &self,
-        session_id: &str,
-        path: &str,
-        mode: u32,
-    ) -> Result<(), String> {
-        self.with_sftp(session_id, |sftp| async move { sftp::chmod(&sftp, path, mode).await })
-            .await
+    pub async fn sftp_chmod(&self, session_id: &str, path: &str, mode: u32) -> Result<(), String> {
+        self.with_sftp(session_id, |sftp| async move {
+            sftp::chmod(&sftp, path, mode).await
+        })
+        .await
     }
 
     pub async fn sftp_create_file(&self, session_id: &str, path: &str) -> Result<(), String> {
-        self.with_sftp(session_id, |sftp| async move { sftp::create_file(&sftp, path).await })
-            .await
+        self.with_sftp(session_id, |sftp| async move {
+            sftp::create_file(&sftp, path).await
+        })
+        .await
     }
 }

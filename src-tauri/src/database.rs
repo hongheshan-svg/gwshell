@@ -173,11 +173,8 @@ impl Database {
 
     pub fn clear_vault_verifier(&self) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        conn.execute(
-            "DELETE FROM app_settings WHERE key = 'vault_verifier'",
-            [],
-        )
-        .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM app_settings WHERE key = 'vault_verifier'", [])
+            .map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -197,8 +194,7 @@ impl Database {
     }
 
     pub fn import_sessions_json(&self, json: &str) -> Result<usize, String> {
-        let sessions: Vec<SessionConfig> =
-            serde_json::from_str(json).map_err(|e| e.to_string())?;
+        let sessions: Vec<SessionConfig> = serde_json::from_str(json).map_err(|e| e.to_string())?;
         let count = sessions.len();
         for session in &sessions {
             self.save_session(session)?;
