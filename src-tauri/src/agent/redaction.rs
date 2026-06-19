@@ -249,11 +249,14 @@ fn assignment_value_range(line: &str, idx: usize) -> Option<(usize, usize)> {
     }
 
     let sep_idx = skip_ascii_whitespace(bytes, after_key);
-    if !matches!(bytes.get(sep_idx), Some(b'=') | Some(b':')) {
-        return None;
-    }
-
-    let value_idx = skip_ascii_whitespace(bytes, sep_idx + 1);
+    let value_idx = if matches!(bytes.get(sep_idx), Some(b'=') | Some(b':')) {
+        skip_ascii_whitespace(bytes, sep_idx + 1)
+    } else {
+        if sep_idx == after_key {
+            return None;
+        }
+        sep_idx
+    };
     if matches!(bytes.get(value_idx), Some(b'"') | Some(b'\'')) {
         let quote = bytes[value_idx];
         let value_start = value_idx + 1;
@@ -455,6 +458,18 @@ mod tests {
         assert!(!redacted.contains("abc1"));
         assert!(!redacted.contains("secret2"));
         assert!(!redacted.contains("secret3"));
+    }
+
+    #[test]
+    fn redacts_whitespace_only_assignment_forms() {
+        let text = "password secret1\ntoken abc1\napi_key sk-test";
+        let redacted = redact_secrets(text);
+        assert!(redacted.contains("password [redacted]"));
+        assert!(redacted.contains("token [redacted]"));
+        assert!(redacted.contains("api_key [redacted]"));
+        assert!(!redacted.contains("secret1"));
+        assert!(!redacted.contains("abc1"));
+        assert!(!redacted.contains("sk-test"));
     }
 
     #[test]
