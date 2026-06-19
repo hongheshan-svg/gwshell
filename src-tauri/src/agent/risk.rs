@@ -231,16 +231,20 @@ fn classify_file_read_path(path: &str) -> AgentRisk {
 }
 
 fn classify_sensitive_read_command(command: &str) -> Option<AgentRisk> {
-    if !(matches_command(command, "tail") || matches_command(command, "grep")) {
+    if !(matches_command(command, "cat")
+        || matches_command(command, "tail")
+        || matches_command(command, "grep"))
+    {
         return None;
     }
 
+    let is_grep = matches_command(command, "grep");
     let mut risk = None;
     for token in command.split_whitespace().skip(1) {
         let token = token.trim_matches(|ch| ch == '\'' || ch == '"');
         if let Some(path_risk) = sensitive_path_risk(token) {
             risk = Some(stronger_risk(risk, path_risk));
-        } else if matches_command(command, "grep") && is_sensitive_search_token(token) {
+        } else if is_grep && is_sensitive_search_token(token) {
             risk = Some(stronger_risk(risk, AgentRisk::High));
         }
     }
@@ -274,6 +278,12 @@ fn sensitive_path_risk(path: &str) -> Option<AgentRisk> {
         .trim_matches(|ch| ch == '\'' || ch == '"')
         .to_ascii_lowercase();
     let file_name = path.rsplit('/').next().unwrap_or(&path);
+
+    if path.starts_with("/proc/")
+        && (path.contains("/../") || path.ends_with("/..") || path.contains("/environ"))
+    {
+        return Some(AgentRisk::Blocked);
+    }
 
     if path.contains("/.ssh/")
         || path.starts_with("~/.ssh")
@@ -390,6 +400,16 @@ mod tests {
     }
 
     #[test]
+    fn cat_secret_targets_are_not_read_only() {
+        assert_eq!(classify_command("cat ~/.ssh/id_rsa"), AgentRisk::Blocked);
+        assert_eq!(
+            classify_command("cat /home/app/.aws/credentials"),
+            AgentRisk::High
+        );
+        assert_eq!(classify_command("cat /proc/cpuinfo"), AgentRisk::ReadOnly);
+    }
+
+    #[test]
     fn proc_environ_and_traversal_reads_are_blocked() {
         assert_eq!(classify_command("cat /proc/cpuinfo"), AgentRisk::ReadOnly);
         assert_eq!(
@@ -400,6 +420,26 @@ mod tests {
         assert_eq!(
             classify_command("cat /proc/../../etc/shadow"),
             AgentRisk::Blocked
+        );
+    }
+
+    #[test]
+    fn tail_and_grep_proc_sensitive_paths_are_not_read_only() {
+        assert_eq!(
+            classify_command("tail /proc/self/environ"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("grep PATH /proc/self/environ"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("tail /proc/../../etc/shadow"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("grep cpu /proc/cpuinfo"),
+            AgentRisk::ReadOnly
         );
     }
 

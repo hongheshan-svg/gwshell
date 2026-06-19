@@ -208,7 +208,7 @@ fn find_byte(bytes: &[u8], start: usize, needle: u8) -> Option<usize> {
 }
 
 fn find_unquoted_key_end(bytes: &[u8], mut idx: usize) -> usize {
-    while bytes.get(idx).is_some_and(|b| is_key_char(*b)) {
+    while bytes.get(idx).is_some_and(|b| is_unquoted_key_char(*b)) {
         idx += 1;
     }
     idx
@@ -266,11 +266,15 @@ fn normalize_key(key: &str) -> String {
 }
 
 fn has_key_boundary_before(bytes: &[u8], idx: usize) -> bool {
-    idx == 0 || !is_key_char(bytes[idx - 1])
+    idx == 0 || !is_unquoted_key_char(bytes[idx - 1])
 }
 
 fn is_key_char(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_'
+}
+
+fn is_unquoted_key_char(byte: u8) -> bool {
+    is_key_char(byte) || byte == b'-' || byte == b'.'
 }
 
 fn skip_ascii_whitespace(bytes: &[u8], mut idx: usize) -> usize {
@@ -415,6 +419,16 @@ mod tests {
         for secret in ["abc", "def", "ghi", "jkl", "mno"] {
             assert!(!redacted.contains(secret), "{secret}");
         }
+    }
+
+    #[test]
+    fn redacts_unquoted_hyphenated_secret_keys() {
+        let text = "x-api-key=secret\naccess-token: other";
+        let redacted = redact_secrets(text);
+        assert!(redacted.contains("x-api-key=[redacted]"));
+        assert!(redacted.contains("access-token: [redacted]"));
+        assert!(!redacted.contains("secret"));
+        assert!(!redacted.contains("other"));
     }
 
     #[test]
