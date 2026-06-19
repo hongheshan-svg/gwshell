@@ -22,9 +22,11 @@ pub fn classify_command(command: &str) -> AgentRisk {
     if c.is_empty() {
         return AgentRisk::Blocked;
     }
+    if is_destructive_dd_command(&c) {
+        return AgentRisk::Blocked;
+    }
     if c.contains("rm -rf /")
         || c.contains("mkfs")
-        || c.contains("dd if=")
         || c.contains("passwd ")
         || c.contains("userdel ")
         || c.contains("chmod -r 777 /")
@@ -92,6 +94,13 @@ fn matches_command(command: &str, prefix: &str) -> bool {
             .is_some_and(char::is_whitespace)
 }
 
+fn is_destructive_dd_command(command: &str) -> bool {
+    matches_command(command, "dd")
+        && command
+            .split_whitespace()
+            .any(|part| part.starts_with("if=") || part.starts_with("of="))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -113,6 +122,10 @@ mod tests {
     fn dangerous_commands_are_blocked_or_high() {
         assert_eq!(classify_command("rm -rf /"), AgentRisk::Blocked);
         assert_eq!(classify_command("iptables -F"), AgentRisk::Blocked);
+        assert_eq!(
+            classify_command("dd bs=1M of=/dev/sda if=/dev/zero"),
+            AgentRisk::Blocked
+        );
         assert_eq!(classify_command("rm /tmp/file"), AgentRisk::High);
         assert_eq!(
             classify_command("systemctl restart nginx"),

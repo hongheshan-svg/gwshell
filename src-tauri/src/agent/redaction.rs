@@ -96,9 +96,10 @@ fn assignment_value_range(line: &str, lower: &str, idx: usize) -> Option<(usize,
         }
 
         let value_idx = skip_ascii_whitespace(bytes, sep_idx + 1);
-        if bytes.get(value_idx) == Some(&b'"') {
+        if matches!(bytes.get(value_idx), Some(b'"') | Some(b'\'')) {
+            let quote = bytes[value_idx];
             let value_start = value_idx + 1;
-            let value_end = find_closing_quote(line, value_start);
+            let value_end = find_closing_quote(line, value_start, quote);
             return Some((value_start, value_end));
         }
 
@@ -124,7 +125,7 @@ fn skip_ascii_whitespace(bytes: &[u8], mut idx: usize) -> usize {
     idx
 }
 
-fn find_closing_quote(line: &str, start: usize) -> usize {
+fn find_closing_quote(line: &str, start: usize, quote: u8) -> usize {
     let mut escaped = false;
     for (offset, ch) in line[start..].char_indices() {
         if escaped {
@@ -135,7 +136,7 @@ fn find_closing_quote(line: &str, start: usize) -> usize {
             escaped = true;
             continue;
         }
-        if ch == '"' {
+        if ch == quote as char {
             return start + offset;
         }
     }
@@ -186,6 +187,14 @@ mod tests {
         assert!(!redacted.contains("abc1"));
         assert!(!redacted.contains("secret2"));
         assert!(!redacted.contains("secret3"));
+    }
+
+    #[test]
+    fn redacts_single_quoted_secret_values_with_spaces() {
+        let redacted = redact_secrets("password='correct horse battery staple'");
+        assert_eq!(redacted, "password='[redacted]'");
+        assert!(!redacted.contains("correct"));
+        assert!(!redacted.contains("battery staple"));
     }
 
     #[test]
