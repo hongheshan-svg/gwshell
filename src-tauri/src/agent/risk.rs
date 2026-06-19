@@ -78,6 +78,7 @@ fn has_shell_control_syntax(command: &str) -> bool {
         || command.contains("&&")
         || command.contains("||")
         || command.contains('|')
+        || command.contains('&')
         || command.contains('\n')
         || command.contains('\r')
         || command.contains("$(")
@@ -145,6 +146,9 @@ mod tests {
             "df -h `shutdown now`",
             "grep x file > /etc/app.conf",
             "cat /proc/cpuinfo < /tmp/input",
+            "df -h & shutdown now",
+            "cat /proc/cpuinfo&true",
+            "cat /proc/cpuinfo&rm -rf /tmp/x",
         ] {
             assert_ne!(classify_command(command), AgentRisk::ReadOnly, "{command}");
         }

@@ -16,7 +16,6 @@ pub fn redact_secrets(input: &str) -> String {
     let mut in_private_key = false;
 
     for line in input.lines() {
-        let lower = line.to_ascii_lowercase();
         if line.contains("-----BEGIN ") && line.contains("PRIVATE KEY-----") {
             in_private_key = true;
             out.push("[redacted private key]".to_string());
@@ -28,14 +27,106 @@ pub fn redact_secrets(input: &str) -> String {
             }
             continue;
         }
-        if lower.contains("authorization: bearer ") {
-            out.push("Authorization: Bearer [redacted]".to_string());
-        } else {
-            out.push(redact_assignment_line(line));
-        }
+        out.push(redact_sensitive_line(line));
     }
 
     cap_text(&out.join("\n"), MAX_EVIDENCE_BODY)
+}
+
+fn redact_sensitive_line(line: &str) -> String {
+    let redacted_bearer = redact_bearer_line(line);
+    redact_assignment_line(&redacted_bearer)
+}
+
+fn redact_bearer_line(line: &str) -> String {
+    let lower = line.to_ascii_lowercase();
+    let mut out = String::new();
+    let mut last = 0;
+    let mut idx = 0;
+
+    while idx < line.len() {
+        if !line.is_char_boundary(idx) {
+            idx += 1;
+            continue;
+        }
+
+        if let Some((value_start, value_end)) = bearer_value_range(line, &lower, idx) {
+            out.push_str(&line[last..value_start]);
+            out.push_str("[redacted]");
+            last = value_end;
+            idx = value_end;
+        } else {
+            idx = next_char_index(line, idx);
+        }
+    }
+
+    out.push_str(&line[last..]);
+    out
+}
+
+fn bearer_value_range(line: &str, lower: &str, idx: usize) -> Option<(usize, usize)> {
+    let bytes = line.as_bytes();
+    let lower_bytes = lower.as_bytes();
+    let quoted_key = matches!(bytes.get(idx), Some(b'"') | Some(b'\''));
+    let key_quote = quoted_key.then(|| bytes[idx]);
+    let key_start = if quoted_key { idx + 1 } else { idx };
+
+    if !has_key_boundary_before(bytes, idx) {
+        return None;
+    }
+
+    for key in ["authorization", "http_authorization"] {
+        let key_bytes = key.as_bytes();
+        if !lower_bytes.get(key_start..)?.starts_with(key_bytes) {
+            continue;
+        }
+
+        let mut after_key = key_start + key_bytes.len();
+        if let Some(quote) = key_quote {
+            if bytes.get(after_key) != Some(&quote) {
+                continue;
+            }
+            after_key += 1;
+        } else if bytes.get(after_key).is_some_and(|b| is_key_char(*b)) {
+            continue;
+        }
+
+        let sep_idx = skip_ascii_whitespace(bytes, after_key);
+        if !matches!(bytes.get(sep_idx), Some(b'=') | Some(b':')) {
+            continue;
+        }
+
+        let value_idx = skip_ascii_whitespace(bytes, sep_idx + 1);
+        let value_quote = if matches!(bytes.get(value_idx), Some(b'"') | Some(b'\'')) {
+            Some(bytes[value_idx])
+        } else {
+            None
+        };
+        let bearer_idx = if value_quote.is_some() {
+            value_idx + 1
+        } else {
+            value_idx
+        };
+
+        if !lower_bytes.get(bearer_idx..)?.starts_with(b"bearer") {
+            continue;
+        }
+
+        let after_bearer = bearer_idx + "bearer".len();
+        let value_start = skip_ascii_whitespace(bytes, after_bearer);
+        if value_start == after_bearer {
+            continue;
+        }
+
+        let value_end = if let Some(quote) = value_quote {
+            find_closing_quote(line, value_start, quote)
+        } else {
+            find_unquoted_value_end(line, value_start)
+        };
+        return Some((value_start, value_end));
+    }
+
+    None
 }
 
 fn redact_assignment_line(line: &str) -> String {
@@ -173,6 +264,20 @@ mod tests {
         assert!(redacted.contains("token=[redacted]"));
         assert!(!redacted.contains("abc123"));
         assert!(!redacted.contains("secret"));
+    }
+
+    #[test]
+    fn redacts_flexible_authorization_bearer_values() {
+        let text = "\"Authorization\": \"Bearer abc\"\nAuthorization:Bearer def\nAuthorization:\tBearer ghi\nHTTP_AUTHORIZATION=Bearer jkl";
+        let redacted = redact_secrets(text);
+        assert!(redacted.contains("\"Authorization\": \"Bearer [redacted]\""));
+        assert!(redacted.contains("Authorization:Bearer [redacted]"));
+        assert!(redacted.contains("Authorization:\tBearer [redacted]"));
+        assert!(redacted.contains("HTTP_AUTHORIZATION=Bearer [redacted]"));
+        assert!(!redacted.contains("abc"));
+        assert!(!redacted.contains("def"));
+        assert!(!redacted.contains("ghi"));
+        assert!(!redacted.contains("jkl"));
     }
 
     #[test]
