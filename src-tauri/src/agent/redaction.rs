@@ -157,48 +157,70 @@ fn redact_assignment_line(line: &str) -> String {
 
 fn assignment_value_range(line: &str, lower: &str, idx: usize) -> Option<(usize, usize)> {
     let bytes = line.as_bytes();
-    let lower_bytes = lower.as_bytes();
-    let quoted_key = bytes.get(idx) == Some(&b'"');
+    let key_quote = match bytes.get(idx) {
+        Some(b'"') | Some(b'\'') => Some(bytes[idx]),
+        _ => None,
+    };
+    let quoted_key = key_quote.is_some();
     let key_start = if quoted_key { idx + 1 } else { idx };
 
     if !has_key_boundary_before(bytes, idx) {
         return None;
     }
 
-    for key in ["api_key", "apikey", "token", "password", "passwd"] {
-        let key_bytes = key.as_bytes();
-        if !lower_bytes.get(key_start..)?.starts_with(key_bytes) {
-            continue;
+    let (key_end, after_key) = if let Some(quote) = key_quote {
+        let key_end = find_byte(bytes, key_start, quote)?;
+        (key_end, key_end + 1)
+    } else {
+        let key_end = find_unquoted_key_end(bytes, key_start);
+        if key_end == key_start {
+            return None;
         }
+        (key_end, key_end)
+    };
 
-        let mut after_key = key_start + key_bytes.len();
-        if quoted_key {
-            if bytes.get(after_key) != Some(&b'"') {
-                continue;
-            }
-            after_key += 1;
-        } else if bytes.get(after_key).is_some_and(|b| is_key_char(*b)) {
-            continue;
-        }
-
-        let sep_idx = skip_ascii_whitespace(bytes, after_key);
-        if !matches!(bytes.get(sep_idx), Some(b'=') | Some(b':')) {
-            continue;
-        }
-
-        let value_idx = skip_ascii_whitespace(bytes, sep_idx + 1);
-        if matches!(bytes.get(value_idx), Some(b'"') | Some(b'\'')) {
-            let quote = bytes[value_idx];
-            let value_start = value_idx + 1;
-            let value_end = find_closing_quote(line, value_start, quote);
-            return Some((value_start, value_end));
-        }
-
-        let value_end = find_unquoted_value_end(line, value_idx);
-        return Some((value_idx, value_end));
+    let key = lower.get(key_start..key_end)?;
+    if !is_sensitive_assignment_key(key) {
+        return None;
     }
 
-    None
+    let sep_idx = skip_ascii_whitespace(bytes, after_key);
+    if !matches!(bytes.get(sep_idx), Some(b'=') | Some(b':')) {
+        return None;
+    }
+
+    let value_idx = skip_ascii_whitespace(bytes, sep_idx + 1);
+    if matches!(bytes.get(value_idx), Some(b'"') | Some(b'\'')) {
+        let quote = bytes[value_idx];
+        let value_start = value_idx + 1;
+        let value_end = find_closing_quote(line, value_start, quote);
+        return Some((value_start, value_end));
+    }
+
+    let value_end = find_unquoted_value_end(line, value_idx);
+    Some((value_idx, value_end))
+}
+
+fn find_byte(bytes: &[u8], start: usize, needle: u8) -> Option<usize> {
+    bytes[start..]
+        .iter()
+        .position(|b| *b == needle)
+        .map(|offset| start + offset)
+}
+
+fn find_unquoted_key_end(bytes: &[u8], mut idx: usize) -> usize {
+    while bytes.get(idx).is_some_and(|b| is_key_char(*b)) {
+        idx += 1;
+    }
+    idx
+}
+
+fn is_sensitive_assignment_key(key: &str) -> bool {
+    matches!(key, "api_key" | "apikey" | "token" | "password" | "passwd")
+        || key.ends_with("_api_key")
+        || key.ends_with("_token")
+        || key.ends_with("_password")
+        || key.ends_with("_passwd")
 }
 
 fn has_key_boundary_before(bytes: &[u8], idx: usize) -> bool {
@@ -292,6 +314,21 @@ mod tests {
         assert!(!redacted.contains("abc1"));
         assert!(!redacted.contains("secret2"));
         assert!(!redacted.contains("secret3"));
+    }
+
+    #[test]
+    fn redacts_suffix_style_secret_keys_and_single_quoted_keys() {
+        let text =
+            "OPENAI_API_KEY=sk-live\nGITHUB_TOKEN=ghp_secret\nDATABASE_PASSWORD=dbpass\n{'password': 'secret'}";
+        let redacted = redact_secrets(text);
+        assert!(redacted.contains("OPENAI_API_KEY=[redacted]"));
+        assert!(redacted.contains("GITHUB_TOKEN=[redacted]"));
+        assert!(redacted.contains("DATABASE_PASSWORD=[redacted]"));
+        assert!(redacted.contains("'password': '[redacted]'"));
+        assert!(!redacted.contains("sk-live"));
+        assert!(!redacted.contains("ghp_secret"));
+        assert!(!redacted.contains("dbpass"));
+        assert!(!redacted.contains("secret'}"));
     }
 
     #[test]

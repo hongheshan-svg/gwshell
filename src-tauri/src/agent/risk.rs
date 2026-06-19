@@ -22,7 +22,7 @@ pub fn classify_command(command: &str) -> AgentRisk {
     if c.is_empty() {
         return AgentRisk::Blocked;
     }
-    if is_destructive_dd_command(&c) {
+    if contains_destructive_dd_command(&c) {
         return AgentRisk::Blocked;
     }
     if c.contains("rm -rf /")
@@ -38,6 +38,9 @@ pub fn classify_command(command: &str) -> AgentRisk {
     }
     if has_shell_control_syntax(&c) {
         return AgentRisk::High;
+    }
+    if is_mutating_journalctl_command(&c) {
+        return AgentRisk::Medium;
     }
     if matches_command(&c, "df")
         || matches_command(&c, "free")
@@ -95,11 +98,38 @@ fn matches_command(command: &str, prefix: &str) -> bool {
             .is_some_and(char::is_whitespace)
 }
 
-fn is_destructive_dd_command(command: &str) -> bool {
-    matches_command(command, "dd")
-        && command
-            .split_whitespace()
-            .any(|part| part.starts_with("if=") || part.starts_with("of="))
+fn contains_destructive_dd_command(command: &str) -> bool {
+    command
+        .split(is_shell_segment_separator)
+        .any(segment_contains_destructive_dd)
+}
+
+fn is_shell_segment_separator(ch: char) -> bool {
+    matches!(ch, ';' | '|' | '&' | '\n' | '\r' | '>' | '<')
+}
+
+fn segment_contains_destructive_dd(segment: &str) -> bool {
+    let mut saw_dd = false;
+    for part in segment.split_whitespace() {
+        if part == "dd" {
+            saw_dd = true;
+            continue;
+        }
+        if saw_dd && (part.starts_with("if=") || part.starts_with("of=")) {
+            return true;
+        }
+    }
+    false
+}
+
+fn is_mutating_journalctl_command(command: &str) -> bool {
+    matches_command(command, "journalctl")
+        && command.split_whitespace().skip(1).any(|part| {
+            part == "--rotate"
+                || part == "--flush"
+                || part.starts_with("--vacuum-time")
+                || part.starts_with("--vacuum-size")
+        })
 }
 
 #[cfg(test)]
@@ -132,6 +162,29 @@ mod tests {
             classify_command("systemctl restart nginx"),
             AgentRisk::Medium
         );
+    }
+
+    #[test]
+    fn wrapped_or_segmented_destructive_dd_is_blocked() {
+        for command in [
+            "sudo dd of=/dev/sda",
+            "env X=1 dd of=/dev/sda",
+            "true; dd of=/dev/sda",
+        ] {
+            assert_eq!(classify_command(command), AgentRisk::Blocked, "{command}");
+        }
+    }
+
+    #[test]
+    fn mutating_journalctl_commands_are_not_read_only() {
+        for command in [
+            "journalctl --vacuum-time=1d",
+            "journalctl --vacuum-size=1G",
+            "journalctl --rotate",
+            "journalctl --flush",
+        ] {
+            assert_eq!(classify_command(command), AgentRisk::Medium, "{command}");
+        }
     }
 
     #[test]
