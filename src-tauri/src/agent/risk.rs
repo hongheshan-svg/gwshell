@@ -46,6 +46,9 @@ pub fn classify_command(command: &str) -> AgentRisk {
     if let Some(risk) = classify_interpreter_command(&c) {
         return risk;
     }
+    if let Some(AgentRisk::Blocked) = classify_blocked_sensitive_read_segment(&c) {
+        return AgentRisk::Blocked;
+    }
     if has_shell_control_syntax(&c) {
         return AgentRisk::High;
     }
@@ -477,6 +480,13 @@ fn classify_sensitive_read_command(command: &str) -> Option<AgentRisk> {
     risk
 }
 
+fn classify_blocked_sensitive_read_segment(command: &str) -> Option<AgentRisk> {
+    command
+        .split(is_shell_segment_separator)
+        .filter_map(classify_sensitive_read_command)
+        .find(|risk| *risk == AgentRisk::Blocked)
+}
+
 fn classify_proc_cat_command(command: &str) -> Option<AgentRisk> {
     let command = normalized_command(command)?;
     if command.name != "cat" {
@@ -657,6 +667,18 @@ mod tests {
         );
         assert_eq!(classify_command("cat /etc/shadow"), AgentRisk::Blocked);
         assert_eq!(classify_command("cat /proc/cpuinfo"), AgentRisk::ReadOnly);
+    }
+
+    #[test]
+    fn composed_system_credential_reads_remain_blocked() {
+        assert_eq!(
+            classify_command("cat /etc/shadow; echo ok"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("echo ok && cat /etc/gshadow"),
+            AgentRisk::Blocked
+        );
     }
 
     #[test]
