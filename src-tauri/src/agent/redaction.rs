@@ -216,11 +216,26 @@ fn find_unquoted_key_end(bytes: &[u8], mut idx: usize) -> usize {
 }
 
 fn is_sensitive_assignment_key(key: &str) -> bool {
-    matches!(key, "api_key" | "apikey" | "token" | "password" | "passwd")
-        || key.ends_with("_api_key")
+    matches!(
+        key,
+        "api_key"
+            | "apikey"
+            | "token"
+            | "password"
+            | "passwd"
+            | "secret"
+            | "secret_key"
+            | "private_key"
+            | "client_secret"
+            | "aws_secret_access_key"
+    ) || key.ends_with("_api_key")
         || key.ends_with("_token")
         || key.ends_with("_password")
         || key.ends_with("_passwd")
+        || key.ends_with("_secret")
+        || key.ends_with("_secret_key")
+        || key.ends_with("_access_key")
+        || key.ends_with("_private_key")
 }
 
 fn has_key_boundary_before(bytes: &[u8], idx: usize) -> bool {
@@ -329,6 +344,36 @@ mod tests {
         assert!(!redacted.contains("ghp_secret"));
         assert!(!redacted.contains("dbpass"));
         assert!(!redacted.contains("secret'}"));
+    }
+
+    #[test]
+    fn redacts_common_secret_and_private_key_names() {
+        let text = "AWS_SECRET_ACCESS_KEY=aws-secret\nCLIENT_SECRET=client-secret\nSECRET_KEY=secret-key\nPRIVATE_KEY=private-key\nOIDC_CLIENT_SECRET=oidc-secret\nSERVICE_SECRET=service-secret\nAPP_SECRET_KEY=app-secret\nDB_ACCESS_KEY=db-access\nTLS_PRIVATE_KEY=tls-private\n{'client_secret': 'dict-secret'}";
+        let redacted = redact_secrets(text);
+        assert!(redacted.contains("AWS_SECRET_ACCESS_KEY=[redacted]"));
+        assert!(redacted.contains("CLIENT_SECRET=[redacted]"));
+        assert!(redacted.contains("SECRET_KEY=[redacted]"));
+        assert!(redacted.contains("PRIVATE_KEY=[redacted]"));
+        assert!(redacted.contains("OIDC_CLIENT_SECRET=[redacted]"));
+        assert!(redacted.contains("SERVICE_SECRET=[redacted]"));
+        assert!(redacted.contains("APP_SECRET_KEY=[redacted]"));
+        assert!(redacted.contains("DB_ACCESS_KEY=[redacted]"));
+        assert!(redacted.contains("TLS_PRIVATE_KEY=[redacted]"));
+        assert!(redacted.contains("'client_secret': '[redacted]'"));
+        for secret in [
+            "aws-secret",
+            "client-secret",
+            "secret-key",
+            "private-key",
+            "oidc-secret",
+            "service-secret",
+            "app-secret",
+            "db-access",
+            "tls-private",
+            "dict-secret",
+        ] {
+            assert!(!redacted.contains(secret), "{secret}");
+        }
     }
 
     #[test]

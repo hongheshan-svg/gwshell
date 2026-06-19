@@ -10,9 +10,8 @@ pub fn classify_tool_call(call: &AgentToolCall) -> AgentRisk {
                 .unwrap_or("");
             classify_command(command)
         }
-        AgentToolName::StreamLog | AgentToolName::ReadFile | AgentToolName::DockerLogs => {
-            AgentRisk::ReadOnly
-        }
+        AgentToolName::StreamLog | AgentToolName::DockerLogs => AgentRisk::ReadOnly,
+        AgentToolName::ReadFile => classify_read_file_payload(&call.payload),
         AgentToolName::RestartService => AgentRisk::Medium,
     }
 }
@@ -41,6 +40,9 @@ pub fn classify_command(command: &str) -> AgentRisk {
     }
     if is_mutating_journalctl_command(&c) {
         return AgentRisk::Medium;
+    }
+    if let Some(risk) = classify_sensitive_read_command(&c) {
+        return risk;
     }
     if matches_command(&c, "df")
         || matches_command(&c, "free")
@@ -111,7 +113,7 @@ fn is_shell_segment_separator(ch: char) -> bool {
 fn segment_contains_destructive_dd(segment: &str) -> bool {
     let mut saw_dd = false;
     for part in segment.split_whitespace() {
-        if part == "dd" {
+        if command_word_name(part) == "dd" {
             saw_dd = true;
             continue;
         }
@@ -120,6 +122,11 @@ fn segment_contains_destructive_dd(segment: &str) -> bool {
         }
     }
     false
+}
+
+fn command_word_name(word: &str) -> &str {
+    let trimmed = word.trim_matches(|ch| ch == '\'' || ch == '"');
+    trimmed.rsplit('/').next().unwrap_or(trimmed)
 }
 
 fn is_mutating_journalctl_command(command: &str) -> bool {
@@ -131,6 +138,111 @@ fn is_mutating_journalctl_command(command: &str) -> bool {
                 || part.starts_with("--vacuum-size")
                 || part.starts_with("--vacuum-files")
         })
+}
+
+fn classify_read_file_payload(payload: &serde_json::Value) -> AgentRisk {
+    for key in [
+        "path",
+        "file",
+        "filepath",
+        "file_path",
+        "target",
+        "target_path",
+    ] {
+        if let Some(path) = payload.get(key).and_then(|value| value.as_str()) {
+            return classify_file_read_path(path);
+        }
+    }
+    AgentRisk::ReadOnly
+}
+
+fn classify_file_read_path(path: &str) -> AgentRisk {
+    sensitive_path_risk(path).unwrap_or(AgentRisk::ReadOnly)
+}
+
+fn classify_sensitive_read_command(command: &str) -> Option<AgentRisk> {
+    if !(matches_command(command, "tail") || matches_command(command, "grep")) {
+        return None;
+    }
+
+    let mut risk = None;
+    for token in command.split_whitespace().skip(1) {
+        let token = token.trim_matches(|ch| ch == '\'' || ch == '"');
+        if let Some(path_risk) = sensitive_path_risk(token) {
+            risk = Some(stronger_risk(risk, path_risk));
+        } else if matches_command(command, "grep") && is_sensitive_search_token(token) {
+            risk = Some(stronger_risk(risk, AgentRisk::High));
+        }
+    }
+    risk
+}
+
+fn sensitive_path_risk(path: &str) -> Option<AgentRisk> {
+    let path = path
+        .trim_matches(|ch| ch == '\'' || ch == '"')
+        .to_ascii_lowercase();
+    let file_name = path.rsplit('/').next().unwrap_or(&path);
+
+    if path.contains("/.ssh/")
+        || path.starts_with("~/.ssh")
+        || path == ".ssh"
+        || path.starts_with(".ssh/")
+        || file_name == "id_rsa"
+        || file_name == "id_dsa"
+        || file_name == "id_ecdsa"
+        || file_name == "id_ed25519"
+        || file_name.contains("private_key")
+        || file_name.ends_with(".pem")
+    {
+        return Some(AgentRisk::Blocked);
+    }
+
+    if file_name == ".bash_history" || file_name == ".zsh_history" || file_name == ".history" {
+        return Some(AgentRisk::Blocked);
+    }
+
+    if path.contains("/.config")
+        || path.starts_with("~/.config")
+        || path == ".config"
+        || path.starts_with(".config/")
+        || path.contains("/.aws")
+        || path.starts_with("~/.aws")
+        || path == ".aws"
+        || path.starts_with(".aws/")
+        || path.contains("/.kube")
+        || path.starts_with("~/.kube")
+        || path == ".kube"
+        || path.starts_with(".kube/")
+        || path.contains("/.docker")
+        || path.starts_with("~/.docker")
+        || path == ".docker"
+        || path.starts_with(".docker/")
+    {
+        return Some(AgentRisk::High);
+    }
+
+    None
+}
+
+fn is_sensitive_search_token(token: &str) -> bool {
+    let token = token.to_ascii_lowercase();
+    matches!(
+        token.as_str(),
+        "aws_secret_access_key" | "client_secret" | "secret_key" | "private_key"
+    ) || token.ends_with("_secret")
+        || token.ends_with("_secret_key")
+        || token.ends_with("_access_key")
+        || token.ends_with("_private_key")
+}
+
+fn stronger_risk(current: Option<AgentRisk>, next: AgentRisk) -> AgentRisk {
+    match (current, next) {
+        (Some(AgentRisk::Blocked), _) | (_, AgentRisk::Blocked) => AgentRisk::Blocked,
+        (Some(AgentRisk::High), _) | (_, AgentRisk::High) => AgentRisk::High,
+        (Some(AgentRisk::Medium), _) | (_, AgentRisk::Medium) => AgentRisk::Medium,
+        (Some(AgentRisk::Low), _) | (_, AgentRisk::Low) => AgentRisk::Low,
+        _ => AgentRisk::ReadOnly,
+    }
 }
 
 #[cfg(test)]
@@ -146,6 +258,41 @@ mod tests {
         );
         assert_eq!(
             classify_command("docker logs --tail=100 web"),
+            AgentRisk::ReadOnly
+        );
+    }
+
+    #[test]
+    fn read_file_secret_targets_are_not_read_only() {
+        assert_eq!(
+            classify_tool_call(&read_file_call("~/.ssh/id_rsa")),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_tool_call(&read_file_call("~/.bash_history")),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_tool_call(&read_file_call(
+                "~/.config/gcloud/configurations/config_default"
+            )),
+            AgentRisk::High
+        );
+    }
+
+    #[test]
+    fn tail_and_grep_secret_targets_are_not_read_only() {
+        assert_eq!(classify_command("tail ~/.bash_history"), AgentRisk::Blocked);
+        assert_eq!(
+            classify_command("grep -R AWS_SECRET_ACCESS_KEY ~/.config"),
+            AgentRisk::High
+        );
+        assert_eq!(
+            classify_command("tail -n 100 /var/log/app.log"),
+            AgentRisk::ReadOnly
+        );
+        assert_eq!(
+            classify_command("grep error /var/log/app.log"),
             AgentRisk::ReadOnly
         );
     }
@@ -171,6 +318,10 @@ mod tests {
             "sudo dd of=/dev/sda",
             "env X=1 dd of=/dev/sda",
             "true; dd of=/dev/sda",
+            "/bin/dd of=/dev/sda",
+            "sudo /bin/dd of=/dev/sda",
+            "sh -c 'dd of=/dev/sda'",
+            "'dd' of=/dev/sda",
         ] {
             assert_eq!(classify_command(command), AgentRisk::Blocked, "{command}");
         }
@@ -212,5 +363,18 @@ mod tests {
     #[test]
     fn read_only_matching_respects_command_boundaries() {
         assert_eq!(classify_command("docker psx"), AgentRisk::Medium);
+    }
+
+    fn read_file_call(path: &str) -> AgentToolCall {
+        AgentToolCall {
+            id: "c1".into(),
+            tool: AgentToolName::ReadFile,
+            target_session_id: "s1".into(),
+            payload: serde_json::json!({ "path": path }),
+            risk: AgentRisk::ReadOnly,
+            reason: "read file".into(),
+            expected_result: None,
+            verify: None,
+        }
     }
 }
