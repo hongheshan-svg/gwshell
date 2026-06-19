@@ -18,7 +18,7 @@ pub fn build_user_prompt(
     let evidence_json = serde_json::to_string(evidence).unwrap_or_else(|_| "[]".to_string());
     let findings_json = serde_json::to_string(findings).unwrap_or_else(|_| "[]".to_string());
     format!(
-        "Objective:\n{}\n\nEvidence JSON:\n{}\n\nLocal rule findings JSON:\n{}\n\nReturn concise streamed analysis and a final JSON update.",
+        "Objective:\n{}\n\nEvidence JSON:\n{}\n\nLocal rule findings JSON:\n{}\n\nReturn concise streamed analysis, then a final JSON object with exactly these keys: summary, findings, proposed_actions, questions.",
         objective, evidence_json, findings_json
     )
 }
@@ -32,6 +32,15 @@ mod tests {
     fn system_prompt_blocks_direct_execution() {
         assert!(AGENT_SYSTEM_PROMPT.contains("cannot execute commands directly"));
         assert!(AGENT_SYSTEM_PROMPT.contains("evidence IDs"));
+    }
+
+    #[test]
+    fn system_prompt_requires_approval_and_blocks_sensitive_requests() {
+        assert!(AGENT_SYSTEM_PROMPT.contains("high-risk actions"));
+        assert!(AGENT_SYSTEM_PROMPT.contains("human approval"));
+        assert!(AGENT_SYSTEM_PROMPT.contains("Never request secrets"));
+        assert!(AGENT_SYSTEM_PROMPT.contains("shell history"));
+        assert!(AGENT_SYSTEM_PROMPT.contains("full config dumps"));
     }
 
     #[test]
@@ -58,6 +67,17 @@ mod tests {
         assert!(prompt.contains("\"id\":\"ev-1\""));
         assert!(prompt.contains("Local rule findings JSON:"));
         assert!(prompt.contains("\"evidence_ids\":[\"ev-1\"]"));
-        assert!(prompt.contains("final JSON update"));
+        assert!(prompt.contains("final JSON object"));
+    }
+
+    #[test]
+    fn user_prompt_defines_final_update_json_keys() {
+        let prompt = build_user_prompt("Investigate disk pressure", &[], &[]);
+
+        assert!(prompt.contains("final JSON object"));
+        assert!(prompt.contains("summary"));
+        assert!(prompt.contains("findings"));
+        assert!(prompt.contains("proposed_actions"));
+        assert!(prompt.contains("questions"));
     }
 }

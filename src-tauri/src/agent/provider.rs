@@ -201,4 +201,18 @@ data: {"choices":[{"delta":{"content":" world"}}]}"#;
 
         assert_eq!(parse_openai_sse_text_delta(chunk), vec!["hello", " world"]);
     }
+
+    #[test]
+    fn parses_crlf_data_and_ignores_comment_lines() {
+        let chunk = ": keep-alive\r\ndata: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\r\ndata: [DONE]\r\n";
+
+        assert_eq!(parse_openai_sse_text_delta(chunk), vec!["hello"]);
+    }
+
+    #[test]
+    fn collects_empty_content_delta() {
+        let chunk = r#"data: {"choices":[{"delta":{"content":""}}]}"#;
+
+        assert_eq!(parse_openai_sse_text_delta(chunk), vec![""]);
+    }
 }
