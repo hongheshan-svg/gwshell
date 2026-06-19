@@ -45,6 +45,32 @@ pub fn load_api_key(db: &Database) -> Result<Option<String>, String> {
     }
 }
 
+pub fn parse_openai_sse_text_delta(chunk: &str) -> Vec<String> {
+    let mut deltas = Vec::new();
+    for line in chunk.lines() {
+        let Some(rest) = line.strip_prefix("data:") else {
+            continue;
+        };
+        let data = rest.trim();
+        if data == "[DONE]" || data.is_empty() {
+            continue;
+        }
+        let Ok(json) = serde_json::from_str::<serde_json::Value>(data) else {
+            continue;
+        };
+        if let Some(content) = json
+            .get("choices")
+            .and_then(|v| v.get(0))
+            .and_then(|v| v.get("delta"))
+            .and_then(|v| v.get("content"))
+            .and_then(|v| v.as_str())
+        {
+            deltas.push(content.to_string());
+        }
+    }
+    deltas
+}
+
 #[cfg(not(test))]
 fn encrypt_api_key(api_key: &str) -> String {
     crypto::encrypt_secret(api_key)
@@ -142,5 +168,37 @@ mod tests {
         let saved: AiProviderSettings = serde_json::from_str(&raw).unwrap();
         assert!(!saved.api_key_configured);
         assert!(!load_settings(&db).unwrap().api_key_configured);
+    }
+}
+
+#[cfg(test)]
+mod sse_tests {
+    use super::*;
+
+    #[test]
+    fn parses_openai_text_deltas() {
+        let chunk = r#"data: {"choices":[{"delta":{"content":"hello"}}]}
+data: [DONE]"#;
+
+        assert_eq!(parse_openai_sse_text_delta(chunk), vec!["hello"]);
+    }
+
+    #[test]
+    fn ignores_malformed_sse_lines() {
+        let chunk = r#"event: completion.chunk
+data: not-json
+data: {"choices":[{"delta":{}}]}
+data:
+data: [DONE]"#;
+
+        assert!(parse_openai_sse_text_delta(chunk).is_empty());
+    }
+
+    #[test]
+    fn parses_multiple_data_lines() {
+        let chunk = r#"data: {"choices":[{"delta":{"content":"hello"}}]}
+data: {"choices":[{"delta":{"content":" world"}}]}"#;
+
+        assert_eq!(parse_openai_sse_text_delta(chunk), vec!["hello", " world"]);
     }
 }

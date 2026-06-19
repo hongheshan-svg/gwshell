@@ -1,3 +1,4 @@
+pub mod prompt;
 pub mod provider;
 pub mod redaction;
 pub mod risk;
