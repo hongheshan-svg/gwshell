@@ -558,7 +558,7 @@ fn sensitive_path_risk(path: &str) -> Option<AgentRisk> {
 }
 
 fn sensitive_normalized_path_risk(path: &str) -> Option<AgentRisk> {
-    if let Some(rest) = leading_relative_traversal_suffix(path) {
+    if let Some(rest) = relative_traversal_suffix(path) {
         if rest.is_empty() {
             return Some(AgentRisk::High);
         }
@@ -574,7 +574,12 @@ fn sensitive_normalized_path_risk(path: &str) -> Option<AgentRisk> {
         if rest.is_empty() {
             return Some(AgentRisk::High);
         }
-        let target_risk = sensitive_normalized_path_risk(&format!("/{rest}"));
+        let target = if rest.split('/').any(|part| part == "..") {
+            rest
+        } else {
+            format!("/{rest}")
+        };
+        let target_risk = sensitive_normalized_path_risk(&target);
         return Some(target_risk.unwrap_or(AgentRisk::High));
     }
 
@@ -634,7 +639,11 @@ fn sensitive_normalized_path_risk(path: &str) -> Option<AgentRisk> {
     None
 }
 
-fn leading_relative_traversal_suffix(path: &str) -> Option<String> {
+fn relative_traversal_suffix(path: &str) -> Option<String> {
+    if path.starts_with('/') || path.starts_with("~/") || is_windows_drive_path(path) {
+        return None;
+    }
+
     let mut saw_traversal = false;
     let mut rest = Vec::new();
     for part in path.split('/') {
@@ -642,13 +651,9 @@ fn leading_relative_traversal_suffix(path: &str) -> Option<String> {
             continue;
         }
         if part == ".." {
-            if rest.is_empty() {
-                saw_traversal = true;
-            }
+            saw_traversal = true;
+            rest.pop();
             continue;
-        }
-        if !saw_traversal {
-            return None;
         }
         rest.push(part);
     }
@@ -685,13 +690,22 @@ fn normalize_path_variants(path: &str) -> Vec<String> {
         .chars()
         .filter(|ch| *ch != '\'' && *ch != '"')
         .collect();
-    let windows = collapse_path_aliases(&unquoted.replace('\\', "/").to_ascii_lowercase());
-    let shell_escaped = collapse_path_aliases(&unquoted.replace('\\', "").to_ascii_lowercase());
+    let windows_raw = unquoted.replace('\\', "/").to_ascii_lowercase();
+    let shell_escaped_raw = unquoted.replace('\\', "").to_ascii_lowercase();
+    let windows_collapsed = collapse_path_aliases(&windows_raw);
+    let shell_escaped_collapsed = collapse_path_aliases(&shell_escaped_raw);
 
-    if windows == shell_escaped {
-        vec![windows]
-    } else {
-        vec![windows, shell_escaped]
+    let mut paths = Vec::new();
+    push_unique_path(&mut paths, windows_raw);
+    push_unique_path(&mut paths, windows_collapsed);
+    push_unique_path(&mut paths, shell_escaped_raw);
+    push_unique_path(&mut paths, shell_escaped_collapsed);
+    paths
+}
+
+fn push_unique_path(paths: &mut Vec<String>, path: String) {
+    if !paths.contains(&path) {
+        paths.push(path);
     }
 }
 
@@ -743,6 +757,13 @@ fn collapse_path_aliases(path: &str) -> String {
             }
         }
     }
+}
+
+fn is_windows_drive_path(path: &str) -> bool {
+    path.len() >= 3
+        && path.as_bytes()[1] == b':'
+        && path.as_bytes()[2] == b'/'
+        && path.as_bytes()[0].is_ascii_alphabetic()
 }
 
 fn is_sensitive_search_token(token: &str) -> bool {
@@ -903,6 +924,14 @@ mod tests {
     fn proc_root_and_cwd_sensitive_aliases_are_not_read_only() {
         assert_eq!(
             classify_command("cat /proc/self/root/etc/shadow"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("tail /proc/self/root/../etc/shadow"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("grep x /proc/self/root/../etc/sudoers"),
             AgentRisk::Blocked
         );
         assert_eq!(
@@ -1078,6 +1107,18 @@ mod tests {
         assert_eq!(
             classify_tool_call(&read_file_call_payload(serde_json::json!({
                 "path": "../var/log/app.log"
+            }))),
+            AgentRisk::High
+        );
+        assert_eq!(
+            classify_tool_call(&read_file_call_payload(serde_json::json!({
+                "path": "foo/../../../../etc/shadow"
+            }))),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_tool_call(&read_file_call_payload(serde_json::json!({
+                "path": "foo/../../var/log/app.log"
             }))),
             AgentRisk::High
         );
