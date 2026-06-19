@@ -1,3 +1,4 @@
+mod agent;
 mod crypto;
 mod database;
 mod docker;
