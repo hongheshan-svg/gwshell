@@ -1,7 +1,12 @@
 # AI Server Rescue Mode - Design
 
 Date: 2026-06-19
-Status: Draft, pending user review
+Status: Superseded by `2026-06-19-gwshell-agent-runtime-design.md`
+
+Note: this narrower rescue-mode design is retained as historical context. The
+current product direction is GWShell Agent Runtime. Rescue mode is now treated
+as the first workflow on top of that agent runtime, not as the top-level product
+concept.
 
 ## Goal
 
