@@ -183,6 +183,26 @@ impl SshManager {
         }
     }
 
+    pub async fn ssh_exec_stream<F>(
+        &self,
+        session_id: &str,
+        command: &str,
+        on_chunk: F,
+        stop: Arc<Notify>,
+    ) -> Result<(), String>
+    where
+        F: FnMut(Vec<u8>) + Send + 'static,
+    {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone())
+            .ok_or("Session not found")?;
+        exec::exec_stream(&conn, command, on_chunk, stop).await
+    }
+
     pub async fn metrics_exec(&self, session_id: &str, command: &str) -> Result<String, String> {
         self.ssh_exec(session_id, command).await
     }

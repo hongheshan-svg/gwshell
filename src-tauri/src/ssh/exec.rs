@@ -39,3 +39,38 @@ pub async fn exec(conn: &Handle<Client>, command: &str) -> Result<String, String
         .map_err(|_| "Exec timed out".to_string())?;
     Ok(String::from_utf8_lossy(&out).trim().to_string())
 }
+
+pub async fn exec_stream<F>(
+    conn: &Handle<Client>,
+    command: &str,
+    mut on_chunk: F,
+    stop: std::sync::Arc<tokio::sync::Notify>,
+) -> Result<(), String>
+where
+    F: FnMut(Vec<u8>) + Send + 'static,
+{
+    let channel = conn
+        .channel_open_session()
+        .await
+        .map_err(|e| format!("Stream channel failed: {}", e))?;
+    channel
+        .exec(true, command.as_bytes())
+        .await
+        .map_err(|e| format!("Stream exec failed: {}", e))?;
+    let mut channel = channel;
+    loop {
+        tokio::select! {
+            _ = stop.notified() => break,
+            msg = channel.wait() => {
+                match msg {
+                    Some(ChannelMsg::Data { data }) | Some(ChannelMsg::ExtendedData { data, .. }) => {
+                        on_chunk(data.to_vec());
+                    }
+                    Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => break,
+                    _ => {}
+                }
+            }
+        }
+    }
+    Ok(())
+}
