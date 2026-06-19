@@ -21,7 +21,7 @@ pub fn docker_logs_tail_command(container: &str, lines: u32) -> String {
 
 pub fn file_tail_command(path: &str, lines: u32) -> String {
     let lines = lines.clamp(20, 500);
-    format!("tail -n {} -F {}", lines, shell_escape(path))
+    format!("tail -n {} -F -- {}", lines, shell_escape(path))
 }
 
 fn shell_escape(input: &str) -> String {
@@ -44,7 +44,15 @@ mod tests {
     fn escapes_file_tail_path() {
         let command = file_tail_command("/var/log/app's.log", 10);
 
-        assert_eq!(command, "tail -n 20 -F '/var/log/app'\\''s.log'");
+        assert_eq!(command, "tail -n 20 -F -- '/var/log/app'\\''s.log'");
+    }
+
+    #[test]
+    fn terminates_tail_options_before_option_style_path() {
+        assert_eq!(
+            file_tail_command("-n10000", 20),
+            "tail -n 20 -F -- '-n10000'"
+        );
     }
 
     #[test]
@@ -75,7 +83,7 @@ mod tests {
     fn escapes_file_path_metacharacters_as_one_argument() {
         assert_eq!(
             file_tail_command("/var/log/$(id)\napp.log", 20),
-            "tail -n 20 -F '/var/log/$(id)\napp.log'"
+            "tail -n 20 -F -- '/var/log/$(id)\napp.log'"
         );
     }
 
@@ -107,11 +115,11 @@ mod tests {
     fn clamps_file_lines_to_supported_range() {
         assert_eq!(
             file_tail_command("/var/log/app.log", 0),
-            "tail -n 20 -F '/var/log/app.log'"
+            "tail -n 20 -F -- '/var/log/app.log'"
         );
         assert_eq!(
             file_tail_command("/var/log/app.log", 999),
-            "tail -n 500 -F '/var/log/app.log'"
+            "tail -n 500 -F -- '/var/log/app.log'"
         );
     }
 }
