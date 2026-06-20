@@ -56,6 +56,10 @@ impl AgentManager {
     }
 }
 
+pub fn event_name(kind: &str, agent_session_id: &str) -> String {
+    AgentManager::event_name(kind, agent_session_id)
+}
+
 fn prune_cancelled_sessions(
     sessions: &mut HashMap<String, AgentSessionInfo>,
     cancelled_order: &mut VecDeque<String>,
@@ -158,6 +162,10 @@ mod tests {
         assert_eq!(
             AgentManager::event_name("evidence", "agent-1"),
             "agent-evidence-agent-1"
+        );
+        assert_eq!(
+            event_name("analysis-delta", "agent-1"),
+            "agent-analysis-delta-agent-1"
         );
     }
 }

@@ -18,7 +18,7 @@ use serial::SerialManager;
 use session::SessionConfig;
 use ssh::SshManager;
 use std::sync::Arc;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 #[cfg(test)]
 mod tests {
@@ -867,12 +867,90 @@ async fn list_agent_audits(
 }
 
 #[tauri::command]
+async fn test_ai_provider(state: State<'_, Arc<AppState>>) -> Result<String, String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let settings = agent::provider::load_settings(&state.db)?;
+        if !settings.enabled {
+            return Err("AI provider is disabled".into());
+        }
+        if agent::provider::load_api_key(&state.db)?.is_none() {
+            return Err("AI API key is not configured".into());
+        }
+        Ok(format!("Configured: {} {}", settings.base_url, settings.model))
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
+}
+
+#[tauri::command]
 async fn start_agent_session(
     request: agent::types::AgentSessionStart,
     state: State<'_, Arc<AppState>>,
+    app_handle: AppHandle,
 ) -> Result<agent::types::AgentSessionInfo, String> {
     validate_agent_session_start(&request)?;
-    Ok(state.agent_manager.start_session(request))
+    let state = state.inner().clone();
+    let info = state.agent_manager.start_session(request);
+    spawn_initial_agent_evidence(state, app_handle, info.clone());
+    Ok(info)
+}
+
+fn spawn_initial_agent_evidence(
+    state: Arc<AppState>,
+    app_handle: AppHandle,
+    info: agent::types::AgentSessionInfo,
+) {
+    tauri::async_runtime::spawn(async move {
+        let output = match state
+            .ssh_manager
+            .ssh_exec(&info.target_session_id, "hostname && uptime && df -hP /")
+            .await
+        {
+            Ok(output) => output,
+            Err(error) => format!("Initial health probe failed: {}", error),
+        };
+
+        let evidence = agent::types::AgentEvidence {
+            id: uuid::Uuid::new_v4().to_string(),
+            source: "ssh_exec".into(),
+            label: "Initial health probe".into(),
+            body: agent::redaction::redact_secrets(&output),
+            created_at: now_secs(),
+        };
+        let _ = app_handle.emit(&agent::manager::event_name("evidence", &info.id), evidence);
+
+        let ai_enabled = agent::provider::load_settings(&state.db)
+            .map(|settings| settings.enabled)
+            .unwrap_or(false);
+        if !ai_enabled {
+            let _ = app_handle.emit(
+                &agent::manager::event_name("analysis-delta", &info.id),
+                serde_json::json!({
+                    "textDelta": "AI provider is disabled. Collected initial server evidence and local rules are available.\n"
+                }),
+            );
+        }
+
+        let action = agent::types::AgentToolCall {
+            id: uuid::Uuid::new_v4().to_string(),
+            tool: agent::types::AgentToolName::RunCommand,
+            target_session_id: info.target_session_id.clone(),
+            payload: serde_json::json!({ "command": "df -hP /" }),
+            risk: agent::types::AgentRisk::ReadOnly,
+            reason: "Inspect root filesystem usage".into(),
+            expected_result: Some("Shows current root filesystem capacity and usage".into()),
+            verify: None,
+        };
+        let _ = app_handle.emit(&agent::manager::event_name("action-proposed", &info.id), action);
+    });
+}
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
 }
 
 fn validate_agent_session_start(request: &agent::types::AgentSessionStart) -> Result<(), String> {
@@ -1374,6 +1452,7 @@ pub fn run() {
             save_ai_provider_settings,
             set_ai_provider_api_key,
             clear_ai_provider_api_key,
+            test_ai_provider,
             list_agent_audits,
             start_agent_session,
             cancel_agent_session,
