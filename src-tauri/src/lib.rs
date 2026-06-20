@@ -980,6 +980,17 @@ async fn execute_agent_action(
     Ok(result)
 }
 
+#[tauri::command]
+async fn save_agent_audit(
+    record: agent::types::AgentAuditRecord,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || agent::audit::save_audit(&state.db, &record))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
+}
+
 // ---- Quake (dropdown console) ----
 
 /// Toggle the "main" window between hidden and a top-docked "Quake" dropdown.
@@ -1466,6 +1477,7 @@ pub fn run() {
             start_agent_session,
             cancel_agent_session,
             execute_agent_action,
+            save_agent_audit,
             export_sessions_data,
             import_sessions_data,
             import_ssh_config,

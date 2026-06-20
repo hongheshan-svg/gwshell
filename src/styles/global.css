@@ -4250,3 +4250,33 @@ textarea,
   color: var(--text-muted);
   font-size: 12px;
 }
+
+.agent-audit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-audit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 9px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+}
+
+.agent-audit-row span {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.agent-audit-row pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}

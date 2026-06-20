@@ -7,6 +7,7 @@ import { AgentObjective } from './AgentObjective';
 import { AgentAnalysisStream } from './AgentAnalysisStream';
 import { AgentEvidence } from './AgentEvidence';
 import { AgentActionQueue } from './AgentActionQueue';
+import { AgentAuditTimeline } from './AgentAuditTimeline';
 
 export const AgentPanel: React.FC = () => {
   const { t } = useTranslation();
@@ -30,6 +31,7 @@ export const AgentPanel: React.FC = () => {
         {activeSession && <div className="agent-session-id">{activeSession.objective}</div>}
         <AgentAnalysisStream />
         <AgentActionQueue />
+        <AgentAuditTimeline />
         <AgentEvidence />
       </div>
     </aside>

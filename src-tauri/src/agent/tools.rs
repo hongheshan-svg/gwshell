@@ -20,7 +20,7 @@ pub async fn execute_tool(ssh: Arc<SshManager>, call: AgentToolCall) -> AgentToo
         None
     };
 
-    match call.tool {
+    let mut result = match call.tool {
         AgentToolName::RunCommand => {
             let command = command.unwrap_or_default();
             match timeout(
@@ -41,7 +41,18 @@ pub async fn execute_tool(ssh: Arc<SshManager>, call: AgentToolCall) -> AgentToo
             }
         }
         _ => failed_result(call.id, "unsupported tool for this action path".to_string()),
+    };
+
+    if result.ok {
+        if let Some(verify) = call.verify {
+            if classify_tool_call(&verify) == AgentRisk::ReadOnly {
+                let verification = Box::pin(execute_tool(ssh.clone(), *verify)).await;
+                result.verification = Some(Box::new(verification));
+            }
+        }
     }
+
+    result
 }
 
 fn failed_result(call_id: String, error: String) -> AgentToolResult {
