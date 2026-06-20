@@ -971,6 +971,15 @@ async fn cancel_agent_session(
     Ok(state.agent_manager.cancel_session(&agent_session_id))
 }
 
+#[tauri::command]
+async fn execute_agent_action(
+    action: agent::types::AgentToolCall,
+    state: State<'_, Arc<AppState>>,
+) -> Result<agent::types::AgentToolResult, String> {
+    let result = agent::tools::execute_tool(state.ssh_manager.clone(), action).await;
+    Ok(result)
+}
+
 // ---- Quake (dropdown console) ----
 
 /// Toggle the "main" window between hidden and a top-docked "Quake" dropdown.
@@ -1456,6 +1465,7 @@ pub fn run() {
             list_agent_audits,
             start_agent_session,
             cancel_agent_session,
+            execute_agent_action,
             export_sessions_data,
             import_sessions_data,
             import_ssh_config,
