@@ -9,6 +9,7 @@ import { useSettingsStore, defaultSettings as persistedDefaultSettings } from '.
 import type { TranslationKeys } from '../../i18n';
 import { TERMINAL_SCHEME_OPTIONS } from '../../lib/terminalThemes';
 import { useEscapeClose } from '../../lib/useEscapeClose';
+import { AiSettingsSection } from './AiSettingsSection';
 import { ShortcutEditor } from './ShortcutEditor';
 
 /* ---- Nav categories ---- */
@@ -27,6 +28,7 @@ const navCategories: { title?: TranslationKeys; items: { id: string; labelKey: T
       { id: 'shortcut-ssh', labelKey: 'settings_shortcut_ssh' },
     ],
   },
+  { items: [{ id: 'agent-ai', labelKey: 'agent_ai_title' }] },
   { items: [{ id: 'vault', labelKey: 'vault_section' }] },
   { items: [{ id: 'storage', labelKey: 'settings_storage' }] },
 ];
@@ -657,6 +659,8 @@ export const SettingsModal: React.FC = () => {
                 <ShortcutTable left={shortcutsSshLeft} right={shortcutsSshRight} t={t} />
               </>
             )}
+
+            {activeNav === 'agent-ai' && <AiSettingsSection />}
 
             {/* ===== 保险库 / Vault ===== */}
             {activeNav === 'vault' && <VaultSection open={showSettings && activeNav === 'vault'} />}
