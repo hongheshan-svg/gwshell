@@ -93,6 +93,10 @@ interface AppStore {
   serverPanelOpen: boolean;
   toggleServerPanel: () => void;
 
+  // Agent Panel
+  agentPanelOpen: boolean;
+  toggleAgentPanel: () => void;
+
   // Group defaults modal
   groupDefaultsTarget: string | null;
   setGroupDefaultsTarget: (group: string | null) => void;
@@ -356,6 +360,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   serverPanelOpen: false,
   toggleServerPanel: () => set((state) => ({ serverPanelOpen: !state.serverPanelOpen })),
+
+  agentPanelOpen: false,
+  toggleAgentPanel: () => set((state) => ({ agentPanelOpen: !state.agentPanelOpen })),
 
   groupDefaultsTarget: null,
   setGroupDefaultsTarget: (group) => set({ groupDefaultsTarget: group }),

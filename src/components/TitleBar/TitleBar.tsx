@@ -1,5 +1,5 @@
 import React from 'react';
-import { Minus, Square, X, Activity, Search } from 'lucide-react';
+import { Minus, Square, X, Activity, Search, Bot } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { exit } from '@tauri-apps/plugin-process';
 import { useTranslation } from 'react-i18next';
@@ -10,7 +10,7 @@ const getAppWindow = () => (isTauriRuntime() ? getCurrentWindow() : null);
 
 export const TitleBar: React.FC = () => {
   const { t } = useTranslation();
-  const { serverPanelOpen, toggleServerPanel, setShowCommandPalette } = useAppStore();
+  const { serverPanelOpen, toggleServerPanel, agentPanelOpen, toggleAgentPanel, setShowCommandPalette } = useAppStore();
 
   const handleMinimize = () => {
     getAppWindow()?.minimize().catch(() => {});
@@ -43,6 +43,14 @@ export const TitleBar: React.FC = () => {
         </button>
       </div>
       <div className="titlebar-controls">
+        <button
+          className={`titlebar-btn${agentPanelOpen ? ' titlebar-btn--active' : ''}`}
+          onClick={toggleAgentPanel}
+          title={t('agent_panel_title')}
+          data-gw-action="toggle_agent_panel"
+        >
+          <Bot size={14} />
+        </button>
         <button
           className={`titlebar-btn${serverPanelOpen ? ' titlebar-btn--active' : ''}`}
           onClick={toggleServerPanel}
