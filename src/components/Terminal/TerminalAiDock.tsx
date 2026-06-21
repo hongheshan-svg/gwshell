@@ -124,12 +124,15 @@ export const TerminalAiDock: React.FC = () => {
     };
   }, [cleanupListeners]);
 
+  const tRef = useRef(t);
+  tRef.current = t;
+
   const refreshAiSettings = useCallback(async (throwOnError = false) => {
     try {
       const loaded = await invokeWithTimeout<AiProviderSettings>(
         'load_ai_provider_settings',
         TERMINAL_AI_SETTINGS_TIMEOUT_MS,
-        t('terminal_ai_settings_timeout_error'),
+        tRef.current('terminal_ai_settings_timeout_error'),
       );
       if (mountedRef.current) setAiSettings(loaded);
       return loaded;
@@ -138,7 +141,7 @@ export const TerminalAiDock: React.FC = () => {
       if (throwOnError) throw err;
       return null;
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     if (open) void refreshAiSettings();
