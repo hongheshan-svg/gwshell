@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   aiModelGroupLabels,
@@ -29,7 +30,6 @@ export const AiModelPicker: React.FC<Props> = ({ activePresetId, activeTab, onTa
       <div className="ai-settings-block-header">
         <div>
           <div className="ai-settings-block-title">{t('agent_ai_model_library')}</div>
-          <p>{t('agent_ai_model_library_hint')}</p>
         </div>
       </div>
       <div className="ai-model-tabs">
@@ -57,10 +57,9 @@ export const AiModelPicker: React.FC<Props> = ({ activePresetId, activeTab, onTa
               type="button"
             >
               <span className="ai-model-card-head">
-                <strong>{preset.vendor}</strong>
-                <small>{t(preset.badgeKey)}</small>
+                <strong>{preset.vendor} · {preset.title}</strong>
+                {active ? <Check size={14} className="ai-model-card-check" /> : <small>{t(preset.badgeKey)}</small>}
               </span>
-              <span className="ai-model-card-name">{preset.title}</span>
               <span className="ai-model-card-scene">{t(preset.descriptionKey)}</span>
               <span className="ai-model-card-proto">{compatibleProviderLabels[preset.provider]}</span>
             </button>

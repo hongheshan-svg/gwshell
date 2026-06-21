@@ -39,7 +39,6 @@ export const AiConnectionConfig: React.FC<Props> = ({
           <div className="ai-settings-model-meta">
             <span>{selectedPreset?.vendor || compatibleProviderLabels[settings.provider]}</span>
             <span>{settings.model || '-'}</span>
-            <span>{settings.base_url || '-'}</span>
           </div>
         </div>
         <div className="ai-settings-hero-actions">
@@ -68,70 +67,69 @@ export const AiConnectionConfig: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Compatible provider segments */}
-      <div className="ai-settings-block-header">
-        <div>
-          <div className="ai-settings-block-title"><PlugZap size={16} />{t('agent_ai_compat_title')}</div>
-          <p>{t('agent_ai_compat_hint')}</p>
+      {/* Custom / third-party provider — prominent card */}
+      <div className="ai-custom-provider">
+        <div className="ai-custom-provider-title">
+          <PlugZap size={16} />
+          {t('agent_ai_compat_title')}
         </div>
-      </div>
-      <div className="ai-provider-segments">
-        {(Object.keys(providerDefaults) as AiProviderSettings['provider'][]).map((provider) => (
-          <button
-            className={settings.provider === provider ? 'active' : ''}
-            disabled={busy}
-            key={provider}
-            onClick={() => onSelectProvider(provider)}
-            type="button"
-          >
-            {compatibleProviderLabels[provider]}
-          </button>
-        ))}
-      </div>
-
-      {/* Connection fields */}
-      <div className="ai-field-grid">
-        <label className="ai-field wide">
-          <span>{t('agent_ai_base_url')}</span>
-          <input
-            className="settings-input"
-            disabled={busy}
-            value={settings.base_url}
-            onChange={(e) => onSettingsChange({ base_url: e.target.value })}
-          />
-        </label>
-        <label className="ai-field">
-          <span>{t('agent_ai_model')}</span>
-          <input
-            className="settings-input"
-            disabled={busy}
-            value={settings.model}
-            onChange={(e) => onSettingsChange({ model: e.target.value })}
-          />
-        </label>
-        <label className="ai-field">
-          <span>{t('agent_ai_api_key')}</span>
-          <input
-            className="settings-input"
-            disabled={busy}
-            type="password"
-            value={apiKey}
-            onChange={(e) => onApiKeyChange(e.target.value)}
-            placeholder={settings.provider === 'ollama' ? t('agent_ai_key_optional') : keyPlaceholder}
-          />
-          <small>
-            {settings.provider === 'ollama'
-              ? t('agent_ai_key_optional')
-              : settings.api_key_configured
-                ? t('agent_ai_key_configured')
-                : t('agent_ai_key_missing')}
-          </small>
-        </label>
+        <p className="ai-custom-provider-hint">{t('agent_ai_compat_hint')}</p>
+        <div className="ai-provider-segments">
+          {(Object.keys(providerDefaults) as AiProviderSettings['provider'][]).map((provider) => (
+            <button
+              className={settings.provider === provider ? 'active' : ''}
+              disabled={busy}
+              key={provider}
+              onClick={() => onSelectProvider(provider)}
+              type="button"
+            >
+              {compatibleProviderLabels[provider]}
+            </button>
+          ))}
+        </div>
+        <div className="ai-field-grid">
+          <label className="ai-field wide">
+            <span>{t('agent_ai_base_url')}</span>
+            <input
+              className="settings-input"
+              disabled={busy}
+              value={settings.base_url}
+              onChange={(e) => onSettingsChange({ base_url: e.target.value })}
+            />
+          </label>
+          <label className="ai-field">
+            <span>{t('agent_ai_model')}</span>
+            <input
+              className="settings-input"
+              disabled={busy}
+              value={settings.model}
+              onChange={(e) => onSettingsChange({ model: e.target.value })}
+            />
+          </label>
+          <label className="ai-field">
+            <span>{t('agent_ai_api_key')}</span>
+            <input
+              className="settings-input"
+              disabled={busy}
+              type="password"
+              value={apiKey}
+              onChange={(e) => onApiKeyChange(e.target.value)}
+              placeholder={settings.provider === 'ollama' ? t('agent_ai_key_optional') : keyPlaceholder}
+            />
+            <small>
+              {settings.provider === 'ollama'
+                ? t('agent_ai_key_optional')
+                : settings.api_key_configured
+                  ? t('agent_ai_key_configured')
+                  : t('agent_ai_key_missing')}
+            </small>
+          </label>
+        </div>
       </div>
 
       {/* Collapsible advanced */}
       <button
-        className="policy-card-collapse-btn"
+        className="ai-advanced-toggle"
         disabled={busy}
         onClick={() => setAdvancedOpen((v) => !v)}
         type="button"
@@ -181,10 +179,10 @@ export const AiConnectionConfig: React.FC<Props> = ({
 
       {/* Action bar */}
       <div className="ai-actions-bar">
-        <div className="ai-settings-notice">
-          {usable ? <CheckCircle2 size={16} /> : <KeyRound size={16} />}
-          <span>{t('agent_ai_external_notice')}</span>
-        </div>
+        <span className="ai-actions-notice">
+          {usable ? <CheckCircle2 size={14} /> : <KeyRound size={14} />}
+          {t('agent_ai_external_notice')}
+        </span>
         <div className="ai-settings-actions">
           <button className="settings-btn-outline" disabled={busy} onClick={onClearKey} type="button">
             <RotateCcw size={14} />
