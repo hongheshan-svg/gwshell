@@ -8,7 +8,6 @@ interface Props {
   settings: AiProviderSettings;
   apiKey: string;
   status: { kind: 'off' | 'warn' | 'ok'; label: string };
-  modelDisplayName: string;
   keyPlaceholder: string;
   usable: boolean;
   busy: boolean;
