@@ -9,7 +9,7 @@ import {
   providerDefaults,
   type AiModelGroup,
 } from '../../lib/aiModels';
-import type { AiProviderSettings } from '../../types/agent';
+import type { AgentPolicySettings, AiProviderSettings } from '../../types/agent';
 import { AiModelPicker } from './AiModelPicker';
 import { AiConnectionConfig } from './AiConnectionConfig';
 import { AgentPolicySection } from './AgentPolicySection';
@@ -61,13 +61,15 @@ export const AiSettingsSection: React.FC = () => {
     }
     return { kind: 'ok' as const, label: t('agent_ai_status_ready') };
   }, [apiKey, settings, t]);
-  const keyPlaceholder = selectedPreset?.apiKeyHint || (settings.provider === 'anthropic_compatible' ? 'sk-ant-...' : 'sk-...');
+  const keyPlaceholder = settings.provider === 'ollama'
+    ? ''
+    : (selectedPreset?.apiKeyHint || (settings.provider === 'anthropic_compatible' ? 'sk-ant-...' : 'sk-...'));
 
   const onSettingsChange = (partial: Partial<AiProviderSettings>) => {
     setSettings((s) => ({ ...s, ...partial }));
     setAiMessage(null);
   };
-  const onPolicyChange = (partial: Partial<typeof policy>) => setPolicy({ ...policy, ...partial });
+  const onPolicyChange = (partial: Partial<AgentPolicySettings>) => setPolicy({ ...policy, ...partial });
 
   const normalizedSettings = (): AiProviderSettings => ({
     ...settings,

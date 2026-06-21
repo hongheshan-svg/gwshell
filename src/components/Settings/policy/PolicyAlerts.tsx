@@ -74,6 +74,21 @@ export const PolicyAlerts: React.FC<Props> = ({ policy, busy, onChange }) => {
           />
         </span>
       </div>
+      <label className="settings-row">
+        <span className="settings-row-left">
+          <span className="settings-label">{t('agent_policy_alert_auto_start')}</span>
+        </span>
+        <span className="settings-row-right">
+          <button
+            className={`settings-toggle ${policy.alert_auto_start_agent ? 'on' : ''}`}
+            disabled={busy}
+            onClick={() => onChange({ alert_auto_start_agent: !policy.alert_auto_start_agent })}
+            type="button"
+          >
+            <span className="settings-toggle-knob" />
+          </button>
+        </span>
+      </label>
     </div>
   );
 };

@@ -293,6 +293,7 @@
   "agent_policy_log_filter": "Live log noise filter",
   "agent_policy_log_keywords": "Log keywords",
   "agent_policy_alert_thresholds": "Alert thresholds: disk / memory",
+  "agent_policy_alert_auto_start": "Auto-start agent on alert",
   "agent_policy_save": "Save policy",
   "agent_policy_saved": "Agent policy saved",
   "agent_policy_save_hint": "Policy saving is separate from AI provider configuration.",

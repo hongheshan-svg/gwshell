@@ -293,6 +293,7 @@
   "agent_policy_log_filter": "实时日志降噪",
   "agent_policy_log_keywords": "日志关键词",
   "agent_policy_alert_thresholds": "告警阈值：磁盘 / 内存",
+  "agent_policy_alert_auto_start": "告警时自动启动 Agent",
   "agent_policy_save": "保存策略",
   "agent_policy_saved": "Agent 策略已保存",
   "agent_policy_save_hint": "策略保存独立于 AI Provider 配置。",
