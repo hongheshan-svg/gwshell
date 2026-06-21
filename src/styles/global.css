@@ -1036,6 +1036,26 @@ input, select, textarea, button {
   color: var(--danger);
 }
 
+.terminal-ai-error-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border-color));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.terminal-ai-error-box svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
 @media (max-width: 820px) {
   .terminal-ai-dock {
     left: 10px;
