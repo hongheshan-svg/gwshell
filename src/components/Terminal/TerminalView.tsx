@@ -19,6 +19,7 @@ import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';
 import { buildCompletions, type Completion } from '../../lib/completion';
 import { tableForShellName, tableForRemoteShell, type CommandTable } from '../../lib/commandDictionary';
 import { getXtermWindowsPty } from '../../lib/terminalPtyOptions';
+import { appendTerminalOutput, clearTerminalAiContext, setTerminalCwd, setTerminalSelection } from '../../lib/terminalContext';
 import { CompletionDropdown } from './CompletionDropdown';
 import i18n from '../../i18n';
 import "@xterm/xterm/css/xterm.css";
@@ -131,6 +132,12 @@ getOsInfo();
 // Track which tab IDs have active backend connections (SSH/PTY/serial)
 // so we can avoid closing them during split-mode transitions.
 const connectedTabs = new Set<string>();
+
+// Sticky renderer fallback: once WebGL fails to load for one terminal,
+// skip the WebGL attempt for subsequent terminals in the same session.
+// Matches VSCode's _suggestedRendererType mechanism — avoids repeated
+// WebGL init failures across multiple tabs.
+let suggestedRendererTypeDom = false;
 
 // Global map of event-listener cleanup functions keyed by tab ID.
 // Ensures only ONE set of listeners exists per tab at any time, even
@@ -294,6 +301,7 @@ export function destroyTerminal(tabId: string): void {
   const apTimer = awaitingPasswordTimer.get(tabId);
   if (apTimer) { clearTimeout(apTimer); awaitingPasswordTimer.delete(tabId); }
   awaitingPassword.delete(tabId);
+  clearTerminalAiContext(tabId);
   const inst = terminalInstances.get(tabId);
   if (inst) {
     try { inst.rendererAddon?.dispose(); } catch {}
@@ -377,6 +385,15 @@ export function forceTerminalRedraw(
   try { inst.fitAddon.fit(); } catch {}
   try { inst.terminal.clearTextureAtlas(); } catch {}
   try { inst.terminal.refresh(0, inst.terminal.rows - 1); } catch {}
+
+  // ConPTY redraws asynchronously after receiving SIGWINCH. The first refresh
+  // clears the stale glyph atlas; this deferred second pass catches ConPTY's
+  // asynchronous repaint, eliminating ghost cells in TUI apps.
+  const term = inst.terminal;
+  requestAnimationFrame(() => {
+    try { term.clearTextureAtlas(); } catch {}
+    try { term.refresh(0, term.rows - 1); } catch {}
+  });
 
   if (tabType === 'serial' || tabType === 'asset-list') return;
   const cols = inst.terminal.cols;
@@ -507,6 +524,25 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       const existingInstance = terminalInstances.get(tab.id);
       let instance = existingInstance;
 
+      // Only the LOCAL PTY backend (local shell, and Docker-over-local-PTY)
+      // runs through Windows ConPTY. SSH and serial sessions talk to a remote
+      // Unix PTY / a serial device and never touch the local ConPTY, so
+      // advertising `windowsPty` for them is wrong. Defined here (outside the
+      // `if (!instance)` block) so it's available throughout initTerminal.
+      const usesLocalConpty = (): boolean => {
+        if (tab.type === "localshell") return true;
+        if (tab.type === "docker") {
+          const dsess = sessionsRef.current.find((s) => s.id === tab.sessionId);
+          return (dsess?.docker_connect_method ?? "").toLowerCase() !== "ssh";
+        }
+        return false;
+      };
+
+      // Collects dispose functions for per-tab xterm parser handlers (e.g. the
+      // ConPTY DA1 response handler) that need to be torn down with the rest
+      // of the tab's listeners on remount/close.
+      const pendingDisposes: Array<{ dispose(): void }> = [];
+
       if (!instance) {
         // Fetch platform info to configure windowsPty for the LOCAL ConPTY
         // backend on Windows (see usesLocalConpty below). This tells xterm.js
@@ -536,22 +572,31 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           allowProposedApi: true,
           scrollback: parseInt(s.terminalMaxScrollback) || 10000,
           copyOnSelect: false,
+          // Match VSCode: scroll content into scrollback on erase (DECSED/ED),
+          // rescale overlapping glyphs for better font rendering, and report
+          // pixel/cell sizes to the PTY via windowOptions so ConPTY can use
+          // them for DPI-aware rendering heuristics.
+          scrollOnEraseInDisplay: true,
+          rescaleOverlappingGlyphs: true,
+          windowOptions: { getWinSizePixels: true, getCellSizePixels: true, getWinSizeChars: true },
         };
 
         // Only the LOCAL PTY backend (local shell, and Docker-over-local-PTY)
         // runs through Windows ConPTY. SSH and serial sessions talk to a remote
         // Unix PTY / a serial device and never touch the local ConPTY, so
         // advertising `windowsPty` for them is wrong.
-        const usesLocalConpty = (): boolean => {
-          if (tab.type === "localshell") return true;
-          if (tab.type === "docker") {
-            const dsess = sessionsRef.current.find((s) => s.id === tab.sessionId);
-            return (dsess?.docker_connect_method ?? "").toLowerCase() !== "ssh";
-          }
-          return false;
-        };
         const windowsPty = getXtermWindowsPty(osInfo, usesLocalConpty());
         if (windowsPty) termOpts.windowsPty = windowsPty;
+
+        // Match VSCode: enable VT extensions for all terminals. win32InputMode
+        // (DECSET 9001) lets ConPTY encode keyboard events as Win32 INPUT_RECORD,
+        // preserving complex modifier keys (Ctrl+Shift+letter, Alt+arrows) that
+        // ConPTY's default VT encoding loses. kittyKeyboard enables the kitty
+        // keyboard protocol for enhanced key reporting on supporting terminals.
+        // Both are opt-in: apps must request them via CSI sequences to activate.
+        if (usesLocalConpty()) {
+          (termOpts as Record<string, unknown>).vtExtensions = { win32InputMode: true, kittyKeyboard: false };
+        }
 
         // Wait for the configured terminal font to load before constructing the
         // terminal. xterm measures character cell width once, on construction;
@@ -639,6 +684,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           if (termRef.hasSelection()) {
             const selection = readTerminalSelection(termRef);
             selectionSnapshotRef.current = selection;
+            setTerminalSelection(tab.id, selection);
             if (selection && useSettingsStore.getState().settings.autoCopyOnSelect) {
               if (selectionCopyTimer) clearTimeout(selectionCopyTimer);
               selectionCopyTimer = setTimeout(() => {
@@ -691,6 +737,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           const s = useSettingsStore.getState().settings;
           if (e.button === 0) {
             selectionSnapshotRef.current = "";
+            setTerminalSelection(tab.id, "");
             setContextMenu(null);
             return;
           }
@@ -879,15 +926,51 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // Attach the WebGL renderer once the terminal is in the DOM. WebGL is
       // xterm.js's preferred GPU renderer (fastest, scales best, and in v6
       // supports DEC 2026 synchronized output that reduces TUI tearing). On
-      // WebGL context loss, dispose the addon so the terminal falls back to
-      // xterm's built-in DOM renderer.
-      if (wasFreshlyOpened || instance.rendererLost) {
+      // WebGL context loss or load failure, dispose the addon so the terminal
+      // falls back to xterm's built-in DOM renderer. This matches VSCode's
+      // renderer chain: WebGL → DOM (no intermediate Canvas layer).
+      //
+      // Sticky fallback: once WebGL fails for one terminal, skip the WebGL
+      // attempt for subsequent terminals in the same session (VSCode's
+      // _suggestedRendererType mechanism).
+      if ((wasFreshlyOpened || instance.rendererLost) && !suggestedRendererTypeDom) {
+        try { instance.rendererAddon?.dispose(); } catch {}
+        instance.rendererAddon = undefined;
         try {
           const webgl = new WebglAddon();
-          webgl.onContextLoss(() => { instance.rendererLost = true; try { webgl.dispose(); } catch {} });
+          webgl.onContextLoss(() => {
+            instance.rendererLost = true;
+            try { webgl.dispose(); } catch {}
+          });
           instance.terminal.loadAddon(webgl);
           instance.rendererAddon = webgl;
           instance.rendererLost = false;
+        } catch {
+          // WebGL could not be loaded — fall back to the DOM renderer.
+          suggestedRendererTypeDom = true;
+        }
+      }
+
+      // ConPTY 1.22+ sends a DA1 request (CSI c) at startup and waits for a
+      // terminal response before continuing to render. If we don't respond,
+      // ConPTY waits for a timeout, causing TUI apps (Claude Code, Codex) to
+      // appear frozen on launch. Register a CSI handler that responds
+      // immediately with VT220-level device attributes. Only for local ConPTY
+      // sessions — SSH/serial PTYs don't go through ConPTY.
+      if (usesLocalConpty()) {
+        try {
+          const da1Dispose = instance.terminal.parser.registerCsiHandler({ final: 'c' }, (params) => {
+            if (params.length === 0 || (params.length === 1 && params[0] === 0)) {
+              // Send the DA1 response to the PTY input (not terminal.write,
+              // which only writes to xterm's local render buffer). ConPTY
+              // needs to receive the response on its input pipe to avoid the
+              // 1.22+ startup timeout. Matches VSCode's _handleOnData path.
+              sendInputToTab(tab.id, '\x1b[?61;4c');
+              return true;
+            }
+            return false;
+          });
+          pendingDisposes.push(da1Dispose);
         } catch {}
       }
 
@@ -921,6 +1004,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         requestAnimationFrame(() => {
           if (wasReparented) {
             forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
+            // For local ConPTY sessions, force ConPTY to re-send the current
+            // screen content by toggling alt-screen mode. \x1b[?1049h enters
+            // alt-screen (saving current screen), \x1b[?1049l exits (restoring)
+            // — the net effect is a full repaint. Unsupported terminals ignore
+            // these sequences safely.
+            if (usesLocalConpty()) {
+              sendInputToTab(tab.id, '\x1b[?1049h\x1b[?1049l');
+            }
           } else {
             scheduleTerminalFit(tab.id);
             scheduleTerminalResizeSettle(tab.id, tab.sessionId, tab.type, 80);
@@ -980,6 +1071,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // ── Listener setup ─────────────────────────────────────
       cleanupTabListeners(tab.id);
 
+
       const setupConnection = async () => {
 
       if (cancelled) return;
@@ -1024,6 +1116,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         instance?.terminal.write(chunk);
       };
       const enqueueRender = (payload: string) => {
+        appendTerminalOutput(tab.id, payload);
         // Detect password / passphrase / verification prompts in the terminal's
         // output so we can stop treating the user's next input as a command.
         // sudo, su, mysql, ssh-keygen, TOTP, etc. all print a prompt ending in
@@ -1169,7 +1262,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       const osc7Dispose = term133.parser.registerOscHandler(7, (payload) => {
         // payload like file://host/abs/path
         const m = /^file:\/\/[^/]*(\/.*)$/.exec(payload);
-        if (m) tabCwd.set(tab.id, decodeURIComponent(m[1]));
+        if (m) {
+          const cwd = decodeURIComponent(m[1]);
+          tabCwd.set(tab.id, cwd);
+          setTerminalCwd(tab.id, cwd);
+        }
         return false; // let other handlers run
       });
 
@@ -1427,6 +1524,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         // re-sends an immediate SIGWINCH instead of falling into the debounce
         // branch — otherwise TUIs render at a stale size after reparenting.
         sentFirstResize.delete(tab.id);
+        for (const d of pendingDisposes) { try { d.dispose(); } catch {} }
         try { dataDispose.dispose(); } catch {}
         try { resizeDispose?.dispose(); } catch {}
         try { osc7Dispose.dispose(); } catch {}

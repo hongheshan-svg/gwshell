@@ -30,12 +30,14 @@ export default defineConfig(async () => ({
     },
   },
   build: {
+    // GWShell is a local Tauri desktop app; xterm/WebGL are split out below, and
+    // the remaining app shell is still modest once gzipped.
+    chunkSizeWarningLimit: 700,
     rollupOptions: {
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
           if (id.includes("@xterm/xterm")) return "xterm-core";
-          if (id.includes("@xterm/addon-canvas")) return "xterm-canvas";
           if (id.includes("@xterm/addon-webgl")) return "xterm-webgl";
           if (id.includes("@xterm/addon-fit") || id.includes("@xterm/addon-web-links")) {
             return "xterm-addons";

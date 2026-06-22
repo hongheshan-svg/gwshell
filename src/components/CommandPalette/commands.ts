@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Settings, Plus, Terminal, Zap, Home, Sun, PanelLeft, Search, Radio, X, ArrowLeftRight } from 'lucide-react';
+import { Settings, Plus, Terminal, Zap, Home, Sun, PanelLeft, Search, Radio, X, ArrowLeftRight, Bot } from 'lucide-react';
 import { KEY_ACTIONS } from '../../keymap/actions';
 import { parseBinding, formatStep } from '../../keymap/match';
 import type { SessionConfig, TabInfo } from '../../types';
@@ -109,6 +109,7 @@ export function buildCommands(ctx: CommandCtx): Command[] {
 
 function iconForAction(id: string): LucideIcon {
   if (id.startsWith('settings'))   return Settings;
+  if (id.startsWith('agent'))      return Bot;
   if (id.startsWith('terminal'))   return Search;
   if (id.startsWith('broadcast'))  return Radio;
   if (id === 'tab.close')          return X;

@@ -13,6 +13,7 @@ import { SortableContext, horizontalListSortingStrategy, useSortable } from '@dn
 import { CSS } from '@dnd-kit/utilities';
 import { useAppStore } from '../../stores/appStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { destroyTerminal } from '../Terminal/TerminalView';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
 import type { TabInfo } from '../../types';
 
@@ -79,9 +80,7 @@ export const TabBar: React.FC = () => {
   };
 
   const doCloseTab = (tabId: string) => {
-    import('../Terminal/TerminalView').then(({ destroyTerminal }) => {
-      destroyTerminal(tabId);
-    });
+    destroyTerminal(tabId);
     removeTab(tabId);
   };
 

@@ -9,6 +9,7 @@ import { useSettingsStore, defaultSettings as persistedDefaultSettings } from '.
 import type { TranslationKeys } from '../../i18n';
 import { TERMINAL_SCHEME_OPTIONS } from '../../lib/terminalThemes';
 import { useEscapeClose } from '../../lib/useEscapeClose';
+import { AiSettingsSection } from './AiSettingsSection';
 import { ShortcutEditor } from './ShortcutEditor';
 
 /* ---- Nav categories ---- */
@@ -27,6 +28,7 @@ const navCategories: { title?: TranslationKeys; items: { id: string; labelKey: T
       { id: 'shortcut-ssh', labelKey: 'settings_shortcut_ssh' },
     ],
   },
+  { items: [{ id: 'agent-ai', labelKey: 'agent_ai_title' }] },
   { items: [{ id: 'vault', labelKey: 'vault_section' }] },
   { items: [{ id: 'storage', labelKey: 'settings_storage' }] },
 ];
@@ -522,7 +524,7 @@ const StorageSection: React.FC = () => {
 
 /* ---- Main Component ---- */
 export const SettingsModal: React.FC = () => {
-  const { showSettings, setShowSettings, theme, setTheme } = useAppStore();
+  const { showSettings, setShowSettings, settingsInitialNav, theme, setTheme } = useAppStore();
   const persistedSettings = useSettingsStore((s) => s.settings);
   const saveSettings = useSettingsStore((s) => s.save);
   const { t } = useTranslation();
@@ -533,9 +535,10 @@ export const SettingsModal: React.FC = () => {
   useEffect(() => {
     if (showSettings) {
       setSettings({ ...persistedSettings, theme });
+      if (settingsInitialNav) setActiveNav(settingsInitialNav);
       setDirty(false);
     }
-  }, [showSettings, persistedSettings, theme]);
+  }, [showSettings, persistedSettings, settingsInitialNav, theme]);
 
   const u = useCallback(<K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
@@ -657,6 +660,8 @@ export const SettingsModal: React.FC = () => {
                 <ShortcutTable left={shortcutsSshLeft} right={shortcutsSshRight} t={t} />
               </>
             )}
+
+            {activeNav === 'agent-ai' && <AiSettingsSection />}
 
             {/* ===== 保险库 / Vault ===== */}
             {activeNav === 'vault' && <VaultSection open={showSettings && activeNav === 'vault'} />}

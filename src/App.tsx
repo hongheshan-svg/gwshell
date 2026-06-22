@@ -39,6 +39,7 @@ const AppMenu = lazy(() => import('./components/AppMenu/AppMenu').then((m) => ({
 const UpdateChecker = lazy(() => import('./components/UpdateChecker/UpdateChecker').then((m) => ({ default: m.UpdateChecker })));
 const SecurityNotice = lazy(() => import('./components/SecurityNotice/SecurityNotice').then((m) => ({ default: m.SecurityNotice })));
 const ServerPanel = lazy(() => import('./components/ServerPanel').then((m) => ({ default: m.ServerPanel })));
+const AgentPanel = lazy(() => import('./components/Agent').then((m) => ({ default: m.AgentPanel })));
 const CommandPalette = lazy(() => import('./components/CommandPalette/CommandPalette').then((m) => ({ default: m.CommandPalette })));
 const GroupDefaultsModal = lazy(() => import('./components/Modals/GroupDefaultsModal').then((m) => ({ default: m.GroupDefaultsModal })));
 
@@ -51,7 +52,8 @@ function App() {
     groupDefaultsTarget,
     dockerPicker, setDockerPicker,
     vaultLocked, setVaultLocked,
-    mainView, activeNavItem, sidebarCollapsed } = useAppStore();
+    mainView, activeNavItem, sidebarCollapsed,
+    agentPanelOpen } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
   const settingsLoaded = useSettingsStore((s) => s.loaded);
   const sessionTabMemory = useSettingsStore((s) => s.settings.sessionTabMemory);
@@ -220,6 +222,11 @@ function App() {
                   </Suspense>
                 );
               })()}
+              {agentPanelOpen && (
+                <Suspense fallback={null}>
+                  <AgentPanel />
+                </Suspense>
+              )}
             </div>
             <StatusBar />
           </div>
