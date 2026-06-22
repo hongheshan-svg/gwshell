@@ -38,7 +38,6 @@ export default defineConfig(async () => ({
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
           if (id.includes("@xterm/xterm")) return "xterm-core";
-          if (id.includes("@xterm/addon-canvas")) return "xterm-canvas";
           if (id.includes("@xterm/addon-webgl")) return "xterm-webgl";
           if (id.includes("@xterm/addon-fit") || id.includes("@xterm/addon-web-links")) {
             return "xterm-addons";
@@ -46,15 +45,6 @@ export default defineConfig(async () => ({
           if (id.includes("@tauri-apps/")) return "tauri-api";
         },
       },
-    },
-  },
-  resolve: {
-    alias: {
-      // @xterm/addon-canvas beta (0.8.0-beta.48) ships the ESM build as
-      // lib/xterm-addon-canvas.mjs but package.json points module to the
-      // non-existent lib/addon-canvas.mjs. Fix the entry until the package
-      // is corrected upstream.
-      "@xterm/addon-canvas": "@xterm/addon-canvas/lib/xterm-addon-canvas.mjs",
     },
   },
 }));
