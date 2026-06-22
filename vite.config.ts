@@ -30,6 +30,9 @@ export default defineConfig(async () => ({
     },
   },
   build: {
+    // GWShell is a local Tauri desktop app; xterm/WebGL are split out below, and
+    // the remaining app shell is still modest once gzipped.
+    chunkSizeWarningLimit: 700,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -43,6 +46,15 @@ export default defineConfig(async () => ({
           if (id.includes("@tauri-apps/")) return "tauri-api";
         },
       },
+    },
+  },
+  resolve: {
+    alias: {
+      // @xterm/addon-canvas beta (0.8.0-beta.48) ships the ESM build as
+      // lib/xterm-addon-canvas.mjs but package.json points module to the
+      // non-existent lib/addon-canvas.mjs. Fix the entry until the package
+      // is corrected upstream.
+      "@xterm/addon-canvas": "@xterm/addon-canvas/lib/xterm-addon-canvas.mjs",
     },
   },
 }));

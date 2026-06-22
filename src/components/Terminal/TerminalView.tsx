@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { CanvasAddon } from "@xterm/addon-canvas";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { readText as clipboardRead, writeText as clipboardWrite } from "@tauri-apps/plugin-clipboard-manager";
@@ -917,19 +918,48 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         });
       }
 
-      // Attach the WebGL renderer once the terminal is in the DOM. WebGL is
-      // xterm.js's preferred GPU renderer (fastest, scales best, and in v6
-      // supports DEC 2026 synchronized output that reduces TUI tearing). On
-      // WebGL context loss, dispose the addon so the terminal falls back to
-      // xterm's built-in DOM renderer.
+      // Attach the GPU renderer once the terminal is in the DOM. Renderer
+      // preference: WebGL (fastest, supports DEC 2026 synchronized output)
+      // → Canvas (GPU-accelerated 2D context, broad compatibility) → DOM
+      // (xterm's built-in fallback, no GPU). On WebGL context loss, dispose
+      // and fall through to Canvas. This matches VSCode's renderer chain.
       if (wasFreshlyOpened || instance.rendererLost) {
-        try {
-          const webgl = new WebglAddon();
-          webgl.onContextLoss(() => { instance.rendererLost = true; try { webgl.dispose(); } catch {} });
-          instance.terminal.loadAddon(webgl);
-          instance.rendererAddon = webgl;
-          instance.rendererLost = false;
-        } catch {}
+        // Dispose any previous renderer addon before attaching a new one.
+        try { instance.rendererAddon?.dispose(); } catch {}
+        instance.rendererAddon = undefined;
+
+        let attached = false;
+        if (!attached) {
+          try {
+            const webgl = new WebglAddon();
+            webgl.onContextLoss(() => {
+              instance.rendererLost = true;
+              try { webgl.dispose(); } catch {}
+              // Fall back to Canvas after WebGL context loss.
+              try {
+                const canvas = new CanvasAddon();
+                instance.terminal.loadAddon(canvas);
+                instance.rendererAddon = canvas;
+              } catch {}
+            });
+            instance.terminal.loadAddon(webgl);
+            instance.rendererAddon = webgl;
+            instance.rendererLost = false;
+            attached = true;
+          } catch {}
+        }
+        if (!attached) {
+          // WebGL unavailable (no GPU / headless) — use Canvas as primary.
+          try {
+            const canvas = new CanvasAddon();
+            instance.terminal.loadAddon(canvas);
+            instance.rendererAddon = canvas;
+            instance.rendererLost = false;
+            attached = true;
+          } catch {}
+        }
+        // If neither WebGL nor Canvas attached, xterm uses its built-in DOM
+        // renderer automatically — no explicit action needed.
       }
 
       // ConPTY 1.22+ sends a DA1 request (CSI c) at startup and waits for a
