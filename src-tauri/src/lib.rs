@@ -17,13 +17,16 @@ use pty::PtyManager;
 use serial::SerialManager;
 use session::SessionConfig;
 use ssh::SshManager;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
+use tokio::sync::Notify;
+use tokio::time::{timeout, Duration};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent::types::{AgentAutonomyLevel, AgentSessionStart};
+    use agent::types::{AgentAutonomyLevel, AgentSessionInfo, AgentSessionStart};
     use session::{AuthMethod, SessionType};
 
     #[test]
@@ -74,12 +77,87 @@ mod tests {
             Err("Target session is required".to_string())
         );
     }
+
+    #[test]
+    fn agent_initial_probes_include_monitoring_evidence() {
+        let labels: Vec<&str> = initial_agent_probe_commands()
+            .iter()
+            .map(|(label, _)| *label)
+            .collect();
+
+        assert!(labels.contains(&"Filesystem inode overview"));
+        assert!(labels.contains(&"Network listeners"));
+        assert!(labels.contains(&"Container overview"));
+    }
+
+    #[test]
+    fn policy_auto_maintenance_only_auto_executes_low_risk_actions() {
+        let mut info = AgentSessionInfo {
+            id: "agent-1".into(),
+            target_session_id: "ssh-1".into(),
+            objective: "maintain".into(),
+            autonomy: AgentAutonomyLevel::PolicyAutoMaintain,
+            started_at: 1,
+            status: agent::types::AgentSessionStatus::Running,
+        };
+
+        assert!(should_auto_execute_agent_action(
+            &info,
+            agent::types::AgentRisk::ReadOnly
+        ));
+        assert!(should_auto_execute_agent_action(
+            &info,
+            agent::types::AgentRisk::Low
+        ));
+        assert!(!should_auto_execute_agent_action(
+            &info,
+            agent::types::AgentRisk::Medium
+        ));
+        assert!(!should_auto_execute_agent_action(
+            &info,
+            agent::types::AgentRisk::High
+        ));
+        assert!(!should_auto_execute_agent_action(
+            &info,
+            agent::types::AgentRisk::Blocked
+        ));
+
+        info.autonomy = AgentAutonomyLevel::Recommend;
+        assert!(!should_auto_execute_agent_action(
+            &info,
+            agent::types::AgentRisk::ReadOnly
+        ));
+    }
+
+    #[test]
+    fn ai_provider_test_uses_inline_key_before_saved_key() {
+        assert_eq!(
+            resolve_ai_provider_test_api_key(
+                Some("  sk-inline  ".to_string()),
+                Some("sk-saved".to_string())
+            ),
+            "sk-inline"
+        );
+        assert_eq!(
+            resolve_ai_provider_test_api_key(Some("  ".to_string()), Some("sk-saved".to_string())),
+            "sk-saved"
+        );
+    }
+
+    #[test]
+    fn terminal_ai_event_name_uses_tauri_safe_channel_names() {
+        assert_eq!(
+            terminal_ai_event_name("delta", "request-1"),
+            "terminal-ai-delta-request-1"
+        );
+    }
 }
 
 pub struct AppState {
     pub pty_manager: PtyManager,
     pub ssh_manager: Arc<SshManager>,
     pub agent_manager: Arc<agent::manager::AgentManager>,
+    pub agent_log_streams: Mutex<HashMap<String, Arc<Notify>>>,
     pub serial_manager: SerialManager,
     pub sessions: Mutex<Vec<SessionConfig>>,
     pub db: Database,
@@ -163,6 +241,9 @@ async fn app_ready(window: tauri::WebviewWindow) {
 /// not `await` the connection's `wait_close`, so it can't hang shutdown.
 fn shutdown_cleanup(state: &Arc<AppState>) {
     state.metrics.stop_all();
+    for (_, stop) in state.agent_log_streams.lock().drain() {
+        stop.notify_waiters();
+    }
     state.pty_manager.close_all();
     state.serial_manager.close_all();
     // Gracefully signal SSH sessions + port/SOCKS forwards to stop. Best-effort:
@@ -831,6 +912,27 @@ async fn save_ai_provider_settings(
 }
 
 #[tauri::command]
+async fn load_agent_policy_settings(
+    state: State<'_, Arc<AppState>>,
+) -> Result<agent::types::AgentPolicySettings, String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || agent::policy::load_settings(&state.db))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
+}
+
+#[tauri::command]
+async fn save_agent_policy_settings(
+    settings: agent::types::AgentPolicySettings,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || agent::policy::save_settings(&state.db, settings))
+        .await
+        .map_err(|e| format!("task join: {}", e))?
+}
+
+#[tauri::command]
 async fn set_ai_provider_api_key(
     api_key: String,
     state: State<'_, Arc<AppState>>,
@@ -847,6 +949,17 @@ async fn clear_ai_provider_api_key(state: State<'_, Arc<AppState>>) -> Result<()
     tokio::task::spawn_blocking(move || agent::provider::clear_api_key(&state.db))
         .await
         .map_err(|e| format!("task join: {}", e))?
+}
+
+fn resolve_ai_provider_test_api_key(
+    inline_api_key: Option<String>,
+    stored_api_key: Option<String>,
+) -> String {
+    inline_api_key
+        .filter(|key| !key.trim().is_empty())
+        .map(|key| key.trim().to_string())
+        .or(stored_api_key)
+        .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -869,22 +982,165 @@ async fn list_agent_audits(
 #[tauri::command]
 async fn test_ai_provider(state: State<'_, Arc<AppState>>) -> Result<String, String> {
     let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
+    let (settings, api_key) = tokio::task::spawn_blocking(move || -> Result<_, String> {
         let settings = agent::provider::load_settings(&state.db)?;
         if !settings.enabled {
-            return Err("AI provider is disabled".into());
+            return Err("AI provider is disabled".to_string());
         }
-        if agent::provider::load_api_key(&state.db)?.is_none() {
-            return Err("AI API key is not configured".into());
+        let api_key = agent::provider::load_api_key(&state.db)?.unwrap_or_default();
+        if agent::provider::provider_requires_api_key(&settings) && api_key.trim().is_empty() {
+            return Err("AI API key is not configured".to_string());
         }
-        Ok(format!("Configured: {} {}", settings.base_url, settings.model))
+        Ok((settings, api_key))
     })
     .await
-    .map_err(|e| format!("task join: {}", e))?
+    .map_err(|e| format!("task join: {}", e))??;
+
+    agent::provider::test_provider_connectivity(settings, api_key).await
+}
+
+#[tauri::command]
+async fn test_ai_provider_with_settings(
+    settings: agent::types::AiProviderSettings,
+    api_key: Option<String>,
+    state: State<'_, Arc<AppState>>,
+) -> Result<String, String> {
+    let state = state.inner().clone();
+    let stored_api_key =
+        tokio::task::spawn_blocking(move || agent::provider::load_api_key(&state.db))
+            .await
+            .map_err(|e| format!("task join: {}", e))??;
+    let api_key = resolve_ai_provider_test_api_key(api_key, stored_api_key);
+    if agent::provider::provider_requires_api_key(&settings) && api_key.trim().is_empty() {
+        return Err("AI API key is not configured".to_string());
+    }
+
+    agent::provider::test_provider_connectivity(settings, api_key).await
+}
+
+const TERMINAL_AI_TIMEOUT_GRACE_SECS: u64 = 5;
+
+fn terminal_ai_event_name(kind: &str, request_id: &str) -> String {
+    format!("terminal-ai-{}-{}", kind, request_id)
+}
+
+#[tauri::command]
+async fn run_terminal_ai_chat(
+    request: agent::types::TerminalAiChatRequest,
+    state: State<'_, Arc<AppState>>,
+    app_handle: AppHandle,
+) -> Result<String, String> {
+    if request.request_id.trim().is_empty() {
+        return Err("AI request id is required".to_string());
+    }
+    if request.question.trim().is_empty() {
+        return Err("Question is required".to_string());
+    }
+
+    let state = state.inner().clone();
+    let (settings, api_key) = tokio::task::spawn_blocking(move || -> Result<_, String> {
+        let settings = agent::provider::load_settings(&state.db)?;
+        if !settings.enabled {
+            return Err("AI provider is disabled".to_string());
+        }
+        let api_key = agent::provider::load_api_key(&state.db)?.unwrap_or_default();
+        if agent::provider::provider_requires_api_key(&settings) && api_key.trim().is_empty() {
+            return Err("AI API key is not configured".to_string());
+        }
+        Ok((settings, api_key))
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))??;
+
+    let request_id = request.request_id.clone();
+    let user_prompt = agent::prompt::build_terminal_ai_chat_prompt(&request);
+    let delta_event = terminal_ai_event_name("delta", &request_id);
+    let done_event = terminal_ai_event_name("done", &request_id);
+    let error_event = terminal_ai_event_name("error", &request_id);
+    let delta_handle = app_handle.clone();
+    let hard_timeout_secs = settings
+        .request_timeout_secs
+        .max(1)
+        .saturating_add(TERMINAL_AI_TIMEOUT_GRACE_SECS);
+
+    let result = match timeout(
+        Duration::from_secs(hard_timeout_secs),
+        agent::provider::stream_chat_completion(
+            settings,
+            api_key,
+            "You are GWShell's terminal AI assistant. You help diagnose terminal output and suggest safe next commands, but you never execute anything.".to_string(),
+            user_prompt,
+            move |delta| {
+                let _ = delta_handle.emit(&delta_event, serde_json::json!({ "textDelta": delta }));
+            },
+            || false,
+        ),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => Err(format!(
+            "AI request timed out after {} seconds",
+            hard_timeout_secs
+        )),
+    };
+
+    match result {
+        Ok(full_text) => {
+            let _ = app_handle.emit(
+                &done_event,
+                serde_json::json!({ "text": full_text.clone() }),
+            );
+            Ok(full_text)
+        }
+        Err(error) => {
+            let _ = app_handle.emit(
+                &error_event,
+                serde_json::json!({ "message": error.clone() }),
+            );
+            Err(error)
+        }
+    }
 }
 
 #[tauri::command]
 async fn start_agent_session(
+    request: agent::types::AgentSessionStart,
+    state: State<'_, Arc<AppState>>,
+) -> Result<agent::types::AgentSessionInfo, String> {
+    validate_agent_session_start(&request)?;
+    let state = state.inner().clone();
+    let info = state.agent_manager.start_session(request);
+    Ok(info)
+}
+
+#[tauri::command]
+async fn run_agent_session(
+    agent_session_id: String,
+    state: State<'_, Arc<AppState>>,
+    app_handle: AppHandle,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    let info = state
+        .agent_manager
+        .get_session(&agent_session_id)
+        .ok_or_else(|| "Agent session not found".to_string())?;
+    if info.status != agent::types::AgentSessionStatus::Running {
+        return Err("Agent session is not running".into());
+    }
+    spawn_agent_session_run(state, app_handle, info);
+    Ok(())
+}
+
+#[tauri::command]
+async fn list_agent_sessions(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<agent::types::AgentSessionInfo>, String> {
+    Ok(state.agent_manager.list_sessions())
+}
+
+#[tauri::command]
+async fn draft_agent_plan(
     request: agent::types::AgentSessionStart,
     state: State<'_, Arc<AppState>>,
     app_handle: AppHandle,
@@ -892,58 +1148,815 @@ async fn start_agent_session(
     validate_agent_session_start(&request)?;
     let state = state.inner().clone();
     let info = state.agent_manager.start_session(request);
-    spawn_initial_agent_evidence(state, app_handle, info.clone());
+    spawn_agent_plan_draft(state, app_handle, info.clone());
     Ok(info)
 }
 
-fn spawn_initial_agent_evidence(
+#[tauri::command]
+async fn continue_agent_session(
+    request: agent::types::AgentContinuationRequest,
+    state: State<'_, Arc<AppState>>,
+    app_handle: AppHandle,
+) -> Result<(), String> {
+    if request.agent_session_id.trim().is_empty() {
+        return Err("Agent session is required".into());
+    }
+    if request.results.is_empty() && request.evidence.is_empty() {
+        return Err("Evidence or tool result is required".into());
+    }
+
+    let state = state.inner().clone();
+    let info = state
+        .agent_manager
+        .get_session(&request.agent_session_id)
+        .ok_or_else(|| "Agent session not found".to_string())?;
+    if info.status == agent::types::AgentSessionStatus::Cancelled {
+        return Err("Agent session is cancelled".into());
+    }
+
+    finish_agent_session(
+        &state,
+        &app_handle,
+        &info.id,
+        agent::types::AgentSessionStatus::Running,
+    );
+    spawn_agent_continuation(state, app_handle, info, request);
+    Ok(())
+}
+
+#[tauri::command]
+async fn start_agent_log_stream(
+    agent_session_id: String,
+    action: agent::types::AgentToolCall,
+    state: State<'_, Arc<AppState>>,
+    app_handle: AppHandle,
+) -> Result<String, String> {
+    let state = state.inner().clone();
+    let info = state
+        .agent_manager
+        .get_session(&agent_session_id)
+        .ok_or_else(|| "Agent session not found".to_string())?;
+    if info.status == agent::types::AgentSessionStatus::Cancelled {
+        return Err("Agent session is cancelled".into());
+    }
+    if action.target_session_id != info.target_session_id {
+        return Err("Stream action target does not match agent session".into());
+    }
+    if agent::risk::classify_tool_call(&action) != agent::types::AgentRisk::ReadOnly {
+        return Err("Only read-only log streams can be started".into());
+    }
+    let command = agent::tools::build_stream_command(&action)?;
+    let stream_id = uuid::Uuid::new_v4().to_string();
+    let stop = Arc::new(Notify::new());
+    let policy = agent::policy::load_settings(&state.db).unwrap_or_default();
+    state
+        .agent_log_streams
+        .lock()
+        .insert(stream_id.clone(), stop.clone());
+
+    emit_agent_delta(
+        &app_handle,
+        &info.id,
+        "Live log stream started. New log chunks will appear as evidence.\n",
+    );
+    spawn_agent_log_stream(
+        state,
+        app_handle,
+        info,
+        stream_id.clone(),
+        action,
+        command,
+        stop,
+        policy,
+    );
+    Ok(stream_id)
+}
+
+#[tauri::command]
+async fn stop_agent_log_stream(
+    stream_id: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<bool, String> {
+    let Some(stop) = state.agent_log_streams.lock().remove(&stream_id) else {
+        return Ok(false);
+    };
+    stop.notify_waiters();
+    Ok(true)
+}
+
+fn spawn_agent_session_run(
     state: Arc<AppState>,
     app_handle: AppHandle,
     info: agent::types::AgentSessionInfo,
 ) {
     tauri::async_runtime::spawn(async move {
-        let output = match state
-            .ssh_manager
-            .ssh_exec(&info.target_session_id, "hostname && uptime && df -hP /")
-            .await
-        {
-            Ok(output) => output,
-            Err(error) => format!("Initial health probe failed: {}", error),
-        };
+        let mut evidence_items = Vec::new();
+        for (label, command) in initial_agent_probe_commands() {
+            if state.agent_manager.is_cancelled(&info.id) {
+                finish_agent_session(
+                    &state,
+                    &app_handle,
+                    &info.id,
+                    agent::types::AgentSessionStatus::Cancelled,
+                );
+                return;
+            }
 
-        let evidence = agent::types::AgentEvidence {
-            id: uuid::Uuid::new_v4().to_string(),
-            source: "ssh_exec".into(),
-            label: "Initial health probe".into(),
-            body: agent::redaction::redact_secrets(&output),
-            created_at: now_secs(),
-        };
-        let _ = app_handle.emit(&agent::manager::event_name("evidence", &info.id), evidence);
-
-        let ai_enabled = agent::provider::load_settings(&state.db)
-            .map(|settings| settings.enabled)
-            .unwrap_or(false);
-        if !ai_enabled {
+            let output =
+                run_agent_probe(state.ssh_manager.clone(), &info.target_session_id, command).await;
+            let evidence = agent::types::AgentEvidence {
+                id: uuid::Uuid::new_v4().to_string(),
+                source: "ssh_exec".into(),
+                label: label.to_string(),
+                body: agent::redaction::redact_secrets(&output),
+                created_at: now_secs(),
+            };
             let _ = app_handle.emit(
-                &agent::manager::event_name("analysis-delta", &info.id),
-                serde_json::json!({
-                    "textDelta": "AI provider is disabled. Collected initial server evidence and local rules are available.\n"
-                }),
+                &agent::manager::event_name("evidence", &info.id),
+                evidence.clone(),
             );
+            evidence_items.push(evidence);
         }
 
-        let action = agent::types::AgentToolCall {
+        let settings = match agent::provider::load_settings(&state.db) {
+            Ok(settings) => settings,
+            Err(error) => {
+                emit_agent_error(&app_handle, &info.id, error);
+                finish_agent_session(
+                    &state,
+                    &app_handle,
+                    &info.id,
+                    agent::types::AgentSessionStatus::Failed,
+                );
+                return;
+            }
+        };
+        let policy = agent::policy::load_settings(&state.db).unwrap_or_default();
+        let alerts = agent::alerts::detect_alerts(&evidence_items, &policy);
+        if !alerts.is_empty() {
+            let evidence = agent::types::AgentEvidence {
+                id: uuid::Uuid::new_v4().to_string(),
+                source: "alert_rules".into(),
+                label: "Agent alert rules".into(),
+                body: alerts.join("\n"),
+                created_at: now_secs(),
+            };
+            let _ = app_handle.emit(
+                &agent::manager::event_name("evidence", &info.id),
+                evidence.clone(),
+            );
+            evidence_items.push(evidence);
+            if policy.alert_auto_start_agent {
+                emit_agent_delta(
+                    &app_handle,
+                    &info.id,
+                    "Alert rules matched current evidence; AI analysis will include these alerts.\n",
+                );
+            }
+        }
+
+        if !settings.enabled {
+            emit_agent_delta(
+                &app_handle,
+                &info.id,
+                "AI provider is disabled. Collected initial server evidence and local read-only actions are available.\n",
+            );
+            emit_default_agent_actions(&app_handle, &info);
+            finish_agent_session(
+                &state,
+                &app_handle,
+                &info.id,
+                agent::types::AgentSessionStatus::Completed,
+            );
+            return;
+        }
+
+        let api_key = match agent::provider::load_api_key(&state.db) {
+            Ok(Some(api_key)) => api_key,
+            Ok(None) if agent::provider::provider_requires_api_key(&settings) => {
+                emit_agent_error(&app_handle, &info.id, "AI API key is not configured");
+                emit_default_agent_actions(&app_handle, &info);
+                finish_agent_session(
+                    &state,
+                    &app_handle,
+                    &info.id,
+                    agent::types::AgentSessionStatus::Failed,
+                );
+                return;
+            }
+            Ok(None) => String::new(),
+            Err(error) => {
+                emit_agent_error(&app_handle, &info.id, error);
+                finish_agent_session(
+                    &state,
+                    &app_handle,
+                    &info.id,
+                    agent::types::AgentSessionStatus::Failed,
+                );
+                return;
+            }
+        };
+
+        let prompt = agent::prompt::build_user_prompt(&info.objective, &evidence_items, &[]);
+        let analysis_event = agent::manager::event_name("analysis-delta", &info.id);
+        let stream_app_handle = app_handle.clone();
+        let cancel_manager = state.agent_manager.clone();
+        let cancel_session_id = info.id.clone();
+        let stream_result = agent::provider::stream_chat_completion(
+            settings,
+            api_key,
+            agent::prompt::AGENT_SYSTEM_PROMPT.to_string(),
+            prompt,
+            move |delta| {
+                let _ = stream_app_handle
+                    .emit(&analysis_event, serde_json::json!({ "textDelta": delta }));
+            },
+            move || cancel_manager.is_cancelled(&cancel_session_id),
+        )
+        .await;
+
+        let full_text = match stream_result {
+            Ok(full_text) => full_text,
+            Err(error) => {
+                if state.agent_manager.is_cancelled(&info.id) {
+                    finish_agent_session(
+                        &state,
+                        &app_handle,
+                        &info.id,
+                        agent::types::AgentSessionStatus::Cancelled,
+                    );
+                    return;
+                }
+                emit_agent_error(&app_handle, &info.id, error);
+                emit_default_agent_actions(&app_handle, &info);
+                finish_agent_session(
+                    &state,
+                    &app_handle,
+                    &info.id,
+                    agent::types::AgentSessionStatus::Failed,
+                );
+                return;
+            }
+        };
+
+        if state.agent_manager.is_cancelled(&info.id) {
+            finish_agent_session(
+                &state,
+                &app_handle,
+                &info.id,
+                agent::types::AgentSessionStatus::Cancelled,
+            );
+            return;
+        }
+
+        match agent::prompt::extract_final_analysis_update(&full_text) {
+            Some(update) => {
+                let update = normalize_analysis_update(update, &info.target_session_id);
+                let _ = app_handle.emit(
+                    &agent::manager::event_name("analysis-update", &info.id),
+                    update.clone(),
+                );
+                emit_agent_actions(&state, &app_handle, &info, update.proposed_actions).await;
+                finish_agent_session(
+                    &state,
+                    &app_handle,
+                    &info.id,
+                    agent::types::AgentSessionStatus::Completed,
+                );
+            }
+            None => {
+                emit_agent_error(
+                    &app_handle,
+                    &info.id,
+                    "AI response did not include a valid final analysis JSON object",
+                );
+                emit_default_agent_actions(&app_handle, &info);
+                finish_agent_session(
+                    &state,
+                    &app_handle,
+                    &info.id,
+                    agent::types::AgentSessionStatus::Failed,
+                );
+            }
+        }
+    });
+}
+
+fn spawn_agent_plan_draft(
+    state: Arc<AppState>,
+    app_handle: AppHandle,
+    info: agent::types::AgentSessionInfo,
+) {
+    tauri::async_runtime::spawn(async move {
+        let settings = match agent::provider::load_settings(&state.db) {
+            Ok(settings) => settings,
+            Err(error) => {
+                emit_agent_error(&app_handle, &info.id, error);
+                return;
+            }
+        };
+        if !settings.enabled {
+            emit_agent_delta(
+                &app_handle,
+                &info.id,
+                "Plan mode: collect host overview, check recent errors, inspect resource pressure, then propose low-risk actions.\n",
+            );
+            return;
+        }
+        let api_key = match agent::provider::load_api_key(&state.db) {
+            Ok(Some(api_key)) => api_key,
+            Ok(None) if agent::provider::provider_requires_api_key(&settings) => {
+                emit_agent_error(&app_handle, &info.id, "AI API key is not configured");
+                return;
+            }
+            Ok(None) => String::new(),
+            Err(error) => {
+                emit_agent_error(&app_handle, &info.id, error);
+                return;
+            }
+        };
+        let prompt = format!(
+            "Objective:\n{}\n\nCreate a concise troubleshooting plan only. Do not propose executable tool calls yet. Include evidence you would collect first and safety checks before actions.",
+            info.objective
+        );
+        let analysis_event = agent::manager::event_name("analysis-delta", &info.id);
+        let stream_app_handle = app_handle.clone();
+        let cancel_manager = state.agent_manager.clone();
+        let cancel_session_id = info.id.clone();
+        let result = agent::provider::stream_chat_completion(
+            settings,
+            api_key,
+            agent::prompt::AGENT_SYSTEM_PROMPT.to_string(),
+            prompt,
+            move |delta| {
+                let _ = stream_app_handle
+                    .emit(&analysis_event, serde_json::json!({ "textDelta": delta }));
+            },
+            move || cancel_manager.is_cancelled(&cancel_session_id),
+        )
+        .await;
+        if let Err(error) = result {
+            emit_agent_error(&app_handle, &info.id, error);
+        }
+    });
+}
+
+fn spawn_agent_continuation(
+    state: Arc<AppState>,
+    app_handle: AppHandle,
+    info: agent::types::AgentSessionInfo,
+    request: agent::types::AgentContinuationRequest,
+) {
+    tauri::async_runtime::spawn(async move {
+        let settings = match agent::provider::load_settings(&state.db) {
+            Ok(settings) => settings,
+            Err(error) => {
+                emit_agent_error(&app_handle, &info.id, error);
+                finish_agent_session(
+                    &state,
+                    &app_handle,
+                    &info.id,
+                    agent::types::AgentSessionStatus::Failed,
+                );
+                return;
+            }
+        };
+
+        if !settings.enabled {
+            emit_agent_delta(
+                &app_handle,
+                &info.id,
+                "AI provider is disabled. Tool result was recorded, but no follow-up analysis was run.\n",
+            );
+            finish_agent_session(
+                &state,
+                &app_handle,
+                &info.id,
+                agent::types::AgentSessionStatus::Completed,
+            );
+            return;
+        }
+
+        let api_key = match agent::provider::load_api_key(&state.db) {
+            Ok(Some(api_key)) => api_key,
+            Ok(None) if agent::provider::provider_requires_api_key(&settings) => {
+                emit_agent_error(&app_handle, &info.id, "AI API key is not configured");
+                finish_agent_session(
+                    &state,
+                    &app_handle,
+                    &info.id,
+                    agent::types::AgentSessionStatus::Failed,
+                );
+                return;
+            }
+            Ok(None) => String::new(),
+            Err(error) => {
+                emit_agent_error(&app_handle, &info.id, error);
+                finish_agent_session(
+                    &state,
+                    &app_handle,
+                    &info.id,
+                    agent::types::AgentSessionStatus::Failed,
+                );
+                return;
+            }
+        };
+
+        let prompt = agent::prompt::build_continuation_prompt(
+            &info.objective,
+            &request.evidence,
+            request.latest_update.as_ref(),
+            &request.results,
+        );
+        let analysis_event = agent::manager::event_name("analysis-delta", &info.id);
+        let stream_app_handle = app_handle.clone();
+        let cancel_manager = state.agent_manager.clone();
+        let cancel_session_id = info.id.clone();
+        let stream_result = agent::provider::stream_chat_completion(
+            settings,
+            api_key,
+            agent::prompt::AGENT_SYSTEM_PROMPT.to_string(),
+            prompt,
+            move |delta| {
+                let _ = stream_app_handle
+                    .emit(&analysis_event, serde_json::json!({ "textDelta": delta }));
+            },
+            move || cancel_manager.is_cancelled(&cancel_session_id),
+        )
+        .await;
+
+        let full_text = match stream_result {
+            Ok(full_text) => full_text,
+            Err(error) => {
+                if state.agent_manager.is_cancelled(&info.id) {
+                    finish_agent_session(
+                        &state,
+                        &app_handle,
+                        &info.id,
+                        agent::types::AgentSessionStatus::Cancelled,
+                    );
+                    return;
+                }
+                emit_agent_error(&app_handle, &info.id, error);
+                finish_agent_session(
+                    &state,
+                    &app_handle,
+                    &info.id,
+                    agent::types::AgentSessionStatus::Failed,
+                );
+                return;
+            }
+        };
+
+        match agent::prompt::extract_final_analysis_update(&full_text) {
+            Some(update) => {
+                let update = normalize_analysis_update(update, &info.target_session_id);
+                let _ = app_handle.emit(
+                    &agent::manager::event_name("analysis-update", &info.id),
+                    update.clone(),
+                );
+                emit_agent_actions(&state, &app_handle, &info, update.proposed_actions).await;
+                finish_agent_session(
+                    &state,
+                    &app_handle,
+                    &info.id,
+                    agent::types::AgentSessionStatus::Completed,
+                );
+            }
+            None => {
+                emit_agent_error(
+                    &app_handle,
+                    &info.id,
+                    "AI response did not include a valid final analysis JSON object",
+                );
+                finish_agent_session(
+                    &state,
+                    &app_handle,
+                    &info.id,
+                    agent::types::AgentSessionStatus::Failed,
+                );
+            }
+        }
+    });
+}
+
+fn spawn_agent_log_stream(
+    state: Arc<AppState>,
+    app_handle: AppHandle,
+    info: agent::types::AgentSessionInfo,
+    stream_id: String,
+    action: agent::types::AgentToolCall,
+    command: String,
+    stop: Arc<Notify>,
+    policy: agent::types::AgentPolicySettings,
+) {
+    tauri::async_runtime::spawn(async move {
+        let event_name = agent::manager::event_name("evidence", &info.id);
+        let stream_label = format!("Live {:?} stream", action.tool);
+        let stream_app = app_handle.clone();
+        let mut chunk_index = 0usize;
+        let result = state
+            .ssh_manager
+            .ssh_exec_stream(
+                &info.target_session_id,
+                &command,
+                move |chunk| {
+                    let raw = String::from_utf8_lossy(&chunk);
+                    let Some(filtered) = agent::log_filter::filter_log_chunk(&raw, &policy) else {
+                        return;
+                    };
+                    let body = agent::redaction::redact_secrets(&filtered);
+                    if body.trim().is_empty() {
+                        return;
+                    }
+                    chunk_index += 1;
+                    let evidence = agent::types::AgentEvidence {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        source: "live_log".into(),
+                        label: format!("{} #{}", stream_label, chunk_index),
+                        body,
+                        created_at: now_secs(),
+                    };
+                    let _ = stream_app.emit(&event_name, evidence);
+                },
+                stop,
+            )
+            .await;
+
+        state.agent_log_streams.lock().remove(&stream_id);
+        match result {
+            Ok(()) => emit_agent_delta(&app_handle, &info.id, "Live log stream stopped.\n"),
+            Err(error) => emit_agent_error(&app_handle, &info.id, error),
+        }
+    });
+}
+
+fn initial_agent_probe_commands() -> &'static [(&'static str, &'static str)] {
+    &[
+        (
+            "Host, uptime, and filesystem overview",
+            "hostname && uptime && uname -a && df -hP",
+        ),
+        (
+            "Memory overview",
+            "free -m 2>/dev/null || vm_stat 2>/dev/null || true",
+        ),
+        (
+            "Top CPU processes",
+            "(ps -eo pid,ppid,stat,pcpu,pmem,comm --sort=-pcpu 2>/dev/null || ps aux 2>/dev/null) | head -20",
+        ),
+        ("Filesystem inode overview", "df -ihP 2>/dev/null || true"),
+        (
+            "Network listeners",
+            "ss -tulpn 2>/dev/null | head -60 || netstat -tulpn 2>/dev/null | head -60 || lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | head -60 || true",
+        ),
+        (
+            "Container overview",
+            "docker ps --format 'table {{.Names}}\\t{{.Status}}\\t{{.Ports}}' 2>/dev/null | head -40 || true",
+        ),
+    ]
+}
+
+async fn run_agent_probe(ssh: Arc<SshManager>, target_session_id: &str, command: &str) -> String {
+    match timeout(
+        Duration::from_secs(20),
+        ssh.ssh_exec(target_session_id, command),
+    )
+    .await
+    {
+        Ok(Ok(output)) => output,
+        Ok(Err(error)) => format!("Probe failed: {}", error),
+        Err(_) => "Probe timed out after 20 seconds".to_string(),
+    }
+}
+
+fn emit_agent_delta(app_handle: &AppHandle, agent_session_id: &str, text_delta: &str) {
+    let _ = app_handle.emit(
+        &agent::manager::event_name("analysis-delta", agent_session_id),
+        serde_json::json!({ "textDelta": text_delta }),
+    );
+}
+
+fn emit_agent_error(app_handle: &AppHandle, agent_session_id: &str, message: impl Into<String>) {
+    let _ = app_handle.emit(
+        &agent::manager::event_name("error", agent_session_id),
+        serde_json::json!({ "message": message.into() }),
+    );
+}
+
+fn emit_default_agent_actions(app_handle: &AppHandle, info: &agent::types::AgentSessionInfo) {
+    for action in default_agent_actions(&info.target_session_id) {
+        let _ = app_handle.emit(
+            &agent::manager::event_name("action-proposed", &info.id),
+            action,
+        );
+    }
+}
+
+async fn emit_agent_actions(
+    state: &Arc<AppState>,
+    app_handle: &AppHandle,
+    info: &agent::types::AgentSessionInfo,
+    actions: Vec<agent::types::AgentToolCall>,
+) {
+    let policy = agent::policy::load_settings(&state.db).unwrap_or_default();
+    for action in actions {
+        let _ = app_handle.emit(
+            &agent::manager::event_name("action-proposed", &info.id),
+            action.clone(),
+        );
+        if should_auto_execute_agent_action_with_policy(info, &action, &policy) {
+            let result = agent::tools::execute_tool(state.ssh_manager.clone(), action).await;
+            let _ = app_handle.emit(
+                &agent::manager::event_name("action-result", &info.id),
+                result,
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+fn should_auto_execute_agent_action(
+    info: &agent::types::AgentSessionInfo,
+    risk: agent::types::AgentRisk,
+) -> bool {
+    let action = agent::types::AgentToolCall {
+        id: "policy-check".into(),
+        tool: agent::types::AgentToolName::RunCommand,
+        target_session_id: info.target_session_id.clone(),
+        payload: serde_json::json!({ "command": "" }),
+        risk,
+        reason: "policy check".into(),
+        expected_result: None,
+        verify: None,
+    };
+    should_auto_execute_agent_action_with_policy(
+        info,
+        &action,
+        &agent::types::AgentPolicySettings::default(),
+    )
+}
+
+fn should_auto_execute_agent_action_with_policy(
+    info: &agent::types::AgentSessionInfo,
+    action: &agent::types::AgentToolCall,
+    policy: &agent::types::AgentPolicySettings,
+) -> bool {
+    if info.autonomy != agent::types::AgentAutonomyLevel::PolicyAutoMaintain {
+        return false;
+    }
+    if policy.maintenance_window_enabled && !is_current_maintenance_window(policy) {
+        return false;
+    }
+    if !policy.auto_execute_service_denylist.is_empty()
+        && action.tool == agent::types::AgentToolName::RestartService
+        && action
+            .payload
+            .get("service")
+            .and_then(|value| value.as_str())
+            .is_some_and(|service| {
+                policy
+                    .auto_execute_service_denylist
+                    .iter()
+                    .any(|blocked| !blocked.trim().is_empty() && service.contains(blocked.trim()))
+            })
+    {
+        return false;
+    }
+    if !policy.auto_execute_command_allowlist.is_empty()
+        && action.tool == agent::types::AgentToolName::RunCommand
+    {
+        let command = action
+            .payload
+            .get("command")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        if !policy
+            .auto_execute_command_allowlist
+            .iter()
+            .any(|allowed| !allowed.trim().is_empty() && command.contains(allowed.trim()))
+        {
+            return false;
+        }
+    }
+
+    match action.risk {
+        agent::types::AgentRisk::ReadOnly => policy.auto_execute_read_only,
+        agent::types::AgentRisk::Low => policy.auto_execute_low_risk,
+        _ => false,
+    }
+}
+
+fn is_current_maintenance_window(policy: &agent::types::AgentPolicySettings) -> bool {
+    let now_minutes = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+        Ok(duration) => ((duration.as_secs() / 60) % 1440) as u16,
+        Err(_) => return false,
+    };
+    is_minute_in_maintenance_window(
+        now_minutes,
+        &policy.maintenance_window_start,
+        &policy.maintenance_window_end,
+    )
+}
+
+fn is_minute_in_maintenance_window(now_minutes: u16, start: &str, end: &str) -> bool {
+    let Some(start) = parse_hhmm_minutes(start) else {
+        return false;
+    };
+    let Some(end) = parse_hhmm_minutes(end) else {
+        return false;
+    };
+    if start <= end {
+        now_minutes >= start && now_minutes <= end
+    } else {
+        now_minutes >= start || now_minutes <= end
+    }
+}
+
+fn parse_hhmm_minutes(value: &str) -> Option<u16> {
+    let (hours, minutes) = value.split_once(':')?;
+    let hours = hours.parse::<u16>().ok()?;
+    let minutes = minutes.parse::<u16>().ok()?;
+    if hours > 23 || minutes > 59 {
+        return None;
+    }
+    Some(hours * 60 + minutes)
+}
+
+fn default_agent_actions(target_session_id: &str) -> Vec<agent::types::AgentToolCall> {
+    vec![
+        agent::types::AgentToolCall {
             id: uuid::Uuid::new_v4().to_string(),
             tool: agent::types::AgentToolName::RunCommand,
-            target_session_id: info.target_session_id.clone(),
+            target_session_id: target_session_id.to_string(),
             payload: serde_json::json!({ "command": "df -hP /" }),
             risk: agent::types::AgentRisk::ReadOnly,
             reason: "Inspect root filesystem usage".into(),
             expected_result: Some("Shows current root filesystem capacity and usage".into()),
             verify: None,
-        };
-        let _ = app_handle.emit(&agent::manager::event_name("action-proposed", &info.id), action);
-    });
+        },
+        agent::types::AgentToolCall {
+            id: uuid::Uuid::new_v4().to_string(),
+            tool: agent::types::AgentToolName::RunCommand,
+            target_session_id: target_session_id.to_string(),
+            payload: serde_json::json!({ "command": "uptime" }),
+            risk: agent::types::AgentRisk::ReadOnly,
+            reason: "Inspect load average and uptime".into(),
+            expected_result: Some("Shows whether the host is under sustained load".into()),
+            verify: None,
+        },
+    ]
+}
+
+fn normalize_analysis_update(
+    mut update: agent::types::AgentAnalysisUpdate,
+    target_session_id: &str,
+) -> agent::types::AgentAnalysisUpdate {
+    for finding in &mut update.findings {
+        if finding.id.trim().is_empty() {
+            finding.id = uuid::Uuid::new_v4().to_string();
+        }
+    }
+    for action in &mut update.proposed_actions {
+        normalize_agent_tool_call(action, target_session_id);
+    }
+    update
+}
+
+fn normalize_agent_tool_call(call: &mut agent::types::AgentToolCall, target_session_id: &str) {
+    if call.id.trim().is_empty() {
+        call.id = uuid::Uuid::new_v4().to_string();
+    }
+    call.target_session_id = target_session_id.to_string();
+    if call.reason.trim().is_empty() {
+        call.reason = "Model proposed action".into();
+    }
+    if let Some(expected_result) = &call.expected_result {
+        if expected_result.trim().is_empty() {
+            call.expected_result = None;
+        }
+    }
+    if let Some(verify) = call.verify.as_mut() {
+        normalize_agent_tool_call(verify, target_session_id);
+        if verify.risk != agent::types::AgentRisk::ReadOnly {
+            call.verify = None;
+        }
+    }
+    call.risk = agent::risk::classify_tool_call(call);
+}
+
+fn finish_agent_session(
+    state: &Arc<AppState>,
+    app_handle: &AppHandle,
+    agent_session_id: &str,
+    status: agent::types::AgentSessionStatus,
+) {
+    if let Some(info) = state.agent_manager.finish_session(agent_session_id, status) {
+        let _ = app_handle.emit(
+            &agent::manager::event_name("session-update", agent_session_id),
+            info,
+        );
+    }
 }
 
 fn now_secs() -> i64 {
@@ -967,8 +1980,18 @@ fn validate_agent_session_start(request: &agent::types::AgentSessionStart) -> Re
 async fn cancel_agent_session(
     agent_session_id: String,
     state: State<'_, Arc<AppState>>,
+    app_handle: AppHandle,
 ) -> Result<bool, String> {
-    Ok(state.agent_manager.cancel_session(&agent_session_id))
+    let cancelled = state.agent_manager.cancel_session(&agent_session_id);
+    if cancelled {
+        if let Some(info) = state.agent_manager.get_session(&agent_session_id) {
+            let _ = app_handle.emit(
+                &agent::manager::event_name("session-update", &agent_session_id),
+                info,
+            );
+        }
+    }
+    Ok(cancelled)
 }
 
 #[tauri::command]
@@ -1403,6 +2426,7 @@ pub fn run() {
         pty_manager: PtyManager::new(),
         ssh_manager: Arc::new(SshManager::new()),
         agent_manager: Arc::new(agent::manager::AgentManager::new()),
+        agent_log_streams: Mutex::new(HashMap::new()),
         serial_manager: SerialManager::new(),
         sessions: Mutex::new(initial_sessions),
         db,
@@ -1470,11 +2494,21 @@ pub fn run() {
             load_app_settings,
             load_ai_provider_settings,
             save_ai_provider_settings,
+            load_agent_policy_settings,
+            save_agent_policy_settings,
             set_ai_provider_api_key,
             clear_ai_provider_api_key,
             test_ai_provider,
+            test_ai_provider_with_settings,
+            run_terminal_ai_chat,
             list_agent_audits,
             start_agent_session,
+            run_agent_session,
+            list_agent_sessions,
+            draft_agent_plan,
+            continue_agent_session,
+            start_agent_log_stream,
+            stop_agent_log_stream,
             cancel_agent_session,
             execute_agent_action,
             save_agent_audit,
