@@ -566,6 +566,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           allowProposedApi: true,
           scrollback: parseInt(s.terminalMaxScrollback) || 10000,
           copyOnSelect: false,
+          // Match VSCode: scroll content into scrollback on erase (DECSED/ED),
+          // rescale overlapping glyphs for better font rendering, and report
+          // pixel/cell sizes to the PTY via windowOptions so ConPTY can use
+          // them for DPI-aware rendering heuristics.
+          scrollOnEraseInDisplay: true,
+          rescaleOverlappingGlyphs: true,
+          windowOptions: { getWinSizePixels: true, getCellSizePixels: true, getWinSizeChars: true },
         };
 
         // Only the LOCAL PTY backend (local shell, and Docker-over-local-PTY)
@@ -575,15 +582,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         const windowsPty = getXtermWindowsPty(osInfo, usesLocalConpty());
         if (windowsPty) termOpts.windowsPty = windowsPty;
 
-        // Enable Win32 INPUT_RECORD keyboard encoding (DECSET 9001) for local
-        // ConPTY sessions. ConPTY's default VT encoding is lossy with complex
-        // modifier keys (Ctrl+Shift+letter, Alt+arrows); win32InputMode lets
-        // TUI apps like Claude Code / Codex receive complete keyboard events.
-        // The option is opt-in: if the application doesn't request CSI ? 9001 h,
-        // there is no effect. SSH/serial sessions are excluded — their PTY is
-        // on a remote Unix host and never touches ConPTY.
+        // Match VSCode: enable VT extensions for all terminals. win32InputMode
+        // (DECSET 9001) lets ConPTY encode keyboard events as Win32 INPUT_RECORD,
+        // preserving complex modifier keys (Ctrl+Shift+letter, Alt+arrows) that
+        // ConPTY's default VT encoding loses. kittyKeyboard enables the kitty
+        // keyboard protocol for enhanced key reporting on supporting terminals.
+        // Both are opt-in: apps must request them via CSI sequences to activate.
         if (usesLocalConpty()) {
-          (termOpts as Record<string, unknown>).vtExtensions = { win32InputMode: true };
+          (termOpts as Record<string, unknown>).vtExtensions = { win32InputMode: true, kittyKeyboard: false };
         }
 
         // Wait for the configured terminal font to load before constructing the
@@ -936,7 +942,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         try {
           const da1Dispose = instance.terminal.parser.registerCsiHandler({ final: 'c' }, (params) => {
             if (params.length === 0 || (params.length === 1 && params[0] === 0)) {
-              instance.terminal.write('\x1b[?61;4c');
+              // Send the DA1 response to the PTY input (not terminal.write,
+              // which only writes to xterm's local render buffer). ConPTY
+              // needs to receive the response on its input pipe to avoid the
+              // 1.22+ startup timeout. Matches VSCode's _handleOnData path.
+              sendInputToTab(tab.id, '\x1b[?61;4c');
               return true;
             }
             return false;
