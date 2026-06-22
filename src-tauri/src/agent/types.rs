@@ -103,6 +103,27 @@ pub struct AgentAnalysisUpdate {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentContinuationRequest {
+    pub agent_session_id: String,
+    pub evidence: Vec<AgentEvidence>,
+    pub latest_update: Option<AgentAnalysisUpdate>,
+    pub results: Vec<AgentToolResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TerminalAiChatRequest {
+    pub request_id: String,
+    pub tab_id: String,
+    pub target_session_id: String,
+    pub tab_title: String,
+    pub question: String,
+    pub cwd: Option<String>,
+    pub prompt: Option<String>,
+    pub selected_text: Option<String>,
+    pub recent_output: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentAuditRecord {
     pub id: String,
     pub agent_session_id: String,
@@ -124,6 +145,105 @@ pub struct AiProviderSettings {
     pub temperature: f32,
     pub max_input_chars: usize,
     pub request_timeout_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentPolicySettings {
+    #[serde(default = "default_true")]
+    pub auto_continue_enabled: bool,
+    #[serde(default = "default_true")]
+    pub live_log_auto_analysis: bool,
+    #[serde(default = "default_max_auto_continuations")]
+    pub max_auto_continuations: u8,
+    #[serde(default = "default_true")]
+    pub auto_execute_read_only: bool,
+    #[serde(default = "default_true")]
+    pub auto_execute_low_risk: bool,
+    #[serde(default)]
+    pub auto_execute_command_allowlist: Vec<String>,
+    #[serde(default)]
+    pub auto_execute_service_denylist: Vec<String>,
+    #[serde(default)]
+    pub maintenance_window_enabled: bool,
+    #[serde(default = "default_maintenance_window_start")]
+    pub maintenance_window_start: String,
+    #[serde(default = "default_maintenance_window_end")]
+    pub maintenance_window_end: String,
+    #[serde(default = "default_true")]
+    pub log_filter_enabled: bool,
+    #[serde(default = "default_log_keywords")]
+    pub log_interest_keywords: Vec<String>,
+    #[serde(default = "default_disk_alert_percent")]
+    pub disk_alert_percent: u8,
+    #[serde(default = "default_memory_alert_percent")]
+    pub memory_alert_percent: u8,
+    #[serde(default = "default_true")]
+    pub alert_auto_start_agent: bool,
+}
+
+impl Default for AgentPolicySettings {
+    fn default() -> Self {
+        Self {
+            auto_continue_enabled: true,
+            live_log_auto_analysis: true,
+            max_auto_continuations: 8,
+            auto_execute_read_only: true,
+            auto_execute_low_risk: true,
+            auto_execute_command_allowlist: Vec::new(),
+            auto_execute_service_denylist: Vec::new(),
+            maintenance_window_enabled: false,
+            maintenance_window_start: "00:00".to_string(),
+            maintenance_window_end: "23:59".to_string(),
+            log_filter_enabled: true,
+            log_interest_keywords: default_log_keywords(),
+            disk_alert_percent: 90,
+            memory_alert_percent: 90,
+            alert_auto_start_agent: true,
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_max_auto_continuations() -> u8 {
+    8
+}
+
+fn default_maintenance_window_start() -> String {
+    "00:00".to_string()
+}
+
+fn default_maintenance_window_end() -> String {
+    "23:59".to_string()
+}
+
+fn default_log_keywords() -> Vec<String> {
+    [
+        "error",
+        "warn",
+        "panic",
+        "fatal",
+        "oom",
+        "timeout",
+        "exception",
+        "failed",
+        "denied",
+        "refused",
+        "unavailable",
+    ]
+    .into_iter()
+    .map(ToString::to_string)
+    .collect()
+}
+
+fn default_disk_alert_percent() -> u8 {
+    90
+}
+
+fn default_memory_alert_percent() -> u8 {
+    90
 }
 
 impl Default for AiProviderSettings {

@@ -524,7 +524,7 @@ const StorageSection: React.FC = () => {
 
 /* ---- Main Component ---- */
 export const SettingsModal: React.FC = () => {
-  const { showSettings, setShowSettings, theme, setTheme } = useAppStore();
+  const { showSettings, setShowSettings, settingsInitialNav, theme, setTheme } = useAppStore();
   const persistedSettings = useSettingsStore((s) => s.settings);
   const saveSettings = useSettingsStore((s) => s.save);
   const { t } = useTranslation();
@@ -535,9 +535,10 @@ export const SettingsModal: React.FC = () => {
   useEffect(() => {
     if (showSettings) {
       setSettings({ ...persistedSettings, theme });
+      if (settingsInitialNav) setActiveNav(settingsInitialNav);
       setDirty(false);
     }
-  }, [showSettings, persistedSettings, theme]);
+  }, [showSettings, persistedSettings, settingsInitialNav, theme]);
 
   const u = useCallback(<K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }));

@@ -5,13 +5,31 @@ export type AgentSessionStatus = 'running' | 'completed' | 'cancelled' | 'failed
 
 export interface AiProviderSettings {
   enabled: boolean;
-  provider: 'openai_compatible';
+  provider: 'openai_compatible' | 'anthropic_compatible' | 'ollama';
   base_url: string;
   model: string;
   api_key_configured: boolean;
   temperature: number;
   max_input_chars: number;
   request_timeout_secs: number;
+}
+
+export interface AgentPolicySettings {
+  auto_continue_enabled: boolean;
+  live_log_auto_analysis: boolean;
+  max_auto_continuations: number;
+  auto_execute_read_only: boolean;
+  auto_execute_low_risk: boolean;
+  auto_execute_command_allowlist: string[];
+  auto_execute_service_denylist: string[];
+  maintenance_window_enabled: boolean;
+  maintenance_window_start: string;
+  maintenance_window_end: string;
+  log_filter_enabled: boolean;
+  log_interest_keywords: string[];
+  disk_alert_percent: number;
+  memory_alert_percent: number;
+  alert_auto_start_agent: boolean;
 }
 
 export interface AgentSessionStart {
@@ -66,4 +84,34 @@ export interface AgentAnalysisUpdate {
   findings: AgentFinding[];
   proposed_actions: AgentToolCall[];
   questions: string[];
+}
+
+export interface AgentContinuationRequest {
+  agent_session_id: string;
+  evidence: AgentEvidence[];
+  latest_update?: AgentAnalysisUpdate | null;
+  results: AgentToolResult[];
+}
+
+export interface TerminalAiChatRequest {
+  request_id: string;
+  tab_id: string;
+  target_session_id: string;
+  tab_title: string;
+  question: string;
+  cwd?: string | null;
+  prompt?: string | null;
+  selected_text?: string | null;
+  recent_output?: string | null;
+}
+
+export interface AgentAuditRecord {
+  id: string;
+  agent_session_id: string;
+  target_session_id: string;
+  started_at: number;
+  finished_at?: number | null;
+  objective: string;
+  status: AgentSessionStatus;
+  report_json: string;
 }

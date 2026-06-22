@@ -2,6 +2,7 @@ import React from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../stores/appStore';
 import { TerminalView } from './TerminalView';
+import { TerminalAiDock } from './TerminalAiDock';
 import { AssetTable } from '../AssetTable/AssetTable';
 
 export const TerminalContainer: React.FC = () => {
@@ -62,6 +63,7 @@ export const TerminalContainer: React.FC = () => {
               </div>
             );
           })}
+          <TerminalAiDock />
         </div>
         <div style={{ display: 'none' }}>
           {offGrid.map((tab) => (
@@ -77,6 +79,7 @@ export const TerminalContainer: React.FC = () => {
       {terminalTabs.map((tab) => (
         <TerminalView key={tab.id} tab={tab} isActive={tab.id === activeTabId} />
       ))}
+      <TerminalAiDock />
     </div>
   );
 };

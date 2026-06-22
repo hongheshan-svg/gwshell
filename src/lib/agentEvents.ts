@@ -1,6 +1,6 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useAgentStore } from '../stores/agentStore';
-import type { AgentAnalysisUpdate, AgentEvidence, AgentToolCall, AgentToolResult } from '../types/agent';
+import type { AgentAnalysisUpdate, AgentEvidence, AgentSessionInfo, AgentToolCall, AgentToolResult } from '../types/agent';
 
 export async function subscribeAgentEvents(agentSessionId: string): Promise<UnlistenFn[]> {
   const unlisteners: UnlistenFn[] = [];
@@ -14,6 +14,9 @@ export async function subscribeAgentEvents(agentSessionId: string): Promise<Unli
     }));
     unlisteners.push(await listen<AgentAnalysisUpdate>(`agent-analysis-update-${agentSessionId}`, (event) => {
       useAgentStore.getState().setLatestUpdate(event.payload);
+    }));
+    unlisteners.push(await listen<AgentSessionInfo>(`agent-session-update-${agentSessionId}`, (event) => {
+      useAgentStore.getState().setActiveSession(event.payload);
     }));
     unlisteners.push(await listen<AgentToolCall>(`agent-action-proposed-${agentSessionId}`, (event) => {
       useAgentStore.getState().upsertAction(event.payload);

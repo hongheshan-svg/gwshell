@@ -19,12 +19,25 @@ pub fn docker_logs_tail_command(container: &str, lines: u32) -> String {
     )
 }
 
+pub fn read_file_head_command(path: &str, lines: u32) -> String {
+    let lines = lines.clamp(20, 1000);
+    format!("head -n {} -- {}", lines, shell_escape(path))
+}
+
 pub fn file_tail_command(path: &str, lines: u32) -> String {
     let lines = lines.clamp(20, 500);
     format!("tail -n {} -F -- {}", lines, shell_escape(path))
 }
 
-fn shell_escape(input: &str) -> String {
+pub fn restart_service_command(service: &str) -> String {
+    format!("systemctl restart {}", shell_escape(service))
+}
+
+pub fn service_status_command(service: &str) -> String {
+    format!("systemctl status --no-pager {}", shell_escape(service))
+}
+
+pub fn shell_escape(input: &str) -> String {
     format!("'{}'", input.replace('\'', "'\\''"))
 }
 
@@ -60,6 +73,30 @@ mod tests {
         assert_eq!(
             docker_logs_tail_command("web'app", 600),
             "docker logs --tail=500 -f 'web'\\''app'"
+        );
+    }
+
+    #[test]
+    fn builds_read_file_head_command() {
+        assert_eq!(
+            read_file_head_command("/var/log/app.log", 0),
+            "head -n 20 -- '/var/log/app.log'"
+        );
+        assert_eq!(
+            read_file_head_command("/var/log/app.log", 2_000),
+            "head -n 1000 -- '/var/log/app.log'"
+        );
+    }
+
+    #[test]
+    fn builds_restart_and_status_commands() {
+        assert_eq!(
+            restart_service_command("nginx.service"),
+            "systemctl restart 'nginx.service'"
+        );
+        assert_eq!(
+            service_status_command("nginx.service"),
+            "systemctl status --no-pager 'nginx.service'"
         );
     }
 

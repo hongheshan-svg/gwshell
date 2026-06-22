@@ -84,6 +84,8 @@ interface AppStore {
   // Settings
   showSettings: boolean;
   setShowSettings: (show: boolean) => void;
+  settingsInitialNav: string | null;
+  openSettingsNav: (nav: string) => void;
 
   // SFTP Panel
   sftpPanelOpen: boolean;
@@ -353,7 +355,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setShowAppMenu: (show) => set({ showAppMenu: show }),
 
   showSettings: false,
-  setShowSettings: (show) => set({ showSettings: show }),
+  setShowSettings: (show) => set({ showSettings: show, settingsInitialNav: null }),
+  settingsInitialNav: null,
+  openSettingsNav: (nav) => set({ settingsInitialNav: nav, showSettings: true }),
 
   sftpPanelOpen: true,
   toggleSftpPanel: () => set((state) => ({ sftpPanelOpen: !state.sftpPanelOpen })),

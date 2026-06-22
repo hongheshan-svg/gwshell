@@ -10,7 +10,8 @@ pub fn classify_tool_call(call: &AgentToolCall) -> AgentRisk {
                 .unwrap_or("");
             classify_command(command)
         }
-        AgentToolName::StreamLog | AgentToolName::DockerLogs => AgentRisk::ReadOnly,
+        AgentToolName::StreamLog => classify_stream_log_payload(&call.payload),
+        AgentToolName::DockerLogs => AgentRisk::ReadOnly,
         AgentToolName::ReadFile => classify_read_file_payload(&call.payload),
         AgentToolName::RestartService => AgentRisk::Medium,
     }
@@ -491,6 +492,13 @@ fn classify_read_file_payload(payload: &serde_json::Value) -> AgentRisk {
     }
 }
 
+fn classify_stream_log_payload(payload: &serde_json::Value) -> AgentRisk {
+    if payload.get("path").is_some() {
+        return classify_read_file_payload(payload);
+    }
+    AgentRisk::ReadOnly
+}
+
 fn classify_file_read_path(path: &str) -> AgentRisk {
     sensitive_path_risk(path).unwrap_or(AgentRisk::ReadOnly)
 }
@@ -822,6 +830,22 @@ mod tests {
             classify_tool_call(&read_file_call(
                 "~/.config/gcloud/configurations/config_default"
             )),
+            AgentRisk::High
+        );
+    }
+
+    #[test]
+    fn stream_log_path_uses_file_read_path_risk() {
+        assert_eq!(
+            classify_tool_call(&stream_log_path_call("/var/log/nginx/error.log")),
+            AgentRisk::ReadOnly
+        );
+        assert_eq!(
+            classify_tool_call(&stream_log_path_call("/etc/shadow")),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_tool_call(&stream_log_path_call("~/.kube/config")),
             AgentRisk::High
         );
     }
@@ -1332,6 +1356,19 @@ mod tests {
             payload,
             risk: AgentRisk::ReadOnly,
             reason: "read file".into(),
+            expected_result: None,
+            verify: None,
+        }
+    }
+
+    fn stream_log_path_call(path: &str) -> AgentToolCall {
+        AgentToolCall {
+            id: "c1".into(),
+            tool: AgentToolName::StreamLog,
+            target_session_id: "s1".into(),
+            payload: serde_json::json!({ "path": path }),
+            risk: AgentRisk::ReadOnly,
+            reason: "stream log".into(),
             expected_result: None,
             verify: None,
         }

@@ -152,8 +152,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const prev = get().settings;
     set({ settings: normalized, hasSaved: true });
     await invoke('save_app_settings', { value: JSON.stringify(normalized) });
-    // Only re-pull history when the load count actually changed — otherwise
-    // every settings save wipes and reloads entries, making in-progress
+    // Only re-pull history when the load count actually changed; otherwise
+    // every settings save clears and reloads entries, making active
     // completion candidates flicker.
     if (normalized.sshHistoryCmd && normalized.sshHistoryCmdLoadCount !== prev.sshHistoryCmdLoadCount) {
       commandHistory.init(parseInt(normalized.sshHistoryCmdLoadCount) || 100);

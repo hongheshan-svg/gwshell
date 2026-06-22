@@ -37,6 +37,36 @@ impl AgentManager {
         info
     }
 
+    pub fn get_session(&self, agent_session_id: &str) -> Option<AgentSessionInfo> {
+        self.sessions.lock().get(agent_session_id).cloned()
+    }
+
+    pub fn list_sessions(&self) -> Vec<AgentSessionInfo> {
+        let mut sessions: Vec<_> = self.sessions.lock().values().cloned().collect();
+        sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+        sessions
+    }
+
+    pub fn is_cancelled(&self, agent_session_id: &str) -> bool {
+        self.sessions
+            .lock()
+            .get(agent_session_id)
+            .is_some_and(|info| info.status == AgentSessionStatus::Cancelled)
+    }
+
+    pub fn finish_session(
+        &self,
+        agent_session_id: &str,
+        status: AgentSessionStatus,
+    ) -> Option<AgentSessionInfo> {
+        let mut sessions = self.sessions.lock();
+        let info = sessions.get_mut(agent_session_id)?;
+        if info.status != AgentSessionStatus::Cancelled {
+            info.status = status;
+        }
+        Some(info.clone())
+    }
+
     pub fn cancel_session(&self, agent_session_id: &str) -> bool {
         let mut sessions = self.sessions.lock();
         let Some(info) = sessions.get_mut(agent_session_id) else {
@@ -129,6 +159,41 @@ mod tests {
         );
         assert!(manager.cancel_session(&info.id));
         assert!(!manager.cancel_session("missing"));
+    }
+
+    #[test]
+    fn manager_gets_cancellation_and_finish_state() {
+        let manager = AgentManager::new();
+        let info = manager.start_session(AgentSessionStart {
+            target_session_id: "ssh-1".into(),
+            objective: "inspect disk".into(),
+            autonomy: AgentAutonomyLevel::Observe,
+        });
+
+        assert_eq!(manager.get_session(&info.id).unwrap().id, info.id);
+        assert!(!manager.is_cancelled(&info.id));
+
+        let completed = manager
+            .finish_session(&info.id, AgentSessionStatus::Completed)
+            .unwrap();
+        assert_eq!(completed.status, AgentSessionStatus::Completed);
+    }
+
+    #[test]
+    fn finish_does_not_override_cancelled_session() {
+        let manager = AgentManager::new();
+        let info = manager.start_session(AgentSessionStart {
+            target_session_id: "ssh-1".into(),
+            objective: "inspect disk".into(),
+            autonomy: AgentAutonomyLevel::Observe,
+        });
+
+        assert!(manager.cancel_session(&info.id));
+        let finished = manager
+            .finish_session(&info.id, AgentSessionStatus::Completed)
+            .unwrap();
+
+        assert_eq!(finished.status, AgentSessionStatus::Cancelled);
     }
 
     #[test]
