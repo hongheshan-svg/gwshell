@@ -139,7 +139,7 @@ GWShell is inspired by and grateful to these outstanding open-source projects:
 
 ## 📄 License
 
-[MIT](LICENSE) © GWShell Contributors
+[AGPL-3.0-only](LICENSE) © GWShell Contributors
 
 ---
 

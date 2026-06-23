@@ -56,4 +56,4 @@ RDP-соединения, Telnet, VNC-просмотрщик, синхрониз
 
 ## 📄 Лицензия
 
-[MIT](../LICENSE) © GWShell Contributors
+[AGPL-3.0-only](../LICENSE) © GWShell Contributors

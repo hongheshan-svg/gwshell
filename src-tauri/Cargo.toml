@@ -4,6 +4,7 @@ version = "0.5.5"
 description = "GWShell - A modern SSH/Shell terminal"
 authors = ["you"]
 edition = "2021"
+license = "AGPL-3.0-only"
 
 [lib]
 name = "gwshell_lib"

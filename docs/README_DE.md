@@ -56,4 +56,4 @@ Laden Sie den Installer oder die portable Version für Ihre Plattform von [der n
 
 ## 📄 Lizenz
 
-[MIT](../LICENSE) © GWShell Contributors
+[AGPL-3.0-only](../LICENSE) © GWShell Contributors

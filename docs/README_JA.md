@@ -56,4 +56,4 @@ RDP 接続、Telnet、VNC ビューアー、ファイル同期、コマンドス
 
 ## 📄 ライセンス
 
-[MIT](../LICENSE) © GWShell Contributors
+[AGPL-3.0-only](../LICENSE) © GWShell Contributors

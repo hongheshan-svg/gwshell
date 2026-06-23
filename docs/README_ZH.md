@@ -139,7 +139,7 @@ GWShell 受到以下优秀开源项目的启发，在此特别感谢：
 
 ## 📄 许可证
 
-[MIT](../LICENSE) © GWShell Contributors
+[AGPL-3.0-only](../LICENSE) © GWShell Contributors
 
 ---
 
