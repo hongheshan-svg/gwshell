@@ -557,6 +557,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           fontSize: parseInt(s.terminalFontSize) || 13,
           lineHeight: parseFloat(s.terminalLineHeight) || 1.2,
           letterSpacing: parseFloat(s.terminalLetterSpacing) || 0,
+          // Match VSCode: bold text rendering and font weights.
+          drawBoldTextInBrightColors: true,
+          fontWeight: 'normal',
+          fontWeightBold: 'bold',
           // Cursor is left to the running program: TUI apps (Claude Code,
           // Codex, vim) drive shape/blink/visibility via DECSCUSR (`\e[ q`)
           // and DECTCEM (`\e[?25h/l`). We only set the fallback default for the
@@ -568,6 +572,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           // never-stopping blink on Windows. Apps still override this on macOS.
           cursorBlink: false,
           cursorStyle: "block",
+          cursorWidth: 1,
+          cursorInactiveStyle: 'bar',
+          blinkIntervalDuration: 600,
           theme: resolveTerminalTheme(useSettingsStore.getState().settings.terminalColorScheme, useAppStore.getState().theme),
           allowProposedApi: true,
           scrollback: parseInt(s.terminalMaxScrollback) || 10000,
@@ -579,6 +586,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           scrollOnEraseInDisplay: true,
           rescaleOverlappingGlyphs: true,
           windowOptions: { getWinSizePixels: true, getCellSizePixels: true, getWinSizeChars: true },
+          // Match VSCode: minimum contrast ratio so dim colors remain readable
+          // on dark themes (e.g. gray-on-black from ls/ripgrep output).
+          minimumContrastRatio: 4.5,
+          // Match VSCode: word separators for double-click selection.
+          wordSeparator: ' ()[]{}\'"`,;:|',
+          // Match VSCode: ignore the host app's bracketed-paste-disable request
+          // so paste behavior is consistent across shells.
+          ignoreBracketedPasteMode: true,
+          // Match VSCode: macOS Option key as Meta (for emacs/readline), and
+          // Alt+click to move cursor in supported shells.
+          macOptionIsMeta: true,
+          altClickMovesCursor: true,
+          // Match VSCode: scroll sensitivity for mouse wheel.
+          fastScrollSensitivity: 5,
+          scrollSensitivity: 1,
         };
 
         // Only the LOCAL PTY backend (local shell, and Docker-over-local-PTY)
@@ -588,15 +610,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         const windowsPty = getXtermWindowsPty(osInfo, usesLocalConpty());
         if (windowsPty) termOpts.windowsPty = windowsPty;
 
-        // Match VSCode: enable VT extensions for all terminals. win32InputMode
-        // (DECSET 9001) lets ConPTY encode keyboard events as Win32 INPUT_RECORD,
-        // preserving complex modifier keys (Ctrl+Shift+letter, Alt+arrows) that
-        // ConPTY's default VT encoding loses. kittyKeyboard enables the kitty
-        // keyboard protocol for enhanced key reporting on supporting terminals.
-        // Both are opt-in: apps must request them via CSI sequences to activate.
-        if (usesLocalConpty()) {
-          (termOpts as Record<string, unknown>).vtExtensions = { win32InputMode: true, kittyKeyboard: false };
-        }
+        // Match VSCode: enable VT extensions for ALL terminals (not just
+        // local ConPTY). win32InputMode (DECSET 9001) lets ConPTY encode
+        // keyboard events as Win32 INPUT_RECORD, preserving complex modifier
+        // keys (Ctrl+Shift+letter, Alt+arrows). kittyKeyboard enables the kitty
+        // keyboard protocol for enhanced key reporting. Both are opt-in: apps
+        // must request them via CSI sequences to activate, so setting them for
+        // SSH/serial is safe — remote TUI apps can then use these protocols.
+        (termOpts as Record<string, unknown>).vtExtensions = {
+          win32InputMode: usesLocalConpty(),
+          kittyKeyboard: false,
+        };
 
         // Wait for the configured terminal font to load before constructing the
         // terminal. xterm measures character cell width once, on construction;
@@ -937,7 +961,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         try { instance.rendererAddon?.dispose(); } catch {}
         instance.rendererAddon = undefined;
         try {
-          const webgl = new WebglAddon();
+          // Match VSCode: pass customGlyphs so powerline/box-drawing/custom CSI
+          // shapes render as designed glyphs instead of degraded fallbacks.
+          const webgl = new WebglAddon({ customGlyphs: true });
           webgl.onContextLoss(() => {
             instance.rendererLost = true;
             try { webgl.dispose(); } catch {}

@@ -439,6 +439,11 @@ impl PtyManager {
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         cmd.env("PYTHONIOENCODING", &charset_str);
+        // Match VSCode: identify the terminal program so TUI apps and shell
+        // integration frameworks (Claude Code, starship, oh-my-posh, etc.) can
+        // detect GWShell and enable features accordingly.
+        cmd.env("TERM_PROGRAM", "gwshell");
+        cmd.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
         #[cfg(not(target_os = "windows"))]
         {
             let locale = match charset_str.to_lowercase().as_str() {
@@ -491,6 +496,8 @@ impl PtyManager {
         ]);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
+        cmd.env("TERM_PROGRAM", "gwshell");
+        cmd.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
         self.spawn_in_pty(session_id, app_handle, rows, cols, cmd, "UTF-8".to_string())
     }
 
