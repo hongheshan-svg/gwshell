@@ -573,7 +573,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           cursorBlink: false,
           cursorStyle: "block",
           cursorWidth: 1,
-          cursorInactiveStyle: 'bar',
+          // Match VSCode: use 'outline' for inactive cursor so the cursor
+          // doesn't toggle between full-block and bar during focus changes
+          // (which reads as flicker during streaming in TUI apps).
+          cursorInactiveStyle: 'outline',
+          // Show cursor before first write so it doesn't pop in.
+          showCursorImmediately: true,
           blinkIntervalDuration: 600,
           theme: resolveTerminalTheme(useSettingsStore.getState().settings.terminalColorScheme, useAppStore.getState().theme),
           allowProposedApi: true,
@@ -967,10 +972,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           webgl.onContextLoss(() => {
             instance.rendererLost = true;
             try { webgl.dispose(); } catch {}
+            // Match VSCode: re-fit after WebGL dispose because WebGL cell
+            // dimensions differ from the DOM renderer's — without this the
+            // cursor's per-cell position math uses stale metrics, causing
+            // cursor shimmering/offset on Windows ConPTY.
+            safeFit(tab.id);
+            forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
           });
           instance.terminal.loadAddon(webgl);
           instance.rendererAddon = webgl;
           instance.rendererLost = false;
+          // Match VSCode: re-fit after WebGL load because the WebGL renderer's
+          // cell dimensions differ from the DOM renderer's. Without this the
+          // cursor position is computed against stale cell metrics, causing
+          // the cursor to shimmer/flicker in TUI apps (Claude Code, Codex).
+          safeFit(tab.id);
+          try { instance.terminal.clearTextureAtlas(); } catch {}
+          try { instance.terminal.refresh(0, instance.terminal.rows - 1); } catch {}
         } catch {
           // WebGL could not be loaded — fall back to the DOM renderer.
           suggestedRendererTypeDom = true;
