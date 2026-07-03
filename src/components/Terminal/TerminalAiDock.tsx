@@ -109,6 +109,7 @@ export const TerminalAiDock: React.FC = () => {
   const listenerRequestIdRef = useRef<string | null>(null);
   const activeRequestIdRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const cleanupListeners = useCallback((requestId?: string) => {
     if (requestId && listenerRequestIdRef.current !== requestId) return;
@@ -144,7 +145,10 @@ export const TerminalAiDock: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (open) void refreshAiSettings();
+    if (open) {
+      void refreshAiSettings();
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    }
   }, [open, refreshAiSettings]);
 
   useEffect(() => {
@@ -438,6 +442,7 @@ export const TerminalAiDock: React.FC = () => {
       )}
 
       <textarea
+        ref={textareaRef}
         className="terminal-ai-input"
         disabled={busy}
         onChange={(event) => setInput(event.target.value)}

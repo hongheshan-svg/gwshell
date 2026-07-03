@@ -1684,7 +1684,7 @@ fn spawn_agent_log_stream(
             .await;
 
         state.agent_log_streams.lock().remove(&stream_id);
-        match result {
+    match result {
             Ok(()) => emit_agent_delta(&app_handle, &info.id, "Live log stream stopped.\n"),
             Err(error) => emit_agent_error(&app_handle, &info.id, error),
         }
