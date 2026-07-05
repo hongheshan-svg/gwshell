@@ -452,7 +452,8 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
         for (const fileEntry of files) {
           const path =
             typeof fileEntry === 'string' ? fileEntry : (fileEntry as { path: string }).path; // eslint-disable-line no-restricted-syntax
-          const fileName = path.replace(/\\/g, '/').split('/').pop() ?? 'file';
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- || correct: pop() can return "" for trailing-slash paths, fallback to 'file'
+          const fileName = path.replace(/\\/g, '/').split('/').pop() || 'file';
           const remotePath = currentPath === '/' ? `/${fileName}` : `${currentPath}/${fileName}`;
           await invoke('sftp_upload', { sessionId, remotePath, localPath: path });
         }
@@ -918,7 +919,8 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
             <div className="sftp-progress-info">
               <span className="sftp-progress-name" title={progress.file}>
                 {(progress.kind === 'upload' ? '↑ ' : '↓ ') +
-                  (progress.file.split('/').pop() ?? progress.file)}
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- || correct: pop() can return "" for trailing-slash paths, fallback to full path
+                  (progress.file.split('/').pop() || progress.file)}
               </span>
               {progress.fileTotal > 1 && (
                 <span className="sftp-progress-count">

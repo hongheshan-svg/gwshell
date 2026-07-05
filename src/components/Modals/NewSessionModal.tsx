@@ -165,6 +165,7 @@ export const NewSessionModal: React.FC = () => {
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       proxy_password: form.proxy_password || undefined,
       // Tunnel
+      // ?? preserves explicit false (user disabled the option); || would coerce it to undefined.
       tunnel_enabled: form.tunnel_enabled ?? undefined,
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       tunnel_type: form.tunnel_type || 'local',
@@ -177,7 +178,9 @@ export const NewSessionModal: React.FC = () => {
       connection_timeout: form.connection_timeout ?? undefined,
       server_alive_count_max: form.server_alive_count_max ?? undefined,
       idle_disconnect_minutes: form.idle_disconnect_minutes ?? undefined,
+      // ?? preserves explicit false (user disabled the option); || would coerce it to undefined.
       compression: form.compression ?? undefined,
+      // ?? preserves explicit false (user disabled the option); || would coerce it to undefined.
       agent_forward: form.agent_forward ?? undefined,
       remote_shell:
         form.remote_shell && form.remote_shell !== 'auto' ? form.remote_shell : undefined,
