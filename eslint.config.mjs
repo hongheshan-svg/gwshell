@@ -51,6 +51,13 @@ export default [
     },
     rules: {
       // --- Project-specific rules (verbatim from .eslintrc.cjs) ---
+      // Allow empty functions/methods/arrow functions — these are common as
+      // default no-op callbacks, default props, and stub implementations in
+      // React/TS code. Matches the standard escape hatch used widely.
+      '@typescript-eslint/no-empty-function': [
+        'error',
+        { allow: ['arrowFunctions', 'functions', 'methods'] },
+      ],
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
