@@ -91,7 +91,7 @@ export const AgentObjective: React.FC = () => {
         className="agent-objective-select"
         disabled={busy}
         value={autonomy}
-        onChange={(e) => setAutonomy(e.target.value as AgentAutonomyLevel)}
+        onChange={(e) => setAutonomy(e.target.value as AgentAutonomyLevel)} // eslint-disable-line no-restricted-syntax
       >
         <option value="observe">{t('agent_autonomy_observe')}</option>
         <option value="recommend">{t('agent_autonomy_recommend')}</option>

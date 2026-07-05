@@ -1,6 +1,7 @@
 import type { SessionConfig } from '../types';
 
 // Curated, non-secret fields a group can supply as defaults.
+// eslint-disable-next-line no-restricted-syntax
 export const INHERITABLE_FIELDS = [
   'username',
   'port',
@@ -27,7 +28,7 @@ export function loadGroupDefaults(): GroupDefaultsMap {
     const raw = localStorage.getItem(KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? (parsed as GroupDefaultsMap) : {};
+    return parsed && typeof parsed === 'object' ? (parsed as GroupDefaultsMap) : {}; // eslint-disable-line no-restricted-syntax
   } catch {
     return {};
   }
@@ -54,7 +55,7 @@ export function applyGroupDefaults(session: SessionConfig, all: GroupDefaultsMap
   const out: SessionConfig = { ...session };
   for (const f of INHERITABLE_FIELDS) {
     if (isUnset(out[f]) && !isUnset(defs[f])) {
-      (out as unknown as Record<string, unknown>)[f] = defs[f];
+      (out as unknown as Record<string, unknown>)[f] = defs[f]; // eslint-disable-line no-restricted-syntax
     }
   }
   return out;

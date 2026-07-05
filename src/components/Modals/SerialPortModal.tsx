@@ -18,7 +18,7 @@ const colorLabels = [
   '#9ca3af',
 ];
 
-const serialTabKeys = ['standard', 'advanced'] as const;
+const serialTabKeys = ['standard', 'advanced'] as const; // eslint-disable-line no-restricted-syntax
 
 const BAUD_RATES = [
   '300',

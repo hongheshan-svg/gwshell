@@ -10,6 +10,7 @@ import { TabBar } from './components/TabBar/TabBar';
 import { AssetTable } from './components/AssetTable/AssetTable';
 import { StatusBar } from './components/StatusBar/StatusBar';
 import { UnlockScreen } from './components/UnlockScreen';
+import { dispatchTypedEvent, type DockerPickPayload, type DockerCancelPayload } from './lib/ipcEvents';
 
 // Heavy / interaction-only chunks: deferred until the user actually needs them.
 // On startup we only render the shell + asset list — every other resource (xterm,
@@ -145,6 +146,7 @@ function App() {
     invoke('app_ready').catch(() => {});
 
     const t0 =
+      // eslint-disable-next-line no-restricted-syntax
       (window as unknown as { __GWSHELL_BOOT_T0__?: number }).__GWSHELL_BOOT_T0__ ??
       performance.now();
     const elapsed = performance.now() - t0;
@@ -322,17 +324,16 @@ function App() {
           <DockerContainerPicker
             containers={dockerPicker.containers}
             onPick={(id) => {
-              window.dispatchEvent(
-                new CustomEvent('gwshell:docker-pick', {
-                  detail: { tabId: dockerPicker.tabId, id },
-                }),
-              );
+              dispatchTypedEvent<DockerPickPayload>('gwshell:docker-pick', {
+                tabId: dockerPicker.tabId,
+                id,
+              });
               setDockerPicker(null);
             }}
             onCancel={() => {
-              window.dispatchEvent(
-                new CustomEvent('gwshell:docker-cancel', { detail: { tabId: dockerPicker.tabId } }),
-              );
+              dispatchTypedEvent<DockerCancelPayload>('gwshell:docker-cancel', {
+                tabId: dockerPicker.tabId,
+              });
               setDockerPicker(null);
             }}
           />

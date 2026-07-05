@@ -227,7 +227,7 @@ export const TabBar: React.FC = () => {
             <>
               <div className="split-menu-backdrop" onClick={() => setSplitMenuOpen(false)} />
               <div className="split-menu">
-                {([1, 2, 4, 6, 8] as const).map((n) => (
+                {([1, 2, 4, 6, 8] as const).map((n) => ( // eslint-disable-line no-restricted-syntax
                   <button
                     key={n}
                     className={`split-menu-item${splitCount === n ? ' active' : ''}`}

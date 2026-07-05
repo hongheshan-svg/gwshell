@@ -448,7 +448,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
         const files = Array.isArray(selected) ? selected : [selected];
         for (const fileEntry of files) {
           const path =
-            typeof fileEntry === 'string' ? fileEntry : (fileEntry as { path: string }).path;
+            typeof fileEntry === 'string' ? fileEntry : (fileEntry as { path: string }).path; // eslint-disable-line no-restricted-syntax
           const fileName = path.replace(/\\/g, '/').split('/').pop() ?? 'file';
           const remotePath = currentPath === '/' ? `/${fileName}` : `${currentPath}/${fileName}`;
           await invoke('sftp_upload', { sessionId, remotePath, localPath: path });

@@ -20,6 +20,7 @@ import { resolveTerminalTheme } from '../../lib/terminalThemes';
 import { runLoginScript } from '../../lib/sendScript';
 import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';
 import { buildCompletions, type Completion } from '../../lib/completion';
+import { listenTypedEvent, type DockerPickPayload, type DockerCancelPayload } from '../../lib/ipcEvents';
 import {
   tableForShellName,
   tableForRemoteShell,
@@ -244,6 +245,7 @@ function isInteractiveTerminal(type: string): boolean {
  */
 function cellSize(term: Terminal, el: HTMLElement): { w: number; h: number } {
   const cell = (
+    // eslint-disable-next-line no-restricted-syntax
     term as unknown as {
       _core?: {
         _renderService?: { dimensions?: { css?: { cell?: { width: number; height: number } } } };
@@ -2250,29 +2252,31 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               // Ask the user to pick (App-root picker, bridged via window events).
               const containerId = await new Promise<string | null>((resolve) => {
                 resolveDockerPick = resolve;
-                const onPick = (e: Event) => {
-                  const d = (e as CustomEvent).detail;
-                  if (d?.tabId === tab.id) {
-                    cleanup();
-                    resolve(d.id as string);
-                  }
-                };
-                const onCancel = (e: Event) => {
-                  const d = (e as CustomEvent).detail;
-                  if (d?.tabId === tab.id) {
-                    cleanup();
-                    resolve(null);
-                  }
-                };
+                const unlistenPick = listenTypedEvent<DockerPickPayload>(
+                  'gwshell:docker-pick',
+                  (d) => {
+                    if (d?.tabId === tab.id) {
+                      cleanup();
+                      resolve(d.id);
+                    }
+                  },
+                );
+                const unlistenCancel = listenTypedEvent<DockerCancelPayload>(
+                  'gwshell:docker-cancel',
+                  (d) => {
+                    if (d?.tabId === tab.id) {
+                      cleanup();
+                      resolve(null);
+                    }
+                  },
+                );
                 const cleanup = () => {
                   cancelDockerPick = null;
                   resolveDockerPick = null;
-                  window.removeEventListener('gwshell:docker-pick', onPick);
-                  window.removeEventListener('gwshell:docker-cancel', onCancel);
+                  unlistenPick();
+                  unlistenCancel();
                 };
                 cancelDockerPick = cleanup;
-                window.addEventListener('gwshell:docker-pick', onPick);
-                window.addEventListener('gwshell:docker-cancel', onCancel);
                 useAppStore.getState().setDockerPicker({ tabId: tab.id, containers });
               });
               cancelDockerPick = null;

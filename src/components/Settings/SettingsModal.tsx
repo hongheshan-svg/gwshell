@@ -795,7 +795,7 @@ export const SettingsModal: React.FC = () => {
                         { value: 'dark', label: t('settings_theme_dark') },
                         { value: 'light', label: t('settings_theme_light') },
                       ]}
-                      onChange={(v) => u('theme', v as 'dark' | 'light')}
+                      onChange={(v) => u('theme', v as 'dark' | 'light')} // eslint-disable-line no-restricted-syntax
                     />
                   </Row>
                   <Row label={t('settings_middle_close')}>

@@ -54,7 +54,7 @@ export function loadOpenTabs(): StoredTabs | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as StoredTabs;
+    const parsed = JSON.parse(raw) as StoredTabs; // eslint-disable-line no-restricted-syntax
     if (!parsed || !Array.isArray(parsed.tabs)) return null;
     return parsed;
   } catch {

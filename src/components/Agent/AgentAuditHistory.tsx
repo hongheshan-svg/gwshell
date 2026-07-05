@@ -7,6 +7,7 @@ import type { AgentAuditRecord } from '../../types/agent';
 
 function auditSummary(record: AgentAuditRecord): string {
   try {
+    // eslint-disable-next-line no-restricted-syntax
     const report = JSON.parse(record.report_json) as {
       evidence?: unknown[];
       actions?: unknown[];

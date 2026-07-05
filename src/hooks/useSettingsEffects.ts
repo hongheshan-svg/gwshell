@@ -57,7 +57,7 @@ export function useSettingsEffects() {
 
   useEffect(() => {
     const zoom = ZOOM_MAP[settings.zoomLevel] ?? 1.0;
-    (document.documentElement.style as unknown as Record<string, string>).zoom = String(zoom);
+    (document.documentElement.style as unknown as Record<string, string>).zoom = String(zoom); // eslint-disable-line no-restricted-syntax
   }, [settings.zoomLevel]);
 
   useEffect(() => {
@@ -146,7 +146,7 @@ export function useSettingsEffects() {
       // settings.autoCopyOnSelect re-runs this effect whenever the setting
       // changes to ensure any newly-created terminal instance also has the flag
       // cleared, but the written value is always false — this is correct.
-      (terminal.options as unknown as { copyOnSelect?: boolean }).copyOnSelect = false;
+      (terminal.options as unknown as { copyOnSelect?: boolean }).copyOnSelect = false; // eslint-disable-line no-restricted-syntax
     });
   }, [settings.autoCopyOnSelect]);
 }

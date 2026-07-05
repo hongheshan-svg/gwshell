@@ -60,13 +60,13 @@ export const AiSettingsSection: React.FC = () => {
       Boolean(settings.model.trim()) &&
       Boolean(apiKey.trim()));
   const status = useMemo(() => {
-    if (!settings.enabled) return { kind: 'off' as const, label: t('agent_ai_status_disabled') };
+    if (!settings.enabled) return { kind: 'off' as const, label: t('agent_ai_status_disabled') }; // eslint-disable-line no-restricted-syntax
     if (!settings.model.trim() || !settings.base_url.trim())
-      return { kind: 'warn' as const, label: t('agent_ai_status_incomplete') };
+      return { kind: 'warn' as const, label: t('agent_ai_status_incomplete') }; // eslint-disable-line no-restricted-syntax
     if (settings.provider !== 'ollama' && !settings.api_key_configured && !apiKey.trim()) {
-      return { kind: 'warn' as const, label: t('agent_ai_status_key_missing') };
+      return { kind: 'warn' as const, label: t('agent_ai_status_key_missing') }; // eslint-disable-line no-restricted-syntax
     }
-    return { kind: 'ok' as const, label: t('agent_ai_status_ready') };
+    return { kind: 'ok' as const, label: t('agent_ai_status_ready') }; // eslint-disable-line no-restricted-syntax
   }, [apiKey, settings, t]);
   const keyPlaceholder =
     settings.provider === 'ollama'

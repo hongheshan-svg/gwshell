@@ -120,7 +120,7 @@ const initialLocale = detectLocale();
 // This eliminates the IPC round-trip that causes the empty-then-populated flash.
 function popInjectedSessions(): SessionConfig[] {
   if (typeof window === 'undefined') return [];
-  const win = window as unknown as Record<string, unknown>;
+  const win = window as unknown as Record<string, unknown>; // eslint-disable-line no-restricted-syntax
   const data = win.__GWSHELL_SESSIONS__;
   if (Array.isArray(data)) {
     delete win.__GWSHELL_SESSIONS__;
@@ -129,7 +129,7 @@ function popInjectedSessions(): SessionConfig[] {
     // save_session / connect logic. Drop bad entries and warn.
     const valid = data.filter((e): e is SessionConfig => {
       if (!e || typeof e !== 'object') return false;
-      const o = e as Record<string, unknown>;
+      const o = e as Record<string, unknown>; // eslint-disable-line no-restricted-syntax
       return typeof o.id === 'string' && typeof o.session_type === 'string';
     });
     if (valid.length !== data.length) {
@@ -292,7 +292,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           tabs: newTabs,
           sessions: newSessions,
           activeTabId: 'asset-list',
-          mainView: 'asset-list' as MainView,
+          mainView: 'asset-list' as MainView, // eslint-disable-line no-restricted-syntax
           splitCount: 1,
           splitPanes: [],
         };

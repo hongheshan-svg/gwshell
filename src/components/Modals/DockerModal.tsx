@@ -33,7 +33,7 @@ export const DockerModal: React.FC = () => {
     name: '',
     color_label: '',
     environment: '',
-    docker_protocol: 'unix' as 'unix' | 'tcp' | 'http' | 'https',
+    docker_protocol: 'unix' as 'unix' | 'tcp' | 'http' | 'https', // eslint-disable-line no-restricted-syntax
     docker_unix_path: '/var/run/docker.sock',
     docker_connect_method: 'SSH',
     docker_ssh_tunnel: '',
@@ -185,7 +185,7 @@ export const DockerModal: React.FC = () => {
                 <label>{t('docker_protocol')}</label>
                 <select
                   value={form.docker_protocol}
-                  onChange={(e) => setForm({ ...form, docker_protocol: e.target.value as any })}
+                  onChange={(e) => setForm({ ...form, docker_protocol: e.target.value as any })} // eslint-disable-line no-restricted-syntax
                 >
                   <option value="unix">Unix</option>
                   <option value="tcp">TCP</option>

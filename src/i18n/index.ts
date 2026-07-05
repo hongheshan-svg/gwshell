@@ -1,4 +1,4 @@
-import i18n from 'i18next';
+import i18n, { type TFunction } from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
 import gwshellZh from './locales/gwshell.zh.json';
@@ -30,9 +30,6 @@ export { detectLocale, persistLocale };
 export type { Locale };
 export type TranslationKeys = keyof typeof gwshellZh;
 
-export function getT(locale: 'zh' | 'en') {
-  const fn = i18n.getFixedT(locale, 'gwshell');
-  return function t(key: TranslationKeys, params?: Record<string, string | number>): string {
-    return fn(key as string, params as any);
-  };
+export function getT(locale: 'zh' | 'en'): TFunction {
+  return i18n.getFixedT(locale, 'gwshell');
 }

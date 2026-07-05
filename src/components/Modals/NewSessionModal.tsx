@@ -523,7 +523,7 @@ export const NewSessionModal: React.FC = () => {
                       onChange={(e) =>
                         setForm({
                           ...form,
-                          tunnel_type: e.target.value as 'local' | 'remote' | 'dynamic',
+                          tunnel_type: e.target.value as 'local' | 'remote' | 'dynamic', // eslint-disable-line no-restricted-syntax
                         })
                       }
                     >
@@ -609,7 +609,7 @@ export const NewSessionModal: React.FC = () => {
                 <select
                   value={form.proxy_type ?? 'none'}
                   onChange={(e) =>
-                    setForm({ ...form, proxy_type: e.target.value as SessionConfig['proxy_type'] })
+                    setForm({ ...form, proxy_type: e.target.value as SessionConfig['proxy_type'] }) // eslint-disable-line no-restricted-syntax
                   }
                 >
                   <option value="none">{t('ssh_proxy_none')}</option>
@@ -787,7 +787,7 @@ export const NewSessionModal: React.FC = () => {
                     onChange={(e) =>
                       setForm({
                         ...form,
-                        remote_shell: e.target.value as 'auto' | 'linux' | 'cmd' | 'powershell',
+                        remote_shell: e.target.value as 'auto' | 'linux' | 'cmd' | 'powershell', // eslint-disable-line no-restricted-syntax
                       })
                     }
                   >
