@@ -40,7 +40,7 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({
         setLoading(false);
       }
     };
-    loadFile();
+    void loadFile();
   }, [sessionId, remotePath]);
 
   const handleSave = useCallback(async () => {
@@ -71,7 +71,7 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
-      if (isModified) handleSave();
+      if (isModified) void handleSave();
     }
     // Tab key inserts spaces
     if (e.key === 'Tab') {
@@ -116,7 +116,7 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({
             </button>
             <button
               className="sftp-editor-btn sftp-editor-btn-save"
-              onClick={handleSave}
+              onClick={() => { void handleSave(); }}
               disabled={!isModified || saving}
               title={`${t('sftp_editor_save')} (Ctrl+S)`}
             >

@@ -114,7 +114,7 @@ export const UpdateChecker: React.FC = () => {
             <strong>{t('update_available')}</strong>
             <span>{t('update_new_version', { version: newVersion })}</span>
           </div>
-          <button className="update-toast-btn primary" onClick={downloadAndInstall}>
+          <button className="update-toast-btn primary" onClick={() => { void downloadAndInstall(); }}>
             <Download size={12} />
             {t('update_download')}
           </button>

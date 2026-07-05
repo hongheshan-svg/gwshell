@@ -293,13 +293,13 @@ export const LocalTerminalModal: React.FC = () => {
                 type="text"
                 value={form.working_dir}
                 onChange={(e) => setForm({ ...form, working_dir: e.target.value })}
-                onDoubleClick={handlePickDir}
+                onDoubleClick={() => { void handlePickDir(); }}
                 placeholder={t('local_working_dir_placeholder')}
                 style={{ flex: 1 }}
               />
               <button
                 type="button"
-                onClick={handlePickDir}
+                onClick={() => { void handlePickDir(); }}
                 title={t('local_select_dir')}
                 style={{
                   display: 'flex',

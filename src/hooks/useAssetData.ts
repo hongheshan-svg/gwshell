@@ -145,8 +145,8 @@ export function useAssetData() {
     };
   }, []);
 
-  const doPingRef = useRef(() => {});
-  doPingRef.current = async () => {
+  const doPingRef = useRef<() => void>(() => {});
+  const runPing = async () => {
     if (pingLoopRunningRef.current || !mountedRef.current) return;
     const targets = sessionsRef.current.filter((s) => s.host && !needsRelay(s));
     if (targets.length === 0) return;
@@ -190,6 +190,9 @@ export function useAssetData() {
     } finally {
       pingLoopRunningRef.current = false;
     }
+  };
+  doPingRef.current = () => {
+    void runPing();
   };
 
   useEffect(() => {

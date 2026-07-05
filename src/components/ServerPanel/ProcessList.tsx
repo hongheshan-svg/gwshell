@@ -86,7 +86,7 @@ export const ProcessList: React.FC<Props> = ({ sessionId, procs }) => {
                   <button
                     className={`sp-kill-btn${armedPid === p.pid ? ' sp-kill-btn--armed' : ''}`}
                     disabled={pending.has(p.pid)}
-                    onClick={() => handleKillClick(p)}
+                    onClick={() => { void handleKillClick(p); }}
                     title={
                       armedPid === p.pid
                         ? t('serverPanel_proc_kill_confirm_body', { pid: p.pid, name: p.comm })

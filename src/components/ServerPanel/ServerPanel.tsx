@@ -76,7 +76,7 @@ export const ServerPanel: React.FC = () => {
     let errUnlisten: UnlistenFn | null = null;
     let cancelled = false;
 
-    (async () => {
+    void (async () => {
       try {
         dataUnlisten = await listen<MetricsSnapshot>(`server-metrics-${sessionId}`, (evt) => {
           const snap = evt.payload;

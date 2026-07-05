@@ -208,16 +208,16 @@ export const AiSettingsSection: React.FC = () => {
           onSettingsChange={onSettingsChange}
           onApiKeyChange={setApiKey}
           onSelectProvider={selectCompatibleProvider}
-          onClearKey={clearKey}
-          onTest={testProvider}
-          onSave={save}
+          onClearKey={() => { void clearKey(); }}
+          onTest={() => { void testProvider(); }}
+          onSave={() => { void save(); }}
         />
       </div>
       <AgentPolicySection
         policy={policy}
         busy={busy}
         onChange={onPolicyChange}
-        onSave={savePolicySettings}
+        onSave={() => { void savePolicySettings(); }}
         message={policyMessage}
       />
     </>

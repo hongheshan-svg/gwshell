@@ -65,7 +65,7 @@ export const UnlockScreen: React.FC = () => {
       onContextMenu={(e) => e.preventDefault()}
     >
       <form
-        onSubmit={handleSubmit}
+        onSubmit={(e) => { void handleSubmit(e); }}
         style={{
           display: 'flex',
           flexDirection: 'column',

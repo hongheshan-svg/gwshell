@@ -411,7 +411,7 @@ export const NewSessionModal: React.FC = () => {
                         type="button"
                         className="ssh-password-toggle"
                         title={t('ssh_select_key_file')}
-                        onClick={() => pickKeyFile('private_key_path')}
+                        onClick={() => { void pickKeyFile('private_key_path'); }}
                       >
                         <FolderOpen size={14} />
                       </button>
@@ -872,7 +872,7 @@ export const NewSessionModal: React.FC = () => {
                         type="button"
                         className="ssh-password-toggle"
                         title={t('ssh_select_key_file')}
-                        onClick={() => pickKeyFile('jump_private_key_path')}
+                        onClick={() => { void pickKeyFile('jump_private_key_path'); }}
                       >
                         <FolderOpen size={14} />
                       </button>
@@ -895,7 +895,7 @@ export const NewSessionModal: React.FC = () => {
 
         {/* Footer */}
         <div className="ssh-modal-footer">
-          <button className="ssh-footer-link" onClick={handleTestConnect}>
+          <button className="ssh-footer-link" onClick={() => { void handleTestConnect(); }}>
             {t('ssh_test_connect')}
           </button>
           <div className="ssh-footer-actions">

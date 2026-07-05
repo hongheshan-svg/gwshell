@@ -270,7 +270,7 @@ export const DockerModal: React.FC = () => {
           <div style={{ display: 'flex', gap: 12, marginLeft: 'auto' }}>
             <button
               className="ssh-footer-link"
-              onClick={handleTest}
+              onClick={() => { void handleTest(); }}
               disabled={testState.kind === 'busy'}
               title={t('docker_test')}
             >

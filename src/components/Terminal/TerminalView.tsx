@@ -147,7 +147,7 @@ async function getOsInfo(): Promise<{ os: string; windowsBuild?: number }> {
 
 // Pre-warm: start fetching OS info immediately at module load time
 // so it's ready before the first terminal is created.
-getOsInfo();
+void getOsInfo();
 
 // Track which tab IDs have active backend connections (SSH/PTY/serial)
 // so we can avoid closing them during split-mode transitions.
@@ -1809,7 +1809,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           } catch {}
           // Close the shared bell AudioContext so it isn't left running.
           try {
-            if (bellCtx) bellCtx.close();
+            if (bellCtx) void bellCtx.close();
           } catch {}
           if (termElForWheel) {
             try {
@@ -2311,10 +2311,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         }
       };
 
-      setupConnection();
+      void setupConnection();
     }; // end initTerminal
 
-    initTerminal();
+    void initTerminal();
 
     return () => {
       cancelled = true;

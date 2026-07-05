@@ -124,7 +124,7 @@ export const AssetDashboard: React.FC<Props> = ({ sessions, onConnect, onEdit })
         }
       };
 
-      (async () => {
+      void (async () => {
         try {
           const dl = await listen<MetricsSnapshot>(`server-metrics-${id}`, (evt) => {
             const snap = evt.payload;
@@ -286,7 +286,7 @@ export const EmptyStateCtas: React.FC = () => {
             <span>{t('newasset_quickconnect')}</span>
             <span className="empty-cta-desc">{t('empty_cta_quick_desc')}</span>
           </button>
-          <button className="empty-cta-card" onClick={handleImportSshConfig}>
+          <button className="empty-cta-card" onClick={() => { void handleImportSshConfig(); }}>
             <FileInput size={16} />
             <span>{t('empty_cta_import')}</span>
             <span className="empty-cta-desc">{t('empty_cta_import_desc')}</span>

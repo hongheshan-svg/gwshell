@@ -168,7 +168,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       normalized.sshHistoryCmd &&
       normalized.sshHistoryCmdLoadCount !== prev.sshHistoryCmdLoadCount
     ) {
-      commandHistory.init(parseInt(normalized.sshHistoryCmdLoadCount) || 100);
+      void commandHistory.init(parseInt(normalized.sshHistoryCmdLoadCount) || 100);
     }
   },
 }));

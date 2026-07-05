@@ -382,7 +382,7 @@ const VaultSection: React.FC<{ open: boolean }> = ({ open }) => {
               />
             </Row>
             <Row label="">
-              <button className="settings-btn-primary" onClick={handleEnable}>
+              <button className="settings-btn-primary" onClick={() => { void handleEnable(); }}>
                 {t('vault_enable_btn')}
               </button>
             </Row>
@@ -421,7 +421,7 @@ const VaultSection: React.FC<{ open: boolean }> = ({ open }) => {
               />
             </Row>
             <Row label="">
-              <button className="settings-btn-primary" onClick={handleChange}>
+              <button className="settings-btn-primary" onClick={() => { void handleChange(); }}>
                 {t('vault_change_btn')}
               </button>
             </Row>
@@ -441,7 +441,7 @@ const VaultSection: React.FC<{ open: boolean }> = ({ open }) => {
               />
             </Row>
             <Row label="">
-              <button className="settings-btn-danger" onClick={handleDisable}>
+              <button className="settings-btn-danger" onClick={() => { void handleDisable(); }}>
                 {t('vault_disable_btn')}
               </button>
             </Row>
@@ -656,7 +656,7 @@ const StorageSection: React.FC = () => {
           <span className="settings-desc" style={{ flex: 1 }}>
             {t('settings_storage_local_data_desc')}
           </span>
-          <button className="settings-btn-danger" disabled={busy} onClick={handleClear}>
+          <button className="settings-btn-danger" disabled={busy} onClick={() => { void handleClear(); }}>
             {confirmClear ? t('settings_storage_clear_confirm') : t('settings_storage_clear')}
           </button>
         </div>
@@ -669,11 +669,11 @@ const StorageSection: React.FC = () => {
             className="settings-btn-outline"
             style={{ marginRight: 6 }}
             disabled={busy}
-            onClick={handleImport}
+            onClick={() => { void handleImport(); }}
           >
             {t('settings_storage_import')}
           </button>
-          <button className="settings-btn-outline" disabled={busy} onClick={handleExport}>
+          <button className="settings-btn-outline" disabled={busy} onClick={() => { void handleExport(); }}>
             {t('settings_storage_export')}
           </button>
         </div>
@@ -682,7 +682,7 @@ const StorageSection: React.FC = () => {
           <span className="settings-desc" style={{ flex: 1 }}>
             {t('settings_storage_sshconfig_desc')}
           </span>
-          <button className="settings-btn-outline" disabled={busy} onClick={handleImportSshConfig}>
+          <button className="settings-btn-outline" disabled={busy} onClick={() => { void handleImportSshConfig(); }}>
             {t('settings_storage_import')}
           </button>
         </div>
@@ -1056,7 +1056,7 @@ export const SettingsModal: React.FC = () => {
             </button>
             <button
               className={`settings-btn-primary ${!dirty ? 'disabled' : ''}`}
-              onClick={handleApply}
+              onClick={() => { void handleApply(); }}
               disabled={!dirty}
             >
               {t('settings_apply')}

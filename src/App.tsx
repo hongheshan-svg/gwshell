@@ -129,7 +129,7 @@ function App() {
   useEffect(() => {
     if (!settingsLoaded) return;
     if (sshHistoryCmd) {
-      commandHistory.init(parseInt(sshHistoryCmdLoadCount) || 100);
+      void commandHistory.init(parseInt(sshHistoryCmdLoadCount) || 100);
     }
     // sshHistoryCmd/Count intentionally omitted: setting changes go through
     // settingsStore.save() which re-calls init() directly.
