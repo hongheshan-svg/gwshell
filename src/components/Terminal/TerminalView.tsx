@@ -139,6 +139,23 @@ const connectedTabs = new Set<string>();
 // WebGL init failures across multiple tabs.
 let suggestedRendererTypeDom = false;
 
+// Dev-only WebGL renderer observability. Toggle from devtools at runtime:
+//   localStorage.setItem('gwshell:webgl-debug', '1')
+// When enabled, the WebGL addon's texture-atlas lifecycle events (atlas
+// rebuild / page add / page remove) are traced to the console. This is the
+// runtime signal that the renderer is exercising the atlas — e.g. confirming
+// a DPR/resize-triggered atlas swap, or that a context-loss → DOM fallback
+// happened. Matches VSCode's WebGL renderer logging/telemetry path. Silent
+// in production (the read is cheap and cached per call). Used by the atlas
+// event wiring in the WebGL load block below.
+function webglDebugEnabled(): boolean {
+  try {
+    return localStorage.getItem('gwshell:webgl-debug') === '1';
+  } catch {
+    return false;
+  }
+}
+
 // Global map of event-listener cleanup functions keyed by tab ID.
 // Ensures only ONE set of listeners exists per tab at any time, even
 // when React StrictMode double-invokes effects or when components
@@ -606,6 +623,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           // Match VSCode: scroll sensitivity for mouse wheel.
           fastScrollSensitivity: 5,
           scrollSensitivity: 1,
+          // Match VSCode: smooth scroll duration. VSCode maps
+          // terminal.integrated.smoothScrolling → smoothScrollDuration (0 when
+          // off, a positive ms value when on). Default is off (0 = instant),
+          // which keeps the terminal in lockstep with the PTY's output stream
+          // instead of animating behind it. Set explicitly so the hook point is
+          // visible if a smoothScrolling setting is added later.
+          smoothScrollDuration: 0,
         };
 
         // Only the LOCAL PTY backend (local shell, and Docker-over-local-PTY)
@@ -965,12 +989,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       if ((wasFreshlyOpened || instance.rendererLost) && !suggestedRendererTypeDom) {
         try { instance.rendererAddon?.dispose(); } catch {}
         instance.rendererAddon = undefined;
+        // Reset atlas tracking from any previous (disposed) WebGL addon.
+        instance.textureAtlasCanvases = undefined;
         try {
           // Match VSCode: pass customGlyphs so powerline/box-drawing/custom CSI
           // shapes render as designed glyphs instead of degraded fallbacks.
           const webgl = new WebglAddon({ customGlyphs: true });
           webgl.onContextLoss(() => {
             instance.rendererLost = true;
+            instance.textureAtlasCanvases = undefined;
             try { webgl.dispose(); } catch {}
             // Match VSCode: re-fit after WebGL dispose because WebGL cell
             // dimensions differ from the DOM renderer's — without this the
@@ -979,6 +1006,48 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             safeFit(tab.id);
             forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
           });
+          // Match VSCode: wire the WebGL texture-atlas lifecycle events.
+          // VSCode forwards these to its "Show Terminal Texture Atlas" debug
+          // command and uses them for renderer telemetry. Here we maintain
+          // the live atlas-canvas page list on the instance (so a future debug
+          // viewer can render them without re-touching the addon) and, when
+          // gwshell:webgl-debug is set, trace the lifecycle to the console.
+          //
+          // Semantics (per @xterm/addon-webgl source):
+          //  - onChangeTextureAtlas: a FRESH atlas instance was acquired
+          //    (first load, or a swap after DPR/dimension change / cache
+          //    eviction). Fires with pages[0].canvas. Note: a plain
+          //    clearTextureAtlas() does NOT swap the instance — it only
+          //    clears the pixels and requests a redraw — so this event is the
+          //    signal for an actual atlas replacement, not a texture clear.
+          //  - onAddTextureAtlasCanvas / onRemoveTextureAtlasCanvas: a page
+          //    was added (cache pressure → new page) or removed (compaction).
+          instance.textureAtlasCanvases = [];
+          const dbg = webglDebugEnabled();
+          try {
+            webgl.onChangeTextureAtlas((canvas) => {
+              // Atlas instance replaced — start the page list from page 0.
+              instance.textureAtlasCanvases = [canvas];
+              if (dbg) console.debug('[gwshell:webgl] atlas rebuilt (page 0)', canvas.width, 'x', canvas.height);
+            });
+          } catch { /* onChangeTextureAtlas unavailable on this addon version */ }
+          try {
+            webgl.onAddTextureAtlasCanvas((canvas) => {
+              const list = instance.textureAtlasCanvases ?? (instance.textureAtlasCanvases = []);
+              if (!list.includes(canvas)) list.push(canvas);
+              if (dbg) console.debug('[gwshell:webgl] atlas page added →', list.length, 'page(s)');
+            });
+          } catch { /* onAddTextureAtlasCanvas unavailable */ }
+          try {
+            webgl.onRemoveTextureAtlasCanvas((canvas) => {
+              const list = instance.textureAtlasCanvases;
+              if (list) {
+                const i = list.indexOf(canvas);
+                if (i >= 0) list.splice(i, 1);
+              }
+              if (dbg) console.debug('[gwshell:webgl] atlas page removed →', instance.textureAtlasCanvases?.length ?? 0, 'page(s)');
+            });
+          } catch { /* onRemoveTextureAtlasCanvas unavailable */ }
           instance.terminal.loadAddon(webgl);
           instance.rendererAddon = webgl;
           instance.rendererLost = false;
@@ -2041,6 +2110,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
     const inst = terminalInstances.get(tab.id);
     if (inst) {
       inst.terminal.options.theme = resolveTerminalTheme(useSettingsStore.getState().settings.terminalColorScheme, theme);
+      // Match VSCode: when the app theme flips dark↔light, the 'auto' terminal
+      // color scheme resolves to a different palette. The WebGL renderer's
+      // glyph atlas still holds pixels rasterized with the old palette, so a
+      // bare options.theme assignment leaves the on-screen colors stale until
+      // something else forces an atlas rebuild. Clear the atlas + force a full
+      // repaint so the new palette takes effect immediately.
+      const dbg = webglDebugEnabled();
+      requestAnimationFrame(() => {
+        try { inst.terminal.clearTextureAtlas(); if (dbg) console.debug('[gwshell:webgl] clearTextureAtlas (app theme change)'); } catch {}
+        try { inst.terminal.refresh(0, inst.terminal.rows - 1); } catch {}
+      });
     }
   }, [theme, tab.id]);
 
