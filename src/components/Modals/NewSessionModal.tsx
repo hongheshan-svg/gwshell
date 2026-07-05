@@ -101,18 +101,18 @@ export const NewSessionModal: React.FC = () => {
     }
   }, [editingSession, showNewSession]);
 
-  if (!showNewSession) return null;
-
+  // Hooks must run unconditionally (before any early return) per rules-of-hooks.
   const handleClose = () => {
     setShowNewSession(false);
     setEditingSession(null);
   };
+  useEscapeClose(handleClose);
+
+  if (!showNewSession) return null;
 
   const handleBlur = (field: string) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
   };
-
-  useEscapeClose(handleClose);
 
   const buildConfig = (sessionId: string): SessionConfig => {
     const now = new Date().toISOString().slice(0, 10);
@@ -196,7 +196,7 @@ export const NewSessionModal: React.FC = () => {
     handleClose();
   };
 
-  const handleTestConnect = async () => {
+  const handleTestConnect = () => {
     setTouched({ name: true, host: true });
     if (!form.name || !form.host) return;
 

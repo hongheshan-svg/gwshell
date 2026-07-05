@@ -309,7 +309,7 @@ pub async fn download_dir(
 
     let total = files.len();
     for (i, (rpath, lpath)) in files.iter().enumerate() {
-        download_one(&sftp, rpath, lpath, i + 1, total, &mut progress).await?;
+        download_one(sftp, rpath, lpath, i + 1, total, &mut progress).await?;
     }
     Ok(total)
 }
@@ -371,7 +371,7 @@ pub async fn upload_dir(
 
     let total = files.len();
     for (i, (lpath, rpath)) in files.iter().enumerate() {
-        upload_one(&sftp, rpath, lpath, i + 1, total, &mut progress).await?;
+        upload_one(sftp, rpath, lpath, i + 1, total, &mut progress).await?;
     }
     Ok(total)
 }

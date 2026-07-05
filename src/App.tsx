@@ -182,15 +182,20 @@ function App() {
 
   // Sessions are pre-loaded via Tauri's initialization_script (window.__GWSHELL_SESSIONS__).
   // Fall back to IPC only when the injection wasn't available (edge cases / dev hot-reload).
+  const didFetchSessionsRef = useRef(false);
   useEffect(() => {
+    if (didFetchSessionsRef.current) return;
     if (sessions.length === 0) {
+      didFetchSessionsRef.current = true;
       invoke<SessionConfig[]>('get_sessions')
         .then((s) => {
           if (s.length > 0) setSessions(s);
         })
         .catch(() => {});
     }
-  }, []);
+    // setSessions is a stable zustand setter; sessions.length is checked only
+    // to decide whether the initial fetch is needed (guarded by the ref).
+  }, [sessions.length, setSessions]);
 
   // Persist the open-tab set (debounced) when "remember tabs" is on. Keyed on a
   // derived signature so connect/disconnect (`connected`) changes don't rewrite.

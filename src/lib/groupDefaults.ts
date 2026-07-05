@@ -27,7 +27,7 @@ export function loadGroupDefaults(): GroupDefaultsMap {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return {};
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     return parsed && typeof parsed === 'object' ? (parsed as GroupDefaultsMap) : {}; // eslint-disable-line no-restricted-syntax
   } catch {
     return {};

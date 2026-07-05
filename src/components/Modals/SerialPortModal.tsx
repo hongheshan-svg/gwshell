@@ -118,10 +118,12 @@ export const SerialPortModal: React.FC = () => {
       .catch(() => setAvailablePorts([]));
   }, [showSerialModal]);
 
-  if (!showSerialModal) return null;
-
+  // Hooks must run unconditionally (before any early return) per rules-of-hooks.
   const handleClose = () => setShowSerialModal(false);
   useEscapeClose(handleClose);
+
+  if (!showSerialModal) return null;
+
 
   const setField = <K extends keyof SerialForm>(key: K, value: SerialForm[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));

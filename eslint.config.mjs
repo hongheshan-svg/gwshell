@@ -58,6 +58,9 @@ export default [
         'error',
         { allow: ['arrowFunctions', 'functions', 'methods'] },
       ],
+      // Allow empty catch blocks — the codebase uses `catch {}` intentionally
+      // for best-effort cleanup/teardown where the error is not actionable.
+      'no-empty': ['error', { allowEmptyCatch: true }],
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',

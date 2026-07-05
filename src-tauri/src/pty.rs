@@ -241,8 +241,8 @@ impl PtyManager {
     /// `create_shell` that lives AFTER the `CommandBuilder` (and env/cwd) are
     /// fully set up.  `create_docker_exec` also calls this directly.
     ///
-    /// * `charset_str`       — effective charset (e.g. "UTF-8", "GBK"); used
-    ///                         for the reader decoder and stored on the handle.
+    /// * `charset_str` — effective charset (e.g. "UTF-8", "GBK"); used
+    ///   for the reader decoder and stored on the handle.
     fn spawn_in_pty(
         &self,
         session_id: &str,
@@ -419,6 +419,10 @@ impl PtyManager {
         Ok(())
     }
 
+    // PTY shell creation requires 8 params (session id, app handle, command,
+    // charset, rows, cols, env, working dir); grouping into a struct would
+    // add indirection without reducing the call-site complexity.
+    #[allow(clippy::too_many_arguments)]
     pub fn create_shell(
         &self,
         session_id: &str,
@@ -518,11 +522,10 @@ impl PtyManager {
         };
 
         handle.input.lock().push(&bytes)?;
-        if !handle.wake_pending.swap(true, Ordering::AcqRel) {
-            if handle.tx.try_send(PtyCmd::WakeInput).is_err() {
+        if !handle.wake_pending.swap(true, Ordering::AcqRel)
+            && handle.tx.try_send(PtyCmd::WakeInput).is_err() {
                 handle.wake_pending.store(false, Ordering::Release);
             }
-        }
         Ok(())
     }
 

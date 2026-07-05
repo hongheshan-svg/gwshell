@@ -185,11 +185,13 @@ export const AssetDashboard: React.FC<Props> = ({ sessions, onConnect, onEdit })
         clearTimeout(tickTimerRef.current);
         tickTimerRef.current = null;
       }
+      // subscribedRef.current is stable across renders; reading it in the
+      // unmount cleanup is safe without listing it as a dependency.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       for (const id of Array.from(subscribedRef.current)) {
         teardownId(id);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Group sessions by session.group (preserving insertion order)

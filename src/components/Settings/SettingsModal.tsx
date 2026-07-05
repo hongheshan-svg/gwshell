@@ -733,9 +733,11 @@ export const SettingsModal: React.FC = () => {
     setDirty(true);
   };
 
-  if (!showSettings) return null;
+  // Hooks must run unconditionally (before any early return) per rules-of-hooks.
   const handleClose = () => setShowSettings(false);
   useEscapeClose(handleClose);
+
+  if (!showSettings) return null;
   const fonts = [
     'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif',
     'Inter, system-ui, sans-serif',

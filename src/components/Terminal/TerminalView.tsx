@@ -317,6 +317,7 @@ function cleanupTerminalInteractions(tabId: string): void {
 }
 
 // Returns true if input could be queued for the given tab.
+// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
 export function sendInputToTab(tabId: string, data: string): boolean {
   const sender = tabInputSenders.get(tabId);
   if (!sender) return false;
@@ -325,6 +326,7 @@ export function sendInputToTab(tabId: string, data: string): boolean {
 }
 
 /** Destroy a terminal instance associated with a tab (called when the tab closes). */
+// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
 export function destroyTerminal(tabId: string): void {
   cleanupTabListeners(tabId);
   cleanupTerminalInteractions(tabId);
@@ -373,6 +375,7 @@ export function destroyTerminal(tabId: string): void {
  * After fitting, forces a full row redraw so the renderer always
  * shows content consistent with the new dimensions.
  */
+// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
 export function safeFit(tabId: string): void {
   const inst = terminalInstances.get(tabId);
   if (!inst) return;
@@ -386,6 +389,7 @@ export function safeFit(tabId: string): void {
   } catch {}
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
 export function scheduleTerminalFit(tabId: string): void {
   if (fitFrameIds.has(tabId)) return;
   const frameId = requestAnimationFrame(() => {
@@ -395,6 +399,7 @@ export function scheduleTerminalFit(tabId: string): void {
   fitFrameIds.set(tabId, frameId);
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
 export function scheduleTerminalResizeSettle(
   tabId: string,
   sessionId: string,
@@ -428,6 +433,7 @@ export function scheduleTerminalResizeSettle(
  *     re-issue resize_pty/resize_ssh unconditionally to trigger SIGWINCH
  *     and force the TUI to repaint.
  */
+// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
 export function forceTerminalRedraw(
   tabId: string,
   sessionId: string,
@@ -1364,6 +1370,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         const ANSI_RE =
           // CSI sequences, OSC sequences (BEL or ST terminated), and other
           // single/short ESC sequences.
+          // eslint-disable-next-line no-control-regex -- ANSI escape sequence, control chars intentional
           /\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g;
         const logName =
           // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
@@ -1551,6 +1558,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               if (data.includes('\x1b[200~')) bracketedPaste.set(tab.id, true);
               if (bracketedPaste.get(tab.id)) {
                 const end = data.indexOf('\x1b[201~');
+                // eslint-disable-next-line no-control-regex -- ANSI bracketed-paste markers, control chars intentional
                 const chunk = (end >= 0 ? data.slice(0, end) : data).replace(/\x1b\[200~/g, '');
                 buf += chunk;
                 if (end >= 0) {
@@ -2362,6 +2370,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         invoke(closeCmd, { sessionId: tab.sessionId }).catch(() => {});
       }
     };
+    // Per-tab init: intentionally omits maybePasteText, t, and tab.title —
+    // this effect should run once per tab lifecycle, not on every prop change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab.id, tab.sessionId, tab.type]);
 
   // Update terminal theme when app theme changes

@@ -307,6 +307,9 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
       homePathRef.current = '/';
       return '/';
     }
+    // sessionId is stable for the panel's lifetime (one panel per session);
+    // omitting it avoids recreating this callback on session prop changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolveReadableDir, username]);
 
   // Detect the initial directory once the SSH session is actually connected.
@@ -390,7 +393,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
     setSelectedEntry(entry);
   };
 
-  const handleEntryDoubleClick = async (entry: SftpEntry) => {
+  const handleEntryDoubleClick = (entry: SftpEntry) => {
     setSelectedEntry(entry);
     if (entry.is_dir) {
       navigateTo(entry.path);

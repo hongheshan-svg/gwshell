@@ -57,10 +57,12 @@ export const DockerModal: React.FC = () => {
     }
   }, [showDockerModal]);
 
-  if (!showDockerModal) return null;
-
+  // Hooks must run unconditionally (before any early return) per rules-of-hooks.
   const handleClose = () => setShowDockerModal(false);
   useEscapeClose(handleClose);
+
+  if (!showDockerModal) return null;
+
 
   const handleBlur = (field: string) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
@@ -185,7 +187,7 @@ export const DockerModal: React.FC = () => {
                 <label>{t('docker_protocol')}</label>
                 <select
                   value={form.docker_protocol}
-                  onChange={(e) => setForm({ ...form, docker_protocol: e.target.value as any })} // eslint-disable-line no-restricted-syntax
+                  onChange={(e) => setForm({ ...form, docker_protocol: e.target.value as 'unix' | 'tcp' | 'http' | 'https' })} // eslint-disable-line no-restricted-syntax
                 >
                   <option value="unix">Unix</option>
                   <option value="tcp">TCP</option>

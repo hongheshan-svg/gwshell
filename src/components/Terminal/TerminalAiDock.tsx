@@ -205,7 +205,9 @@ export const TerminalAiDock: React.FC = () => {
   );
   const context = useMemo(
     () => (activeTab ? getTerminalAiContext(activeTab.id) : null),
-    // contextTick forces a re-read so selection/output chips stay fresh while open
+    // contextTick forces a re-read so selection/output chips stay fresh while open.
+    // activeTab?.id is sufficient; listing activeTab would over-trigger on tab object updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeTab?.id, contextTick],
   );
   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing

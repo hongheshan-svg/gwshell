@@ -157,11 +157,10 @@ pub fn parse_ssh_config(content: &str) -> Vec<SshConfigHost> {
                             .identity_file
                             .get_or_insert_with(|| strip_quotes(&value).to_string());
                     }
-                    "proxyjump" => {
-                        if block.jump.is_none() {
+                    "proxyjump"
+                        if block.jump.is_none() => {
                             block.jump = parse_proxy_jump(strip_quotes(&value));
                         }
-                    }
                     _ => {}
                 }
             }

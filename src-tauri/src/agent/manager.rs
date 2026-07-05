@@ -43,7 +43,7 @@ impl AgentManager {
 
     pub fn list_sessions(&self) -> Vec<AgentSessionInfo> {
         let mut sessions: Vec<_> = self.sessions.lock().values().cloned().collect();
-        sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+        sessions.sort_by_key(|s| std::cmp::Reverse(s.started_at));
         sessions
     }
 

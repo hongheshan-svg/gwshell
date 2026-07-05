@@ -232,7 +232,7 @@ fn command_word_name(word: &str) -> String {
     let trimmed = clean_token(word);
     let basename = if trimmed.contains('/') || trimmed.contains(':') || trimmed.starts_with('\\') {
         trimmed
-            .rsplit(|ch| ch == '/' || ch == '\\')
+            .rsplit(['/', '\\'])
             .next()
             .unwrap_or(trimmed)
     } else {
@@ -288,8 +288,8 @@ fn segment_contains_blocked_destructive(segment: &str) -> bool {
 
 fn is_root_recursive_world_writable_chmod(args: &[&str]) -> bool {
     let recursive = args.iter().any(|arg| is_chmod_recursive_flag(arg));
-    let mode_777 = args.iter().any(|arg| *arg == "777");
-    let root = args.iter().any(|arg| *arg == "/");
+    let mode_777 = args.contains(&"777");
+    let root = args.contains(&"/");
     recursive && mode_777 && root
 }
 

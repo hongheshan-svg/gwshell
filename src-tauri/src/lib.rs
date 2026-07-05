@@ -264,6 +264,7 @@ fn quit_app(app_handle: tauri::AppHandle, state: State<'_, Arc<AppState>>) {
 // ---- PTY Commands ----
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // Tauri command — args map to frontend IPC params
 async fn create_local_shell(
     session_id: String,
     rows: u16,
@@ -820,6 +821,7 @@ async fn ping_host(host: String, port: u16, timeout_secs: Option<u64>) -> Result
 // ---- Serial Commands ----
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // Tauri command — args map to frontend IPC params
 async fn serial_open(
     session_id: String,
     port_name: String,
@@ -1640,6 +1642,8 @@ fn spawn_agent_continuation(
     });
 }
 
+// 8 params: all distinct agent log-stream setup values.
+#[allow(clippy::too_many_arguments)]
 fn spawn_agent_log_stream(
     state: Arc<AppState>,
     app_handle: AppHandle,

@@ -27,7 +27,7 @@ export const AgentObjective: React.FC = () => {
   useEffect(() => clearSubscriptions, []);
 
   const start = async () => {
-    if (!activeTab || activeTab.type !== 'ssh' || !activeTab.connected) {
+    if (activeTab?.type !== 'ssh' || !activeTab?.connected) {
       setError(t('agent_requires_connected_ssh'));
       return;
     }
@@ -54,7 +54,7 @@ export const AgentObjective: React.FC = () => {
   };
 
   const draftPlan = async () => {
-    if (!activeTab || activeTab.type !== 'ssh' || !activeTab.connected) {
+    if (activeTab?.type !== 'ssh' || !activeTab?.connected) {
       setError(t('agent_requires_connected_ssh'));
       return;
     }

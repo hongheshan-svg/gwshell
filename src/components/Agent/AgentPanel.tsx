@@ -29,7 +29,7 @@ export const AgentPanel: React.FC = () => {
   if (!open) return null;
 
   const cancelAgent = async () => {
-    if (!activeSession || activeSession.status !== 'running') return;
+    if (activeSession?.status !== 'running') return;
     try {
       setError(null);
       await invoke('cancel_agent_session', { agentSessionId: activeSession.id });

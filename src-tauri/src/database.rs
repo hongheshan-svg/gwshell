@@ -261,6 +261,8 @@ impl Database {
 
     // ---- Agent Audit ----
 
+    // 9 params: all are distinct audit-record fields that map 1:1 to columns.
+    #[allow(clippy::too_many_arguments)]
     pub fn save_agent_audit_raw(
         &self,
         id: &str,

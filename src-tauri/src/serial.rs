@@ -60,6 +60,9 @@ impl SerialManager {
         }
     }
 
+    // Serial open takes 9 params (port config + session/app handle); all are
+    // distinct serial-port settings that map to Tauri command args.
+    #[allow(clippy::too_many_arguments)]
     pub fn open(
         &self,
         session_id: &str,
@@ -256,11 +259,10 @@ impl SerialManager {
         };
 
         handle.input.lock().push(data)?;
-        if !handle.wake_pending.swap(true, Ordering::AcqRel) {
-            if handle.tx.try_send(SerialCmd::WakeInput).is_err() {
+        if !handle.wake_pending.swap(true, Ordering::AcqRel)
+            && handle.tx.try_send(SerialCmd::WakeInput).is_err() {
                 handle.wake_pending.store(false, Ordering::Release);
             }
-        }
         Ok(())
     }
 

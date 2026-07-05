@@ -136,12 +136,17 @@ export const LocalTerminalModal: React.FC = () => {
           /* keep default */
         });
     }
+    // t is stable (i18next fixed-T); intentionally omitted to avoid re-running
+    // the shell-discovery effect on language change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showLocalTerminalModal]);
+
+  // Hooks must run unconditionally (before any early return) per rules-of-hooks.
+  const handleClose = () => setShowLocalTerminalModal(false);
+  useEscapeClose(handleClose);
 
   if (!showLocalTerminalModal) return null;
 
-  const handleClose = () => setShowLocalTerminalModal(false);
-  useEscapeClose(handleClose);
 
   const handlePickDir = async () => {
     try {
