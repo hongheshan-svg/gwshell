@@ -15,6 +15,12 @@
     "preview": "vite preview",
     "smoke:check": "node scripts/stability-smoke.mjs",
     "tauri": "tauri",
+    "lint": "eslint src --max-warnings 0",
+    "lint:fix": "eslint src --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test:node": "node scripts/test-completion.mjs && node scripts/test-split-layout.mjs && node scripts/verify-webgl-lifecycle.mjs",
+    "ci:check": "npm run build && npm run smoke:check && npm run lint && npm run format:check && npm run test:node",
     "version": "node -e \"const fs=require('fs');const v=require('./package.json').version;const c=fs.readFileSync('src-tauri/Cargo.toml','utf8').replace(/^version = \\\"[^\\\"]+\\\"/m,'version = \\\"'+v+'\\\"');fs.writeFileSync('src-tauri/Cargo.toml',c);console.log('Cargo.toml version synced to '+v);\" && git add src-tauri/Cargo.toml"
   },
   "dependencies": {
