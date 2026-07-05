@@ -235,6 +235,7 @@ export const findAiModelPreset = (
 export const getAiModelDisplayName = (
   settings: Pick<AiProviderSettings, 'provider' | 'base_url' | 'model'>,
 ) =>
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
   findAiModelPreset(settings)?.title ||
   settings.model ||
   compatibleProviderLabels[settings.provider];

@@ -208,7 +208,9 @@ export const TerminalAiDock: React.FC = () => {
     // contextTick forces a re-read so selection/output chips stay fresh while open
     [activeTab?.id, contextTick],
   );
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
   const promptChip = context?.prompt || activeTab?.title || t('terminal_ai_no_prompt');
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
   const cwdChip = context?.cwd || t('terminal_ai_unknown_cwd');
   const selectionChars = context?.selectedText?.trim().length ?? 0;
   const outputKb = context?.recentOutput
@@ -304,7 +306,9 @@ export const TerminalAiDock: React.FC = () => {
       question: input.trim(),
       cwd: currentContext.cwd ?? null,
       prompt: currentContext.prompt ?? activeTab.title,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       selected_text: currentContext.selectedText?.trim() || null,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       recent_output: currentContext.recentOutput?.trim() || null,
     };
 
@@ -340,6 +344,7 @@ export const TerminalAiDock: React.FC = () => {
           activeRequestIdRef.current = null;
           setBusy(false);
           setPhase('');
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
           setError(event.payload.message || t('terminal_ai_error'));
           cleanupListeners(requestId);
         });

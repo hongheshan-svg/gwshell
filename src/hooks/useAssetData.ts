@@ -41,6 +41,7 @@ export function useAssetData() {
     ? realSessions.filter(
         (s) =>
           s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
           (s.host?.toLowerCase().includes(searchQuery.toLowerCase())) ||
           (s.username?.toLowerCase().includes(searchQuery.toLowerCase())),
       )
@@ -171,7 +172,7 @@ export function useAssetData() {
         try {
           const latency = await invoke<number>('ping_host', {
             host: session.host!,
-            port: session.port || 22,
+            port: session.port ?? 22,
             timeoutSecs: session.connection_timeout,
           });
           updates.set(session.id, latency);

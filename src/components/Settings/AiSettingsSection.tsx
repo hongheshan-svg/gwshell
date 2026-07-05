@@ -71,6 +71,7 @@ export const AiSettingsSection: React.FC = () => {
   const keyPlaceholder =
     settings.provider === 'ollama'
       ? ''
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       : selectedPreset?.apiKeyHint ||
         (settings.provider === 'anthropic_compatible' ? 'sk-ant-...' : 'sk-...');
 

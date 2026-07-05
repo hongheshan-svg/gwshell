@@ -183,7 +183,7 @@ const NumInput: React.FC<{
     {prefix && <span className="settings-desc">{prefix}</span>}
     <input
       className="settings-input"
-      style={{ width: width || 70 }}
+      style={{ width: width ?? 70 }}
       value={value}
       onChange={(e) => onChange(e.target.value)}
     />

@@ -132,8 +132,7 @@ let osInfoPromise: Promise<{ os: string; windowsBuild?: number }> | null = null;
 
 async function getOsInfo(): Promise<{ os: string; windowsBuild?: number }> {
   if (cachedOsInfo) return cachedOsInfo;
-  if (!osInfoPromise) {
-    osInfoPromise = invoke<{ os: string; windowsBuild?: number }>('get_os_info')
+  osInfoPromise ??= invoke<{ os: string; windowsBuild?: number }>('get_os_info')
       .then((info) => {
         cachedOsInfo = info;
         return info;
@@ -143,7 +142,6 @@ async function getOsInfo(): Promise<{ os: string; windowsBuild?: number }> {
         cachedOsInfo = fallback;
         return fallback;
       });
-  }
   return osInfoPromise;
 }
 
@@ -1366,6 +1364,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           // single/short ESC sequences.
           /\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g;
         const logName =
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
           sessionsRef.current.find((s) => s.id === tab.sessionId)?.name ||
           tab.title ||
           tab.sessionId;
@@ -1383,7 +1382,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         const enqueueLog = (payload: string) => {
           if (logDisposed || !useSettingsStore.getState().settings.sessionLogEnabled) return;
           logQueue += payload;
-          if (!logTimer) logTimer = setTimeout(flushLog, 1000);
+          logTimer ??= setTimeout(flushLog, 1000);
         };
 
         const unlistenData = await listen<string>(
@@ -1976,10 +1975,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               await invoke('serial_open', {
                 sessionId: freshSession.id,
                 portName: freshSession.serial_port,
+                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                 baudRate: parseInt(freshSession.serial_baud_rate || '115200', 10),
+                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                 dataBits: freshSession.serial_data_bits || '8',
+                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                 stopBits: freshSession.serial_stop_bits || '1',
+                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                 parity: freshSession.serial_parity || 'None',
+                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                 serialEncoding: freshSession.serial_encoding || null,
               });
             }
@@ -2084,7 +2088,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                 if (cancelled) return;
 
                 instance?.terminal.write(
-                  `\r\n\x1b[90m${t('term_connecting', { user: session.username || 'root', host: session.host, port: session.port || 22 })}` +
+                  `\r\n\x1b[90m${t('term_connecting', {
+                    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+                    user: session.username || 'root',
+                    host: session.host,
+                    port: session.port ?? 22,
+                  })}` +
                     `${session.jump_host ? ` ${t('term_via_jump', { jumpHost: session.jump_host })}` : ''}` +
                     `${session.proxy_type && session.proxy_type !== 'none' ? ` ${t('term_via_proxy', { proxyType: session.proxy_type })}` : ''}` +
                     `...\x1b[0m\r\n`,
@@ -2182,15 +2191,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                 );
               } else {
                 instance?.terminal.write(
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                   `\r\n\x1b[90m${t('term_opening_serial', { port: session.serial_port, baud: session.serial_baud_rate || '115200' })}\x1b[0m\r\n`,
                 );
                 await invoke('serial_open', {
                   sessionId: tab.sessionId,
                   portName: session.serial_port,
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                   baudRate: parseInt(session.serial_baud_rate || '115200', 10),
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                   dataBits: session.serial_data_bits || '8',
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                   stopBits: session.serial_stop_bits || '1',
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                   parity: session.serial_parity || 'None',
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                   serialEncoding: session.serial_encoding || null,
                 });
                 connectionReady = true;

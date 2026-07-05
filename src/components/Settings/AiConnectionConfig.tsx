@@ -62,6 +62,7 @@ export const AiConnectionConfig: React.FC<Props> = ({
             <span>{getAiModelDisplayName(settings)}</span>
           </div>
           <div className="ai-settings-model-meta">
+            {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing */}
             <span>{selectedPreset?.vendor || compatibleProviderLabels[settings.provider]}</span>
             <span>{settings.model || '-'}</span>
           </div>

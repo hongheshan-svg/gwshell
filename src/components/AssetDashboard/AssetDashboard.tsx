@@ -196,6 +196,7 @@ export const AssetDashboard: React.FC<Props> = ({ sessions, onConnect, onEdit })
   const groups = useMemo(() => {
     const map = new Map<string, SessionConfig[]>();
     sessions.forEach((s) => {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       const key = s.group?.trim() || UNGROUPED_SENTINEL;
       const existing = map.get(key);
       if (existing) {

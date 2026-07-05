@@ -213,10 +213,12 @@ export const HostDashCard: React.FC<Props> = ({
           ? `${session.serial_port}${session.serial_baud_rate ? ` @ ${session.serial_baud_rate}` : ''}`
           : t('newasset_serial');
       case 'localshell':
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
         return session.shell_name || t('newasset_localshell');
       case 'docker':
         return session.docker_connect_method?.toLowerCase() === 'ssh'
           ? 'docker via SSH'
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
           : session.docker_unix_path || 'docker';
       default:
         return session.session_type;

@@ -88,8 +88,10 @@ export const AssetTable: React.FC = () => {
     if (s.host) return s.host;
     switch (s.session_type) {
       case 'serial':
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
         return s.serial_port || '-';
       case 'localshell':
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
         return s.shell_name || t('newasset_localshell');
       case 'docker':
         return s.docker_connect_method?.toLowerCase() === 'ssh' ? 'docker (SSH)' : 'docker';
@@ -109,7 +111,7 @@ export const AssetTable: React.FC = () => {
   const groupedSessions = useMemo(() => {
     const map = new Map<string, SessionConfig[]>();
     filteredSessions.forEach((s) => {
-      const key = s.group?.trim() || '';
+      const key = s.group?.trim() ?? '';
       const arr = map.get(key);
       if (arr) arr.push(s);
       else map.set(key, [s]);
@@ -257,18 +259,29 @@ export const AssetTable: React.FC = () => {
                         <td className="col-name">
                           <span
                             className="asset-name-color"
+                            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                             style={{ background: session.color_label || 'var(--border-color)' }}
                           />
                           <span>{session.name}</span>
                         </td>
                         <td className="col-latency">{formatLatency(session.latency)}</td>
                         <td className="col-host">{hostInfo(session)}</td>
+                        {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing */}
                         <td className="col-user">{session.username || '-'}</td>
+                        {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing */}
                         <td className="col-created">{session.created_at || '-'}</td>
                         {showExpired && (
-                          <td className="col-expired">{session.expired_at || '-'}</td>
+                          <td className="col-expired">
+                            {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing */}
+                            {session.expired_at || '-'}
+                          </td>
                         )}
-                        {showRemark && <td className="col-remark">{session.remark || '-'}</td>}
+                        {showRemark && (
+                          <td className="col-remark">
+                            {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing */}
+                            {session.remark || '-'}
+                          </td>
+                        )}
                         <td className="col-actions">
                           <button
                             className="asset-action-btn"

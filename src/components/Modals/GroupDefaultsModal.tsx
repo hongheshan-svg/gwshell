@@ -91,6 +91,7 @@ export const GroupDefaultsModal: React.FC = () => {
             className="group-defaults-input"
             value={defs.auth_method ?? ''}
             onChange={(e) =>
+              // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
               set('auth_method', (e.target.value as GroupDefaults['auth_method']) || undefined)
             }
           >
@@ -163,6 +164,7 @@ export const GroupDefaultsModal: React.FC = () => {
             className="group-defaults-input"
             value={defs.proxy_type ?? ''}
             onChange={(e) =>
+              // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
               set('proxy_type', (e.target.value as GroupDefaults['proxy_type']) || undefined)
             }
           >

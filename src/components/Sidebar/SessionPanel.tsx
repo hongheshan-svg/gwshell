@@ -66,6 +66,7 @@ export const SessionPanel: React.FC = () => {
   const allSessions = sessions.filter((s) => !s._temporary);
   const groups: Record<string, SessionConfig[]> = {};
   allSessions.forEach((s) => {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
     const g = s.group || t('panel_default_group');
     if (!groups[g]) groups[g] = [];
     groups[g].push(s);
