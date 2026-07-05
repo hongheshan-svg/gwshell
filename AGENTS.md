@@ -22,6 +22,21 @@ Other:
 - `npm run tauri build` — production packages.
 - `npm version <x>` — runs the `version` lifecycle script, which rewrites the new version into `src-tauri/Cargo.toml` and stages it. Do not edit `Cargo.toml` version by hand.
 
+## Linting & formatting
+
+Project uses ESLint (strict, type-checked), Prettier, rustfmt, and Clippy. Run
+before every commit:
+
+- `npm run lint` — ESLint on `src/`, `--max-warnings 0`.
+- `npm run format:check` — Prettier check (CI fails if unformatted).
+- `cd src-tauri && cargo fmt --check` — Rust formatting check.
+- `cd src-tauri && cargo clippy -- -D warnings` — Clippy strict.
+
+Auto-fix locally with `npm run lint:fix`, `npm run format`, `cargo fmt`.
+
+`.git-blame-ignore-revs` skips the bulk-reformat commit (PR1) in `git blame`.
+Enable locally: `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
+
 ## Tests
 
 There is no Vitest/Jest runner. Tests are standalone Node scripts run directly:
