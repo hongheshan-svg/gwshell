@@ -9,7 +9,9 @@ export const AgentAuditTimeline: React.FC = () => {
         <div className="agent-audit-row" key={result.call_id}>
           <span>{result.ok ? 'OK' : 'FAIL'}</span>
           <pre>{result.output || result.error}</pre>
-          {result.verification && <pre>Verification: {result.verification.output || result.verification.error}</pre>}
+          {result.verification && (
+            <pre>Verification: {result.verification.output || result.verification.error}</pre>
+          )}
         </div>
       ))}
     </div>

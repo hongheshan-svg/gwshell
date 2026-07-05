@@ -25,8 +25,8 @@ user-visible features, the TerminalView.tsx refactor, and CSS reorganization
 4. **Close concrete security gaps** — `pty.rs` thread leak under queue pressure,
    `serial.rs` hardcoded flow control, missing SBOM, undocumented Argon2 params.
 5. **Unlock future schema evolution** — replace ad-hoc `CREATE TABLE IF NOT EXISTS`
-   + silent `ALTER TABLE` with a real migration framework so SessionConfig
-   refactors (e.g. discriminated union) don't get blocked.
+   - silent `ALTER TABLE` with a real migration framework so SessionConfig
+     refactors (e.g. discriminated union) don't get blocked.
 
 ### 1.2 Non-Goals (explicitly out of scope, each gets its own spec later)
 
@@ -44,7 +44,7 @@ user-visible features, the TerminalView.tsx refactor, and CSS reorganization
 
 - `npm run ci:check` (a new aggregate script) passes locally before every push,
   running: `tsc` + `vite build` + `smoke:check` + `eslint` + `prettier --check`
-  + the 3 `.mjs` test scripts.
+  - the 3 `.mjs` test scripts.
 - `cargo test` runs in CI and passes (all 159 existing tests green).
 - `cargo clippy -- -D warnings` and `cargo fmt --check` pass in CI.
 - Zero `window.confirm` calls remain in `src/` (grep-enforced by smoke:check).
@@ -72,16 +72,16 @@ user-visible features, the TerminalView.tsx refactor, and CSS reorganization
 
 ### 2.1 New tooling config files
 
-| File | Purpose |
-|---|---|
-| `.eslintrc.cjs` | `@typescript-eslint` `strict-type-checked` + `eslint-plugin-react-hooks` + `eslint-plugin-react-refresh` (Vite). Banned: `any`, `console.*` outside `lib/`/`stores/`, `@ts-ignore`. |
-| `.prettierrc.json` | 2-space indent, single quotes for JS/TS, double for JSX, no trailing comma all, printWidth 100. Matches `tsconfig.json` + AGENTS.md "Two-space indent" rule. |
-| `.prettierignore` | `dist/`, `node_modules/`, `src-tauri/target/`, `src-tauri/gen/`, `package-lock.json`, `*.min.js`. |
-| `.eslintignore` | Same as prettier, plus `src/i18n/locales/**` (generated-looking JSON). |
-| `rustfmt.toml` | `edition = "2021"`, `max_width = 100`, `fn_single_line = true` (subjective; matches existing code style on review). |
-| `clippy.toml` | `msrv = "1.80"` (per AGENTS.md), `type-complexity-threshold = 250` (existing AppState is borderline). |
-| `.editorconfig` | UTF-8, LF, final newline, 2-space for `*.{ts,tsx,js,mjs,json,css,md,toml}`, 4-space for `*.rs`. |
-| `.gitattributes` | `* text=auto eol=lf` (already partially present, complete it). |
+| File               | Purpose                                                                                                                                                                             |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.eslintrc.cjs`    | `@typescript-eslint` `strict-type-checked` + `eslint-plugin-react-hooks` + `eslint-plugin-react-refresh` (Vite). Banned: `any`, `console.*` outside `lib/`/`stores/`, `@ts-ignore`. |
+| `.prettierrc.json` | 2-space indent, single quotes for JS/TS, double for JSX, no trailing comma all, printWidth 100. Matches `tsconfig.json` + AGENTS.md "Two-space indent" rule.                        |
+| `.prettierignore`  | `dist/`, `node_modules/`, `src-tauri/target/`, `src-tauri/gen/`, `package-lock.json`, `*.min.js`.                                                                                   |
+| `.eslintignore`    | Same as prettier, plus `src/i18n/locales/**` (generated-looking JSON).                                                                                                              |
+| `rustfmt.toml`     | `edition = "2021"`, `max_width = 100`, `fn_single_line = true` (subjective; matches existing code style on review).                                                                 |
+| `clippy.toml`      | `msrv = "1.80"` (per AGENTS.md), `type-complexity-threshold = 250` (existing AppState is borderline).                                                                               |
+| `.editorconfig`    | UTF-8, LF, final newline, 2-space for `*.{ts,tsx,js,mjs,json,css,md,toml}`, 4-space for `*.rs`.                                                                                     |
+| `.gitattributes`   | `* text=auto eol=lf` (already partially present, complete it).                                                                                                                      |
 
 ### 2.2 `package.json` new scripts
 
@@ -203,7 +203,7 @@ current 23 entries.
 - ESLint will likely flag existing code on first run. Plan: run
   `eslint --fix` once to auto-resolve stylistic issues, manually fix the
   remaining ~20–50 issues (mostly `any`/`console.*`/unused imports), commit
-  as a single `chore: enable eslint` commit *before* the workflow file lands.
+  as a single `chore: enable eslint` commit _before_ the workflow file lands.
   This way CI goes green on the first run with linting enabled.
 - Same for `prettier --write` — single `chore: apply prettier` commit.
 - Same for `cargo fmt` — single `chore: cargo fmt` commit.
@@ -237,7 +237,7 @@ Three new pieces, all under `src/`:
    error surfacing.
 
 4. **`hooks/useConfirm.ts`** — backed by a `confirmStore` (Zustand). `confirm({
-   title, message, confirmLabel, cancelLabel, danger })` returns
+title, message, confirmLabel, cancelLabel, danger })` returns
    `Promise<boolean>`. Mounts a single `<ConfirmDialog>` at `App.tsx` root
    reusing `TabBar`'s existing `role="alertdialog" aria-modal="true"` styling
    (extract that CSS into `styles/confirm.css` or keep in `global.css` and
@@ -247,6 +247,7 @@ Three new pieces, all under `src/`:
 ### 3.2 Migration plan (call sites)
 
 **Replace `window.confirm`** (7 sites, from audit):
+
 - `SessionPanel` (×1, delete session confirm)
 - `SnippetPanel` (×1, delete snippet)
 - `SftpPanel` (×1, overwrite/rmtree)
@@ -257,6 +258,7 @@ Three new pieces, all under `src/`:
 Each call site moves to `const confirm = useConfirm(); ... if (await confirm({...})) {...}`.
 
 **Wire optimistic-rollback failures to toast** (silent today):
+
 - `snippetStore.add/update/remove` — `catch` rolls back UI + calls
   `toast.error({ title: t('common.error'), message: err })`.
 - `appStore.removeSession` — same pattern, `t('sessions.deleteFailed')`.
@@ -568,14 +570,14 @@ PR3, in parallel if multiple reviewers are available.
 
 ### 7.1 What's covered after this wave
 
-| Layer | Coverage |
-|---|---|
-| Rust unit | All 159 existing `#[test]`s run in CI per OS. New tests for `pty::close_pty_wait`, `vault::argon2id` consistency, `serial::flow_control` mapping. |
-| Rust integration | New `tests/migrations.rs` covering refinery up + baseline paths. |
-| Node scripts | 3 existing `.mjs` scripts run in CI. |
-| Smoke | Extended: IPC parity (existing) + i18n key parity + event-name parity + capabilities allowlist + no-`window.confirm` grep. |
-| Frontend | Still no Vitest/RTL — explicitly out of scope for this wave (separate spec). |
-| E2E | None — out of scope. |
+| Layer            | Coverage                                                                                                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rust unit        | All 159 existing `#[test]`s run in CI per OS. New tests for `pty::close_pty_wait`, `vault::argon2id` consistency, `serial::flow_control` mapping. |
+| Rust integration | New `tests/migrations.rs` covering refinery up + baseline paths.                                                                                  |
+| Node scripts     | 3 existing `.mjs` scripts run in CI.                                                                                                              |
+| Smoke            | Extended: IPC parity (existing) + i18n key parity + event-name parity + capabilities allowlist + no-`window.confirm` grep.                        |
+| Frontend         | Still no Vitest/RTL — explicitly out of scope for this wave (separate spec).                                                                      |
+| E2E              | None — out of scope.                                                                                                                              |
 
 ### 7.2 What's explicitly not tested here
 
@@ -588,14 +590,14 @@ PR3, in parallel if multiple reviewers are available.
 
 ## 8. Risk & Rollback
 
-| Risk | Mitigation |
-|---|---|
-| ESLint bulk reformat (PR1) obscures real changes in `git blame` | Add `.git-blame-ignore-revs` file pointing at the reformat commit SHA. Document in AGENTS.md. |
-| `cargo clippy -D warnings` finds an unfixable lint in third-party macro-generated code | Use `#[allow(clippy::...)]` scoped to the smallest possible block with a reason comment. |
-| refinery bootstrap mis-detects an existing v0.5.5 database and re-runs V001, corrupting data | V001 uses `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN` (idempotent). Add the §5.5 baseline-fixture test. Ship PR6 behind a feature flag for one release cycle. |
-| `pty::close_pty_wait` blocks the UI thread if the child won't die | Caller (`close_pty` IPC command) already runs in `tokio::spawn_blocking`. Add a 2-second timeout wrapping the join, falling back to signal-only on timeout. |
-| Toast migration breaks `UpdateChecker` auto-update flow | Manual test of the update check flow before PR4 merge. Keep the old `.update-toast` CSS until PR4 is verified, remove in a follow-up. |
-| Cargo audit fails CI on an advisory with no fix | Use `cargo audit --deny warnings` for PRs (strict) but `cargo audit` (warning-only) for the weekly schedule, so weekly reports surface but don't break. Per-PR strictness catches new deps with known fixes immediately. |
+| Risk                                                                                         | Mitigation                                                                                                                                                                                                               |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ESLint bulk reformat (PR1) obscures real changes in `git blame`                              | Add `.git-blame-ignore-revs` file pointing at the reformat commit SHA. Document in AGENTS.md.                                                                                                                            |
+| `cargo clippy -D warnings` finds an unfixable lint in third-party macro-generated code       | Use `#[allow(clippy::...)]` scoped to the smallest possible block with a reason comment.                                                                                                                                 |
+| refinery bootstrap mis-detects an existing v0.5.5 database and re-runs V001, corrupting data | V001 uses `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN` (idempotent). Add the §5.5 baseline-fixture test. Ship PR6 behind a feature flag for one release cycle.                                                |
+| `pty::close_pty_wait` blocks the UI thread if the child won't die                            | Caller (`close_pty` IPC command) already runs in `tokio::spawn_blocking`. Add a 2-second timeout wrapping the join, falling back to signal-only on timeout.                                                              |
+| Toast migration breaks `UpdateChecker` auto-update flow                                      | Manual test of the update check flow before PR4 merge. Keep the old `.update-toast` CSS until PR4 is verified, remove in a follow-up.                                                                                    |
+| Cargo audit fails CI on an advisory with no fix                                              | Use `cargo audit --deny warnings` for PRs (strict) but `cargo audit` (warning-only) for the weekly schedule, so weekly reports surface but don't break. Per-PR strictness catches new deps with known fixes immediately. |
 
 ---
 

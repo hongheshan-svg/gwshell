@@ -4,7 +4,7 @@ export interface TerminalOsInfo {
 }
 
 export interface XtermWindowsPtyOptions {
-  backend: "conpty";
+  backend: 'conpty';
   buildNumber: number;
 }
 
@@ -19,13 +19,13 @@ export function getXtermWindowsPty(
   osInfo: TerminalOsInfo,
   usesLocalConpty: boolean,
 ): XtermWindowsPtyOptions | undefined {
-  if (!usesLocalConpty || osInfo.os !== "windows") return undefined;
+  if (!usesLocalConpty || osInfo.os !== 'windows') return undefined;
 
   const build = osInfo.windowsBuild;
-  if (typeof build !== "number" || !Number.isFinite(build)) return undefined;
+  if (typeof build !== 'number' || !Number.isFinite(build)) return undefined;
 
   return {
-    backend: "conpty",
+    backend: 'conpty',
     buildNumber: Math.trunc(build),
   };
 }

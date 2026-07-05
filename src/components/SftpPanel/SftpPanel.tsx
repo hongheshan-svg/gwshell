@@ -6,9 +6,23 @@ import { save, open } from '@tauri-apps/plugin-dialog';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
-  Folder, File, Upload, Download, Trash2, FolderPlus,
-  RefreshCw, ChevronUp, Home, Edit3, X, Copy,
-  Shield, FilePlus, FolderUp, ExternalLink, FileEdit,
+  Folder,
+  File,
+  Upload,
+  Download,
+  Trash2,
+  FolderPlus,
+  RefreshCw,
+  ChevronUp,
+  Home,
+  Edit3,
+  X,
+  Copy,
+  Shield,
+  FilePlus,
+  FolderUp,
+  ExternalLink,
+  FileEdit,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { fileIconFor } from '../../lib/fileIcons';
@@ -16,15 +30,76 @@ import { getSftpHomeCandidates, normalizeResolvedSftpDirectory } from '../../lib
 import { SftpEditor } from './SftpEditor';
 
 const TEXT_EXTENSIONS = new Set([
-  'txt', 'md', 'json', 'xml', 'yml', 'yaml', 'toml', 'ini', 'cfg', 'conf',
-  'sh', 'bash', 'zsh', 'fish', 'bat', 'cmd', 'ps1',
-  'js', 'ts', 'jsx', 'tsx', 'mjs', 'cjs',
-  'py', 'rb', 'pl', 'php', 'lua', 'go', 'rs', 'java', 'kt', 'scala', 'c', 'cpp', 'h', 'hpp', 'cs',
-  'css', 'scss', 'less', 'sass', 'html', 'htm', 'vue', 'svelte',
-  'sql', 'graphql', 'gql',
-  'env', 'gitignore', 'dockerignore', 'editorconfig', 'eslintrc', 'prettierrc',
-  'log', 'csv', 'tsv', 'properties', 'service', 'timer', 'socket', 'desktop',
-  'nginx', 'apache', 'Makefile', 'Dockerfile', 'Vagrantfile', 'Rakefile', 'Gemfile',
+  'txt',
+  'md',
+  'json',
+  'xml',
+  'yml',
+  'yaml',
+  'toml',
+  'ini',
+  'cfg',
+  'conf',
+  'sh',
+  'bash',
+  'zsh',
+  'fish',
+  'bat',
+  'cmd',
+  'ps1',
+  'js',
+  'ts',
+  'jsx',
+  'tsx',
+  'mjs',
+  'cjs',
+  'py',
+  'rb',
+  'pl',
+  'php',
+  'lua',
+  'go',
+  'rs',
+  'java',
+  'kt',
+  'scala',
+  'c',
+  'cpp',
+  'h',
+  'hpp',
+  'cs',
+  'css',
+  'scss',
+  'less',
+  'sass',
+  'html',
+  'htm',
+  'vue',
+  'svelte',
+  'sql',
+  'graphql',
+  'gql',
+  'env',
+  'gitignore',
+  'dockerignore',
+  'editorconfig',
+  'eslintrc',
+  'prettierrc',
+  'log',
+  'csv',
+  'tsv',
+  'properties',
+  'service',
+  'timer',
+  'socket',
+  'desktop',
+  'nginx',
+  'apache',
+  'Makefile',
+  'Dockerfile',
+  'Vagrantfile',
+  'Rakefile',
+  'Gemfile',
 ]);
 
 function isTextFile(name: string): boolean {
@@ -72,7 +147,9 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
   const [pathInput, setPathInput] = useState('');
   // Right-click context menu: on entry or on blank area
   const [contextMenu, setContextMenu] = useState<{
-    x: number; y: number; entry: SftpEntry | null;
+    x: number;
+    y: number;
+    entry: SftpEntry | null;
   } | null>(null);
   const [renamingEntry, setRenamingEntry] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -194,14 +271,19 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
     try {
       const resolved = await new Promise<string>((resolve, reject) => {
         let remaining = probes.length;
-        if (remaining === 0) { reject(new Error('no candidates')); return; }
+        if (remaining === 0) {
+          reject(new Error('no candidates'));
+          return;
+        }
         for (const c of probes) {
-          resolveReadableDir(c).then((r) => {
-            if (r) resolve(r);
-            else if (--remaining === 0) reject(new Error('all unresolved'));
-          }).catch(() => {
-            if (--remaining === 0) reject(new Error('all unresolved'));
-          });
+          resolveReadableDir(c)
+            .then((r) => {
+              if (r) resolve(r);
+              else if (--remaining === 0) reject(new Error('all unresolved'));
+            })
+            .catch(() => {
+              if (--remaining === 0) reject(new Error('all unresolved'));
+            });
         }
       });
       homePathRef.current = resolved;
@@ -365,7 +447,8 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
         if (!selected) return;
         const files = Array.isArray(selected) ? selected : [selected];
         for (const fileEntry of files) {
-          const path = typeof fileEntry === 'string' ? fileEntry : (fileEntry as { path: string }).path;
+          const path =
+            typeof fileEntry === 'string' ? fileEntry : (fileEntry as { path: string }).path;
           const fileName = path.replace(/\\/g, '/').split('/').pop() || 'file';
           const remotePath = currentPath === '/' ? `/${fileName}` : `${currentPath}/${fileName}`;
           await invoke('sftp_upload', { sessionId, remotePath, localPath: path });
@@ -432,9 +515,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
       return;
     }
     const path =
-      currentPath === '/'
-        ? `/${newFolderName.trim()}`
-        : `${currentPath}/${newFolderName.trim()}`;
+      currentPath === '/' ? `/${newFolderName.trim()}` : `${currentPath}/${newFolderName.trim()}`;
     try {
       await invoke('sftp_mkdir', { sessionId, path });
       setNewFolderMode(false);
@@ -451,9 +532,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
       return;
     }
     const path =
-      currentPath === '/'
-        ? `/${newFileName.trim()}`
-        : `${currentPath}/${newFileName.trim()}`;
+      currentPath === '/' ? `/${newFileName.trim()}` : `${currentPath}/${newFileName.trim()}`;
     try {
       await invoke('sftp_create_file', { sessionId, path });
       setNewFileMode(false);
@@ -594,21 +673,47 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
           <button className="sftp-tool-btn" onClick={goUp} title={t('sftp_parent')}>
             <ChevronUp size={14} />
           </button>
-          <button className="sftp-tool-btn" onClick={() => loadDir(currentPath)} title={t('sftp_refresh')}>
+          <button
+            className="sftp-tool-btn"
+            onClick={() => loadDir(currentPath)}
+            title={t('sftp_refresh')}
+          >
             <RefreshCw size={14} />
           </button>
           <div className="sftp-toolbar-sep" />
-          <button className="sftp-tool-btn" onClick={() => { setNewFolderMode(true); setNewFolderName(''); }} title={t('sftp_new_folder')}>
+          <button
+            className="sftp-tool-btn"
+            onClick={() => {
+              setNewFolderMode(true);
+              setNewFolderName('');
+            }}
+            title={t('sftp_new_folder')}
+          >
             <FolderPlus size={14} />
           </button>
-          <button className="sftp-tool-btn" onClick={handleUpload} disabled={busy} title={t('sftp_upload')}>
+          <button
+            className="sftp-tool-btn"
+            onClick={handleUpload}
+            disabled={busy}
+            title={t('sftp_upload')}
+          >
             <Upload size={14} />
           </button>
           <div className="sftp-toolbar-sep" />
-          <button className="sftp-tool-btn" onClick={downloadSelected} disabled={!selectedEntry || busy} title={t('sftp_download')}>
+          <button
+            className="sftp-tool-btn"
+            onClick={downloadSelected}
+            disabled={!selectedEntry || busy}
+            title={t('sftp_download')}
+          >
             <Download size={14} />
           </button>
-          <button className="sftp-tool-btn sftp-tool-btn-danger" onClick={deleteSelected} disabled={!selectedEntry || busy} title={t('sftp_delete')}>
+          <button
+            className="sftp-tool-btn sftp-tool-btn-danger"
+            onClick={deleteSelected}
+            disabled={!selectedEntry || busy}
+            title={t('sftp_delete')}
+          >
             <Trash2 size={14} />
           </button>
         </div>
@@ -621,11 +726,18 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
               value={pathInput}
               onChange={(e) => setPathInput(e.target.value)}
               onBlur={handlePathSubmit}
-              onKeyDown={(e) => { if (e.key === 'Enter') handlePathSubmit(); if (e.key === 'Escape') setEditingPath(false); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handlePathSubmit();
+                if (e.key === 'Escape') setEditingPath(false);
+              }}
               autoFocus
             />
           ) : (
-            <div className="sftp-path-display" onClick={() => setEditingPath(true)} title={currentPath}>
+            <div
+              className="sftp-path-display"
+              onClick={() => setEditingPath(true)}
+              title={currentPath}
+            >
               {currentPath}
             </div>
           )}
@@ -675,7 +787,10 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
                 onBlur={handleNewFolder}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleNewFolder(); if (e.key === 'Escape') setNewFolderMode(false); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleNewFolder();
+                  if (e.key === 'Escape') setNewFolderMode(false);
+                }}
                 placeholder={t('sftp_folder_name')}
                 autoFocus
               />
@@ -691,7 +806,10 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                 value={newFileName}
                 onChange={(e) => setNewFileName(e.target.value)}
                 onBlur={handleNewFile}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleNewFile(); if (e.key === 'Escape') setNewFileMode(false); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleNewFile();
+                  if (e.key === 'Escape') setNewFileMode(false);
+                }}
                 placeholder={t('sftp_file_name')}
                 autoFocus
               />
@@ -705,8 +823,17 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
               role="button"
               tabIndex={0}
               aria-label=".."
-              onClick={() => { setSelectedEntry(null); goUp(); }}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedEntry(null); goUp(); } }}
+              onClick={() => {
+                setSelectedEntry(null);
+                goUp();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setSelectedEntry(null);
+                  goUp();
+                }
+              }}
             >
               <FolderUp size={17} className="sftp-icon sftp-icon-folder" />
               <span className="sftp-file-name">..</span>
@@ -732,29 +859,43 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                   aria-label={entry.name}
                   onClick={() => handleEntryClick(entry)}
                   onDoubleClick={() => handleEntryDoubleClick(entry)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleEntryDoubleClick(entry); } }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleEntryDoubleClick(entry);
+                    }
+                  }}
                   onContextMenu={(e) => handleContextMenu(e, entry)}
                 >
                   {entry.is_dir ? (
                     <Folder size={17} className="sftp-icon sftp-icon-folder" />
-                  ) : (() => {
-                    const { Icon, cls } = fileIconFor(entry.name);
-                    return <Icon size={16} className={`sftp-icon ${cls}`} />;
-                  })()}
+                  ) : (
+                    (() => {
+                      const { Icon, cls } = fileIconFor(entry.name);
+                      return <Icon size={16} className={`sftp-icon ${cls}`} />;
+                    })()
+                  )}
                   {renamingEntry === entry.path ? (
                     <input
                       className="sftp-rename-input"
                       value={renameValue}
                       onChange={(e) => setRenameValue(e.target.value)}
                       onBlur={() => handleRename(entry)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') handleRename(entry); if (e.key === 'Escape') setRenamingEntry(null); }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleRename(entry);
+                        if (e.key === 'Escape') setRenamingEntry(null);
+                      }}
                       autoFocus
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : (
                     <>
-                      <span className="sftp-file-name" title={entry.name}>{entry.name}</span>
-                      <span className="sftp-file-size">{entry.is_dir ? '' : formatSize(entry.size)}</span>
+                      <span className="sftp-file-name" title={entry.name}>
+                        {entry.name}
+                      </span>
+                      <span className="sftp-file-size">
+                        {entry.is_dir ? '' : formatSize(entry.size)}
+                      </span>
                       <span className="sftp-file-perm">{formatPermissions(entry.permissions)}</span>
                     </>
                   )}
@@ -773,10 +914,13 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
           <div className="sftp-progress">
             <div className="sftp-progress-info">
               <span className="sftp-progress-name" title={progress.file}>
-                {(progress.kind === 'upload' ? '↑ ' : '↓ ') + (progress.file.split('/').pop() || progress.file)}
+                {(progress.kind === 'upload' ? '↑ ' : '↓ ') +
+                  (progress.file.split('/').pop() || progress.file)}
               </span>
               {progress.fileTotal > 1 && (
-                <span className="sftp-progress-count">{progress.fileIndex}/{progress.fileTotal}</span>
+                <span className="sftp-progress-count">
+                  {progress.fileIndex}/{progress.fileTotal}
+                </span>
               )}
               <span className="sftp-progress-pct">
                 {progress.total > 0
@@ -787,23 +931,20 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
             <div className="sftp-progress-track">
               <div
                 className="sftp-progress-bar"
-                style={{ width: `${progress.total > 0 ? Math.min(100, (progress.bytes / progress.total) * 100) : 0}%` }}
+                style={{
+                  width: `${progress.total > 0 ? Math.min(100, (progress.bytes / progress.total) * 100) : 0}%`,
+                }}
               />
             </div>
           </div>
         )}
 
         {/* Status */}
-        <div className="sftp-status">
-          {t('sftp_item_count', { count: entries.length })}
-        </div>
+        <div className="sftp-status">{t('sftp_item_count', { count: entries.length })}</div>
 
         {/* Context menu */}
         {contextMenu && (
-          <div
-            className="sftp-context-menu"
-            style={{ left: contextMenu.x, top: contextMenu.y }}
-          >
+          <div className="sftp-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
             {contextMenu.entry ? (
               <>
                 {/* --- Entry-level right-click --- */}
@@ -812,7 +953,10 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                     {isTextFile(contextMenu.entry.name) && (
                       <div
                         className="sftp-context-item"
-                        onClick={() => { setEditingFile(contextMenu.entry!); setContextMenu(null); }}
+                        onClick={() => {
+                          setEditingFile(contextMenu.entry);
+                          setContextMenu(null);
+                        }}
                       >
                         <FileEdit size={13} />
                         <span>{t('sftp_edit_online')}</span>
@@ -820,7 +964,10 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                     )}
                     <div
                       className="sftp-context-item"
-                      onClick={() => { handleOpenLocal(contextMenu.entry!); setContextMenu(null); }}
+                      onClick={() => {
+                        handleOpenLocal(contextMenu.entry!);
+                        setContextMenu(null);
+                      }}
                     >
                       <ExternalLink size={13} />
                       <span>{t('sftp_open_local')}</span>
@@ -829,21 +976,30 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                 )}
                 <div
                   className="sftp-context-item"
-                  onClick={() => { handleDownload(contextMenu.entry!); setContextMenu(null); }}
+                  onClick={() => {
+                    handleDownload(contextMenu.entry!);
+                    setContextMenu(null);
+                  }}
                 >
                   <Download size={13} />
                   <span>{t('sftp_download_to')}</span>
                 </div>
                 <div
                   className="sftp-context-item"
-                  onClick={() => { handleUpload(); setContextMenu(null); }}
+                  onClick={() => {
+                    handleUpload();
+                    setContextMenu(null);
+                  }}
                 >
                   <Upload size={13} />
                   <span>{t('sftp_upload_file')}</span>
                 </div>
                 <div
                   className="sftp-context-item"
-                  onClick={() => { handleUploadFolder(); setContextMenu(null); }}
+                  onClick={() => {
+                    handleUploadFolder();
+                    setContextMenu(null);
+                  }}
                 >
                   <FolderUp size={13} />
                   <span>{t('sftp_upload_folder')}</span>
@@ -851,7 +1007,10 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                 <div className="sftp-context-divider" />
                 <div
                   className="sftp-context-item"
-                  onClick={() => { loadDir(currentPath); setContextMenu(null); }}
+                  onClick={() => {
+                    loadDir(currentPath);
+                    setContextMenu(null);
+                  }}
                 >
                   <RefreshCw size={13} />
                   <span>{t('sftp_refresh')}</span>
@@ -859,7 +1018,10 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                 <div className="sftp-context-divider" />
                 <div
                   className="sftp-context-item"
-                  onClick={() => { handleCopyPath(contextMenu.entry!.path); setContextMenu(null); }}
+                  onClick={() => {
+                    handleCopyPath(contextMenu.entry!.path);
+                    setContextMenu(null);
+                  }}
                 >
                   <Copy size={13} />
                   <span>{t('sftp_copy_path')}</span>
@@ -878,7 +1040,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                 <div
                   className="sftp-context-item"
                   onClick={() => {
-                    setChmodEntry(contextMenu.entry!);
+                    setChmodEntry(contextMenu.entry);
                     setChmodValue(formatPermissions(contextMenu.entry!.permissions));
                     setContextMenu(null);
                   }}
@@ -889,7 +1051,10 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                 <div className="sftp-context-divider" />
                 <div
                   className="sftp-context-item sftp-context-danger"
-                  onClick={() => { handleDelete(contextMenu.entry!); setContextMenu(null); }}
+                  onClick={() => {
+                    handleDelete(contextMenu.entry!);
+                    setContextMenu(null);
+                  }}
                 >
                   <Trash2 size={13} />
                   <span>{t('sftp_delete')}</span>
@@ -900,7 +1065,10 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                 {/* --- Blank area right-click --- */}
                 <div
                   className="sftp-context-item"
-                  onClick={() => { loadDir(currentPath); setContextMenu(null); }}
+                  onClick={() => {
+                    loadDir(currentPath);
+                    setContextMenu(null);
+                  }}
                 >
                   <RefreshCw size={13} />
                   <span>{t('sftp_refresh')}</span>
@@ -908,21 +1076,32 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                 <div className="sftp-context-divider" />
                 <div
                   className="sftp-context-item"
-                  onClick={() => { handleCopyPath(currentPath); setContextMenu(null); }}
+                  onClick={() => {
+                    handleCopyPath(currentPath);
+                    setContextMenu(null);
+                  }}
                 >
                   <Copy size={13} />
                   <span>{t('sftp_copy_path')}</span>
                 </div>
                 <div
                   className="sftp-context-item"
-                  onClick={() => { setNewFolderMode(true); setNewFolderName(''); setContextMenu(null); }}
+                  onClick={() => {
+                    setNewFolderMode(true);
+                    setNewFolderName('');
+                    setContextMenu(null);
+                  }}
                 >
                   <FolderPlus size={13} />
                   <span>{t('sftp_new_folder')}</span>
                 </div>
                 <div
                   className="sftp-context-item"
-                  onClick={() => { setNewFileMode(true); setNewFileName(''); setContextMenu(null); }}
+                  onClick={() => {
+                    setNewFileMode(true);
+                    setNewFileName('');
+                    setContextMenu(null);
+                  }}
                 >
                   <FilePlus size={13} />
                   <span>{t('sftp_new_file')}</span>
@@ -930,14 +1109,20 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                 <div className="sftp-context-divider" />
                 <div
                   className="sftp-context-item"
-                  onClick={() => { handleUpload(); setContextMenu(null); }}
+                  onClick={() => {
+                    handleUpload();
+                    setContextMenu(null);
+                  }}
                 >
                   <Upload size={13} />
                   <span>{t('sftp_upload_file')}</span>
                 </div>
                 <div
                   className="sftp-context-item"
-                  onClick={() => { handleUploadFolder(); setContextMenu(null); }}
+                  onClick={() => {
+                    handleUploadFolder();
+                    setContextMenu(null);
+                  }}
                 >
                   <FolderUp size={13} />
                   <span>{t('sftp_upload_folder')}</span>
@@ -949,7 +1134,12 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
 
         {/* Chmod dialog */}
         {chmodEntry && (
-          <div className="sftp-chmod-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setChmodEntry(null); }}>
+          <div
+            className="sftp-chmod-overlay"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setChmodEntry(null);
+            }}
+          >
             <div className="sftp-chmod-dialog">
               <div className="sftp-chmod-title">{t('sftp_chmod')}</div>
               <div className="sftp-chmod-filename">{chmodEntry.name}</div>
@@ -959,14 +1149,20 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                   className="sftp-chmod-input"
                   value={chmodValue}
                   onChange={(e) => setChmodValue(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleChmod(); if (e.key === 'Escape') setChmodEntry(null); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleChmod();
+                    if (e.key === 'Escape') setChmodEntry(null);
+                  }}
                   placeholder="755"
                   maxLength={4}
                   autoFocus
                 />
               </div>
               <div className="sftp-chmod-actions">
-                <button className="sftp-chmod-btn sftp-chmod-cancel" onClick={() => setChmodEntry(null)}>
+                <button
+                  className="sftp-chmod-btn sftp-chmod-cancel"
+                  onClick={() => setChmodEntry(null)}
+                >
                   {t('sftp_cancel')}
                 </button>
                 <button className="sftp-chmod-btn sftp-chmod-ok" onClick={handleChmod}>

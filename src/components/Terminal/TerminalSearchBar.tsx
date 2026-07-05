@@ -31,15 +31,24 @@ export const TerminalSearchBar: React.FC = () => {
   // Guard against SyntaxError thrown by @xterm/addon-search when the regex
   // pattern is syntactically incomplete (e.g. "[" or "*"). An in-progress
   // invalid pattern is simply treated as a no-op.
-  const safeFind = (fn: () => void) => { try { fn(); } catch { /* invalid regex in-progress */ } };
+  const safeFind = (fn: () => void) => {
+    try {
+      fn();
+    } catch {
+      /* invalid regex in-progress */
+    }
+  };
 
-  const buildOpts = useCallback((extra?: Partial<ISearchOptions>): ISearchOptions => ({
-    decorations: BASE_DECORATIONS,
-    caseSensitive,
-    regex: useRegex,
-    wholeWord,
-    ...extra,
-  }), [caseSensitive, useRegex, wholeWord]);
+  const buildOpts = useCallback(
+    (extra?: Partial<ISearchOptions>): ISearchOptions => ({
+      decorations: BASE_DECORATIONS,
+      caseSensitive,
+      regex: useRegex,
+      wholeWord,
+      ...extra,
+    }),
+    [caseSensitive, useRegex, wholeWord],
+  );
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -51,9 +60,19 @@ export const TerminalSearchBar: React.FC = () => {
     const sub = a.onDidChangeResults?.(({ resultIndex, resultCount }) => {
       // resultIndex is -1 when the active match is unknown (e.g. match count
       // capped on very large result sets); show 0 in that case, not a negative.
-      setCount(resultCount > 0 ? { idx: resultIndex >= 0 ? resultIndex + 1 : 0, total: resultCount } : null);
+      setCount(
+        resultCount > 0
+          ? { idx: resultIndex >= 0 ? resultIndex + 1 : 0, total: resultCount }
+          : null,
+      );
     });
-    return () => { try { sub?.dispose?.(); } catch { /* noop */ } };
+    return () => {
+      try {
+        sub?.dispose?.();
+      } catch {
+        /* noop */
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabId]);
 
@@ -69,7 +88,11 @@ export const TerminalSearchBar: React.FC = () => {
   useEffect(() => {
     const prev = prevTabRef.current;
     if (prev && prev !== activeTabId) {
-      try { terminalInstances.get(prev)?.searchAddon?.clearDecorations?.(); } catch { /* noop */ }
+      try {
+        terminalInstances.get(prev)?.searchAddon?.clearDecorations?.();
+      } catch {
+        /* noop */
+      }
     }
     prevTabRef.current = activeTabId;
     if (!query) return;
@@ -77,20 +100,33 @@ export const TerminalSearchBar: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseSensitive, useRegex, wholeWord, query, activeTabId]);
 
-  const findNext = () => { if (query) safeFind(() => addon()?.findNext(query, buildOpts())); };
-  const findPrev = () => { if (query) safeFind(() => addon()?.findPrevious(query, buildOpts())); };
+  const findNext = () => {
+    if (query) safeFind(() => addon()?.findNext(query, buildOpts()));
+  };
+  const findPrev = () => {
+    if (query) safeFind(() => addon()?.findPrevious(query, buildOpts()));
+  };
   const close = () => {
-    try { addon()?.clearDecorations?.(); } catch { /* noop */ }
+    try {
+      addon()?.clearDecorations?.();
+    } catch {
+      /* noop */
+    }
     setCount(null);
     setShowTerminalSearch(false);
     // Return focus to the terminal so typing resumes immediately.
-    try { (activeTabId ? terminalInstances.get(activeTabId)?.terminal : undefined)?.focus(); } catch { /* noop */ }
+    try {
+      (activeTabId ? terminalInstances.get(activeTabId)?.terminal : undefined)?.focus();
+    } catch {
+      /* noop */
+    }
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (e.shiftKey) findPrev(); else findNext();
+      if (e.shiftKey) findPrev();
+      else findNext();
     } else if (e.key === 'Escape') {
       e.preventDefault();
       close();
@@ -100,7 +136,15 @@ export const TerminalSearchBar: React.FC = () => {
   const onChange = (value: string) => {
     setQuery(value);
     const a = addon();
-    if (!value) { setCount(null); try { a?.clearDecorations?.(); } catch { /* noop */ } return; }
+    if (!value) {
+      setCount(null);
+      try {
+        a?.clearDecorations?.();
+      } catch {
+        /* noop */
+      }
+      return;
+    }
     safeFind(() => a?.findNext(value, buildOpts({ incremental: true })));
   };
 
@@ -114,7 +158,7 @@ export const TerminalSearchBar: React.FC = () => {
         onChange={(e) => onChange(e.target.value)}
       />
       <span className="terminal-search-count">
-        {count ? `${count.idx}/${count.total}` : (query ? t('search_no_results') : '')}
+        {count ? `${count.idx}/${count.total}` : query ? t('search_no_results') : ''}
       </span>
       <button
         className={`terminal-search-btn${caseSensitive ? ' active' : ''}`}
@@ -122,24 +166,36 @@ export const TerminalSearchBar: React.FC = () => {
         title={t('search_case_sensitive')}
         aria-label={t('search_case_sensitive')}
         aria-pressed={caseSensitive}
-      >Aa</button>
+      >
+        Aa
+      </button>
       <button
         className={`terminal-search-btn${useRegex ? ' active' : ''}`}
         onClick={() => setUseRegex((v) => !v)}
         title={t('search_use_regex')}
         aria-label={t('search_use_regex')}
         aria-pressed={useRegex}
-      >.*</button>
+      >
+        .*
+      </button>
       <button
         className={`terminal-search-btn${wholeWord ? ' active' : ''}`}
         onClick={() => setWholeWord((v) => !v)}
         title={t('search_whole_word')}
         aria-label={t('search_whole_word')}
         aria-pressed={wholeWord}
-      >W</button>
-      <button className="terminal-search-btn" onClick={findPrev} title={t('search_prev')}><ChevronUp size={14} /></button>
-      <button className="terminal-search-btn" onClick={findNext} title={t('search_next')}><ChevronDown size={14} /></button>
-      <button className="terminal-search-btn" onClick={close} title={t('search_close')}><X size={14} /></button>
+      >
+        W
+      </button>
+      <button className="terminal-search-btn" onClick={findPrev} title={t('search_prev')}>
+        <ChevronUp size={14} />
+      </button>
+      <button className="terminal-search-btn" onClick={findNext} title={t('search_next')}>
+        <ChevronDown size={14} />
+      </button>
+      <button className="terminal-search-btn" onClick={close} title={t('search_close')}>
+        <X size={14} />
+      </button>
     </div>
   );
 };

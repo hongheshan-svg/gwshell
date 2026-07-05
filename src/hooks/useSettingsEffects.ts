@@ -7,7 +7,7 @@ import { resolveTerminalTheme } from '../lib/terminalThemes';
 const LANG_MAP: Record<string, 'zh' | 'en'> = {
   zh: 'zh',
   en: 'en',
-  '简体中文': 'zh',
+  简体中文: 'zh',
   English: 'en',
 };
 
@@ -65,7 +65,10 @@ export function useSettingsEffects() {
   }, [settings.enableAnimation]);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('terminal-stripe-bg', settings.terminalStripeBackground);
+    document.documentElement.classList.toggle(
+      'terminal-stripe-bg',
+      settings.terminalStripeBackground,
+    );
   }, [settings.terminalStripeBackground]);
 
   useEffect(() => {
@@ -82,9 +85,15 @@ export function useSettingsEffects() {
       terminal.options.scrollback = scrollback;
 
       requestAnimationFrame(() => {
-        try { fitAddon.fit(); } catch {}
-        try { terminal.clearTextureAtlas(); } catch {}
-        try { terminal.refresh(0, terminal.rows - 1); } catch {}
+        try {
+          fitAddon.fit();
+        } catch {}
+        try {
+          terminal.clearTextureAtlas();
+        } catch {}
+        try {
+          terminal.refresh(0, terminal.rows - 1);
+        } catch {}
       });
     });
   }, [
@@ -102,7 +111,9 @@ export function useSettingsEffects() {
     // is actually invoked (clearTextureAtlas does NOT fire onChangeTextureAtlas
     // — it clears pixels + requests a redraw — so this trace is the signal).
     let dbg = false;
-    try { dbg = localStorage.getItem('gwshell:webgl-debug') === '1'; } catch {}
+    try {
+      dbg = localStorage.getItem('gwshell:webgl-debug') === '1';
+    } catch {}
     terminalInstances.forEach(({ terminal }) => {
       terminal.options.theme = theme;
       // Match VSCode: the WebGL renderer's texture atlas bakes glyph pixels
@@ -114,8 +125,13 @@ export function useSettingsEffects() {
       // the atlas forces a re-rasterize with the new palette on the next
       // paint. Harmless no-op for the DOM renderer.
       requestAnimationFrame(() => {
-        try { terminal.clearTextureAtlas(); if (dbg) console.debug('[gwshell:webgl] clearTextureAtlas (color-scheme change)'); } catch {}
-        try { terminal.refresh(0, terminal.rows - 1); } catch {}
+        try {
+          terminal.clearTextureAtlas();
+          if (dbg) console.debug('[gwshell:webgl] clearTextureAtlas (color-scheme change)');
+        } catch {}
+        try {
+          terminal.refresh(0, terminal.rows - 1);
+        } catch {}
       });
     });
   }, [settings.terminalColorScheme, settings.theme]);

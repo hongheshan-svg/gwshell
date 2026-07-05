@@ -18,7 +18,10 @@ const root = process.cwd();
 let failures = 0;
 const assert = (cond, msg) => {
   if (cond) console.log('  ✓', msg);
-  else { console.error('  ✗', msg); failures++; }
+  else {
+    console.error('  ✗', msg);
+    failures++;
+  }
 };
 
 console.log('GWShell WebGL lifecycle alignment verification\n');
@@ -32,18 +35,30 @@ console.log('[1] WebglAddon runtime API surface');
 const { WebglAddon } = require('@xterm/addon-webgl');
 const addon = new WebglAddon({ customGlyphs: true });
 assert(typeof addon.dispose === 'function', 'WebglAddon.dispose() exists');
-for (const ev of ['onContextLoss', 'onChangeTextureAtlas', 'onAddTextureAtlasCanvas', 'onRemoveTextureAtlasCanvas']) {
+for (const ev of [
+  'onContextLoss',
+  'onChangeTextureAtlas',
+  'onAddTextureAtlasCanvas',
+  'onRemoveTextureAtlasCanvas',
+]) {
   const val = addon[ev];
-  assert(typeof val === 'function',
-    `WebglAddon.${ev} is wired (instance event accessor present, typeof ${typeof val})`);
+  assert(
+    typeof val === 'function',
+    `WebglAddon.${ev} is wired (instance event accessor present, typeof ${typeof val})`,
+  );
 }
-try { addon.dispose(); } catch {}
+try {
+  addon.dispose();
+} catch {}
 
 // ── 2. The xterm Terminal exposes clearTextureAtlas + refresh ─────────
 console.log('\n[2] xterm Terminal runtime API surface');
 const { Terminal } = require('@xterm/xterm');
 const tproto = Terminal.prototype;
-assert(typeof tproto.clearTextureAtlas === 'function', 'Terminal.clearTextureAtlas() exists (theme-switch fix depends on it)');
+assert(
+  typeof tproto.clearTextureAtlas === 'function',
+  'Terminal.clearTextureAtlas() exists (theme-switch fix depends on it)',
+);
 assert(typeof tproto.refresh === 'function', 'Terminal.refresh() exists');
 assert(typeof tproto.dispose === 'function', 'Terminal.dispose() exists');
 
@@ -51,7 +66,7 @@ assert(typeof tproto.dispose === 'function', 'Terminal.dispose() exists');
 console.log('\n[3] Built-bundle wiring presence');
 const distDir = `${root}/dist/assets`;
 const indexFiles = existsSync(distDir)
-  ? readdirSync(distDir).filter(f => f.startsWith('index-') && f.endsWith('.js'))
+  ? readdirSync(distDir).filter((f) => f.startsWith('index-') && f.endsWith('.js'))
   : [];
 if (indexFiles.length === 0) {
   console.log('  (skip) dist/ not present — run `npm run build` first');
@@ -71,10 +86,16 @@ if (indexFiles.length === 0) {
 // ── 4. TerminalInstance registry tracks atlas canvases ────────────────
 console.log('\n[4] Registry tracks texture atlas canvases');
 const regSrc = readFileSync(`${root}/src/components/Terminal/terminalRegistry.ts`, 'utf8');
-assert(regSrc.includes('textureAtlasCanvases?: HTMLCanvasElement[]'),
-  'TerminalInstance.textureAtlasCanvases field declared');
-assert(/onChangeTextureAtlas[\s\S]{0,400}onAddTextureAtlasCanvas[\s\S]{0,400}onRemoveTextureAtlasCanvas/.test(regSrc),
-  'registry comment documents all three atlas events');
+assert(
+  regSrc.includes('textureAtlasCanvases?: HTMLCanvasElement[]'),
+  'TerminalInstance.textureAtlasCanvases field declared',
+);
+assert(
+  /onChangeTextureAtlas[\s\S]{0,400}onAddTextureAtlasCanvas[\s\S]{0,400}onRemoveTextureAtlasCanvas/.test(
+    regSrc,
+  ),
+  'registry comment documents all three atlas events',
+);
 
 console.log('\n' + (failures === 0 ? 'Result: PASS' : `Result: FAIL (${failures} assertion(s))`));
 process.exit(failures === 0 ? 0 : 1);

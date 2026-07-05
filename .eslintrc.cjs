@@ -32,7 +32,10 @@ module.exports = {
     'no-console': ['error', { allow: ['warn', 'error'] }],
     'no-restricted-syntax': [
       'error',
-      { selector: 'TSAsExpression', message: 'Avoid `as` casts — narrow with types or guards instead.' },
+      {
+        selector: 'TSAsExpression',
+        message: 'Avoid `as` casts — narrow with types or guards instead.',
+      },
     ],
   },
   ignorePatterns: ['dist/', 'node_modules/', 'src-tauri/', '.vite/', 'src/i18n/locales/**'],

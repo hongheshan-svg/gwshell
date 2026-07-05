@@ -18,25 +18,25 @@
 
 ### Implementadas ✅
 
-| Categoría | Característica | Descripción |
-|-----------|---------------|-------------|
-| **SSH** | Conexiones SSH multi-pestaña | Conectar a múltiples servidores simultáneamente |
-| **SSH** | Autenticación contraseña / clave / MFA | Contraseña, clave privada, TOTP/2FA |
-| **SSH** | Host de salto (-J) | Conexiones proxy a través de bastión |
-| **SSH** | Proxies SOCKS4/5, HTTP | Enrutar conexiones SSH a través de proxies |
-| **SSH** | Reenvío de puertos | Reenvío de puerto local (túnel SSH) |
-| **SSH** | Latencia de conexión (ping) | Medición de latencia TCP en tiempo real |
-| **SFTP** | Navegador de archivos | Navegar sistemas de archivos remotos |
-| **SFTP** | Subir / Descargar | Transferir archivos entre local y remoto |
-| **SFTP** | Editor de texto en línea | Editar archivos remotos directamente |
-| **Terminal** | Terminal local | PowerShell, CMD, Bash, Zsh, etc. |
-| **Terminal** | Pantalla dividida | Diseños 1×1, 1×2, 2×2, 2×3, 2×4 |
-| **Serial** | Consola de puerto serie | Conexión a dispositivos COM/ttyUSB |
-| **AI** | Gestión de proveedores | Configurar y cambiar proveedores de AI CLI |
-| **UI** | Tema oscuro / claro | Detección automática del sistema |
-| **UI** | i18n (English, 中文) | Interfaz bilingüe completa |
-| **Datos** | Persistencia SQLite | Almacenamiento local de sesiones y configuraciones |
-| **Actualización** | Actualización automática | Verificación e instalación de actualizaciones en la app |
+| Categoría         | Característica                         | Descripción                                             |
+| ----------------- | -------------------------------------- | ------------------------------------------------------- |
+| **SSH**           | Conexiones SSH multi-pestaña           | Conectar a múltiples servidores simultáneamente         |
+| **SSH**           | Autenticación contraseña / clave / MFA | Contraseña, clave privada, TOTP/2FA                     |
+| **SSH**           | Host de salto (-J)                     | Conexiones proxy a través de bastión                    |
+| **SSH**           | Proxies SOCKS4/5, HTTP                 | Enrutar conexiones SSH a través de proxies              |
+| **SSH**           | Reenvío de puertos                     | Reenvío de puerto local (túnel SSH)                     |
+| **SSH**           | Latencia de conexión (ping)            | Medición de latencia TCP en tiempo real                 |
+| **SFTP**          | Navegador de archivos                  | Navegar sistemas de archivos remotos                    |
+| **SFTP**          | Subir / Descargar                      | Transferir archivos entre local y remoto                |
+| **SFTP**          | Editor de texto en línea               | Editar archivos remotos directamente                    |
+| **Terminal**      | Terminal local                         | PowerShell, CMD, Bash, Zsh, etc.                        |
+| **Terminal**      | Pantalla dividida                      | Diseños 1×1, 1×2, 2×2, 2×3, 2×4                         |
+| **Serial**        | Consola de puerto serie                | Conexión a dispositivos COM/ttyUSB                      |
+| **AI**            | Gestión de proveedores                 | Configurar y cambiar proveedores de AI CLI              |
+| **UI**            | Tema oscuro / claro                    | Detección automática del sistema                        |
+| **UI**            | i18n (English, 中文)                   | Interfaz bilingüe completa                              |
+| **Datos**         | Persistencia SQLite                    | Almacenamiento local de sesiones y configuraciones      |
+| **Actualización** | Actualización automática               | Verificación e instalación de actualizaciones en la app |
 
 ### Planificadas 🚧
 

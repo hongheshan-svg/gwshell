@@ -49,6 +49,7 @@ like any other interactive session.
 Two Tauri commands, registered in `lib.rs`:
 
 **`docker_list_containers(args) -> Vec<DockerContainer>`**
+
 - `DockerContainer { id: String, name: String, image: String, status: String }`.
 - Runs, non-interactively, capturing stdout:
   `docker ps --no-trunc --format '{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}'`
@@ -63,6 +64,7 @@ Two Tauri commands, registered in `lib.rs`:
   `parse_docker_ps(out: &str) -> Vec<DockerContainer>` (Rust unit-tested).
 
 **`docker_exec(args)`**
+
 - Opens an INTERACTIVE session running, on the chosen transport:
   `docker exec -it <containerId> sh -c 'exec bash 2>/dev/null || exec sh'`
 - **Local**: spawn it in a PTY via the existing `pty.rs` machinery (extend the
@@ -81,6 +83,7 @@ They remain on the struct for forward-compat.
 ### Frontend
 
 **`TerminalView.setupConnection` — add a `docker` branch:**
+
 1. Determine transport from `session.docker_connect_method`. For SSH, resolve
    `session.docker_ssh_tunnel` → the referenced SSH `SessionConfig` from the
    store; if missing/invalid, show an error in the terminal and stop.
@@ -96,6 +99,7 @@ They remain on the struct for forward-compat.
 4. Picker cancelled → close the docker tab (it has no live session yet).
 
 **New component `src/components/Terminal/DockerContainerPicker.tsx`:**
+
 - A small modal listing `DockerContainer[]` (name, image, truncated status),
   keyboard navigable (↑/↓/Enter, Esc to cancel), styled with the existing modal
   CSS. Props: `containers`, `onPick(id)`, `onCancel`.

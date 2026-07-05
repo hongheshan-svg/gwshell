@@ -12,22 +12,23 @@
 
 ## File Map
 
-| File | Action |
-|---|---|
-| `src-tauri/src/history.rs` | New — pure SQL logic for load/save |
-| `src-tauri/src/database.rs` | Modify — add table migration + two wrapper methods |
-| `src-tauri/src/lib.rs` | Modify — `mod history`, two Tauri commands, register in handler |
-| `src/lib/commandHistory.ts` | New — in-memory history + IPC wrapper |
-| `src/App.tsx` | Modify — call `commandHistory.init()` after settings load |
-| `src/stores/settingsStore.ts` | Modify — re-init on `save()` |
-| `src/components/Terminal/TerminalView.tsx` | Modify — maps, onData interception, key handler, ghost overlay |
-| `src/styles/global.css` | Modify — `.terminal-ghost-text` style |
+| File                                       | Action                                                          |
+| ------------------------------------------ | --------------------------------------------------------------- |
+| `src-tauri/src/history.rs`                 | New — pure SQL logic for load/save                              |
+| `src-tauri/src/database.rs`                | Modify — add table migration + two wrapper methods              |
+| `src-tauri/src/lib.rs`                     | Modify — `mod history`, two Tauri commands, register in handler |
+| `src/lib/commandHistory.ts`                | New — in-memory history + IPC wrapper                           |
+| `src/App.tsx`                              | Modify — call `commandHistory.init()` after settings load       |
+| `src/stores/settingsStore.ts`              | Modify — re-init on `save()`                                    |
+| `src/components/Terminal/TerminalView.tsx` | Modify — maps, onData interception, key handler, ghost overlay  |
+| `src/styles/global.css`                    | Modify — `.terminal-ghost-text` style                           |
 
 ---
 
 ## Task 1: SQLite migration — add `command_history` table
 
 **Files:**
+
 - Modify: `src-tauri/src/database.rs:31-48`
 
 - [ ] **Step 1: Extend `init_tables` SQL to include the new table and index**
@@ -66,6 +67,7 @@
   ```bash
   cd src-tauri && cargo check
   ```
+
   Expected: `Finished \`dev\` profile` with no errors.
 
 - [ ] **Step 3: Commit**
@@ -80,6 +82,7 @@
 ## Task 2: Rust history module + Database wrapper methods
 
 **Files:**
+
 - Create: `src-tauri/src/history.rs`
 - Modify: `src-tauri/src/database.rs` (add two public methods at bottom)
 
@@ -154,6 +157,7 @@
   ```bash
   cd src-tauri && cargo check
   ```
+
   Expected: `Finished \`dev\` profile` with no errors.
 
 - [ ] **Step 4: Commit**
@@ -168,6 +172,7 @@
 ## Task 3: Register Tauri commands
 
 **Files:**
+
 - Modify: `src-tauri/src/lib.rs`
 
 - [ ] **Step 1: Add `mod history;` at the top of `lib.rs`**
@@ -226,6 +231,7 @@
   ```bash
   cd src-tauri && cargo check
   ```
+
   Expected: `Finished \`dev\` profile` with no errors.
 
 - [ ] **Step 5: Commit**
@@ -240,6 +246,7 @@
 ## Task 4: Frontend `commandHistory` module
 
 **Files:**
+
 - Create: `src/lib/commandHistory.ts`
 
 - [ ] **Step 1: Create the module**
@@ -282,6 +289,7 @@
   ```bash
   npm run smoke:check
   ```
+
   Expected: `Result: PASS`
 
 - [ ] **Step 3: Commit**
@@ -296,6 +304,7 @@
 ## Task 5: Startup init + settings re-init
 
 **Files:**
+
 - Modify: `src/App.tsx`
 - Modify: `src/stores/settingsStore.ts`
 
@@ -354,6 +363,7 @@
   ```bash
   npm run smoke:check
   ```
+
   Expected: `Result: PASS`
 
 - [ ] **Step 5: Commit**
@@ -368,6 +378,7 @@
 ## Task 6: TerminalView — module-level maps + cleanup
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
 - [ ] **Step 1: Add four new module-level Maps**
@@ -376,9 +387,9 @@
 
   ```typescript
   // Command history: per-tab line buffer, ghost text state, and callbacks.
-  const inputBuffers         = new Map<string, string>();
-  const ghostTextState       = new Map<string, string>();
-  const ghostTextSetters     = new Map<string, (text: string, x: number, y: number) => void>();
+  const inputBuffers = new Map<string, string>();
+  const ghostTextState = new Map<string, string>();
+  const ghostTextSetters = new Map<string, (text: string, x: number, y: number) => void>();
   const ghostAcceptCallbacks = new Map<string, (suffix: string) => void>();
   ```
 
@@ -387,10 +398,10 @@
   In `destroyTerminal` (around line 201), add after `reconnectableTabs.delete(tabId);`:
 
   ```typescript
-    inputBuffers.delete(tabId);
-    ghostTextState.delete(tabId);
-    ghostTextSetters.delete(tabId);
-    ghostAcceptCallbacks.delete(tabId);
+  inputBuffers.delete(tabId);
+  ghostTextState.delete(tabId);
+  ghostTextSetters.delete(tabId);
+  ghostAcceptCallbacks.delete(tabId);
   ```
 
 - [ ] **Step 3: Run smoke check**
@@ -398,6 +409,7 @@
   ```bash
   npm run smoke:check
   ```
+
   Expected: `Result: PASS`
 
 - [ ] **Step 4: Commit**
@@ -412,6 +424,7 @@
 ## Task 7: TerminalView — `onData` interception for SSH tabs
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
 - [ ] **Step 1: Add `commandHistory` import at the top of the file**
@@ -425,6 +438,7 @@
 - [ ] **Step 2: Modify the `onData` handler inside `setupConnection`**
 
   The `onData` handler starts at line 839 with:
+
   ```typescript
   const dataDispose = instance!.terminal.onData((data) => {
     if (reconnectableTabs.has(tab.id)) {
@@ -481,7 +495,10 @@
 
     writeQueue += data;
     if (writeQueue.length >= WRITE_CHUNK_SIZE) {
-      if (writeTimer) { clearTimeout(writeTimer); writeTimer = null; }
+      if (writeTimer) {
+        clearTimeout(writeTimer);
+        writeTimer = null;
+      }
       flushWrites();
     } else {
       scheduleWriteFlush();
@@ -497,7 +514,10 @@
       ghostTextSetters.get(tab.id)?.('', 0, 0);
       writeQueue += suffix;
       if (writeQueue.length >= WRITE_CHUNK_SIZE) {
-        if (writeTimer) { clearTimeout(writeTimer); writeTimer = null; }
+        if (writeTimer) {
+          clearTimeout(writeTimer);
+          writeTimer = null;
+        }
         flushWrites();
       } else {
         scheduleWriteFlush();
@@ -511,7 +531,7 @@
   In the `tabListenerCleanups.set(tab.id, () => { ... })` block (around line 901), add at the end before `});`:
 
   ```typescript
-    ghostAcceptCallbacks.delete(tab.id);
+  ghostAcceptCallbacks.delete(tab.id);
   ```
 
 - [ ] **Step 4: Run smoke check**
@@ -519,6 +539,7 @@
   ```bash
   npm run smoke:check
   ```
+
   Expected: `Result: PASS`
 
 - [ ] **Step 5: Commit**
@@ -533,6 +554,7 @@
 ## Task 8: TerminalView — Tab/→ acceptance in key handler
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
 - [ ] **Step 1: Prepend ghost text acceptance to `attachCustomKeyEventHandler`**
@@ -541,12 +563,16 @@
 
   ```typescript
   termRef.attachCustomKeyEventHandler((e) => {
-    if (e.type !== "keydown") return true;
+    if (e.type !== 'keydown') return true;
 
     // Ghost text acceptance: Tab or → when SSH and ghost text is active.
     if (tab.type === 'ssh') {
       const ghost = ghostTextState.get(tab.id) ?? '';
-      if (ghost && (e.key === 'Tab' || (e.key === 'ArrowRight' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey))) {
+      if (
+        ghost &&
+        (e.key === 'Tab' ||
+          (e.key === 'ArrowRight' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey))
+      ) {
         e.preventDefault();
         ghostAcceptCallbacks.get(tab.id)?.(ghost);
         return false;
@@ -559,7 +585,7 @@
         e.preventDefault();
         void writeClipboardText(selection);
         termRef.clearSelection();
-        selectionSnapshotRef.current = "";
+        selectionSnapshotRef.current = '';
         return false;
       }
     }
@@ -579,6 +605,7 @@
   ```bash
   npm run smoke:check
   ```
+
   Expected: `Result: PASS`
 
 - [ ] **Step 3: Commit**
@@ -593,6 +620,7 @@
 ## Task 9: TerminalView — ghost text React state + overlay JSX
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
 - [ ] **Step 1: Add ghost text state variables inside `TerminalView` component**
@@ -635,19 +663,21 @@
   In the `return (` block (around line 1272), after the `<div ref={containerRef} ... />` element and before the `{contextMenu && ...}` block, add:
 
   ```tsx
-  {ghostText && isActive && terminalCmdHint && (
-    <div
-      className="terminal-ghost-text"
-      style={{
-        left: `calc(${ghostCursor.x} * var(--cell-w))`,
-        top: `calc(${ghostCursor.y} * var(--cell-h))`,
-        fontFamily: terminalFont,
-        fontSize: terminalFontSize,
-      }}
-    >
-      {ghostText}
-    </div>
-  )}
+  {
+    ghostText && isActive && terminalCmdHint && (
+      <div
+        className="terminal-ghost-text"
+        style={{
+          left: `calc(${ghostCursor.x} * var(--cell-w))`,
+          top: `calc(${ghostCursor.y} * var(--cell-h))`,
+          fontFamily: terminalFont,
+          fontSize: terminalFontSize,
+        }}
+      >
+        {ghostText}
+      </div>
+    );
+  }
   ```
 
 - [ ] **Step 5: Run smoke check**
@@ -655,6 +685,7 @@
   ```bash
   npm run smoke:check
   ```
+
   Expected: `Result: PASS`
 
 - [ ] **Step 6: Commit**
@@ -669,6 +700,7 @@
 ## Task 10: ResizeObserver — compute cell-size CSS variables
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
 - [ ] **Step 1: Update cell-size CSS vars in the ResizeObserver callback**
@@ -712,6 +744,7 @@
   ```bash
   npm run smoke:check
   ```
+
   Expected: `Result: PASS`
 
 - [ ] **Step 4: Commit**
@@ -726,6 +759,7 @@
 ## Task 11: CSS — ghost text styles
 
 **Files:**
+
 - Modify: `src/styles/global.css`
 
 - [ ] **Step 1: Add `.terminal-ghost-text` styles after the `.terminal-pane` block**
@@ -744,11 +778,11 @@
     user-select: none;
   }
 
-  [data-theme="dark"] .terminal-ghost-text {
+  [data-theme='dark'] .terminal-ghost-text {
     color: #d4d4d8;
   }
 
-  [data-theme="light"] .terminal-ghost-text {
+  [data-theme='light'] .terminal-ghost-text {
     color: #1a1a2e;
   }
   ```
@@ -758,6 +792,7 @@
   ```bash
   npm run smoke:check
   ```
+
   Expected: `Result: PASS`
 
 - [ ] **Step 3: Commit**
@@ -805,4 +840,5 @@
   ```bash
   npm run smoke:check
   ```
+
   Expected: `Result: PASS`

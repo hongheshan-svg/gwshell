@@ -22,7 +22,9 @@ export const PolicyMaintenance: React.FC<Props> = ({ policy, busy, onChange }) =
           <button
             className={`settings-toggle ${policy.maintenance_window_enabled ? 'on' : ''}`}
             disabled={busy}
-            onClick={() => onChange({ maintenance_window_enabled: !policy.maintenance_window_enabled })}
+            onClick={() =>
+              onChange({ maintenance_window_enabled: !policy.maintenance_window_enabled })
+            }
             type="button"
           >
             <span className="settings-toggle-knob" />

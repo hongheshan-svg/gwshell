@@ -1,12 +1,28 @@
-export interface Step { ctrl: boolean; shift: boolean; alt: boolean; meta: boolean; key: string }
+export interface Step {
+  ctrl: boolean;
+  shift: boolean;
+  alt: boolean;
+  meta: boolean;
+  key: string;
+}
 export type Chord = Step[];
 
 function normKey(k: string): string {
   const m: Record<string, string> = {
-    ',': 'Comma', comma: 'Comma', ' ': 'Space', space: 'Space',
-    esc: 'Escape', escape: 'Escape', del: 'Delete', delete: 'Delete',
-    ins: 'Insert', insert: 'Insert', return: 'Enter', enter: 'Enter',
-    tab: 'Tab', backspace: 'Backspace',
+    ',': 'Comma',
+    comma: 'Comma',
+    ' ': 'Space',
+    space: 'Space',
+    esc: 'Escape',
+    escape: 'Escape',
+    del: 'Delete',
+    delete: 'Delete',
+    ins: 'Insert',
+    insert: 'Insert',
+    return: 'Enter',
+    enter: 'Enter',
+    tab: 'Tab',
+    backspace: 'Backspace',
   };
   const lower = k.toLowerCase();
   if (m[lower]) return m[lower];
@@ -20,7 +36,10 @@ export function parseBinding(binding: string): Chord | null {
   if (steps.length === 0) return null;
   const chord: Chord = [];
   for (const step of steps) {
-    const parts = step.split('+').map((p) => p.trim()).filter(Boolean);
+    const parts = step
+      .split('+')
+      .map((p) => p.trim())
+      .filter(Boolean);
     if (parts.length === 0) return null;
     const s: Step = { ctrl: false, shift: false, alt: false, meta: false, key: '' };
     for (const p of parts) {
@@ -28,7 +47,8 @@ export function parseBinding(binding: string): Chord | null {
       if (lp === 'ctrl' || lp === 'control') s.ctrl = true;
       else if (lp === 'shift') s.shift = true;
       else if (lp === 'alt' || lp === 'option') s.alt = true;
-      else if (lp === 'meta' || lp === 'cmd' || lp === 'command' || lp === 'win' || lp === 'super') s.meta = true;
+      else if (lp === 'meta' || lp === 'cmd' || lp === 'command' || lp === 'win' || lp === 'super')
+        s.meta = true;
       else s.key = normKey(p);
     }
     if (!s.key) return null;
@@ -47,8 +67,13 @@ function eventKey(e: KeyboardEvent): string {
 }
 
 export function matchStep(e: KeyboardEvent, st: Step): boolean {
-  return e.ctrlKey === st.ctrl && e.shiftKey === st.shift && e.altKey === st.alt && e.metaKey === st.meta
-    && eventKey(e).toLowerCase() === st.key.toLowerCase();
+  return (
+    e.ctrlKey === st.ctrl &&
+    e.shiftKey === st.shift &&
+    e.altKey === st.alt &&
+    e.metaKey === st.meta &&
+    eventKey(e).toLowerCase() === st.key.toLowerCase()
+  );
 }
 
 export function eventToStep(e: KeyboardEvent): Step | null {
@@ -65,4 +90,6 @@ export function formatStep(st: Step): string {
   return [...mods, st.key].join('+');
 }
 
-export function stepToBinding(st: Step): string { return formatStep(st); }
+export function stepToBinding(st: Step): string {
+  return formatStep(st);
+}

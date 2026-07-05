@@ -1,5 +1,5 @@
 import 'i18next';
-import gwshellZh from './locales/gwshell.zh.json';
+import type gwshellZh from './locales/gwshell.zh.json';
 
 declare module 'i18next' {
   interface CustomTypeOptions {

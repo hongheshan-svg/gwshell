@@ -39,10 +39,13 @@ export const SecurityNotice: React.FC = () => {
         <strong>{t('secret_storage_warning_title')}</strong>
         <span>{t('secret_storage_warning_body')}</span>
       </div>
-      <button className="update-toast-btn" onClick={() => {
-        localStorage.setItem(DISMISSED_KEY, '1');
-        setShow(false);
-      }}>
+      <button
+        className="update-toast-btn"
+        onClick={() => {
+          localStorage.setItem(DISMISSED_KEY, '1');
+          setShow(false);
+        }}
+      >
         <X size={12} />
       </button>
     </div>

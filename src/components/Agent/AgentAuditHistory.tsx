@@ -28,7 +28,9 @@ function auditSummary(record: AgentAuditRecord): string {
 export const AgentAuditHistory: React.FC = () => {
   const { t } = useTranslation();
   const activeTab = useAppStore((s) => s.tabs.find((tab) => tab.id === s.activeTabId));
-  const auditPulse = useAgentStore((s) => `${s.activeSession?.status ?? 'none'}-${s.evidence.length}-${s.results.length}`);
+  const auditPulse = useAgentStore(
+    (s) => `${s.activeSession?.status ?? 'none'}-${s.evidence.length}-${s.results.length}`,
+  );
   const [records, setRecords] = useState<AgentAuditRecord[]>([]);
 
   useEffect(() => {

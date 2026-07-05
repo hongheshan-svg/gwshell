@@ -9,19 +9,19 @@ interface Props {
   session: SessionConfig;
   connected: boolean;
   snapshot?: MetricsSnapshot | null;
-  cpuHistory?: number[];        // 0-100 values for sparkline
-  latency?: number | null;      // ping ms (disconnected state)
+  cpuHistory?: number[]; // 0-100 values for sparkline
+  latency?: number | null; // ping ms (disconnected state)
   onConnect: (s: SessionConfig) => void;
   onEdit: (s: SessionConfig) => void;
-  onFocus?: (s: SessionConfig) => void;  // focus existing tab when connected
+  onFocus?: (s: SessionConfig) => void; // focus existing tab when connected
 }
 
 // ---- Helpers ----------------------------------------------------------------
 
 function formatBytes(n: number): string {
   if (n >= 1_073_741_824) return (n / 1_073_741_824).toFixed(1) + 'G';
-  if (n >= 1_048_576)     return (n / 1_048_576).toFixed(1) + 'M';
-  if (n >= 1_024)          return (n / 1_024).toFixed(1) + 'K';
+  if (n >= 1_048_576) return (n / 1_048_576).toFixed(1) + 'M';
+  if (n >= 1_024) return (n / 1_024).toFixed(1) + 'K';
   return n + 'B';
 }
 
@@ -39,7 +39,7 @@ function cpuColor(p: number): string {
 // ---- Sparkline SVG ----------------------------------------------------------
 
 interface SparklineProps {
-  values: number[];  // 0-100
+  values: number[]; // 0-100
   width?: number;
   height?: number;
 }
@@ -84,7 +84,7 @@ const Sparkline: React.FC<SparklineProps> = ({ values, width = 80, height = 24 }
 // ---- CPU Ring ---------------------------------------------------------------
 
 interface RingProps {
-  percent: number;  // 0-100
+  percent: number; // 0-100
 }
 
 const CpuRing: React.FC<RingProps> = ({ percent }) => {
@@ -107,7 +107,7 @@ const CpuRing: React.FC<RingProps> = ({ percent }) => {
 // ---- Bar ----------------------------------------------------------------
 
 interface BarProps {
-  percent: number;  // 0-100
+  percent: number; // 0-100
   warn?: boolean;
 }
 
@@ -141,20 +141,18 @@ export const HostDashCard: React.FC<Props> = ({
   const stripeColor = session.color_label ?? 'var(--border-color)';
 
   // Derived metrics (only when connected + snapshot)
-  const cpuPct    = snapshot?.cpu ? Math.round(snapshot.cpu.total_percent) : 0;
-  const memPct    = snapshot?.mem ? pct(snapshot.mem.mem_used_bytes, snapshot.mem.mem_total_bytes) : 0;
-  const diskPct   = snapshot?.disk ? pct(snapshot.disk.used_bytes, snapshot.disk.total_bytes) : 0;
-  const loadavg   = snapshot?.cpu?.loadavg_1m ?? null;
-  const cpuCores  = snapshot?.host?.cpu_cores ?? 1;
-  const loadHigh  = loadavg !== null && loadavg > cpuCores;
+  const cpuPct = snapshot?.cpu ? Math.round(snapshot.cpu.total_percent) : 0;
+  const memPct = snapshot?.mem ? pct(snapshot.mem.mem_used_bytes, snapshot.mem.mem_total_bytes) : 0;
+  const diskPct = snapshot?.disk ? pct(snapshot.disk.used_bytes, snapshot.disk.total_bytes) : 0;
+  const loadavg = snapshot?.cpu?.loadavg_1m ?? null;
+  const cpuCores = snapshot?.host?.cpu_cores ?? 1;
+  const loadHigh = loadavg !== null && loadavg > cpuCores;
 
   const memLabel = snapshot?.mem
     ? `${formatBytes(snapshot.mem.mem_used_bytes)}/${formatBytes(snapshot.mem.mem_total_bytes)}`
     : '';
 
-  const diskLabel = snapshot?.disk
-    ? `${diskPct}%`
-    : '';
+  const diskLabel = snapshot?.disk ? `${diskPct}%` : '';
 
   const hasSnapshot = connected && snapshot != null;
 
@@ -171,10 +169,14 @@ export const HostDashCard: React.FC<Props> = ({
   // non-pingable types only show the badge (latency would be meaningless).
   const typeBadge = (() => {
     switch (session.session_type) {
-      case 'docker':     return { icon: <Box size={11} />,            label: t('newasset_docker') };
-      case 'serial':     return { icon: <Usb size={11} />,            label: t('newasset_serial') };
-      case 'localshell': return { icon: <TerminalSquare size={11} />, label: t('newasset_localshell') };
-      default:           return { icon: <Server size={11} />,         label: t('newasset_ssh') };
+      case 'docker':
+        return { icon: <Box size={11} />, label: t('newasset_docker') };
+      case 'serial':
+        return { icon: <Usb size={11} />, label: t('newasset_serial') };
+      case 'localshell':
+        return { icon: <TerminalSquare size={11} />, label: t('newasset_localshell') };
+      default:
+        return { icon: <Server size={11} />, label: t('newasset_ssh') };
     }
   })();
 
@@ -182,8 +184,7 @@ export const HostDashCard: React.FC<Props> = ({
   const isPingable = session.session_type === 'ssh';
   // SSH reached via a jump host / proxy isn't directly TCP-reachable from here,
   // so a direct probe is meaningless — show a neutral marker, not "timeout".
-  const viaRelay = !!session.jump_host
-    || (!!session.proxy_type && session.proxy_type !== 'none');
+  const viaRelay = !!session.jump_host || (!!session.proxy_type && session.proxy_type !== 'none');
 
   // Distinguish the three latency states so a not-yet-probed or relay-only host
   // never renders the misleading "timeout":
@@ -194,7 +195,8 @@ export const HostDashCard: React.FC<Props> = ({
     if (!isPingable) return null;
     if (viaRelay) return { cls: '', text: '—', title: t('dash_via_relay_hint') };
     if (typeof latency === 'number') return { cls: ' live', text: `${latency} ms` };
-    if (latency === null) return { cls: '', text: t('dash_offline', 'Timeout'), title: t('dash_offline_hint') };
+    if (latency === null)
+      return { cls: '', text: t('dash_offline', 'Timeout'), title: t('dash_offline_hint') };
     return { cls: '', text: '…', title: t('dash_checking_hint') };
   })();
 
@@ -236,7 +238,9 @@ export const HostDashCard: React.FC<Props> = ({
             className={`dash-status-dot${connected ? ' online' : ''}`}
             aria-label={connected ? 'Connected' : 'Disconnected'}
           />
-          <span className="dash-name" title={nameTooltip}>{session.name}</span>
+          <span className="dash-name" title={nameTooltip}>
+            {session.name}
+          </span>
           <div className="dash-actions">
             <button
               className="dash-action-btn"
@@ -277,7 +281,9 @@ export const HostDashCard: React.FC<Props> = ({
                 <span className="dash-metric-label">{t('dash_disk', 'DISK')}</span>
                 <div className="dash-metric-bar-wrap">
                   <Bar percent={diskPct} warn={diskPct > 85} />
-                  <span className="dash-metric-value">{diskLabel} <span className="dash-metric-mount">{snapshot.disk.mount}</span></span>
+                  <span className="dash-metric-value">
+                    {diskLabel} <span className="dash-metric-mount">{snapshot.disk.mount}</span>
+                  </span>
                 </div>
               </div>
             )}
@@ -315,10 +321,7 @@ export const HostDashCard: React.FC<Props> = ({
               )}
             </div>
 
-            <button
-              className="dash-connect-btn"
-              onClick={() => onConnect(session)}
-            >
+            <button className="dash-connect-btn" onClick={() => onConnect(session)}>
               <Play size={12} />
               {t('dash_connect', 'Connect')}
             </button>

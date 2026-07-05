@@ -16,22 +16,22 @@
 
 ## 文件结构
 
-| 文件 | 职责 | 动作 |
-|---|---|---|
-| `src/components/Terminal/blocks.ts` | block 数据模型 + 行区间/跨度/活动块 helper | 修改 |
-| `src/components/Terminal/blockActions.ts` | 复制命令/输出、重跑、聚焦（imperative + React 共用） | 新建 |
-| `src/components/Terminal/blockCards.ts` | 已完成卡的 decoration 管理（frame + header chrome） | 新建 |
-| `src/components/Terminal/BlockLiveFrame.tsx` | 活动 block 的 React overlay 卡 | 新建 |
-| `src/components/Terminal/BlockFocusPanel.tsx` | 聚焦面板（单命令全文） | 新建 |
-| `src/components/Terminal/BlockStickyHeader.tsx` | 粘性命令头 | 新建 |
-| `src/components/Terminal/BlockOverviewRuler.tsx` | 右侧刻度尺 | 新建 |
-| `src/components/Terminal/blockNav.ts` | 导航跳转 + 聚焦当前块 + 跳转高亮 | 修改 |
-| `src/components/Terminal/TerminalView.tsx` | OSC133 接 `syncCards`；挂载 overlay；移除旧 gutter deco/菜单；终端内导航键 | 修改 |
-| `src/keymap/actions.ts` | 新增 `block.focus` 动作 | 修改 |
-| `src/stores/appStore.ts` | `focusedBlock` 状态 | 修改 |
-| `src/App.tsx` | 根级挂载 `BlockFocusPanel` | 修改 |
-| `src/styles/global.css` | `.gw-card*` 样式；移除 `.gw-block-deco`/`.gw-block-menu` | 修改 |
-| `src/i18n/locales/gwshell.{en,zh}.json` | 新增文案 | 修改 |
+| 文件                                             | 职责                                                                       | 动作 |
+| ------------------------------------------------ | -------------------------------------------------------------------------- | ---- |
+| `src/components/Terminal/blocks.ts`              | block 数据模型 + 行区间/跨度/活动块 helper                                 | 修改 |
+| `src/components/Terminal/blockActions.ts`        | 复制命令/输出、重跑、聚焦（imperative + React 共用）                       | 新建 |
+| `src/components/Terminal/blockCards.ts`          | 已完成卡的 decoration 管理（frame + header chrome）                        | 新建 |
+| `src/components/Terminal/BlockLiveFrame.tsx`     | 活动 block 的 React overlay 卡                                             | 新建 |
+| `src/components/Terminal/BlockFocusPanel.tsx`    | 聚焦面板（单命令全文）                                                     | 新建 |
+| `src/components/Terminal/BlockStickyHeader.tsx`  | 粘性命令头                                                                 | 新建 |
+| `src/components/Terminal/BlockOverviewRuler.tsx` | 右侧刻度尺                                                                 | 新建 |
+| `src/components/Terminal/blockNav.ts`            | 导航跳转 + 聚焦当前块 + 跳转高亮                                           | 修改 |
+| `src/components/Terminal/TerminalView.tsx`       | OSC133 接 `syncCards`；挂载 overlay；移除旧 gutter deco/菜单；终端内导航键 | 修改 |
+| `src/keymap/actions.ts`                          | 新增 `block.focus` 动作                                                    | 修改 |
+| `src/stores/appStore.ts`                         | `focusedBlock` 状态                                                        | 修改 |
+| `src/App.tsx`                                    | 根级挂载 `BlockFocusPanel`                                                 | 修改 |
+| `src/styles/global.css`                          | `.gw-card*` 样式；移除 `.gw-block-deco`/`.gw-block-menu`                   | 修改 |
+| `src/i18n/locales/gwshell.{en,zh}.json`          | 新增文案                                                                   | 修改 |
 
 ---
 
@@ -55,11 +55,11 @@
 把 `finishBlock` 中的赋值改为：
 
 ```ts
-  if (b) {
-    b.state = 'done';
-    b.exitCode = exitCode;
-    b.finishedAt = Date.now();
-  }
+if (b) {
+  b.state = 'done';
+  b.exitCode = exitCode;
+  b.finishedAt = Date.now();
+}
 ```
 
 - [ ] **Step 3: 新增行区间 / 跨度 / 活动块 / 用时 helper**
@@ -75,11 +75,15 @@ export function blockEndLine(tabId: string, term: Terminal, block: CommandBlock)
   const idx = list.indexOf(block);
   const next = idx >= 0 ? list[idx + 1] : undefined;
   const nextLine = next?.promptMarker?.line;
-  return (nextLine == null || nextLine < 0) ? term.buffer.active.length : nextLine;
+  return nextLine == null || nextLine < 0 ? term.buffer.active.length : nextLine;
 }
 
 /** Frame region [start,end): from the prompt line to the next prompt (or buffer end). */
-export function frameRange(tabId: string, term: Terminal, block: CommandBlock): { start: number; end: number } {
+export function frameRange(
+  tabId: string,
+  term: Terminal,
+  block: CommandBlock,
+): { start: number; end: number } {
   const start = block.promptMarker?.line ?? -1;
   return { start, end: blockEndLine(tabId, term, block) };
 }
@@ -113,9 +117,9 @@ export function durationMs(block: CommandBlock): number | undefined {
 把 `readOutput` 内计算 `end` 的那段替换为：
 
 ```ts
-  const start = block.outputMarker?.line;
-  if (start == null || start < 0) return '';
-  const end = blockEndLine(tabId, term, block);
+const start = block.outputMarker?.line;
+if (start == null || start < 0) return '';
+const end = blockEndLine(tabId, term, block);
 ```
 
 （删掉原本 `const list = ...; const idx = ...; const next = ...; const nextLine = ...; const end = ...` 那几行，循环 `for (let i = start; i < end; i++)` 不变。）
@@ -125,28 +129,40 @@ export function durationMs(block: CommandBlock): number | undefined {
 `startBlock` 的孤儿回收里：
 
 ```ts
-      list.pop();
-      prev.promptMarker?.dispose();
-      try { prev.deco?.dispose(); } catch {}
-      try { prev.chromeDeco?.dispose(); } catch {}
+list.pop();
+prev.promptMarker?.dispose();
+try {
+  prev.deco?.dispose();
+} catch {}
+try {
+  prev.chromeDeco?.dispose();
+} catch {}
 ```
 
 `startBlock` 的 `MAX_BLOCKS` 回收 while 里：
 
 ```ts
-    old?.promptMarker?.dispose();
-    old?.outputMarker?.dispose();
-    try { old?.deco?.dispose(); } catch {}
-    try { old?.chromeDeco?.dispose(); } catch {}
+old?.promptMarker?.dispose();
+old?.outputMarker?.dispose();
+try {
+  old?.deco?.dispose();
+} catch {}
+try {
+  old?.chromeDeco?.dispose();
+} catch {}
 ```
 
 `clearTab` 的 forEach 里：
 
 ```ts
-      b.promptMarker?.dispose();
-      b.outputMarker?.dispose();
-      try { b.deco?.dispose(); } catch {}
-      try { b.chromeDeco?.dispose(); } catch {}
+b.promptMarker?.dispose();
+b.outputMarker?.dispose();
+try {
+  b.deco?.dispose();
+} catch {}
+try {
+  b.chromeDeco?.dispose();
+} catch {}
 ```
 
 - [ ] **Step 6: 构建 + smoke**
@@ -212,78 +228,219 @@ git commit -m "feat(store): add focusedBlock state for block focus panel"
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 6%, transparent);
   pointer-events: none;
 }
-.gw-card.running { border-left: 2px solid var(--accent-primary); }
-.gw-card.ok     { border-left: 2px solid var(--success); }
-.gw-card.err    { border-left: 2px solid var(--danger); }
+.gw-card.running {
+  border-left: 2px solid var(--accent-primary);
+}
+.gw-card.ok {
+  border-left: 2px solid var(--success);
+}
+.gw-card.err {
+  border-left: 2px solid var(--danger);
+}
 
 /* Header chrome (layer:top, 1 row) — transparent container, right-aligned
    badge + hover toolbar. pointer-events none so terminal selection still works;
    only the buttons capture clicks. */
 .gw-card-hdr {
-  display: flex; align-items: center; justify-content: flex-end;
-  gap: 6px; padding: 0 8px; pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 0 8px;
+  pointer-events: none;
 }
 .gw-card-badge {
-  font-size: 10.5px; font-weight: 600; line-height: 1.4;
-  padding: 0 7px; border-radius: var(--radius-pill); white-space: nowrap;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
 }
-.gw-card-badge.ok      { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
-.gw-card-badge.err     { background: color-mix(in srgb, var(--danger) 18%, transparent);  color: var(--danger); }
-.gw-card-badge.running { background: color-mix(in srgb, var(--accent-primary) 16%, transparent); color: var(--accent-primary); }
+.gw-card-badge.ok {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+}
+.gw-card-badge.err {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+.gw-card-badge.running {
+  background: color-mix(in srgb, var(--accent-primary) 16%, transparent);
+  color: var(--accent-primary);
+}
 
-.gw-card-toolbar { display: none; gap: 4px; pointer-events: auto; }
-.gw-card-hdr:hover .gw-card-toolbar,
-.gw-card-live:hover .gw-card-toolbar { display: flex; }
-.gw-card-btn {
-  font-size: 11px; padding: 1px 7px; border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm); background: var(--bg-secondary);
-  color: var(--text-primary); cursor: pointer; white-space: nowrap; pointer-events: auto;
+.gw-card-toolbar {
+  display: none;
+  gap: 4px;
+  pointer-events: auto;
 }
-.gw-card-btn:hover { background: var(--bg-hover, var(--accent-bg)); }
+.gw-card-hdr:hover .gw-card-toolbar,
+.gw-card-live:hover .gw-card-toolbar {
+  display: flex;
+}
+.gw-card-btn {
+  font-size: 11px;
+  padding: 1px 7px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+.gw-card-btn:hover {
+  background: var(--bg-hover, var(--accent-bg));
+}
 
 /* Live overlay card (React) — absolutely positioned inside .terminal-container. */
 .gw-card-live {
-  position: absolute; left: 0; right: 0; z-index: 4;
-  border: 1px solid var(--border-color); border-radius: var(--radius-md);
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-secondary) 30%, transparent);
   pointer-events: none;
 }
-.gw-card-live.running { border-left: 2px solid var(--accent-primary); border-bottom-style: dashed; }
-.gw-card-live.ok { border-left: 2px solid var(--success); }
-.gw-card-live.err { border-left: 2px solid var(--danger); }
-.gw-card-live .gw-card-hdr { height: var(--cell-h, 17px); }
+.gw-card-live.running {
+  border-left: 2px solid var(--accent-primary);
+  border-bottom-style: dashed;
+}
+.gw-card-live.ok {
+  border-left: 2px solid var(--success);
+}
+.gw-card-live.err {
+  border-left: 2px solid var(--danger);
+}
+.gw-card-live .gw-card-hdr {
+  height: var(--cell-h, 17px);
+}
 
 /* Brief highlight when navigated to. */
-.gw-card-flash { animation: gwCardFlash .7s ease-out; }
-@keyframes gwCardFlash { from { background: color-mix(in srgb, var(--accent-primary) 22%, transparent); } }
+.gw-card-flash {
+  animation: gwCardFlash 0.7s ease-out;
+}
+@keyframes gwCardFlash {
+  from {
+    background: color-mix(in srgb, var(--accent-primary) 22%, transparent);
+  }
+}
 
 /* Sticky command header (Task 9). */
 .gw-sticky {
-  position: absolute; top: 0; left: 0; right: 0; z-index: 6;
-  display: flex; align-items: center; gap: 8px;
-  padding: 4px 10px; font-size: 12px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
   background: var(--surface-blur, color-mix(in srgb, var(--bg-secondary) 92%, transparent));
   backdrop-filter: blur(6px);
-  border-bottom: 1px solid var(--border-color); cursor: pointer;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
 }
-.gw-sticky-cmd { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-sticky-cmd {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Overview ruler (Task 10). */
-.gw-ruler { position: absolute; top: 0; right: 0; bottom: 0; width: 8px; z-index: 5; pointer-events: none; }
-.gw-ruler-tick { position: absolute; right: 1px; width: 4px; height: 12px; border-radius: 2px; cursor: pointer; pointer-events: auto; opacity: .75; }
-.gw-ruler-tick:hover { opacity: 1; }
-.gw-ruler-tick.running { background: var(--accent-primary); }
-.gw-ruler-tick.ok { background: var(--success); }
-.gw-ruler-tick.err { background: var(--danger); }
+.gw-ruler {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 8px;
+  z-index: 5;
+  pointer-events: none;
+}
+.gw-ruler-tick {
+  position: absolute;
+  right: 1px;
+  width: 4px;
+  height: 12px;
+  border-radius: 2px;
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0.75;
+}
+.gw-ruler-tick:hover {
+  opacity: 1;
+}
+.gw-ruler-tick.running {
+  background: var(--accent-primary);
+}
+.gw-ruler-tick.ok {
+  background: var(--success);
+}
+.gw-ruler-tick.err {
+  background: var(--danger);
+}
 
 /* Focus panel (Task 7). */
-.gw-focus-overlay { position: fixed; inset: 0; z-index: 1000; display: flex; justify-content: flex-end; background: color-mix(in srgb, #000 28%, transparent); }
-.gw-focus-panel { width: min(560px, 92vw); height: 100%; display: flex; flex-direction: column; background: var(--bg-primary); border-left: 1px solid var(--border-color); box-shadow: var(--shadow-lg); }
-.gw-focus-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border-color); }
-.gw-focus-cmd { font-family: var(--font-mono); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-.gw-focus-meta { color: var(--text-secondary); font-size: 11px; }
-.gw-focus-output { flex: 1; margin: 0; padding: 12px 14px; overflow: auto; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; color: var(--text-primary); white-space: pre-wrap; word-break: break-word; }
-.gw-focus-foot { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border-color); }
+.gw-focus-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+  background: color-mix(in srgb, #000 28%, transparent);
+}
+.gw-focus-panel {
+  width: min(560px, 92vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border-color);
+  box-shadow: var(--shadow-lg);
+}
+.gw-focus-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+.gw-focus-cmd {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.gw-focus-meta {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.gw-focus-output {
+  flex: 1;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.gw-focus-foot {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-color);
+}
 ```
 
 - [ ] **Step 2: 构建 + smoke**
@@ -328,19 +485,26 @@ export interface BlockCtx {
 }
 
 export function blockCopyCommand(block: CommandBlock): void {
-  clipboardWrite(block.command).catch(() => { navigator.clipboard?.writeText(block.command).catch(() => {}); });
+  clipboardWrite(block.command).catch(() => {
+    navigator.clipboard?.writeText(block.command).catch(() => {});
+  });
 }
 
 export function blockCopyOutput(term: Terminal, ctx: BlockCtx, block: CommandBlock): void {
   const out = readOutput(ctx.tabId, term, block);
-  clipboardWrite(out).catch(() => { navigator.clipboard?.writeText(out).catch(() => {}); });
+  clipboardWrite(out).catch(() => {
+    navigator.clipboard?.writeText(out).catch(() => {});
+  });
 }
 
 export function blockRerun(ctx: BlockCtx, block: CommandBlock): void {
   if (!block.command) return;
-  const cmd = ctx.tabType === 'ssh' ? 'write_to_ssh'
-    : ctx.tabType === 'serial' ? 'write_to_serial'
-    : 'write_to_pty';
+  const cmd =
+    ctx.tabType === 'ssh'
+      ? 'write_to_ssh'
+      : ctx.tabType === 'serial'
+        ? 'write_to_serial'
+        : 'write_to_pty';
   invoke(cmd, { sessionId: ctx.sessionId, data: block.command }).catch(() => {});
 }
 
@@ -385,7 +549,11 @@ import type { Terminal } from '@xterm/xterm';
 import i18n from '../../i18n';
 import { blocksFor, rowSpan, type CommandBlock } from './blocks';
 import {
-  blockCopyCommand, blockCopyOutput, blockRerun, blockFocus, type BlockCtx,
+  blockCopyCommand,
+  blockCopyOutput,
+  blockRerun,
+  blockFocus,
+  type BlockCtx,
 } from './blockActions';
 
 function applyCardState(el: HTMLElement, block: CommandBlock): void {
@@ -398,8 +566,13 @@ function applyCardState(el: HTMLElement, block: CommandBlock): void {
 function buildBadge(block: CommandBlock): HTMLElement {
   const b = document.createElement('span');
   b.className = 'gw-card-badge';
-  if (block.exitCode === 0) { b.classList.add('ok'); b.textContent = '✓ 0'; }
-  else { b.classList.add('err'); b.textContent = '✕ ' + (block.exitCode ?? '?'); }
+  if (block.exitCode === 0) {
+    b.classList.add('ok');
+    b.textContent = '✓ 0';
+  } else {
+    b.classList.add('err');
+    b.textContent = '✕ ' + (block.exitCode ?? '?');
+  }
   return b;
 }
 
@@ -412,7 +585,10 @@ function buildToolbar(term: Terminal, ctx: BlockCtx, block: CommandBlock): HTMLE
     btn.type = 'button';
     btn.className = 'gw-card-btn';
     btn.textContent = label;
-    btn.addEventListener('click', (e) => { e.stopPropagation(); on(); });
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      on();
+    });
     return btn;
   };
   bar.appendChild(mk(t('block_copy_cmd'), () => blockCopyCommand(block)));
@@ -427,27 +603,40 @@ function createCard(term: Terminal, ctx: BlockCtx, block: CommandBlock): void {
   const span = rowSpan(ctx.tabId, term, block);
 
   const frame = term.registerDecoration({
-    marker: block.promptMarker, x: 0, width: term.cols, height: span, layer: 'bottom',
+    marker: block.promptMarker,
+    x: 0,
+    width: term.cols,
+    height: span,
+    layer: 'bottom',
   });
   block.deco = frame ?? null;
   if (frame) frame.onRender((el) => applyCardState(el, block));
 
   const chrome = term.registerDecoration({
-    marker: block.promptMarker, x: 0, width: term.cols, height: 1, layer: 'top',
+    marker: block.promptMarker,
+    x: 0,
+    width: term.cols,
+    height: 1,
+    layer: 'top',
   });
   block.chromeDeco = chrome ?? null;
-  if (chrome) chrome.onRender((el) => {
-    if (el.dataset.gwChrome) return;
-    el.dataset.gwChrome = '1';
-    el.classList.add('gw-card-hdr');
-    el.appendChild(buildBadge(block));
-    el.appendChild(buildToolbar(term, ctx, block));
-  });
+  if (chrome)
+    chrome.onRender((el) => {
+      if (el.dataset.gwChrome) return;
+      el.dataset.gwChrome = '1';
+      el.classList.add('gw-card-hdr');
+      el.appendChild(buildBadge(block));
+      el.appendChild(buildToolbar(term, ctx, block));
+    });
 }
 
 function disposeCard(block: CommandBlock): void {
-  try { block.deco?.dispose(); } catch {}
-  try { block.chromeDeco?.dispose(); } catch {}
+  try {
+    block.deco?.dispose();
+  } catch {}
+  try {
+    block.chromeDeco?.dispose();
+  } catch {}
   block.deco = null;
   block.chromeDeco = null;
 }
@@ -505,7 +694,11 @@ import type { TabInfo } from '../../types';
 import { terminalInstances } from './terminalRegistry';
 import { activeBlock, frameRange, type CommandBlock } from './blocks';
 import {
-  blockCopyCommand, blockCopyOutput, blockRerun, blockFocus, type BlockCtx,
+  blockCopyCommand,
+  blockCopyOutput,
+  blockRerun,
+  blockFocus,
+  type BlockCtx,
 } from './blockActions';
 
 function statusClass(block: CommandBlock): string {
@@ -522,7 +715,14 @@ export function BlockLiveFrame({ tab }: { tab: TabInfo }): JSX.Element | null {
     if (!inst) return;
     const d1 = inst.terminal.onRender(() => bump());
     const d2 = inst.terminal.onScroll(() => bump());
-    return () => { try { d1.dispose(); } catch {} try { d2.dispose(); } catch {} };
+    return () => {
+      try {
+        d1.dispose();
+      } catch {}
+      try {
+        d2.dispose();
+      } catch {}
+    };
   }, [tab.id]);
 
   const inst = terminalInstances.get(tab.id);
@@ -546,18 +746,37 @@ export function BlockLiveFrame({ tab }: { tab: TabInfo }): JSX.Element | null {
 
   const ctx: BlockCtx = { tabId: tab.id, tabType: tab.type, sessionId: tab.sessionId };
   const cls = statusClass(block);
-  const badge = block.state === 'running' ? t('block_running')
-    : block.exitCode === 0 ? '✓ 0' : '✕ ' + (block.exitCode ?? '?');
+  const badge =
+    block.state === 'running'
+      ? t('block_running')
+      : block.exitCode === 0
+        ? '✓ 0'
+        : '✕ ' + (block.exitCode ?? '?');
 
   return (
-    <div className={`gw-card gw-card-live ${cls}`} style={{ top: `${topPx}px`, height: `${heightPx}px` }}>
+    <div
+      className={`gw-card gw-card-live ${cls}`}
+      style={{ top: `${topPx}px`, height: `${heightPx}px` }}
+    >
       <div className="gw-card-hdr">
         <span className={`gw-card-badge ${cls}`}>{badge}</span>
         <div className="gw-card-toolbar">
-          <button type="button" className="gw-card-btn" onClick={() => blockCopyCommand(block)}>{t('block_copy_cmd')}</button>
-          <button type="button" className="gw-card-btn" onClick={() => blockCopyOutput(term, ctx, block)}>{t('block_copy_output')}</button>
-          <button type="button" className="gw-card-btn" onClick={() => blockRerun(ctx, block)}>{t('block_rerun')}</button>
-          <button type="button" className="gw-card-btn" onClick={() => blockFocus(ctx, block)}>{t('block_focus')}</button>
+          <button type="button" className="gw-card-btn" onClick={() => blockCopyCommand(block)}>
+            {t('block_copy_cmd')}
+          </button>
+          <button
+            type="button"
+            className="gw-card-btn"
+            onClick={() => blockCopyOutput(term, ctx, block)}
+          >
+            {t('block_copy_output')}
+          </button>
+          <button type="button" className="gw-card-btn" onClick={() => blockRerun(ctx, block)}>
+            {t('block_rerun')}
+          </button>
+          <button type="button" className="gw-card-btn" onClick={() => blockFocus(ctx, block)}>
+            {t('block_focus')}
+          </button>
         </div>
       </div>
     </div>
@@ -630,7 +849,9 @@ export function BlockFocusPanel(): JSX.Element | null {
   const setFocused = useAppStore((s) => s.setFocusedBlock);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFocused(null); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFocused(null);
+    };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [setFocused]);
@@ -640,7 +861,9 @@ export function BlockFocusPanel(): JSX.Element | null {
   const term = inst?.terminal;
   const tab = useAppStore.getState().tabs.find((tb) => tb.id === focused.tabId);
   const block = term ? blocksFor(focused.tabId).find((b) => b.id === focused.blockId) : undefined;
-  if (!term || !block || !tab) { return null; }
+  if (!term || !block || !tab) {
+    return null;
+  }
 
   const output = readOutput(focused.tabId, term, block);
   const dur = durationMs(block);
@@ -648,20 +871,45 @@ export function BlockFocusPanel(): JSX.Element | null {
   const ok = block.state === 'done' && block.exitCode === 0;
 
   return (
-    <div className="gw-focus-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setFocused(null); }}>
+    <div
+      className="gw-focus-overlay"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) setFocused(null);
+      }}
+    >
       <div className="gw-focus-panel">
         <div className="gw-focus-head">
-          <span className={`gw-card-badge ${block.state === 'running' ? 'running' : ok ? 'ok' : 'err'}`}>
-            {block.state === 'running' ? t('block_running') : ok ? '✓ 0' : '✕ ' + (block.exitCode ?? '?')}
+          <span
+            className={`gw-card-badge ${block.state === 'running' ? 'running' : ok ? 'ok' : 'err'}`}
+          >
+            {block.state === 'running'
+              ? t('block_running')
+              : ok
+                ? '✓ 0'
+                : '✕ ' + (block.exitCode ?? '?')}
           </span>
           <span className="gw-focus-cmd">{block.command || '—'}</span>
-          {dur != null && <span className="gw-focus-meta">{t('focus_duration')}: {dur} ms</span>}
-          <button type="button" className="gw-card-btn" onClick={() => setFocused(null)}>✕</button>
+          {dur != null && (
+            <span className="gw-focus-meta">
+              {t('focus_duration')}: {dur} ms
+            </span>
+          )}
+          <button type="button" className="gw-card-btn" onClick={() => setFocused(null)}>
+            ✕
+          </button>
         </div>
         <pre className="gw-focus-output">{output || t('focus_empty')}</pre>
         <div className="gw-focus-foot">
-          <button type="button" className="gw-card-btn" onClick={() => blockCopyOutput(term, ctx, block)}>{t('block_copy_output')}</button>
-          <button type="button" className="gw-card-btn" onClick={() => blockRerun(ctx, block)}>{t('block_rerun')}</button>
+          <button
+            type="button"
+            className="gw-card-btn"
+            onClick={() => blockCopyOutput(term, ctx, block)}
+          >
+            {t('block_copy_output')}
+          </button>
+          <button type="button" className="gw-card-btn" onClick={() => blockRerun(ctx, block)}>
+            {t('block_rerun')}
+          </button>
         </div>
       </div>
     </div>
@@ -674,19 +922,27 @@ export function BlockFocusPanel(): JSX.Element | null {
 在其它 lazy 导入旁加：
 
 ```ts
-const BlockFocusPanel = lazy(() => import('./components/Terminal/BlockFocusPanel').then((m) => ({ default: m.BlockFocusPanel })));
+const BlockFocusPanel = lazy(() =>
+  import('./components/Terminal/BlockFocusPanel').then((m) => ({ default: m.BlockFocusPanel })),
+);
 ```
 
 在 App 的 store 选择器里加 `focusedBlock`（与 `showTerminalSearch` 等并列）：
 
 ```ts
-  const focusedBlock = useAppStore((s) => s.focusedBlock);
+const focusedBlock = useAppStore((s) => s.focusedBlock);
 ```
 
 在根级模态挂载区（如 `{showNewSession && <NewSessionModal />}` 附近）加：
 
 ```tsx
-          {focusedBlock && <Suspense fallback={null}><BlockFocusPanel /></Suspense>}
+{
+  focusedBlock && (
+    <Suspense fallback={null}>
+      <BlockFocusPanel />
+    </Suspense>
+  );
+}
 ```
 
 - [ ] **Step 5: 构建 + smoke**
@@ -720,7 +976,11 @@ export function flashBlock(block: CommandBlock): void {
   const el = block.deco?.element;
   if (!el) return;
   el.classList.add('gw-card-flash');
-  setTimeout(() => { try { el.classList.remove('gw-card-flash'); } catch {} }, 700);
+  setTimeout(() => {
+    try {
+      el.classList.remove('gw-card-flash');
+    } catch {}
+  }, 700);
 }
 
 /** Focus the block whose prompt is at/above the current viewport top. */
@@ -734,7 +994,9 @@ export function focusViewportBlock(): void {
   const viewportY = term.buffer.active.viewportY;
   const blocks = blocksFor(activeTabId).filter((b) => b.promptMarker && b.promptMarker.line >= 0);
   let target = blocks[0];
-  for (const b of blocks) { if (b.promptMarker!.line <= viewportY) target = b; }
+  for (const b of blocks) {
+    if (b.promptMarker!.line <= viewportY) target = b;
+  }
   if (target) blockFocus({ tabId: tab.id, tabType: tab.type, sessionId: tab.sessionId }, target);
 }
 ```
@@ -773,7 +1035,7 @@ import { ACTION_BY_ID } from '../../keymap/actions';
 在 `kind === 'A'` 分支创建 block 之后追加（finalize 上一块）。直接用 handler 内已有的 `term133`，不要新建 `term` 局部（避免遮蔽）：
 
 ```ts
-          syncCards(term133, { tabId: tab.id, tabType: tab.type, sessionId: tab.sessionId });
+syncCards(term133, { tabId: tab.id, tabType: tab.type, sessionId: tab.sessionId });
 ```
 
 在 `kind === 'C'` 分支：**删除**创建 gutter decoration 的整段（现 `if (cblock && cblock.promptMarker && !cblock.deco) { const deco = term133.registerDecoration(...); ... }`）。保留 `markOutput`/`setCommand` 调用与历史记录逻辑。
@@ -785,7 +1047,9 @@ import { ACTION_BY_ID } from '../../keymap/actions';
 在 `instance!.terminal.onResize(({ rows, cols }) => { ... })` 回调体内（`resizeCmd` 那个）末尾追加：
 
 ```ts
-          try { rebuildCards(instance!.terminal, { tabId: tab.id, tabType: tab.type, sessionId: tab.sessionId }); } catch {}
+try {
+  rebuildCards(instance!.terminal, { tabId: tab.id, tabType: tab.type, sessionId: tab.sessionId });
+} catch {}
 ```
 
 （若该 `onResize` 仅在 `resizeCmd` 存在时注册，对无 resizeCmd 的 tab 影响不大；卡片主要用于可注入 OSC133 的交互终端，均有 resizeCmd。）
@@ -795,20 +1059,25 @@ import { ACTION_BY_ID } from '../../keymap/actions';
 在 `attachCustomKeyEventHandler` 回调内、`if (isCopyShortcut(e)) {` 之前插入：
 
 ```ts
-          // Block navigation / focus — handle at the terminal level so a focused
-          // terminal doesn't swallow the chord (fixes the Phase A ⌘⇧↑/↓ leftover:
-          // the window-level dispatcher bails on defaultPrevented).
-          {
-            const overrides = useSettingsStore.getState().settings.keymapOverrides ?? {};
-            for (const b of resolveBindings(overrides)) {
-              if ((b.actionId === 'block.prev' || b.actionId === 'block.next' || b.actionId === 'block.focus')
-                  && b.chord.length === 1 && matchStep(e, b.chord[0])) {
-                e.preventDefault();
-                ACTION_BY_ID.get(b.actionId)?.run();
-                return false;
-              }
-            }
-          }
+// Block navigation / focus — handle at the terminal level so a focused
+// terminal doesn't swallow the chord (fixes the Phase A ⌘⇧↑/↓ leftover:
+// the window-level dispatcher bails on defaultPrevented).
+{
+  const overrides = useSettingsStore.getState().settings.keymapOverrides ?? {};
+  for (const b of resolveBindings(overrides)) {
+    if (
+      (b.actionId === 'block.prev' ||
+        b.actionId === 'block.next' ||
+        b.actionId === 'block.focus') &&
+      b.chord.length === 1 &&
+      matchStep(e, b.chord[0])
+    ) {
+      e.preventDefault();
+      ACTION_BY_ID.get(b.actionId)?.run();
+      return false;
+    }
+  }
+}
 ```
 
 - [ ] **Step 7: TerminalView — 删除旧 block 菜单代码**
@@ -820,7 +1089,9 @@ import { ACTION_BY_ID } from '../../keymap/actions';
 在 ghost overlay `<div className="terminal-ghost-text">...` 块之后加：
 
 ```tsx
-      {isActive && isInteractiveTerminal(tab.type) && <BlockLiveFrame tab={tab} />}
+{
+  isActive && isInteractiveTerminal(tab.type) && <BlockLiveFrame tab={tab} />;
+}
 ```
 
 - [ ] **Step 9: global.css — 删除旧样式**
@@ -867,7 +1138,14 @@ export function BlockStickyHeader({ tab }: { tab: TabInfo }): JSX.Element | null
     if (!inst) return;
     const d1 = inst.terminal.onRender(() => bump());
     const d2 = inst.terminal.onScroll(() => bump());
-    return () => { try { d1.dispose(); } catch {} try { d2.dispose(); } catch {} };
+    return () => {
+      try {
+        d1.dispose();
+      } catch {}
+      try {
+        d2.dispose();
+      } catch {}
+    };
   }, [tab.id]);
 
   const inst = terminalInstances.get(tab.id);
@@ -882,7 +1160,9 @@ export function BlockStickyHeader({ tab }: { tab: TabInfo }): JSX.Element | null
   let current = null as (typeof blocks)[number] | null;
   for (const b of blocks) {
     const { start, end } = frameRange(tab.id, term, b);
-    if (start >= 0 && start <= top && top < end) { current = b; }
+    if (start >= 0 && start <= top && top < end) {
+      current = b;
+    }
   }
   if (!current || current.promptMarker?.line === top) return null; // don't shadow the real prompt row
 
@@ -911,7 +1191,9 @@ import { BlockStickyHeader } from './BlockStickyHeader';
 在 `<BlockLiveFrame .../>` 旁加：
 
 ```tsx
-      {isActive && isInteractiveTerminal(tab.type) && <BlockStickyHeader tab={tab} />}
+{
+  isActive && isInteractiveTerminal(tab.type) && <BlockStickyHeader tab={tab} />;
+}
 ```
 
 - [ ] **Step 3: 构建 + smoke**
@@ -954,7 +1236,17 @@ export function BlockOverviewRuler({ tab }: { tab: TabInfo }): JSX.Element | nul
     const d1 = inst.terminal.onRender(() => bump());
     const d2 = inst.terminal.onScroll(() => bump());
     const d3 = inst.terminal.onLineFeed(() => bump());
-    return () => { try { d1.dispose(); } catch {} try { d2.dispose(); } catch {} try { d3.dispose(); } catch {} };
+    return () => {
+      try {
+        d1.dispose();
+      } catch {}
+      try {
+        d2.dispose();
+      } catch {}
+      try {
+        d3.dispose();
+      } catch {}
+    };
   }, [tab.id]);
 
   const inst = terminalInstances.get(tab.id);
@@ -977,7 +1269,10 @@ export function BlockOverviewRuler({ tab }: { tab: TabInfo }): JSX.Element | nul
             className={`gw-ruler-tick ${cls}`}
             style={{ top: `calc(${pct}% - 6px)` }}
             title={b.command || ''}
-            onClick={() => { term.scrollToLine(b.promptMarker!.line); flashBlockById(tab.id, b.id); }}
+            onClick={() => {
+              term.scrollToLine(b.promptMarker!.line);
+              flashBlockById(tab.id, b.id);
+            }}
           />
         );
       })}
@@ -997,7 +1292,11 @@ export function flashBlockById(tabId: string, blockId: number): void {
   const el = block?.deco?.element;
   if (!el) return;
   el.classList.add('gw-card-flash');
-  setTimeout(() => { try { el.classList.remove('gw-card-flash'); } catch {} }, 700);
+  setTimeout(() => {
+    try {
+      el.classList.remove('gw-card-flash');
+    } catch {}
+  }, 700);
 }
 ```
 
@@ -1012,7 +1311,9 @@ import { BlockOverviewRuler } from './BlockOverviewRuler';
 在 sticky/live 旁加：
 
 ```tsx
-      {isActive && isInteractiveTerminal(tab.type) && <BlockOverviewRuler tab={tab} />}
+{
+  isActive && isInteractiveTerminal(tab.type) && <BlockOverviewRuler tab={tab} />;
+}
 ```
 
 - [ ] **Step 4: 构建 + smoke**
@@ -1066,6 +1367,7 @@ Expected: 全绿。
 ## Self-Review
 
 **Spec 覆盖核对（spec §4 A1–A9）：**
+
 - A1 数据模型 → Task 1 ✅
 - A2 完成卡管理 → Task 5 ✅
 - A3 运行中 overlay → Task 6 ✅
@@ -1080,6 +1382,7 @@ Expected: 全绿。
 **占位符扫描：** 无 TBD/TODO；所有代码步给出完整代码。
 
 **类型一致性核对：**
+
 - `CommandBlock` 新字段 `chromeDeco`/`finishedAt`（Task 1）→ 被 Task 5/blocks 用到，一致。
 - `BlockCtx { tabId, tabType, sessionId }`（Task 4）→ Task 5/6/7/8/9 一致使用。
 - `syncCards(term, ctx)` / `rebuildCards(term, ctx)`（Task 5）→ Task 8 调用签名一致。

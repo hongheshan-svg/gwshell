@@ -44,11 +44,20 @@ export const AgentPanel: React.FC = () => {
         <span>{t('agent_panel_title')}</span>
         <div className="agent-panel-header-actions">
           {activeSession?.status === 'running' && (
-            <button className="agent-panel-link-btn" onClick={() => void cancelAgent()} type="button">
+            <button
+              className="agent-panel-link-btn"
+              onClick={() => void cancelAgent()}
+              type="button"
+            >
               {t('agent_cancel')}
             </button>
           )}
-          <button className="agent-panel-close" onClick={toggle} title={t('agent_panel_close')} type="button">
+          <button
+            className="agent-panel-close"
+            onClick={toggle}
+            title={t('agent_panel_close')}
+            type="button"
+          >
             <X size={16} />
           </button>
         </div>
@@ -64,8 +73,11 @@ export const AgentPanel: React.FC = () => {
               {autoContinuation.inFlight
                 ? t('agent_auto_continue_running')
                 : autoContinuation.enabled
-                ? t('agent_auto_continue_status', { count: autoContinuation.count, max: autoContinuation.max })
-                : t('agent_auto_continue_disabled')}
+                  ? t('agent_auto_continue_status', {
+                      count: autoContinuation.count,
+                      max: autoContinuation.max,
+                    })
+                  : t('agent_auto_continue_disabled')}
             </small>
           </div>
         )}

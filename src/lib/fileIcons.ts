@@ -27,34 +27,77 @@ function reg(exts: string[], Icon: LucideIcon, cls: string) {
 }
 
 reg(
-  ['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'py', 'rs', 'go', 'java', 'c', 'cc',
-    'cpp', 'cxx', 'h', 'hpp', 'rb', 'php', 'swift', 'kt', 'kts', 'scala', 'lua',
-    'dart', 'vue', 'svelte', 'sql', 'r', 'pl'],
-  FileCode, 'sftp-icon-code',
+  [
+    'js',
+    'jsx',
+    'ts',
+    'tsx',
+    'mjs',
+    'cjs',
+    'py',
+    'rs',
+    'go',
+    'java',
+    'c',
+    'cc',
+    'cpp',
+    'cxx',
+    'h',
+    'hpp',
+    'rb',
+    'php',
+    'swift',
+    'kt',
+    'kts',
+    'scala',
+    'lua',
+    'dart',
+    'vue',
+    'svelte',
+    'sql',
+    'r',
+    'pl',
+  ],
+  FileCode,
+  'sftp-icon-code',
 );
 reg(['html', 'htm', 'css', 'scss', 'sass', 'less'], FileCode, 'sftp-icon-web');
 reg(
-  ['json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'env',
-    'properties', 'lock'],
-  FileJson, 'sftp-icon-data',
+  ['json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'env', 'properties', 'lock'],
+  FileJson,
+  'sftp-icon-data',
 );
 reg(['md', 'markdown', 'txt', 'rst', 'log', 'rtf', 'nfo'], FileText, 'sftp-icon-doc');
 reg(
   ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'webp', 'ico', 'tiff', 'tif', 'heic', 'avif'],
-  FileImage, 'sftp-icon-image',
+  FileImage,
+  'sftp-icon-image',
 );
 reg(
   ['zip', 'tar', 'gz', 'tgz', 'bz2', 'xz', '7z', 'rar', 'zst', 'lz', 'lzma', 'jar', 'war'],
-  FileArchive, 'sftp-icon-archive',
+  FileArchive,
+  'sftp-icon-archive',
 );
-reg(['mp4', 'mkv', 'mov', 'avi', 'webm', 'flv', 'wmv', 'm4v', 'mpg', 'mpeg'], FileVideo, 'sftp-icon-media');
+reg(
+  ['mp4', 'mkv', 'mov', 'avi', 'webm', 'flv', 'wmv', 'm4v', 'mpg', 'mpeg'],
+  FileVideo,
+  'sftp-icon-media',
+);
 reg(['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'opus', 'wma'], FileAudio, 'sftp-icon-audio');
 reg(['csv', 'tsv', 'xls', 'xlsx', 'ods'], FileSpreadsheet, 'sftp-icon-sheet');
 reg(['pdf'], FileText, 'sftp-icon-pdf');
 reg(['doc', 'docx', 'odt'], FileText, 'sftp-icon-word');
 reg(['sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd'], FileTerminal, 'sftp-icon-shell');
-reg(['pem', 'key', 'crt', 'cer', 'pub', 'asc', 'gpg', 'p12', 'pfx', 'kdbx'], FileKey, 'sftp-icon-key');
-reg(['so', 'o', 'a', 'dll', 'exe', 'bin', 'dylib', 'class', 'pyc', 'wasm', 'deb', 'rpm'], FileCog, 'sftp-icon-binary');
+reg(
+  ['pem', 'key', 'crt', 'cer', 'pub', 'asc', 'gpg', 'p12', 'pfx', 'kdbx'],
+  FileKey,
+  'sftp-icon-key',
+);
+reg(
+  ['so', 'o', 'a', 'dll', 'exe', 'bin', 'dylib', 'class', 'pyc', 'wasm', 'deb', 'rpm'],
+  FileCog,
+  'sftp-icon-binary',
+);
 
 // Whole-name matches (no extension, or a conventional name). Lower-cased.
 const NAME_MAP: Record<string, FileIconSpec> = {

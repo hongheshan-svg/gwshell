@@ -10,7 +10,12 @@ interface SftpEditorProps {
   onClose: () => void;
 }
 
-export const SftpEditor: React.FC<SftpEditorProps> = ({ sessionId, remotePath, fileName, onClose }) => {
+export const SftpEditor: React.FC<SftpEditorProps> = ({
+  sessionId,
+  remotePath,
+  fileName,
+  onClose,
+}) => {
   const { t } = useTranslation();
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
@@ -87,7 +92,12 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({ sessionId, remotePath, f
   const lineCount = content.split('\n').length;
 
   return (
-    <div className="sftp-editor-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
+    <div
+      className="sftp-editor-overlay"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
       <div className="sftp-editor-dialog">
         {/* Header */}
         <div className="sftp-editor-header">
@@ -113,11 +123,7 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({ sessionId, remotePath, f
               <Save size={14} />
               <span>{saving ? t('sftp_editor_saving') : t('sftp_editor_save')}</span>
             </button>
-            <button
-              className="sftp-editor-btn"
-              onClick={handleClose}
-              title={t('sftp_close')}
-            >
+            <button className="sftp-editor-btn" onClick={handleClose} title={t('sftp_close')}>
               <X size={14} />
             </button>
           </div>
@@ -144,7 +150,9 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({ sessionId, remotePath, f
             <div className="sftp-editor-content">
               <div className="sftp-editor-gutter">
                 {Array.from({ length: lineCount }, (_, i) => (
-                  <div key={i + 1} className="sftp-editor-line-num">{i + 1}</div>
+                  <div key={i + 1} className="sftp-editor-line-num">
+                    {i + 1}
+                  </div>
                 ))}
               </div>
               <textarea

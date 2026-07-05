@@ -69,6 +69,7 @@ Later plans should cover L3 policy auto-maintenance, runbook conversion, fleet/b
 ### Task 1: Backend Agent Types Skeleton
 
 **Files:**
+
 - Create: `src-tauri/src/agent/mod.rs`
 - Create: `src-tauri/src/agent/types.rs`
 - Modify: `src-tauri/src/lib.rs`
@@ -294,6 +295,7 @@ git commit -m "feat: add agent runtime types"
 ### Task 2: Redaction And Risk Classifier
 
 **Files:**
+
 - Modify: `src-tauri/src/agent/mod.rs`
 - Create: `src-tauri/src/agent/redaction.rs`
 - Create: `src-tauri/src/agent/risk.rs`
@@ -520,6 +522,7 @@ git commit -m "feat: add agent redaction and risk policy"
 ### Task 3: Agent Database And Encrypted AI Provider Settings
 
 **Files:**
+
 - Create: `src-tauri/src/agent/provider.rs`
 - Modify: `src-tauri/src/agent/mod.rs`
 - Modify: `src-tauri/src/database.rs`
@@ -706,6 +709,7 @@ git commit -m "feat: persist agent ai provider settings"
 ### Task 4: OpenAI-Compatible Streaming Parser And Prompt Contract
 
 **Files:**
+
 - Create: `src-tauri/src/agent/prompt.rs`
 - Modify: `src-tauri/src/agent/provider.rs`
 - Modify: `src-tauri/src/agent/mod.rs`
@@ -835,6 +839,7 @@ git commit -m "feat: add agent prompt and streaming parser"
 ### Task 5: Backend Agent Manager And Read-Only Tool Registry
 
 **Files:**
+
 - Create: `src-tauri/src/agent/tools.rs`
 - Create: `src-tauri/src/agent/manager.rs`
 - Modify: `src-tauri/src/agent/mod.rs`
@@ -1078,6 +1083,7 @@ git commit -m "feat: add agent manager and tool registry"
 ### Task 6: SSH Exec Streaming For Real-Time Logs
 
 **Files:**
+
 - Create: `src-tauri/src/agent/stream.rs`
 - Modify: `src-tauri/src/agent/mod.rs`
 - Modify: `src-tauri/src/ssh/mod.rs`
@@ -1238,6 +1244,7 @@ git commit -m "feat: add ssh log streaming for agent"
 ### Task 7: Agent Events, Evidence Frames, And Audit Persistence
 
 **Files:**
+
 - Create: `src-tauri/src/agent/audit.rs`
 - Modify: `src-tauri/src/agent/mod.rs`
 - Modify: `src-tauri/src/agent/manager.rs`
@@ -1396,6 +1403,7 @@ git commit -m "feat: add agent audit persistence"
 ### Task 8: Frontend Agent Types, Store, And Event Subscriptions
 
 **Files:**
+
 - Create: `src/types/agent.ts`
 - Create: `src/stores/agentStore.ts`
 - Create: `src/lib/agentEvents.ts`
@@ -1408,7 +1416,8 @@ Add `src/types/agent.ts`:
 ```ts
 export type AgentAutonomyLevel = 'observe' | 'recommend' | 'confirmed_act' | 'policy_auto_maintain';
 export type AgentRisk = 'read_only' | 'low' | 'medium' | 'high' | 'blocked';
-export type AgentToolName = 'run_command' | 'stream_log' | 'read_file' | 'docker_logs' | 'restart_service';
+export type AgentToolName =
+  'run_command' | 'stream_log' | 'read_file' | 'docker_logs' | 'restart_service';
 export type AgentSessionStatus = 'running' | 'completed' | 'cancelled' | 'failed';
 
 export interface AiProviderSettings {
@@ -1491,7 +1500,13 @@ Add `src/stores/agentStore.ts`:
 
 ```ts
 import { create } from 'zustand';
-import type { AgentAnalysisUpdate, AgentEvidence, AgentSessionInfo, AgentToolCall, AgentToolResult } from '../types/agent';
+import type {
+  AgentAnalysisUpdate,
+  AgentEvidence,
+  AgentSessionInfo,
+  AgentToolCall,
+  AgentToolResult,
+} from '../types/agent';
 
 interface AgentStore {
   activeSession: AgentSessionInfo | null;
@@ -1519,14 +1534,33 @@ export const useAgentStore = create<AgentStore>((set) => ({
   actions: [],
   results: [],
   error: null,
-  setActiveSession: (session) => set({ activeSession: session, evidence: [], analysisText: '', latestUpdate: null, actions: [], results: [], error: null }),
+  setActiveSession: (session) =>
+    set({
+      activeSession: session,
+      evidence: [],
+      analysisText: '',
+      latestUpdate: null,
+      actions: [],
+      results: [],
+      error: null,
+    }),
   pushEvidence: (evidence) => set((s) => ({ evidence: [...s.evidence, evidence] })),
   appendAnalysisText: (delta) => set((s) => ({ analysisText: s.analysisText + delta })),
   setLatestUpdate: (update) => set({ latestUpdate: update }),
-  upsertAction: (action) => set((s) => ({ actions: [...s.actions.filter((a) => a.id !== action.id), action] })),
+  upsertAction: (action) =>
+    set((s) => ({ actions: [...s.actions.filter((a) => a.id !== action.id), action] })),
   pushResult: (result) => set((s) => ({ results: [...s.results, result] })),
   setError: (error) => set({ error }),
-  reset: () => set({ activeSession: null, evidence: [], analysisText: '', latestUpdate: null, actions: [], results: [], error: null }),
+  reset: () =>
+    set({
+      activeSession: null,
+      evidence: [],
+      analysisText: '',
+      latestUpdate: null,
+      actions: [],
+      results: [],
+      error: null,
+    }),
 }));
 ```
 
@@ -1537,7 +1571,12 @@ Add `src/lib/agentEvents.ts`:
 ```ts
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useAgentStore } from '../stores/agentStore';
-import type { AgentAnalysisUpdate, AgentEvidence, AgentToolCall, AgentToolResult } from '../types/agent';
+import type {
+  AgentAnalysisUpdate,
+  AgentEvidence,
+  AgentToolCall,
+  AgentToolResult,
+} from '../types/agent';
 
 export async function subscribeAgentEvents(agentSessionId: string): Promise<UnlistenFn[]> {
   const unlisteners = await Promise.all([
@@ -1584,6 +1623,7 @@ git commit -m "feat: add frontend agent state model"
 ### Task 9: AI Settings UI
 
 **Files:**
+
 - Create: `src/components/Settings/AiSettingsSection.tsx`
 - Modify: `src/components/Settings/SettingsModal.tsx`
 - Modify: `src/i18n/locales/gwshell.zh.json`
@@ -1643,37 +1683,98 @@ export const AiSettingsSection: React.FC = () => {
       <div className="settings-section-title">{t('agent_ai_title')}</div>
       <div className="settings-col" style={{ maxWidth: 760 }}>
         <label className="settings-row">
-          <span className="settings-row-left"><span className="settings-label">{t('agent_ai_enabled')}</span></span>
+          <span className="settings-row-left">
+            <span className="settings-label">{t('agent_ai_enabled')}</span>
+          </span>
           <span className="settings-row-right">
-            <button className={`settings-toggle ${settings.enabled ? 'on' : ''}`} onClick={() => setSettings((s) => ({ ...s, enabled: !s.enabled }))} type="button">
+            <button
+              className={`settings-toggle ${settings.enabled ? 'on' : ''}`}
+              onClick={() => setSettings((s) => ({ ...s, enabled: !s.enabled }))}
+              type="button"
+            >
               <span className="settings-toggle-knob" />
             </button>
           </span>
         </label>
         <div className="settings-row">
-          <span className="settings-row-left"><span className="settings-label">{t('agent_ai_base_url')}</span></span>
-          <span className="settings-row-right"><input className="settings-input" style={{ width: 320 }} value={settings.base_url} onChange={(e) => setSettings((s) => ({ ...s, base_url: e.target.value }))} /></span>
-        </div>
-        <div className="settings-row">
-          <span className="settings-row-left"><span className="settings-label">{t('agent_ai_model')}</span></span>
-          <span className="settings-row-right"><input className="settings-input" style={{ width: 220 }} value={settings.model} onChange={(e) => setSettings((s) => ({ ...s, model: e.target.value }))} /></span>
-        </div>
-        <div className="settings-row">
-          <span className="settings-row-left"><span className="settings-label">{t('agent_ai_api_key')}</span><span className="settings-desc">{settings.api_key_configured ? t('agent_ai_key_configured') : t('agent_ai_key_missing')}</span></span>
-          <span className="settings-row-right"><input className="settings-input" type="password" style={{ width: 260 }} value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..." /></span>
-        </div>
-        <div className="settings-row">
-          <span className="settings-row-left"><span className="settings-label">{t('agent_ai_timeout')}</span></span>
-          <span className="settings-row-right"><input className="settings-input" style={{ width: 90 }} value={settings.request_timeout_secs} onChange={(e) => setSettings((s) => ({ ...s, request_timeout_secs: parseInt(e.target.value) || 45 }))} /></span>
-        </div>
-        <div className="settings-row">
-          <span className="settings-row-left"><span className="settings-desc">{t('agent_ai_external_notice')}</span></span>
+          <span className="settings-row-left">
+            <span className="settings-label">{t('agent_ai_base_url')}</span>
+          </span>
           <span className="settings-row-right">
-            <button className="settings-btn-outline" onClick={clearKey}>{t('agent_ai_clear_key')}</button>
-            <button className="settings-btn-primary" style={{ marginLeft: 8 }} onClick={save}>{t('settings_apply')}</button>
+            <input
+              className="settings-input"
+              style={{ width: 320 }}
+              value={settings.base_url}
+              onChange={(e) => setSettings((s) => ({ ...s, base_url: e.target.value }))}
+            />
           </span>
         </div>
-        {message && <p className="settings-desc" style={{ color: 'var(--success)' }}>{message}</p>}
+        <div className="settings-row">
+          <span className="settings-row-left">
+            <span className="settings-label">{t('agent_ai_model')}</span>
+          </span>
+          <span className="settings-row-right">
+            <input
+              className="settings-input"
+              style={{ width: 220 }}
+              value={settings.model}
+              onChange={(e) => setSettings((s) => ({ ...s, model: e.target.value }))}
+            />
+          </span>
+        </div>
+        <div className="settings-row">
+          <span className="settings-row-left">
+            <span className="settings-label">{t('agent_ai_api_key')}</span>
+            <span className="settings-desc">
+              {settings.api_key_configured
+                ? t('agent_ai_key_configured')
+                : t('agent_ai_key_missing')}
+            </span>
+          </span>
+          <span className="settings-row-right">
+            <input
+              className="settings-input"
+              type="password"
+              style={{ width: 260 }}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="sk-..."
+            />
+          </span>
+        </div>
+        <div className="settings-row">
+          <span className="settings-row-left">
+            <span className="settings-label">{t('agent_ai_timeout')}</span>
+          </span>
+          <span className="settings-row-right">
+            <input
+              className="settings-input"
+              style={{ width: 90 }}
+              value={settings.request_timeout_secs}
+              onChange={(e) =>
+                setSettings((s) => ({ ...s, request_timeout_secs: parseInt(e.target.value) || 45 }))
+              }
+            />
+          </span>
+        </div>
+        <div className="settings-row">
+          <span className="settings-row-left">
+            <span className="settings-desc">{t('agent_ai_external_notice')}</span>
+          </span>
+          <span className="settings-row-right">
+            <button className="settings-btn-outline" onClick={clearKey}>
+              {t('agent_ai_clear_key')}
+            </button>
+            <button className="settings-btn-primary" style={{ marginLeft: 8 }} onClick={save}>
+              {t('settings_apply')}
+            </button>
+          </span>
+        </div>
+        {message && (
+          <p className="settings-desc" style={{ color: 'var(--success)' }}>
+            {message}
+          </p>
+        )}
       </div>
     </>
   );
@@ -1697,7 +1798,9 @@ import { AiSettingsSection } from './AiSettingsSection';
 Inside settings content:
 
 ```tsx
-{activeNav === 'agent-ai' && <AiSettingsSection />}
+{
+  activeNav === 'agent-ai' && <AiSettingsSection />;
+}
 ```
 
 - [ ] **Step 3: Add i18n keys**
@@ -1741,6 +1844,7 @@ git commit -m "feat: add agent ai settings"
 ### Task 10: Agent Panel Shell And App Integration
 
 **Files:**
+
 - Create: `src/components/Agent/AgentPanel.tsx`
 - Create: `src/components/Agent/AgentObjective.tsx`
 - Create: `src/components/Agent/AgentAnalysisStream.tsx`
@@ -1807,8 +1911,15 @@ export const AgentObjective: React.FC = () => {
 
   return (
     <div className="agent-objective">
-      <textarea className="agent-objective-input" value={objective} onChange={(e) => setObjective(e.target.value)} placeholder={t('agent_objective_placeholder')} />
-      <button className="settings-btn-primary" onClick={start} disabled={!objective.trim()}>{t('agent_start')}</button>
+      <textarea
+        className="agent-objective-input"
+        value={objective}
+        onChange={(e) => setObjective(e.target.value)}
+        placeholder={t('agent_objective_placeholder')}
+      />
+      <button className="settings-btn-primary" onClick={start} disabled={!objective.trim()}>
+        {t('agent_start')}
+      </button>
     </div>
   );
 };
@@ -1863,7 +1974,11 @@ export const AgentActionQueue: React.FC = () => {
         <div className={`agent-action agent-risk-${action.risk}`} key={action.id}>
           <div>{action.tool}</div>
           <div>{action.reason}</div>
-          <code>{typeof action.payload.command === 'string' ? action.payload.command : JSON.stringify(action.payload)}</code>
+          <code>
+            {typeof action.payload.command === 'string'
+              ? action.payload.command
+              : JSON.stringify(action.payload)}
+          </code>
         </div>
       ))}
     </div>
@@ -1898,7 +2013,9 @@ export const AgentPanel: React.FC = () => {
     <aside className="agent-panel">
       <div className="agent-panel-header">
         <span>{t('agent_panel_title')}</span>
-        <button className="sp-header__close" onClick={toggle} title={t('serverPanel_close')}><X size={16} /></button>
+        <button className="sp-header__close" onClick={toggle} title={t('serverPanel_close')}>
+          <X size={16} />
+        </button>
       </div>
       <div className="agent-panel-body">
         <AgentObjective />
@@ -1924,7 +2041,9 @@ export { AgentPanel } from './AgentPanel';
 Modify `src/App.tsx`:
 
 ```tsx
-const AgentPanel = lazy(() => import('./components/Agent').then((m) => ({ default: m.AgentPanel })));
+const AgentPanel = lazy(() =>
+  import('./components/Agent').then((m) => ({ default: m.AgentPanel })),
+);
 ```
 
 Render near `ServerPanel`:
@@ -2003,6 +2122,7 @@ git commit -m "feat: add agent panel shell"
 ### Task 11: Wire Agent Session To Initial Evidence And Model Stream
 
 **Files:**
+
 - Modify: `src-tauri/src/agent/manager.rs`
 - Modify: `src-tauri/src/agent/provider.rs`
 - Modify: `src-tauri/src/lib.rs`
@@ -2115,6 +2235,7 @@ git commit -m "feat: emit initial agent evidence"
 ### Task 12: Action Approval And Execution IPC
 
 **Files:**
+
 - Modify: `src-tauri/src/lib.rs`
 - Modify: `src/components/Agent/AgentActionQueue.tsx`
 - Modify: `src/stores/agentStore.ts`
@@ -2186,6 +2307,7 @@ git commit -m "feat: execute agent actions with approval"
 ### Task 13: Verification, Audit Save, And Final Build
 
 **Files:**
+
 - Modify: `src-tauri/src/agent/tools.rs`
 - Modify: `src-tauri/src/agent/audit.rs`
 - Modify: `src-tauri/src/lib.rs`
@@ -2243,7 +2365,9 @@ export const AgentAuditTimeline: React.FC = () => {
         <div className="agent-audit-row" key={result.call_id}>
           <span>{result.ok ? 'OK' : 'FAIL'}</span>
           <pre>{result.output || result.error}</pre>
-          {result.verification && <pre>Verification: {result.verification.output || result.verification.error}</pre>}
+          {result.verification && (
+            <pre>Verification: {result.verification.output || result.verification.error}</pre>
+          )}
         </div>
       ))}
     </div>
@@ -2283,6 +2407,7 @@ git commit -m "feat: verify and audit agent actions"
 ### Task 14: Manual End-To-End Verification
 
 **Files:**
+
 - No source files unless bugs are found.
 
 - [ ] **Step 1: Start the app**

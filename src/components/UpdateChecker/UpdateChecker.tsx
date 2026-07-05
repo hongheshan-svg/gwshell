@@ -79,9 +79,12 @@ export const UpdateChecker: React.FC = () => {
     // Updates are non-critical; don't let them compete with early window interactions.
     const timer = window.setTimeout(() => {
       if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        idleCallbackId = window.requestIdleCallback(() => {
-          void checkForUpdate();
-        }, { timeout: 5000 });
+        idleCallbackId = window.requestIdleCallback(
+          () => {
+            void checkForUpdate();
+          },
+          { timeout: 5000 },
+        );
       } else {
         idleCallbackId = setTimeout(() => {
           void checkForUpdate();
@@ -115,10 +118,13 @@ export const UpdateChecker: React.FC = () => {
             <Download size={12} />
             {t('update_download')}
           </button>
-          <button className="update-toast-btn" onClick={() => {
-            localStorage.setItem(DISMISSED_KEY, newVersion);
-            setDismissed(true);
-          }}>
+          <button
+            className="update-toast-btn"
+            onClick={() => {
+              localStorage.setItem(DISMISSED_KEY, newVersion);
+              setDismissed(true);
+            }}
+          >
             <X size={12} />
           </button>
         </>

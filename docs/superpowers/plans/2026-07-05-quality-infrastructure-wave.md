@@ -28,6 +28,7 @@ This plan implements `docs/superpowers/specs/2026-07-05-quality-infrastructure-w
 ## File Structure (whole wave)
 
 **Created:**
+
 ```
 .eslintrc.cjs, .eslintignore, .prettierrc.json, .prettierignore
 .editorconfig, .gitattributes, rustfmt.toml, clippy.toml
@@ -44,6 +45,7 @@ src/lib/ipcEvents.ts
 ```
 
 **Modified:**
+
 ```
 package.json, src-tauri/Cargo.toml
 src-tauri/src/{database,vault,pty,serial,lib}.rs
@@ -67,6 +69,7 @@ AGENTS.md
 ### Task 1.1: Install frontend lint/format devDependencies
 
 **Files:**
+
 - Modify: `package.json`, `package-lock.json`
 
 - [ ] **Step 1: Install the devDependencies**
@@ -129,7 +132,10 @@ module.exports = {
     'no-console': ['error', { allow: ['warn', 'error'] }],
     'no-restricted-syntax': [
       'error',
-      { selector: 'TSAsExpression', message: 'Avoid `as` casts — narrow with types or guards instead.' },
+      {
+        selector: 'TSAsExpression',
+        message: 'Avoid `as` casts — narrow with types or guards instead.',
+      },
     ],
   },
   ignorePatterns: ['dist/', 'node_modules/', 'src-tauri/', '.vite/', 'src/i18n/locales/**'],
@@ -137,6 +143,7 @@ module.exports = {
 ```
 
 - [ ] **Step 2: Write `.eslintignore`**
+
 ```
 dist/
 node_modules/
@@ -147,6 +154,7 @@ src/i18n/locales/
 ```
 
 - [ ] **Step 3: Write `.prettierrc.json`**
+
 ```json
 {
   "semi": true,
@@ -162,6 +170,7 @@ src/i18n/locales/
 ```
 
 - [ ] **Step 4: Write `.prettierignore`**
+
 ```
 dist/
 node_modules/
@@ -173,6 +182,7 @@ src/i18n/locales/
 ```
 
 - [ ] **Step 5: Write `.editorconfig`**
+
 ```ini
 root = true
 
@@ -195,6 +205,7 @@ indent_style = tab
 ```
 
 - [ ] **Step 6: Write `.gitattributes`**
+
 ```
 * text=auto eol=lf
 *.png binary
@@ -204,6 +215,7 @@ indent_style = tab
 ```
 
 - [ ] **Step 7: Write `rustfmt.toml`**
+
 ```toml
 edition = "2021"
 max_width = 100
@@ -211,6 +223,7 @@ fn_single_line = true
 ```
 
 - [ ] **Step 8: Write `clippy.toml`**
+
 ```toml
 msrv = "1.80"
 type-complexity-threshold = 250
@@ -256,12 +269,14 @@ Do NOT add `test` as an alias — `npm test` running `test:node` would surprise 
 - [ ] **Step 4: Verify the app still builds** — `npm run build` (must succeed; if Prettier broke a template/JSX, fix manually).
 
 - [ ] **Step 5: Create `.git-blame-ignore-revs`** with header:
+
 ```
 # Commits that should be ignored by git blame (bulk reformats, etc.)
 # One SHA per line.
 ```
 
 - [ ] **Step 6: Commit the bulk reformat**
+
 ```bash
 git add -A
 git commit -m "chore: apply prettier, eslint --fix, cargo fmt (bulk reformat)
@@ -271,6 +286,7 @@ commit to .git-blame-ignore-revs so git blame skips it."
 ```
 
 - [ ] **Step 7: Add the reformat SHA to `.git-blame-ignore-revs`**
+
 ```bash
 REFORMAT_SHA=$(git rev-parse HEAD)
 echo "$REFORMAT_SHA  # bulk reformat (PR1)" >> .git-blame-ignore-revs
@@ -332,6 +348,7 @@ Expected top: `no-explicit-any`, `no-console`, `no-unused-vars`, `no-restricted-
 ### Task 2.4: Fix `TSAsExpression` violations via typed `ipcEvents` helper
 
 **Files:**
+
 - Create: `src/lib/ipcEvents.ts`
 - Modify: `src/components/Terminal/TerminalView.tsx` (docker-picker casts)
 - Modify: `src/components/Terminal/DockerContainerPicker.tsx`
@@ -462,7 +479,7 @@ jobs:
           for i in 1 2 3; do
             npm ci && break || (sleep 10 && [ $i -lt 3 ])
           done
-      - run: npm run build  # produces ../dist needed by tauri build.rs
+      - run: npm run build # produces ../dist needed by tauri build.rs
       - run: cargo fmt --check
         working-directory: src-tauri
       - run: cargo clippy -- -D warnings
@@ -531,15 +548,15 @@ jobs:
 - [ ] **Step 2: Insert SBOM step before the release upload**
 
 ```yaml
-      - name: Generate CycloneDX SBOM
-        run: |
-          cargo install cargo-cyclonedx --locked
-          cargo cyclonedx --format json --output-pattern package
-        working-directory: src-tauri
-      - name: Upload SBOM to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: src-tauri/gwshell.cdx.json
+- name: Generate CycloneDX SBOM
+  run: |
+    cargo install cargo-cyclonedx --locked
+    cargo cyclonedx --format json --output-pattern package
+  working-directory: src-tauri
+- name: Upload SBOM to release
+  uses: softprops/action-gh-release@v2
+  with:
+    files: src-tauri/gwshell.cdx.json
 ```
 
 - [ ] **Step 3: Verify YAML** — `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/release.yml'))"`
@@ -566,8 +583,14 @@ function checkI18nKeyParity() {
   const onlyInZh = zhKeys.filter((k) => !enKeys.includes(k));
   if (onlyInEn.length === 0 && onlyInZh.length === 0) return { ok: true, errors: [] };
   const errors = [];
-  if (onlyInEn.length) errors.push(`Keys only in en.json: ${onlyInEn.slice(0, 10).join(', ')}${onlyInEn.length > 10 ? ' (...)' : ''}`);
-  if (onlyInZh.length) errors.push(`Keys only in zh.json: ${onlyInZh.slice(0, 10).join(', ')}${onlyInZh.length > 10 ? ' (...)' : ''}`);
+  if (onlyInEn.length)
+    errors.push(
+      `Keys only in en.json: ${onlyInEn.slice(0, 10).join(', ')}${onlyInEn.length > 10 ? ' (...)' : ''}`,
+    );
+  if (onlyInZh.length)
+    errors.push(
+      `Keys only in zh.json: ${onlyInZh.slice(0, 10).join(', ')}${onlyInZh.length > 10 ? ' (...)' : ''}`,
+    );
   return { ok: false, errors };
 }
 
@@ -587,6 +610,7 @@ function collectKeys(obj, prefix) {
 - [ ] **Step 4: Verify passes** — `npm run smoke:check`
 
 - [ ] **Step 5: Verify FAILS on broken case (then revert)**
+
 ```bash
 python3 -c "import json; d=json.load(open('src/i18n/locales/gwshell.en.json')); d['__test_missing']='temp'; json.dump(d, open('src/i18n/locales/gwshell.en.json','w'), indent=2, ensure_ascii=False)"
 npm run smoke:check  # should fail
@@ -603,35 +627,53 @@ git checkout src/i18n/locales/gwshell.en.json
 
 ```javascript
 const ALLOWED_EVENT_NAMES = [
-  'pty-data', 'pty-exit',
-  'ssh-data', 'ssh-exit',
-  'serial-data', 'serial-exit',
+  'pty-data',
+  'pty-exit',
+  'ssh-data',
+  'ssh-exit',
+  'serial-data',
+  'serial-exit',
   'sftp-progress',
   'server-metrics',
 ];
 
 function collectEventNames(dir, pattern) {
   try {
-    const out = execSync(`grep -rohE "${pattern}" ${dir} 2>/dev/null || true`, { encoding: 'utf8' });
+    const out = execSync(`grep -rohE "${pattern}" ${dir} 2>/dev/null || true`, {
+      encoding: 'utf8',
+    });
     return [...new Set(out.trim().split('\n').filter(Boolean))];
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 function checkEventNameParity() {
   const backendRaw = collectEventNames('src-tauri/src', 'emit\\("[a-z_-]+-\\{');
-  const backendPrefixes = [...new Set(backendRaw.map((s) => s.match(/emit\("([a-z_-]+)-/)?.[1]).filter(Boolean))].sort();
+  const backendPrefixes = [
+    ...new Set(backendRaw.map((s) => s.match(/emit\("([a-z_-]+)-/)?.[1]).filter(Boolean)),
+  ].sort();
   const frontendRaw = collectEventNames('src', 'listen\\("[a-z_-]+-[\\$\\{]');
-  const frontendPrefixes = [...new Set(frontendRaw.map((s) => s.match(/listen\("([a-z_-]+)-/)?.[1]).filter(Boolean))].sort();
+  const frontendPrefixes = [
+    ...new Set(frontendRaw.map((s) => s.match(/listen\("([a-z_-]+)-/)?.[1]).filter(Boolean)),
+  ].sort();
 
   const errors = [];
   for (const name of backendPrefixes) {
-    if (!ALLOWED_EVENT_NAMES.includes(name)) errors.push(`Backend emits "${name}-{id}" but it's not in ALLOWED_EVENT_NAMES — add it (forces review).`);
+    if (!ALLOWED_EVENT_NAMES.includes(name))
+      errors.push(
+        `Backend emits "${name}-{id}" but it's not in ALLOWED_EVENT_NAMES — add it (forces review).`,
+      );
   }
   for (const name of frontendPrefixes) {
-    if (!backendPrefixes.includes(name)) errors.push(`Frontend listens for "${name}-{id}" but backend never emits it.`);
+    if (!backendPrefixes.includes(name))
+      errors.push(`Frontend listens for "${name}-{id}" but backend never emits it.`);
   }
   for (const name of ALLOWED_EVENT_NAMES) {
-    if (!backendPrefixes.includes(name)) errors.push(`ALLOWED_EVENT_NAMES lists "${name}" but backend never emits it — remove or implement.`);
+    if (!backendPrefixes.includes(name))
+      errors.push(
+        `ALLOWED_EVENT_NAMES lists "${name}" but backend never emits it — remove or implement.`,
+      );
   }
   return { ok: errors.length === 0, errors };
 }
@@ -651,24 +693,39 @@ function checkEventNameParity() {
 
 ```javascript
 function checkCapabilitiesAllowlist() {
-  const caps = JSON.parse(fs.readFileSync(path.join(SRC_TAURI, 'capabilities/default.json'), 'utf8'));
+  const caps = JSON.parse(
+    fs.readFileSync(path.join(SRC_TAURI, 'capabilities/default.json'), 'utf8'),
+  );
   const allowed = new Set([
-    'core:default', 'opener:allow-open-path',
-    'dialog:allow-open', 'dialog:allow-save',
-    'core:window:allow-start-dragging', 'core:window:allow-minimize',
-    'core:window:allow-maximize', 'core:window:allow-unmaximize',
-    'core:window:allow-close', 'core:window:allow-destroy',
-    'core:window:allow-toggle-maximize', 'core:window:allow-is-maximized',
-    'core:window:allow-show', 'core:window:allow-hide',
+    'core:default',
+    'opener:allow-open-path',
+    'dialog:allow-open',
+    'dialog:allow-save',
+    'core:window:allow-start-dragging',
+    'core:window:allow-minimize',
+    'core:window:allow-maximize',
+    'core:window:allow-unmaximize',
+    'core:window:allow-close',
+    'core:window:allow-destroy',
+    'core:window:allow-toggle-maximize',
+    'core:window:allow-is-maximized',
+    'core:window:allow-show',
+    'core:window:allow-hide',
     'core:window:allow-set-focus',
-    'updater:allow-check', 'updater:allow-download-and-install',
+    'updater:allow-check',
+    'updater:allow-download-and-install',
     'deep-link:default',
-    'clipboard-manager:allow-read-text', 'clipboard-manager:allow-write-text',
-    'process:allow-exit', 'global-shortcut:default',
+    'clipboard-manager:allow-read-text',
+    'clipboard-manager:allow-write-text',
+    'process:allow-exit',
+    'global-shortcut:default',
   ]);
   const errors = [];
   for (const perm of caps.permissions || []) {
-    if (!allowed.has(perm)) errors.push(`capabilities/default.json grants "${perm}" which is not on the allowlist — add it here (forces security review).`);
+    if (!allowed.has(perm))
+      errors.push(
+        `capabilities/default.json grants "${perm}" which is not on the allowlist — add it here (forces security review).`,
+      );
   }
   return { ok: errors.length === 0, errors };
 }
@@ -679,6 +736,7 @@ function checkCapabilitiesAllowlist() {
 - [ ] **Step 3: Verify passes** — `npm run smoke:check`
 
 - [ ] **Step 4: Verify FAILS on broken case (then revert)**
+
 ```bash
 python3 -c "import json; d=json.load(open('src-tauri/capabilities/default.json')); d['permissions'].append('fs:allow-read-text'); json.dump(d, open('src-tauri/capabilities/default.json','w'), indent=2)"
 npm run smoke:check  # should fail
@@ -708,6 +766,7 @@ git checkout src-tauri/capabilities/default.json
 **Files:** Create `src/stores/toastStore.ts`
 
 **Interfaces:**
+
 - Produces: `useToastStore` exporting `toasts`, `pushToast(toast)`, `dismissToast(id)`, `clear()`. Toast shape: `{ id, kind: 'info'|'success'|'warning'|'error', title, message?, durationMs?, action? }`.
 
 - [ ] **Step 1: Write `src/stores/toastStore.ts`**
@@ -805,6 +864,7 @@ export function useToast() {
 ### Task 4.3: Create `ToastProvider` + `ToastItem` components
 
 **Files:**
+
 - Create: `src/components/Toast/ToastProvider.tsx`
 - Create: `src/components/Toast/ToastItem.tsx`
 - Create: `src/components/Toast/toast.css`
@@ -836,25 +896,61 @@ export function useToast() {
   color: var(--text-primary);
   animation: toast-slide-in 200ms ease-out;
 }
-.toast-item--error { border-left: 3px solid var(--accent-danger); }
-.toast-item--warning { border-left: 3px solid var(--accent-warning); }
-.toast-item--success { border-left: 3px solid var(--accent-success); }
-.toast-item--info { border-left: 3px solid var(--accent-primary); }
-.toast-title { font-weight: 600; font-size: 0.875rem; }
-.toast-message { font-size: 0.8125rem; color: var(--text-secondary); margin-top: 2px; }
-.toast-body { flex: 1; min-width: 0; }
-.toast-close {
-  background: none; border: none; color: var(--text-secondary);
-  cursor: pointer; padding: 0 var(--space-1); font-size: 1rem; line-height: 1;
+.toast-item--error {
+  border-left: 3px solid var(--accent-danger);
 }
-.toast-close:hover { color: var(--text-primary); }
+.toast-item--warning {
+  border-left: 3px solid var(--accent-warning);
+}
+.toast-item--success {
+  border-left: 3px solid var(--accent-success);
+}
+.toast-item--info {
+  border-left: 3px solid var(--accent-primary);
+}
+.toast-title {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+.toast-message {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+.toast-body {
+  flex: 1;
+  min-width: 0;
+}
+.toast-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0 var(--space-1);
+  font-size: 1rem;
+  line-height: 1;
+}
+.toast-close:hover {
+  color: var(--text-primary);
+}
 .toast-action {
-  background: none; border: none; color: var(--accent-primary);
-  cursor: pointer; font-size: 0.8125rem; font-weight: 500; margin-top: var(--space-1);
+  background: none;
+  border: none;
+  color: var(--accent-primary);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  margin-top: var(--space-1);
 }
 @keyframes toast-slide-in {
-  from { opacity: 0; transform: translateX(20px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 ```
 
@@ -885,7 +981,11 @@ export function ToastItem({ toast }: { toast: Toast }) {
           </button>
         )}
       </div>
-      <button className="toast-close" onClick={() => dismiss(toast.id)} aria-label={t('common.dismiss')}>
+      <button
+        className="toast-close"
+        onClick={() => dismiss(toast.id)}
+        aria-label={t('common.dismiss')}
+      >
         <X size={14} />
       </button>
     </div>
@@ -919,6 +1019,7 @@ export function ToastProvider() {
 ### Task 4.4: Create `confirmStore.ts` + `useConfirm.ts` + `ConfirmDialog.tsx`
 
 **Files:**
+
 - Create: `src/stores/confirmStore.ts`
 - Create: `src/hooks/useConfirm.ts`
 - Create: `src/components/ConfirmDialog/ConfirmDialog.tsx`
@@ -972,27 +1073,68 @@ export function useConfirm() {
 
 ```css
 .confirm-overlay {
-  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 10001; animation: confirm-fade-in 150ms ease-out;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10001;
+  animation: confirm-fade-in 150ms ease-out;
 }
 .confirm-dialog {
-  background: var(--bg-elevated); border: 1px solid var(--border-color);
-  border-radius: var(--radius-md); padding: var(--space-4);
-  min-width: 320px; max-width: 420px; box-shadow: var(--shadow-elevated);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  min-width: 320px;
+  max-width: 420px;
+  box-shadow: var(--shadow-elevated);
 }
-.confirm-title { font-weight: 600; font-size: 0.9375rem; margin-bottom: var(--space-2); color: var(--text-primary); }
-.confirm-message { font-size: 0.875rem; color: var(--text-secondary); margin-bottom: var(--space-3); }
-.confirm-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.confirm-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  margin-bottom: var(--space-2);
+  color: var(--text-primary);
+}
+.confirm-message {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-3);
+}
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
 .confirm-btn {
-  padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color); background: var(--bg-elevated);
-  color: var(--text-primary); cursor: pointer; font-size: 0.8125rem;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.8125rem;
 }
-.confirm-btn:hover { background: var(--bg-hover); }
-.confirm-btn--danger { background: var(--accent-danger); color: white; border-color: var(--accent-danger); }
-.confirm-btn--danger:hover { filter: brightness(1.1); }
-@keyframes confirm-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.confirm-btn:hover {
+  background: var(--bg-hover);
+}
+.confirm-btn--danger {
+  background: var(--accent-danger);
+  color: white;
+  border-color: var(--accent-danger);
+}
+.confirm-btn--danger:hover {
+  filter: brightness(1.1);
+}
+@keyframes confirm-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
 ```
 
 - [ ] **Step 4: Write `src/components/ConfirmDialog/ConfirmDialog.tsx`** (focus trap: focus confirm on open, Esc cancels, Enter confirms)
@@ -1032,7 +1174,9 @@ export function ConfirmDialog() {
         aria-labelledby="confirm-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <div id="confirm-title" className="confirm-title">{options.title}</div>
+        <div id="confirm-title" className="confirm-title">
+          {options.title}
+        </div>
         {options.message && <div className="confirm-message">{options.message}</div>}
         <div className="confirm-actions">
           <button className="confirm-btn" onClick={() => respond(false)}>
@@ -1059,6 +1203,7 @@ export function ConfirmDialog() {
 ### Task 4.5: Mount providers at `App.tsx` root + add i18n keys
 
 **Files:**
+
 - Modify: `src/App.tsx`
 - Modify: `src/i18n/locales/gwshell.en.json`
 - Modify: `src/i18n/locales/gwshell.zh.json`
@@ -1133,6 +1278,7 @@ Both render `null` when nothing to show, so mounting at root is always safe.
 ### Task 4.6: Replace `window.confirm` call sites with `useConfirm`
 
 **Files:** 8 call sites across 7 files:
+
 - `src/components/Sidebar/SessionPanel.tsx:253`
 - `src/components/Sidebar/SnippetPanel.tsx:133`
 - `src/components/SftpPanel/SftpEditor.tsx:60`
@@ -1191,6 +1337,7 @@ Note: `useConfirm` returns an async function — the enclosing handler must be `
 ### Task 4.7: Wire optimistic-rollback failures to toast
 
 **Files:**
+
 - Modify: `src/stores/snippetStore.ts`
 - Modify: `src/stores/appStore.ts`
 - Modify: `src/stores/agentPolicyStore.ts`
@@ -1221,6 +1368,7 @@ useToastStore.getState().pushToast({
 ### Task 4.8: Migrate `UpdateChecker` + `SecurityNotice` to toast
 
 **Files:**
+
 - Modify: `src/components/UpdateChecker/UpdateChecker.tsx`
 - Modify: `src/components/SecurityNotice/SecurityNotice.tsx`
 - Modify: `src/styles/global.css` (remove orphan `.update-toast` rules)
@@ -1261,7 +1409,10 @@ useEffect(() => {
 
 ```javascript
 function checkNoWindowConfirm() {
-  const result = execSync(`grep -rn "window\\.confirm" src/ --include="*.ts" --include="*.tsx" || true`, { encoding: 'utf8' });
+  const result = execSync(
+    `grep -rn "window\\.confirm" src/ --include="*.ts" --include="*.tsx" || true`,
+    { encoding: 'utf8' },
+  );
   if (result.trim()) {
     return {
       ok: false,
@@ -1493,6 +1644,7 @@ Implement the test body: open a pty via `create_local_shell`, send 65+ `PtyCmd::
 ### Task 5.3: Expose `flow_control` in `serial.rs`
 
 **Files:**
+
 - Modify: `src-tauri/src/serial.rs`
 - Modify: `src-tauri/src/lib.rs` (`serial_open` command signature)
 - Modify: `src/types/index.ts` (`SessionConfig.serial_flow_control`)
@@ -1652,6 +1804,7 @@ refinery = { version = "0.8", features = ["rusqlite"] }
 ### Task 6.2: Create `migrations/V001__initial.sql`
 
 **Files:**
+
 - Create: `src-tauri/migrations/V001__initial.sql`
 - Create: `src-tauri/tests/fixtures/v0.5.5_baseline.sql`
 
@@ -1960,6 +2113,7 @@ Schema changes use `refinery` (embedded SQL files in `src-tauri/migrations/`).
 The current schema is captured in `V001__initial.sql`.
 
 To add a schema change:
+
 1. Create `src-tauri/migrations/V0NN__description.sql`.
 2. Add the corresponding fixture/update to `tests/fixtures/` if testing migration.
 3. Run `cd src-tauri && cargo test --test migrations` to verify.
@@ -1983,28 +2137,28 @@ upgrade of pre-refinery (v0.5.5) databases — do not modify it.
 
 ### Spec coverage
 
-| Spec section | Tasks implementing it |
-|---|---|
-| §A.2.1 config files | Task 1.2 |
-| §A.2.2 npm scripts | Task 1.3 |
-| §A.2.3 Cargo.toml dev-deps | Task 6.1 (refinery) |
-| §A.2.4 ci.yml changes | Task 3.1 |
-| §A.2.5 security.yml | Task 3.2 |
-| §A.2.6 release.yml SBOM | Task 3.3 |
-| §A.2.7 smoke:check extensions (i18n, events, capabilities) | Tasks 3.4, 3.5, 3.6 |
-| §A.2.8 backwards compat (bulk reformat) | Task 1.4 |
-| §B.3.1 toast store + provider + hook | Tasks 4.1, 4.2, 4.3 |
-| §B.3.1 confirm dialog + hook | Task 4.4 |
-| §B.3.2 migration of call sites | Tasks 4.5, 4.6, 4.7, 4.8 |
-| §B.3.3 i18n keys | Task 4.5 |
-| §B.3.4 component layout | Tasks 4.3, 4.4 |
-| §B.3.5 backwards compat (UpdateChecker/SecurityNotice) | Task 4.8 |
-| §C.4.1 documented Argon2id | Task 5.1 |
-| §C.4.2 pty close_pty_wait | Task 5.2 |
-| §C.4.3 serial flow_control | Task 5.3 |
-| §C.4.4 SBOM | Task 3.3 (in PR3) |
-| §C.4.5 cargo audit + npm audit | Task 3.2 |
-| §D.5.1-5.5 refinery integration | Tasks 6.1, 6.2, 6.3, 6.4 |
+| Spec section                                               | Tasks implementing it    |
+| ---------------------------------------------------------- | ------------------------ |
+| §A.2.1 config files                                        | Task 1.2                 |
+| §A.2.2 npm scripts                                         | Task 1.3                 |
+| §A.2.3 Cargo.toml dev-deps                                 | Task 6.1 (refinery)      |
+| §A.2.4 ci.yml changes                                      | Task 3.1                 |
+| §A.2.5 security.yml                                        | Task 3.2                 |
+| §A.2.6 release.yml SBOM                                    | Task 3.3                 |
+| §A.2.7 smoke:check extensions (i18n, events, capabilities) | Tasks 3.4, 3.5, 3.6      |
+| §A.2.8 backwards compat (bulk reformat)                    | Task 1.4                 |
+| §B.3.1 toast store + provider + hook                       | Tasks 4.1, 4.2, 4.3      |
+| §B.3.1 confirm dialog + hook                               | Task 4.4                 |
+| §B.3.2 migration of call sites                             | Tasks 4.5, 4.6, 4.7, 4.8 |
+| §B.3.3 i18n keys                                           | Task 4.5                 |
+| §B.3.4 component layout                                    | Tasks 4.3, 4.4           |
+| §B.3.5 backwards compat (UpdateChecker/SecurityNotice)     | Task 4.8                 |
+| §C.4.1 documented Argon2id                                 | Task 5.1                 |
+| §C.4.2 pty close_pty_wait                                  | Task 5.2                 |
+| §C.4.3 serial flow_control                                 | Task 5.3                 |
+| §C.4.4 SBOM                                                | Task 3.3 (in PR3)        |
+| §C.4.5 cargo audit + npm audit                             | Task 3.2                 |
+| §D.5.1-5.5 refinery integration                            | Tasks 6.1, 6.2, 6.3, 6.4 |
 
 ### Type consistency check
 
@@ -2017,4 +2171,3 @@ upgrade of pre-refinery (v0.5.5) databases — do not modify it.
 ### Placeholder scan
 
 No TBD/TODO. Two intentional `#[cfg(test)]` bodies that say "implement the test body" (Task 5.2 Step 5, Task 2.6 Step 3 auto-fix) — these are TDD-style "write the test" steps where the actual test code is shown. No vague "add appropriate error handling" steps.
-

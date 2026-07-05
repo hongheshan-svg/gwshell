@@ -58,7 +58,10 @@ export const PolicyAutoAnalysis: React.FC<Props> = ({ policy, busy, onChange }) 
             value={policy.max_auto_continuations}
             onChange={(e) =>
               onChange({
-                max_auto_continuations: Math.max(1, Math.min(30, parseInt(e.target.value, 10) || 8)),
+                max_auto_continuations: Math.max(
+                  1,
+                  Math.min(30, parseInt(e.target.value, 10) || 8),
+                ),
               })
             }
           />

@@ -48,7 +48,7 @@
   ```ts
   const selected = await dialogOpen({ multiple: false, title: t('ssh_select_key_file') });
   if (typeof selected === 'string' && selected) {
-    setForm(prev => ({ ...prev, private_key_path: selected }));
+    setForm((prev) => ({ ...prev, private_key_path: selected }));
   }
   ```
 - 输入框**保留可手动编辑**（导入会话、`~` 路径、相对路径仍可工作）
@@ -63,11 +63,11 @@
 
 `src/i18n/locales/gwshell.{en,zh}.json` 增加：
 
-| key | en | zh |
-|---|---|---|
-| `ssh_select_key_file` | Select SSH private key | 选择 SSH 私钥文件 |
-| `ssh_key_passphrase_label` | Key passphrase (optional) | 密码短语（可选） |
-| `ssh_key_passphrase_hint` | Only needed if your private key is encrypted | 仅用于解密带密码的私钥 |
+| key                        | en                                           | zh                     |
+| -------------------------- | -------------------------------------------- | ---------------------- |
+| `ssh_select_key_file`      | Select SSH private key                       | 选择 SSH 私钥文件      |
+| `ssh_key_passphrase_label` | Key passphrase (optional)                    | 密码短语（可选）       |
+| `ssh_key_passphrase_hint`  | Only needed if your private key is encrypted | 仅用于解密带密码的私钥 |
 
 ### 3. 后端（`src-tauri/src/ssh.rs`）
 
@@ -127,12 +127,12 @@ if let Some(key_path_raw) = jump_private_key_path.filter(|s| !s.is_empty()) {
 
 ## 影响面
 
-| 文件 | 改动幅度 |
-|---|---|
-| `src/components/Modals/NewSessionModal.tsx` | +20~30 行（两个 📁 按钮 + passphrase 区段）|
-| `src/i18n/locales/gwshell.en.json` | +3 keys |
-| `src/i18n/locales/gwshell.zh.json` | +3 keys |
-| `src-tauri/src/ssh.rs` | +1 函数（~10 行）+ 两处分支改写 |
+| 文件                                        | 改动幅度                                    |
+| ------------------------------------------- | ------------------------------------------- |
+| `src/components/Modals/NewSessionModal.tsx` | +20~30 行（两个 📁 按钮 + passphrase 区段） |
+| `src/i18n/locales/gwshell.en.json`          | +3 keys                                     |
+| `src/i18n/locales/gwshell.zh.json`          | +3 keys                                     |
+| `src-tauri/src/ssh.rs`                      | +1 函数（~10 行）+ 两处分支改写             |
 
 不涉及：DB 迁移、跨进程通信变更、新依赖。
 
@@ -153,8 +153,8 @@ if let Some(key_path_raw) = jump_private_key_path.filter(|s| !s.is_empty()) {
 
 ## 风险
 
-| 风险 | 处理 |
-|---|---|
-| OpenSSH 新格式密钥仍可能解析失败 | 已声明非目标；错误信息含路径后用户至少知道是"格式问题"而非"路径错" |
+| 风险                                                   | 处理                                                                                                                            |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| OpenSSH 新格式密钥仍可能解析失败                       | 已声明非目标；错误信息含路径后用户至少知道是"格式问题"而非"路径错"                                                              |
 | `form.password` 在 password ↔ publickey 模式切换时残留 | 单次会话只有一个 `auth_method`，无泄漏路径；如果用户切换模式忘记清空，无安全后果，仅可能传给 libssh2 一个无效 passphrase 被忽略 |
-| 文件选择器在 Linux 上需 zenity/kdialog | tauri-plugin-dialog 自身处理，已在其他模态框验证可用 |
+| 文件选择器在 Linux 上需 zenity/kdialog                 | tauri-plugin-dialog 自身处理，已在其他模态框验证可用                                                                            |

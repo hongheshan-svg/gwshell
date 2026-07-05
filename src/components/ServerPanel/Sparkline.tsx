@@ -13,12 +13,7 @@ interface Props {
   className?: string;
 }
 
-export const Sparkline: React.FC<Props> = ({
-  series,
-  width = 320,
-  height = 80,
-  className,
-}) => {
+export const Sparkline: React.FC<Props> = ({ series, width = 320, height = 80, className }) => {
   const paths = useMemo(() => {
     return series.map((s) => {
       const data = s.data;

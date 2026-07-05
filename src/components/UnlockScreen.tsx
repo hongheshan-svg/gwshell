@@ -107,9 +107,7 @@ export const UnlockScreen: React.FC = () => {
           }}
         />
         {error && (
-          <div style={{ fontSize: 12, color: 'var(--danger)' }}>
-            {t('vault_wrong_passphrase')}
-          </div>
+          <div style={{ fontSize: 12, color: 'var(--danger)' }}>{t('vault_wrong_passphrase')}</div>
         )}
         <button
           type="submit"

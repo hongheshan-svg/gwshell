@@ -67,7 +67,10 @@ export const PolicyAutoExecution: React.FC<Props> = ({ policy, busy, onChange })
                 value={policy.auto_execute_command_allowlist.join('\n')}
                 onChange={(e) =>
                   onChange({
-                    auto_execute_command_allowlist: e.target.value.split('\n').map((line) => line.trim()).filter(Boolean),
+                    auto_execute_command_allowlist: e.target.value
+                      .split('\n')
+                      .map((line) => line.trim())
+                      .filter(Boolean),
                   })
                 }
               />
@@ -86,7 +89,10 @@ export const PolicyAutoExecution: React.FC<Props> = ({ policy, busy, onChange })
                 value={policy.auto_execute_service_denylist.join('\n')}
                 onChange={(e) =>
                   onChange({
-                    auto_execute_service_denylist: e.target.value.split('\n').map((line) => line.trim()).filter(Boolean),
+                    auto_execute_service_denylist: e.target.value
+                      .split('\n')
+                      .map((line) => line.trim())
+                      .filter(Boolean),
                   })
                 }
               />

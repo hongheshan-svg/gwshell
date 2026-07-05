@@ -16,21 +16,22 @@
 
 ## 文件结构（改动面）
 
-| 文件 | 职责 / 改动 |
-|---|---|
-| `src/styles/global.css` | 替换两个令牌块；body 字体；半透明表面；选中/悬停态；圆角令牌化 |
-| `src/App.css` | 基础字体改 sans；少量硬编码色/圆角令牌化 |
-| `src/hooks/useSettingsEffects.ts` | 新增 `uiFont → --font-sans` 注入 effect |
-| `src/stores/settingsStore.ts` | `uiFont` 默认改 sans（:90） |
-| `src/components/Settings/SettingsModal.tsx` | `uiFont` 默认改 sans（:124）；`fonts` 列表加 sans 选项（:516） |
-| `src/components/ServerPanel/ServerPanel.css` | 跟随新令牌校准 |
-| `*.tsx` | 内联 hex 残留清理（分批，grep 校验） |
+| 文件                                         | 职责 / 改动                                                    |
+| -------------------------------------------- | -------------------------------------------------------------- |
+| `src/styles/global.css`                      | 替换两个令牌块；body 字体；半透明表面；选中/悬停态；圆角令牌化 |
+| `src/App.css`                                | 基础字体改 sans；少量硬编码色/圆角令牌化                       |
+| `src/hooks/useSettingsEffects.ts`            | 新增 `uiFont → --font-sans` 注入 effect                        |
+| `src/stores/settingsStore.ts`                | `uiFont` 默认改 sans（:90）                                    |
+| `src/components/Settings/SettingsModal.tsx`  | `uiFont` 默认改 sans（:124）；`fonts` 列表加 sans 选项（:516） |
+| `src/components/ServerPanel/ServerPanel.css` | 跟随新令牌校准                                                 |
+| `*.tsx`                                      | 内联 hex 残留清理（分批，grep 校验）                           |
 
 ---
 
 ## Task 1: 替换暗/亮设计令牌
 
 **Files:**
+
 - Modify: `src/styles/global.css:1-77`（`:root` 与 `[data-theme='light']` 两个块）
 
 - [ ] **Step 1: 先确认当前令牌块范围**
@@ -45,28 +46,31 @@ Expected: `:root` 在第 1 行附近，`[data-theme='light']` 在第 46 行附�
 ```css
 :root {
   /* Neutral slate dark + indigo signature */
-  --bg-primary:   #0d0e12;
+  --bg-primary: #0d0e12;
   --bg-secondary: #16171d;
-  --bg-tertiary:  #1c1d25;
-  --bg-hover:     #22232c;
-  --bg-active:    #2a2b36;
-  --bg-card:      #14151a;
+  --bg-tertiary: #1c1d25;
+  --bg-hover: #22232c;
+  --bg-active: #2a2b36;
+  --bg-card: #14151a;
 
   --border-color: #24262e;
   --border-light: #2e3039;
 
-  --text-primary:   #e7e9f0;
+  --text-primary: #e7e9f0;
   --text-secondary: #9ca3b4;
-  --text-muted:     #5b6172;
+  --text-muted: #5b6172;
 
   --accent-primary: #6366f1;
   --accent-primary-rgb: 99, 102, 241;
-  --accent-hover:   #818cf8;
-  --accent-bg:      rgba(99, 102, 241, 0.14);
+  --accent-hover: #818cf8;
+  --accent-bg: rgba(99, 102, 241, 0.14);
 
-  --success: #4ade80;  --success-rgb: 74, 222, 128;
-  --warning: #fbbf24;  --warning-rgb: 251, 191, 36;
-  --danger:  #f87171;  --danger-rgb: 248, 113, 113;
+  --success: #4ade80;
+  --success-rgb: 74, 222, 128;
+  --warning: #fbbf24;
+  --warning-rgb: 251, 191, 36;
+  --danger: #f87171;
+  --danger-rgb: 248, 113, 113;
 
   /* Layout (preserved) */
   --sidebar-width: 220px;
@@ -79,7 +83,8 @@ Expected: `:root` 在第 1 行附近，`[data-theme='light']` 在第 46 行附�
   --radius-lg: 12px;
 
   --font-mono: 'Cascadia Mono', 'JetBrains Mono', 'Consolas', 'Fira Code', monospace;
-  --font-sans: -apple-system, system-ui, 'Segoe UI', 'Inter', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-sans:
+    -apple-system, system-ui, 'Segoe UI', 'Inter', Roboto, 'Helvetica Neue', Arial, sans-serif;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
@@ -87,7 +92,7 @@ Expected: `:root` 在第 1 行附近，`[data-theme='light']` 在第 46 行附�
 
   --surface-blur: 7px;
   --chrome-bg: rgba(22, 23, 29, 0.78);
-  --term-bg:   rgba(6, 7, 10, 0.92);
+  --term-bg: rgba(6, 7, 10, 0.92);
 }
 ```
 
@@ -95,35 +100,38 @@ Expected: `:root` 在第 1 行附近，`[data-theme='light']` 在第 46 行附�
 
 ```css
 [data-theme='light'] {
-  --bg-primary:   #f7f8fa;
+  --bg-primary: #f7f8fa;
   --bg-secondary: #eef0f4;
-  --bg-tertiary:  #e4e7ec;
-  --bg-hover:     #e0e3e9;
-  --bg-active:    #d6dae2;
-  --bg-card:      #ffffff;
+  --bg-tertiary: #e4e7ec;
+  --bg-hover: #e0e3e9;
+  --bg-active: #d6dae2;
+  --bg-card: #ffffff;
 
   --border-color: #d8dce3;
   --border-light: #e6e9ee;
 
-  --text-primary:   #1a1c23;
+  --text-primary: #1a1c23;
   --text-secondary: #5b6172;
-  --text-muted:     #8a91a0;
+  --text-muted: #8a91a0;
 
   --accent-primary: #4f46e5;
   --accent-primary-rgb: 79, 70, 229;
-  --accent-hover:   #4338ca;
-  --accent-bg:      rgba(79, 70, 229, 0.10);
+  --accent-hover: #4338ca;
+  --accent-bg: rgba(79, 70, 229, 0.1);
 
-  --success: #16a34a;  --success-rgb: 22, 163, 74;
-  --warning: #ca8a04;  --warning-rgb: 202, 138, 4;
-  --danger:  #dc2626;  --danger-rgb: 220, 38, 38;
+  --success: #16a34a;
+  --success-rgb: 22, 163, 74;
+  --warning: #ca8a04;
+  --warning-rgb: 202, 138, 4;
+  --danger: #dc2626;
+  --danger-rgb: 220, 38, 38;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.10);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
   --shadow-lg: 0 12px 40px -8px rgba(0, 0, 0, 0.16);
 
-  --chrome-bg: rgba(247, 248, 250, 0.80);
-  --term-bg:   rgba(255, 255, 255, 0.96);
+  --chrome-bg: rgba(247, 248, 250, 0.8);
+  --term-bg: rgba(255, 255, 255, 0.96);
 }
 ```
 
@@ -148,6 +156,7 @@ git commit -m "feat(ui): neutral slate + indigo design tokens (P1)"
 ## Task 2: 字体分工（chrome→sans，终端→mono 不变）
 
 **Files:**
+
 - Modify: `src/styles/global.css:88`（`html, body, #root` 的 `font-family`）
 - Modify: `src/App.css:9`
 
@@ -159,23 +168,29 @@ Expected: 第 88 行命中（body 当前用 mono）。
 - [ ] **Step 2: 改 `global.css:88`**
 
 把 `html, body, #root` 规则里的：
+
 ```css
-  font-family: var(--font-mono);
+font-family: var(--font-mono);
 ```
+
 改为：
+
 ```css
-  font-family: var(--font-sans);
+font-family: var(--font-sans);
 ```
 
 - [ ] **Step 3: 改 `App.css:9`**
 
 把：
+
 ```css
-  font-family: 'Cascadia Mono', 'JetBrains Mono', 'Consolas', 'Fira Code', monospace;
+font-family: 'Cascadia Mono', 'JetBrains Mono', 'Consolas', 'Fira Code', monospace;
 ```
+
 改为：
+
 ```css
-  font-family: var(--font-sans);
+font-family: var(--font-sans);
 ```
 
 - [ ] **Step 4: 核对 mono 保留点未被波及**
@@ -199,6 +214,7 @@ git commit -m "feat(ui): split fonts — sans chrome, mono terminal (P1)"
 ## Task 3: 接活 `uiFont` → `--font-sans`
 
 **Files:**
+
 - Modify: `src/hooks/useSettingsEffects.ts`（新增一个 effect）
 - Modify: `src/stores/settingsStore.ts:90`
 - Modify: `src/components/Settings/SettingsModal.tsx:124` 与 `:516`
@@ -208,25 +224,28 @@ git commit -m "feat(ui): split fonts — sans chrome, mono terminal (P1)"
 在 `setLocale` 的 effect（约 :43-45）之后，新增：
 
 ```ts
-  // UI (chrome) font — drives the CSS --font-sans token. Empty falls back to
-  // the stylesheet default. Terminal font is separate (terminalFont).
-  useEffect(() => {
-    const sans = settings.uiFont?.trim();
-    if (sans) {
-      document.documentElement.style.setProperty('--font-sans', sans);
-    } else {
-      document.documentElement.style.removeProperty('--font-sans');
-    }
-  }, [settings.uiFont]);
+// UI (chrome) font — drives the CSS --font-sans token. Empty falls back to
+// the stylesheet default. Terminal font is separate (terminalFont).
+useEffect(() => {
+  const sans = settings.uiFont?.trim();
+  if (sans) {
+    document.documentElement.style.setProperty('--font-sans', sans);
+  } else {
+    document.documentElement.style.removeProperty('--font-sans');
+  }
+}, [settings.uiFont]);
 ```
 
 - [ ] **Step 2: 改 `settingsStore.ts:90` 默认值**
 
 把：
+
 ```ts
   uiFont: 'JetBrainsMono, NotoSansSC',
 ```
+
 改为：
+
 ```ts
   uiFont: 'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif',
 ```
@@ -238,12 +257,33 @@ git commit -m "feat(ui): split fonts — sans chrome, mono terminal (P1)"
 - [ ] **Step 4: 给 `fonts` 下拉（`SettingsModal.tsx:516`）加 sans 选项**
 
 把：
+
 ```ts
-  const fonts = [CMD_TERMINAL_FONT, 'Consolas', 'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono, "Noto Sans SC", monospace', 'Fira Code', 'monospace'];
+const fonts = [
+  CMD_TERMINAL_FONT,
+  'Consolas',
+  'Cascadia Mono',
+  'Cascadia Code',
+  'JetBrains Mono, "Noto Sans SC", monospace',
+  'Fira Code',
+  'monospace',
+];
 ```
+
 改为（前置两个 sans 选项，使 UI 字体下拉里可选）：
+
 ```ts
-  const fonts = ['system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif', 'Inter, system-ui, sans-serif', CMD_TERMINAL_FONT, 'Consolas', 'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono, "Noto Sans SC", monospace', 'Fira Code', 'monospace'];
+const fonts = [
+  'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif',
+  'Inter, system-ui, sans-serif',
+  CMD_TERMINAL_FONT,
+  'Consolas',
+  'Cascadia Mono',
+  'Cascadia Code',
+  'JetBrains Mono, "Noto Sans SC", monospace',
+  'Fira Code',
+  'monospace',
+];
 ```
 
 - [ ] **Step 5: 校验两处默认一致**
@@ -267,6 +307,7 @@ git commit -m "feat(settings): wire uiFont to --font-sans with sans default (P1)
 ## Task 4: 轻半透明表面（B 档，纯 CSS）
 
 **Files:**
+
 - Modify: `src/styles/global.css`（chrome 表面规则 + 终端容器规则）
 
 - [ ] **Step 1: 定位 chrome 表面规则**
@@ -279,9 +320,9 @@ Expected: 得到 `.titlebar`、标签栏、状态栏、侧栏等表面规则行�
 对 `.titlebar`、侧栏容器、`.tabbar`、状态栏这几条规则，将其 `background: var(--bg-secondary);`（或对应实色）改为：
 
 ```css
-  background: var(--chrome-bg);
-  backdrop-filter: blur(var(--surface-blur));
-  -webkit-backdrop-filter: blur(var(--surface-blur));
+background: var(--chrome-bg);
+backdrop-filter: blur(var(--surface-blur));
+-webkit-backdrop-filter: blur(var(--surface-blur));
 ```
 
 > 只改这几个外层 chrome 容器，不要给每个子元素都加 blur（性能）。
@@ -307,6 +348,7 @@ git commit -m "feat(ui): subtle CSS translucency on chrome surfaces (P1)"
 ## Task 5: 选中/悬停态改柔光
 
 **Files:**
+
 - Modify: `src/styles/global.css`（会话项、标签、输入/按钮 focus）
 
 - [ ] **Step 1: 定位选中态规则**
@@ -316,35 +358,40 @@ Run: `grep -nE "\.active|\.selected|:hover|box-shadow: inset|--accent-bg" src/st
 - [ ] **Step 2: 会话项选中态**
 
 将侧栏会话/资产项的选中规则改为柔光：
+
 ```css
-  background: var(--accent-bg);
-  color: var(--text-primary);
-  border-radius: var(--radius-md);
-  box-shadow: inset 2px 0 0 var(--accent-primary);
+background: var(--accent-bg);
+color: var(--text-primary);
+border-radius: var(--radius-md);
+box-shadow: inset 2px 0 0 var(--accent-primary);
 ```
+
 （保留一条 2px inset 强调条作为左侧标识，其余用柔色背景。）
 
 - [ ] **Step 3: 标签选中态**
 
 将激活标签由整块换色改为下划线 + 轻提亮：
+
 ```css
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
-  box-shadow: inset 0 -2px 0 var(--accent-primary);
+background: rgba(255, 255, 255, 0.05);
+color: var(--text-primary);
+box-shadow: inset 0 -2px 0 var(--accent-primary);
 ```
 
 - [ ] **Step 4: 输入/按钮 focus 柔光环**
 
 为主要 `input:focus` / `select:focus` / 主按钮 `:focus-visible` 规则加：
+
 ```css
-  outline: none;
-  box-shadow: 0 0 0 2px var(--accent-bg);
-  border-color: var(--accent-primary);
+outline: none;
+box-shadow: 0 0 0 2px var(--accent-bg);
+border-color: var(--accent-primary);
 ```
 
 - [ ] **Step 5: 构建 + 人工核对 + Commit**
 
 Run: `npm run build && npm run smoke:check`，`npm run tauri dev` 核对选中/悬停/聚焦均为柔光态、无硬色块。
+
 ```bash
 git add src/styles/global.css
 git commit -m "feat(ui): soft accent for selected/hover/focus states (P1)"
@@ -355,6 +402,7 @@ git commit -m "feat(ui): soft accent for selected/hover/focus states (P1)"
 ## Task 6: 圆角令牌化
 
 **Files:**
+
 - Modify: `src/styles/global.css`、`src/App.css`
 
 - [ ] **Step 1: 列出硬编码圆角**
@@ -364,12 +412,12 @@ Expected: ~52 行。
 
 - [ ] **Step 2: 按映射表批量替换**
 
-| 原值 | 替换为 |
-|---|---|
-| `border-radius: 1px` / `2px` / `3px` / `4px` | `var(--radius-sm)`（6px） |
-| `border-radius: 6px` / `8px` | `var(--radius-md)`（8px） |
-| `border-radius: 10px`+ | `var(--radius-lg)`（12px） |
-| `border-radius: 50%` / `9999px`（圆形/胶囊） | **保持不变** |
+| 原值                                         | 替换为                     |
+| -------------------------------------------- | -------------------------- |
+| `border-radius: 1px` / `2px` / `3px` / `4px` | `var(--radius-sm)`（6px）  |
+| `border-radius: 6px` / `8px`                 | `var(--radius-md)`（8px）  |
+| `border-radius: 10px`+                       | `var(--radius-lg)`（12px） |
+| `border-radius: 50%` / `9999px`（圆形/胶囊） | **保持不变**               |
 
 逐条替换 Step 1 列出的行（圆形/胶囊例外）。
 
@@ -381,6 +429,7 @@ Expected: 空（除有意保留的圆形/胶囊外，无裸数值圆角）。
 - [ ] **Step 4: 构建 + Commit**
 
 Run: `npm run build && npm run smoke:check`
+
 ```bash
 git add src/styles/global.css src/App.css
 git commit -m "refactor(ui): tokenize border-radius to --radius-* (P1)"
@@ -391,6 +440,7 @@ git commit -m "refactor(ui): tokenize border-radius to --radius-* (P1)"
 ## Task 7: ServerPanel.css 校准
 
 **Files:**
+
 - Modify: `src/components/ServerPanel/ServerPanel.css`
 
 - [ ] **Step 1: 审查硬编码值**
@@ -404,6 +454,7 @@ Run: `grep -nE "#[0-9a-fA-F]{3,6}|border-radius: ?[0-9]" src/components/ServerPa
 - [ ] **Step 3: 构建 + 人工核对 + Commit**
 
 Run: `npm run build && npm run smoke:check`，`npm run tauri dev` 打开 ServerPanel 核对配色与新令牌一致。
+
 ```bash
 git add src/components/ServerPanel/ServerPanel.css
 git commit -m "refactor(ui): ServerPanel calibrate to new tokens (P1)"
@@ -414,6 +465,7 @@ git commit -m "refactor(ui): ServerPanel calibrate to new tokens (P1)"
 ## Task 8: tsx 内联 hex 残留清理（分批）
 
 **Files:**
+
 - Modify: 多个 `*.tsx`（grep 驱动）
 
 - [ ] **Step 1: 列出 Dracula/Catppuccin 残留**
@@ -435,6 +487,7 @@ Expected: 空（或仅剩明确有意保留项）。
 - [ ] **Step 4: 构建 + Commit**
 
 Run: `npm run build && npm run smoke:check`
+
 ```bash
 git add -A src
 git commit -m "refactor(ui): replace residual hardcoded colors with tokens (P1)"

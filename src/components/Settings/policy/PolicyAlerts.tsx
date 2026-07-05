@@ -41,7 +41,10 @@ export const PolicyAlerts: React.FC<Props> = ({ policy, busy, onChange }) => {
             value={policy.log_interest_keywords.join(', ')}
             onChange={(e) =>
               onChange({
-                log_interest_keywords: e.target.value.split(',').map((item) => item.trim()).filter(Boolean),
+                log_interest_keywords: e.target.value
+                  .split(',')
+                  .map((item) => item.trim())
+                  .filter(Boolean),
               })
             }
           />
@@ -60,7 +63,11 @@ export const PolicyAlerts: React.FC<Props> = ({ policy, busy, onChange }) => {
             style={{ width: 80 }}
             type="number"
             value={policy.disk_alert_percent}
-            onChange={(e) => onChange({ disk_alert_percent: Math.max(1, Math.min(100, parseInt(e.target.value, 10) || 90)) })}
+            onChange={(e) =>
+              onChange({
+                disk_alert_percent: Math.max(1, Math.min(100, parseInt(e.target.value, 10) || 90)),
+              })
+            }
           />
           <input
             className="settings-input"
@@ -70,7 +77,14 @@ export const PolicyAlerts: React.FC<Props> = ({ policy, busy, onChange }) => {
             style={{ width: 80, marginLeft: 8 }}
             type="number"
             value={policy.memory_alert_percent}
-            onChange={(e) => onChange({ memory_alert_percent: Math.max(1, Math.min(100, parseInt(e.target.value, 10) || 90)) })}
+            onChange={(e) =>
+              onChange({
+                memory_alert_percent: Math.max(
+                  1,
+                  Math.min(100, parseInt(e.target.value, 10) || 90),
+                ),
+              })
+            }
           />
         </span>
       </div>

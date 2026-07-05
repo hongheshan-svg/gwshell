@@ -41,8 +41,8 @@ export function useAssetData() {
     ? realSessions.filter(
         (s) =>
           s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (s.host && s.host.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          (s.username && s.username.toLowerCase().includes(searchQuery.toLowerCase()))
+          (s.host?.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (s.username?.toLowerCase().includes(searchQuery.toLowerCase())),
       )
     : realSessions;
 
@@ -97,9 +97,10 @@ export function useAssetData() {
   const lastInteractionRef = useRef(Date.now());
   const pingLoopRunningRef = useRef(false);
 
-  const sleep = (ms: number) => new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
+  const sleep = (ms: number) =>
+    new Promise<void>((resolve) => {
+      window.setTimeout(resolve, ms);
+    });
 
   const scheduleIdle = (callback: () => void) => {
     if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
@@ -113,7 +114,11 @@ export function useAssetData() {
 
   const cancelIdle = () => {
     if (idleCallbackRef.current == null) return;
-    if (!idleUsesTimeoutRef.current && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+    if (
+      !idleUsesTimeoutRef.current &&
+      typeof window !== 'undefined' &&
+      'cancelIdleCallback' in window
+    ) {
       window.cancelIdleCallback(idleCallbackRef.current);
     } else {
       clearTimeout(idleCallbackRef.current);

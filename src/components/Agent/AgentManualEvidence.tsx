@@ -38,7 +38,12 @@ export const AgentManualEvidence: React.FC = () => {
         value={body}
         onChange={(event) => setBody(event.target.value)}
       />
-      <button className="settings-btn-outline" disabled={!activeSession || !body.trim()} onClick={addEvidence} type="button">
+      <button
+        className="settings-btn-outline"
+        disabled={!activeSession || !body.trim()}
+        onClick={addEvidence}
+        type="button"
+      >
         {t('agent_manual_context_add')}
       </button>
     </div>

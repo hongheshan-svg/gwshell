@@ -57,7 +57,9 @@ export const TerminalContainer: React.FC = () => {
               <div
                 key={tab.id}
                 className={`terminal-pane-cell${isActive ? ' is-active-pane' : ''}`}
-                onMouseDown={() => { if (!isActive) setActiveTab(tab.id); }}
+                onMouseDown={() => {
+                  if (!isActive) setActiveTab(tab.id);
+                }}
               >
                 <TerminalView tab={tab} isActive={isActive} visible />
               </div>

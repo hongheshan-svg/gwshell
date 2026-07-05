@@ -27,9 +27,11 @@ All three reuse the existing single-batch SSH probe and the existing `LastSample
 ## 3. Feature A — Disk I/O via /proc/diskstats
 
 ### 3.1 Rationale
+
 `iostat` is frequently absent on minimal remote hosts. `/proc/diskstats` is always present on Linux and exposes cumulative sector counters; a delta against the previous tick yields throughput and IOPS without any extra dependency.
 
 ### 3.2 Data collection
+
 - The batched probe command in `metrics.rs` (the multi-`echo` block) gains one section:
   ```
   echo '---DISKIO---'; cat /proc/diskstats 2>/dev/null
@@ -37,12 +39,15 @@ All three reuse the existing single-batch SSH probe and the existing `LastSample
 - Section parser in `build_snapshot` adds a `"DISKIO"` tag mapping, mirroring the existing `STAT`/`MEM`/`DISK` handling.
 
 ### 3.3 Device selection
+
 - Reuse the already-collected `df -kP /` output. Its first data column is the filesystem path (e.g. `/dev/sda2`, `/dev/nvme0n1p3`, or a non-`/dev` value for network/overlay mounts).
 - Derive the diskstats device name by stripping the `/dev/` prefix. If the df filesystem is not under `/dev/` (e.g. `overlay`, `tmpfs`, NFS), no device can be matched → `disk_io = None` and the card shows space only (current behavior).
 - In `/proc/diskstats`, match the line whose 3rd whitespace-separated field equals the derived device name. Partitions (`sda2`, `nvme0n1p3`) appear as their own lines, so the exact partition device is tracked.
 
 ### 3.4 Parsing
+
 `/proc/diskstats` line fields (1-indexed, whitespace-separated):
+
 - 1 major, 2 minor, 3 device name
 - 6 sectors read (cumulative), 10 sectors written (cumulative)
 - 4 reads completed, 8 writes completed (for IOPS)
@@ -50,15 +55,19 @@ All three reuse the existing single-batch SSH probe and the existing `LastSample
 Each sector is 512 bytes (constant, per kernel ABI).
 
 New pure function:
+
 ```rust
 pub fn parse_diskstats(text: &str, device: &str) -> Option<DiskIoCounters> {
     // returns cumulative sectors_read, sectors_written, reads, writes
 }
 ```
+
 Unit-tested like the other `parse_*` functions.
 
 ### 3.5 Delta computation
+
 `LastSample` gains two `u64` fields: `disk_sectors_read`, `disk_sectors_write` (and `reads`/`writes` for IOPS, or derive IOPS from the same counters). The delta path mirrors the existing CPU/net delta:
+
 - If `prev` exists: `bytes_per_sec = (cur - prev) * 512 / elapsed_secs`.
 - First sample (no `prev`): `disk_io = None` (card shows `—`).
 - Wraparound/monotonic reset (counter < prev): treat as no prev → `None`.
@@ -66,6 +75,7 @@ Unit-tested like the other `parse_*` functions.
 `elapsed_secs` comes from the existing `now.duration_since(prev.instant)` already computed for CPU%.
 
 ### 3.6 Types
+
 ```rust
 pub struct DiskIoStats {
     pub read_bytes_per_sec: u64,
@@ -74,11 +84,13 @@ pub struct DiskIoStats {
     pub write_iops: u64,
 }
 ```
+
 Added to `MetricsSnapshot` as `pub disk_io: Option<DiskIoStats>`.
 
 Frontend `DiskIoStats` mirror + `MetricsSnapshot.disk_io?: DiskIoStats | null`.
 
 ### 3.7 Frontend — DiskCard
+
 - Extend `DiskCard` (no new card). Below the existing space progress bar, add a compact two-row key/value block:
   - 读速 (read): `fmtBytes(read_bytes_per_sec)/s` — reuses existing `fmtBytes`
   - 写速 (write): `fmtBytes(write_bytes_per_sec)/s`
@@ -88,6 +100,7 @@ Frontend `DiskIoStats` mirror + `MetricsSnapshot.disk_io?: DiskIoStats | null`.
 ## 4. Feature B — Process sort, search, signal selection
 
 ### 4.1 Sorting
+
 - Column headers (`进程名 / PID / %CPU / 内存`) become clickable buttons.
 - New state: `sortKey: 'comm' | 'pid' | 'cpu' | 'mem'`, `sortDir: 'asc' | 'desc'`.
 - Default: `sortKey='cpu', sortDir='desc'` (matches backend pre-sort, so no visual jump on first render).
@@ -96,11 +109,13 @@ Frontend `DiskIoStats` mirror + `MetricsSnapshot.disk_io?: DiskIoStats | null`.
 - Sort applied in `render` over a copied array (never mutate the prop). Numeric for pid/cpu/mem, locale-compare for comm.
 
 ### 4.2 Search
+
 - A text input above the table header row (full-width, placeholder `搜索进程名/PID`).
 - `filterText` state. Filters the (already-sorted) list by substring match on `comm` or `pid.toString()`.
 - Empty filter = show all (current behavior).
 
 ### 4.3 Signal selection (SIGTERM / SIGKILL)
+
 - Extend backend command:
   ```rust
   #[tauri::command]
@@ -124,27 +139,32 @@ Frontend `DiskIoStats` mirror + `MetricsSnapshot.disk_io?: DiskIoStats | null`.
 - `pending` Set tracks `pid` only (one in-flight per row, as today; whichever confirm button is clicked first wins, the other is disabled while pending).
 
 ### 4.4 Data unchanged
+
 - Backend still returns top-20 by `%CPU` (`ps --sort=-%cpu | head -21`). Sorting/search reorganize only the display.
 
 ## 5. Feature C — Resizable drawer + width persistence
 
 ### 5.1 Handle
+
 - New element `.sp-resize-handle` as the first child of `.sp-drawer`, a 4px-wide strip on the drawer's left edge, `cursor: col-resize`, hover highlight via CSS.
 - `aria-label` for accessibility (i18n key `serverPanel_resize_handle`).
 
 ### 5.2 Drag behavior
+
 - `onMouseDown` on the handle starts drag: capture pointer, attach `mousemove`/`mouseup` to `window`.
 - `mousemove`: `newWidth = window.innerWidth - clientX` (drawer is right-anchored), clamped to `[320, 720]`. Update a local `width` state applied as `style={{ width }}` on `.sp-drawer`.
 - `mouseup`: end drag, remove listeners, persist width (§5.3).
 - Drag is suppressed during `loading`/`no-ssh` is fine (handle still works; width is independent of metrics).
 
 ### 5.3 Persistence
+
 - `AppSettings` interface (settingsStore.ts) gains `serverPanelWidth: number` (default `380`, matching the current fixed width in `ServerPanel.css:6`).
 - On drag end: `update({ serverPanelWidth: width })` → existing `save_app_settings` JSON round-trip. No backend change (app_settings is a stored JSON string).
 - On panel mount: read `settings.serverPanelWidth` and apply as initial width; fall back to `380` if unset.
 - Debounce is unnecessary — persist only on `mouseup`, not on every `mousemove`.
 
 ### 5.4 CSS
+
 - `.sp-drawer` currently has a fixed `width`. Replace with an inline `style` and keep `min-width`/`max-width` as CSS clamp safety (320/720) in addition to the JS clamp.
 - Add `.sp-resize-handle` and `:hover`/active states.
 
@@ -168,6 +188,7 @@ Frontend `DiskIoStats` mirror + `MetricsSnapshot.disk_io?: DiskIoStats | null`.
 ## 8. i18n keys
 
 New keys in both `gwshell.en.json` and `gwshell.zh.json` (parity enforced by the smoke test):
+
 - `serverPanel_disk_read` / `serverPanel_disk_write` (read speed / write speed labels)
 - `serverPanel_proc_search_placeholder`
 - `serverPanel_proc_kill_sigterm` / `serverPanel_proc_kill_sigkill` (button + tooltip)
@@ -177,6 +198,7 @@ New keys in both `gwshell.en.json` and `gwshell.zh.json` (parity enforced by the
 ## 9. Out of scope (still)
 
 Unchanged from original spec §9 except the three items now implemented here:
+
 - Per-core CPU bar collapse/expand
 - macOS / BSD / Windows remote support
 - Backend multi-second history ring buffer

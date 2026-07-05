@@ -4,7 +4,12 @@ import type { SessionConfig, TabInfo, ThemeMode, MainView } from '../types';
 import i18n, { detectLocale, type Locale, type TranslationKeys } from '../i18n';
 import { buildSplitPanes, clearSlot, fillFirstEmpty } from '../lib/splitLayout';
 
-export interface DockerContainer { id: string; name: string; image: string; status: string; }
+export interface DockerContainer {
+  id: string;
+  name: string;
+  image: string;
+  status: string;
+}
 
 interface AppStore {
   // Locale
@@ -128,7 +133,9 @@ function popInjectedSessions(): SessionConfig[] {
       return typeof o.id === 'string' && typeof o.session_type === 'string';
     });
     if (valid.length !== data.length) {
-      console.warn(`popInjectedSessions: dropped ${data.length - valid.length} malformed entr(ies)`);
+      console.warn(
+        `popInjectedSessions: dropped ${data.length - valid.length} malformed entr(ies)`,
+      );
     }
     return valid;
   }
@@ -154,19 +161,17 @@ export const useAppStore = create<AppStore>((set, get) => ({
     void i18n.changeLanguage(locale);
     set({
       locale,
-      t: i18n.getFixedT(locale, 'gwshell') as (key: TranslationKeys, params?: Record<string, string | number>) => string,
+      t: i18n.getFixedT(locale, 'gwshell'),
     });
   },
-  t: i18n.getFixedT(initialLocale, 'gwshell') as (key: TranslationKeys, params?: Record<string, string | number>) => string,
+  t: i18n.getFixedT(initialLocale, 'gwshell'),
 
   theme: 'dark',
   setTheme: (theme) => set({ theme }),
-  toggleTheme: () =>
-    set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
+  toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
 
   sidebarCollapsed: false,
-  toggleSidebar: () =>
-    set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   activeNavItem: 'sessions',
   setActiveNavItem: (item) => set({ activeNavItem: item }),
 
@@ -187,8 +192,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       console.error('Failed to save session, the UI may be out of sync:', err);
     });
   },
-  addTemporarySession: (session) =>
-    set((state) => ({ sessions: [...state.sessions, session] })),
+  addTemporarySession: (session) => set((state) => ({ sessions: [...state.sessions, session] })),
   removeSession: (id) => {
     // Capture the removed session so it can be restored if the backend delete
     // fails (otherwise the UI shows it gone but it reappears after restart).
@@ -206,9 +210,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
   updateSessionLatency: (id, latency) => {
     set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === id ? { ...s, latency } : s
-      ),
+      sessions: state.sessions.map((s) => (s.id === id ? { ...s, latency } : s)),
     }));
   },
   batchUpdateLatency: (updates) => {
@@ -231,14 +233,23 @@ export const useAppStore = create<AppStore>((set, get) => ({
   mainView: 'asset-list',
   setMainView: (view) => set({ mainView: view }),
 
-  tabs: [{ id: 'asset-list', sessionId: '', title: i18n.getFixedT(initialLocale, 'gwshell')('tab_list'), type: 'asset-list', connected: false }],
+  tabs: [
+    {
+      id: 'asset-list',
+      sessionId: '',
+      title: i18n.getFixedT(initialLocale, 'gwshell')('tab_list'),
+      type: 'asset-list',
+      connected: false,
+    },
+  ],
   activeTabId: 'asset-list',
   addTab: (tab) =>
     set((state) => ({
       tabs: [...state.tabs, tab],
       activeTabId: tab.id,
       mainView: tab.type === 'asset-list' ? 'asset-list' : 'terminal',
-      splitPanes: state.splitCount > 1 ? fillFirstEmpty(state.splitPanes, tab.id) : state.splitPanes,
+      splitPanes:
+        state.splitCount > 1 ? fillFirstEmpty(state.splitPanes, tab.id) : state.splitPanes,
     })),
   // Move the tab `fromId` to the position currently held by `toId` (drag &
   // drop reorder). The asset-list home tab is pinned and never moves.
@@ -306,7 +317,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         tabs: newTabs,
         sessions: newSessions,
         activeTabId: newActiveId,
-        mainView: newMainView as MainView,
+        mainView: newMainView,
         splitCount: collapsedCount,
         splitPanes: collapsedPanes,
       };
@@ -315,9 +326,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ activeTabId: id, mainView: id === 'asset-list' ? 'asset-list' : 'terminal' }),
   updateTabConnected: (id, connected) =>
     set((state) => ({
-      tabs: state.tabs.map((tab) =>
-        tab.id === id ? { ...tab, connected } : tab
-      ),
+      tabs: state.tabs.map((tab) => (tab.id === id ? { ...tab, connected } : tab)),
     })),
 
   splitCount: 1,
@@ -382,7 +391,7 @@ i18n.on('languageChanged', (lng) => {
     if (cur.locale !== lng) {
       useAppStore.setState({
         locale: lng,
-        t: i18n.getFixedT(lng, 'gwshell') as typeof cur.t,
+        t: i18n.getFixedT(lng, 'gwshell'),
       });
     }
   }

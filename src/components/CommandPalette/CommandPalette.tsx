@@ -4,13 +4,13 @@ import { useAppStore } from '../../stores/appStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { buildCommands, type Command } from './commands';
 
-const GROUPS: Array<Command['group']> = ['action', 'create', 'session', 'tab'];
+const GROUPS: Command['group'][] = ['action', 'create', 'session', 'tab'];
 
 const GROUP_LABELS: Record<Command['group'], [string, string]> = {
-  action:  ['cmd_grp_action',  'Commands'],
-  create:  ['cmd_grp_create',  'Create'],
+  action: ['cmd_grp_action', 'Commands'],
+  create: ['cmd_grp_create', 'Create'],
   session: ['cmd_grp_session', 'Sessions'],
-  tab:     ['cmd_grp_tab',     'Tabs'],
+  tab: ['cmd_grp_tab', 'Tabs'],
 };
 
 export const CommandPalette: React.FC = () => {
@@ -44,33 +44,36 @@ export const CommandPalette: React.FC = () => {
     inputRef.current?.focus();
   }, []);
 
-  const ctx = useMemo(() => ({
-    sessions,
-    tabs,
-    keymapOverrides: settings.keymapOverrides ?? {},
-    t: (k: string, d?: string) => t(k, d ?? k),
-    addTab,
-    setActiveTab,
-    setShowNewSession,
-    setShowQuickConnect,
-    setShowLocalTerminalModal,
-    setShowSettings,
-    toggleSidebar,
-    toggleTheme,
-  }), [
-    sessions,
-    tabs,
-    settings.keymapOverrides,
-    t,
-    addTab,
-    setActiveTab,
-    setShowNewSession,
-    setShowQuickConnect,
-    setShowLocalTerminalModal,
-    setShowSettings,
-    toggleSidebar,
-    toggleTheme,
-  ]);
+  const ctx = useMemo(
+    () => ({
+      sessions,
+      tabs,
+      keymapOverrides: settings.keymapOverrides ?? {},
+      t: (k: string, d?: string) => t(k, d ?? k),
+      addTab,
+      setActiveTab,
+      setShowNewSession,
+      setShowQuickConnect,
+      setShowLocalTerminalModal,
+      setShowSettings,
+      toggleSidebar,
+      toggleTheme,
+    }),
+    [
+      sessions,
+      tabs,
+      settings.keymapOverrides,
+      t,
+      addTab,
+      setActiveTab,
+      setShowNewSession,
+      setShowQuickConnect,
+      setShowLocalTerminalModal,
+      setShowSettings,
+      toggleSidebar,
+      toggleTheme,
+    ],
+  );
 
   const commands = useMemo(() => buildCommands(ctx), [ctx]);
 
@@ -111,10 +114,13 @@ export const CommandPalette: React.FC = () => {
     setShowCommandPalette(false);
   }, [setShowCommandPalette]);
 
-  const runCommand = useCallback((cmd: Command) => {
-    setShowCommandPalette(false);
-    cmd.run();
-  }, [setShowCommandPalette]);
+  const runCommand = useCallback(
+    (cmd: Command) => {
+      setShowCommandPalette(false);
+      cmd.run();
+    },
+    [setShowCommandPalette],
+  );
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
@@ -169,19 +175,17 @@ export const CommandPalette: React.FC = () => {
                   return (
                     <div
                       key={cmd.id}
-                      ref={(el) => { itemRefs.current[flatIdx] = el; }}
+                      ref={(el) => {
+                        itemRefs.current[flatIdx] = el;
+                      }}
                       className={`command-palette-item${isActive ? ' active' : ''}`}
                       onMouseEnter={() => setActiveIndex(flatIdx)}
                       onClick={() => runCommand(cmd)}
                     >
                       {Icon && <Icon size={14} className="command-palette-item-icon" />}
                       <span className="command-palette-item-label">{cmd.label}</span>
-                      {cmd.sub && (
-                        <span className="command-palette-item-sub">{cmd.sub}</span>
-                      )}
-                      {cmd.hint && (
-                        <kbd className="command-palette-item-hint">{cmd.hint}</kbd>
-                      )}
+                      {cmd.sub && <span className="command-palette-item-sub">{cmd.sub}</span>}
+                      {cmd.hint && <kbd className="command-palette-item-hint">{cmd.hint}</kbd>}
                     </div>
                   );
                 })}

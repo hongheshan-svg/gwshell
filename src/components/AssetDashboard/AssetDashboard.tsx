@@ -10,7 +10,7 @@ import { HostDashCard } from './HostDashCard';
 import './AssetDashboard.css';
 
 interface Props {
-  sessions: SessionConfig[];       // already filtered (pass filteredSessions)
+  sessions: SessionConfig[]; // already filtered (pass filteredSessions)
   onConnect: (s: SessionConfig) => void;
   onEdit: (s: SessionConfig) => void;
 }
@@ -49,12 +49,12 @@ export const AssetDashboard: React.FC<Props> = ({ sessions, onConnect, onEdit })
 
   // Snapshots + history in refs to avoid re-renders from within listeners
   const snapshotsRef = useRef<Record<string, MetricsSnapshot>>({});
-  const cpuHistRef   = useRef<Record<string, number[]>>({});
+  const cpuHistRef = useRef<Record<string, number[]>>({});
 
   // Throttled force-render (mirrors ServerPanel pattern)
   const [, setTick] = useState(0);
   const tickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastTickRef  = useRef<number>(0);
+  const lastTickRef = useRef<number>(0);
 
   const scheduleTick = () => {
     const now = Date.now();
@@ -114,39 +114,39 @@ export const AssetDashboard: React.FC<Props> = ({ sessions, onConnect, onEdit })
       // Register a teardown that works even if async setup is still in flight
       teardownRef.current[id] = () => {
         cancelled = true;
-        if (dataUnlisten) { dataUnlisten(); dataUnlisten = null; }
-        if (errUnlisten)  { errUnlisten();  errUnlisten  = null; }
+        if (dataUnlisten) {
+          dataUnlisten();
+          dataUnlisten = null;
+        }
+        if (errUnlisten) {
+          errUnlisten();
+          errUnlisten = null;
+        }
       };
 
       (async () => {
         try {
-          const dl = await listen<MetricsSnapshot>(
-            `server-metrics-${id}`,
-            (evt) => {
-              const snap = evt.payload;
-              snapshotsRef.current[id] = snap;
+          const dl = await listen<MetricsSnapshot>(`server-metrics-${id}`, (evt) => {
+            const snap = evt.payload;
+            snapshotsRef.current[id] = snap;
 
-              // Push cpu history
-              const cpuPct = snap.cpu?.total_percent;
-              if (cpuPct !== undefined) {
-                const hist = cpuHistRef.current[id] ?? [];
-                const next = hist.length >= CPU_HIST_LEN ? hist.slice(1) : hist.slice();
-                next.push(cpuPct);
-                cpuHistRef.current[id] = next;
-              }
-
-              scheduleTick();
+            // Push cpu history
+            const cpuPct = snap.cpu?.total_percent;
+            if (cpuPct !== undefined) {
+              const hist = cpuHistRef.current[id] ?? [];
+              const next = hist.length >= CPU_HIST_LEN ? hist.slice(1) : hist.slice();
+              next.push(cpuPct);
+              cpuHistRef.current[id] = next;
             }
-          );
 
-          const el = await listen(
-            `server-metrics-error-${id}`,
-            (_evt) => {
-              // Clear snapshot so the card falls back to connected-but-no-data view
-              delete snapshotsRef.current[id];
-              scheduleTick();
-            }
-          );
+            scheduleTick();
+          });
+
+          const el = await listen(`server-metrics-error-${id}`, (_evt) => {
+            // Clear snapshot so the card falls back to connected-but-no-data view
+            delete snapshotsRef.current[id];
+            scheduleTick();
+          });
 
           if (cancelled) {
             // Teardown already fired during setup — clean up immediately
@@ -157,7 +157,7 @@ export const AssetDashboard: React.FC<Props> = ({ sessions, onConnect, onEdit })
 
           // Wire into the teardown ref so later calls to teardownId() work
           dataUnlisten = dl;
-          errUnlisten  = el;
+          errUnlisten = el;
 
           // Start backend poller (ref-counted; safe if drawer also watching)
           await invoke('start_server_metrics', { sessionId: id });
@@ -175,7 +175,7 @@ export const AssetDashboard: React.FC<Props> = ({ sessions, onConnect, onEdit })
         tickTimerRef.current = null;
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectedIdsKey]);
 
   // On component unmount: stop all remaining subscriptions
@@ -189,7 +189,7 @@ export const AssetDashboard: React.FC<Props> = ({ sessions, onConnect, onEdit })
         teardownId(id);
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Group sessions by session.group (preserving insertion order)
@@ -223,9 +223,7 @@ export const AssetDashboard: React.FC<Props> = ({ sessions, onConnect, onEdit })
         <div key={groupName} className="dash-group">
           {(groups.size > 1 || groupName !== UNGROUPED_SENTINEL) && (
             <div className="dash-group-title">
-              {groupName === UNGROUPED_SENTINEL
-                ? t('dash_ungrouped', 'Ungrouped')
-                : groupName}
+              {groupName === UNGROUPED_SENTINEL ? t('dash_ungrouped', 'Ungrouped') : groupName}
             </div>
           )}
           <div className="dash-grid">
@@ -236,7 +234,7 @@ export const AssetDashboard: React.FC<Props> = ({ sessions, onConnect, onEdit })
                   key={s.id}
                   session={s}
                   connected={isConn}
-                  snapshot={isConn ? snapshotsRef.current[s.id] ?? null : null}
+                  snapshot={isConn ? (snapshotsRef.current[s.id] ?? null) : null}
                   cpuHistory={cpuHistRef.current[s.id]}
                   latency={s.latency}
                   onConnect={onConnect}

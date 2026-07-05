@@ -62,7 +62,9 @@ export const useSnippetStore = create<SnippetStore>((set, get) => ({
       await invoke('save_snippet', { id: snippet.id, data: JSON.stringify(snippet) });
     } catch (err) {
       if (oldSnippet) {
-        set((state) => ({ snippets: state.snippets.map((s) => (s.id === snippet.id ? oldSnippet : s)) }));
+        set((state) => ({
+          snippets: state.snippets.map((s) => (s.id === snippet.id ? oldSnippet : s)),
+        }));
       }
       console.error('Failed to update snippet, rolled back:', err);
     }

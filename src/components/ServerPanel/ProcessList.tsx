@@ -40,7 +40,10 @@ export const ProcessList: React.FC<Props> = ({ sessionId, procs }) => {
       }, 3000);
       return;
     }
-    if (armedTimerRef.current) { clearTimeout(armedTimerRef.current); armedTimerRef.current = null; }
+    if (armedTimerRef.current) {
+      clearTimeout(armedTimerRef.current);
+      armedTimerRef.current = null;
+    }
     setArmedPid(null);
     setPending((prev) => new Set(prev).add(p.pid));
     try {
@@ -59,7 +62,7 @@ export const ProcessList: React.FC<Props> = ({ sessionId, procs }) => {
   return (
     <div className="sp-card sp-card--procs">
       <div className="sp-card__title">{t('serverPanel_proc_title')}</div>
-      {(!procs || procs.length === 0) ? (
+      {!procs || procs.length === 0 ? (
         <div className="sp-empty">—</div>
       ) : (
         <table className="sp-table sp-table--procs">

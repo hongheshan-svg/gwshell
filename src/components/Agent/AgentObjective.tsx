@@ -99,10 +99,20 @@ export const AgentObjective: React.FC = () => {
         <option value="policy_auto_maintain">{t('agent_autonomy_policy_auto_maintain')}</option>
       </select>
       <div className="agent-objective-actions">
-        <button className="settings-btn-outline" onClick={draftPlan} disabled={busy || !objective.trim()} type="button">
+        <button
+          className="settings-btn-outline"
+          onClick={draftPlan}
+          disabled={busy || !objective.trim()}
+          type="button"
+        >
           {t('agent_draft_plan')}
         </button>
-        <button className="settings-btn-primary" onClick={start} disabled={busy || !objective.trim()} type="button">
+        <button
+          className="settings-btn-primary"
+          onClick={start}
+          disabled={busy || !objective.trim()}
+          type="button"
+        >
           {t('agent_start')}
         </button>
       </div>

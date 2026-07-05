@@ -13,7 +13,8 @@ export function detectLocale(): Locale {
   }
 
   const lang =
-    (typeof navigator !== 'undefined' && (navigator.language || (navigator as any).userLanguage)) || 'en';
+    (typeof navigator !== 'undefined' && (navigator.language || (navigator as any).userLanguage)) ||
+    'en';
   return lang.startsWith('zh') ? 'zh' : 'en';
 }
 

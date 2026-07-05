@@ -1,8 +1,6 @@
 // A send plan is an ordered list of segments. `delayMs` segments pause the
 // sender; `text` segments are written to the terminal.
-export type SendSegment =
-  | { kind: 'text'; text: string }
-  | { kind: 'delay'; delayMs: number };
+export type SendSegment = { kind: 'text'; text: string } | { kind: 'delay'; delayMs: number };
 
 // Expands snippet escapes into a send plan:
 //   \xNN  -> control byte from two hex digits (e.g. \x03 = Ctrl-C)
@@ -34,7 +32,9 @@ export function expandSnippet(raw: string): SendSegment[] {
       }
       // \x not followed by two hex digits — warn so the author notices the
       // typo (e.g. \x3 expecting Ctrl-C) instead of silently getting literal text.
-      console.warn(`snippet: \\x escape needs two hex digits near index ${i}; got "${raw.slice(i, i + 4)}"`);
+      console.warn(
+        `snippet: \\x escape needs two hex digits near index ${i}; got "${raw.slice(i, i + 4)}"`,
+      );
     } else if (next === 's') {
       const m = /^(\d{1,4})/.exec(raw.slice(i + 2));
       if (m) {
@@ -44,15 +44,25 @@ export function expandSnippet(raw: string): SendSegment[] {
         continue;
       }
       // \s not followed by digits — warn similarly.
-      console.warn(`snippet: \\s escape needs 1-4 digits near index ${i}; got "${raw.slice(i, i + 4)}"`);
+      console.warn(
+        `snippet: \\s escape needs 1-4 digits near index ${i}; got "${raw.slice(i, i + 4)}"`,
+      );
     } else if (next === 'n') {
-      buf += '\n'; i += 1; continue;
+      buf += '\n';
+      i += 1;
+      continue;
     } else if (next === 'r') {
-      buf += '\r'; i += 1; continue;
+      buf += '\r';
+      i += 1;
+      continue;
     } else if (next === 't') {
-      buf += '\t'; i += 1; continue;
+      buf += '\t';
+      i += 1;
+      continue;
     } else if (next === '\\') {
-      buf += '\\'; i += 1; continue;
+      buf += '\\';
+      i += 1;
+      continue;
     }
     // Unknown escape — keep the backslash literally.
     buf += ch;

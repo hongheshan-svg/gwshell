@@ -56,7 +56,10 @@ export const MemCard: React.FC<Props> = ({ mem }) => {
           <span>{swap.label}</span>
         </div>
         <div className="sp-membar__track">
-          <div className="sp-membar__fill sp-membar__fill--swap" style={{ width: `${swap.pct}%` }} />
+          <div
+            className="sp-membar__fill sp-membar__fill--swap"
+            style={{ width: `${swap.pct}%` }}
+          />
         </div>
       </div>
     </div>

@@ -1,10 +1,26 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { AlertCircle, Bot, Check, Copy, Folder, Plus, RotateCcw, SendHorizontal, ShieldCheck, TerminalSquare, X } from 'lucide-react';
+import {
+  AlertCircle,
+  Bot,
+  Check,
+  Copy,
+  Folder,
+  Plus,
+  RotateCcw,
+  SendHorizontal,
+  ShieldCheck,
+  TerminalSquare,
+  X,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../stores/appStore';
-import { compatibleProviderLabels, getAiModelDisplayName, isAiProviderUsable } from '../../lib/aiModels';
+import {
+  compatibleProviderLabels,
+  getAiModelDisplayName,
+  isAiProviderUsable,
+} from '../../lib/aiModels';
 import { getTerminalAiContext } from '../../lib/terminalContext';
 import type { AiProviderSettings, TerminalAiChatRequest } from '../../types/agent';
 import { sendInputToTab } from './TerminalView';
@@ -18,19 +34,37 @@ interface TerminalAiEventPayload {
 const MAX_COMMAND_SUGGESTIONS = 6;
 const TERMINAL_AI_SETTINGS_TIMEOUT_MS = 5000;
 const TERMINAL_AI_TIMEOUT_GRACE_SECS = 5;
-const SHELL_FENCE_LANGS = new Set(['', 'bash', 'sh', 'shell', 'zsh', 'fish', 'terminal', 'console', 'cmd', 'powershell', 'pwsh']);
+const SHELL_FENCE_LANGS = new Set([
+  '',
+  'bash',
+  'sh',
+  'shell',
+  'zsh',
+  'fish',
+  'terminal',
+  'console',
+  'cmd',
+  'powershell',
+  'pwsh',
+]);
 
 const newRequestId = () =>
-  globalThis.crypto?.randomUUID?.() ?? `terminal-ai-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  globalThis.crypto?.randomUUID?.() ??
+  `terminal-ai-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const formatError = (err: unknown): string => {
   if (typeof err === 'string') return err;
   if (err instanceof Error) return err.message;
-  if (err && typeof err === 'object' && 'message' in err) return String((err as { message: unknown }).message);
+  if (err && typeof err === 'object' && 'message' in err)
+    return String((err).message);
   return String(err);
 };
 
-const invokeWithTimeout = async <T,>(command: string, timeoutMs: number, timeoutMessage: string): Promise<T> => {
+const invokeWithTimeout = async <T,>(
+  command: string,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<T> => {
   let timeoutHandle: ReturnType<typeof window.setTimeout> | null = null;
   try {
     return await Promise.race([
@@ -46,7 +80,7 @@ const invokeWithTimeout = async <T,>(command: string, timeoutMs: number, timeout
 
 const cleanCommandLine = (line: string) => {
   const trimmed = line.trim();
-  const promptMatch = trimmed.match(/^(?:(?:[\w.-]+@[\w.-]+(?::[^$#>\s]+)?)?[$#>]|\$|#|>)\s+(.+)$/);
+  const promptMatch = /^(?:(?:[\w.-]+@[\w.-]+(?::[^$#>\s]+)?)?[$#>]|\$|#|>)\s+(.+)$/.exec(trimmed);
   return (promptMatch?.[1] ?? trimmed).trim();
 };
 
@@ -54,7 +88,7 @@ const isCommandCandidate = (line: string) => {
   if (!line || line.length > 260) return false;
   if (line.startsWith('#') || line.startsWith('//')) return false;
   if (/^(output|result|返回|输出|说明)[:：]/i.test(line)) return false;
-  if (/^```/.test(line)) return false;
+  if (line.startsWith("```")) return false;
   return /^(?:sudo\s+)?(?:[A-Za-z0-9_./-]+)(?:\s|$)/.test(line);
 };
 
@@ -105,7 +139,7 @@ export const TerminalAiDock: React.FC = () => {
   const [aiSettings, setAiSettings] = useState<AiProviderSettings | null>(null);
   const [copied, setCopied] = useState(false);
   const [contextTick, setContextTick] = useState(0);
-  const unlistenersRef = useRef<Array<() => void>>([]);
+  const unlistenersRef = useRef<(() => void)[]>([]);
   const listenerRequestIdRef = useRef<string | null>(null);
   const activeRequestIdRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
@@ -197,14 +231,17 @@ export const TerminalAiDock: React.FC = () => {
     setInput('');
   };
 
-  const stopWaiting = useCallback((showNotice = true) => {
-    const requestId = activeRequestIdRef.current;
-    activeRequestIdRef.current = null;
-    if (requestId) cleanupListeners(requestId);
-    setBusy(false);
-    setPhase('');
-    if (showNotice) setNotice(t('terminal_ai_stopped_waiting'));
-  }, [cleanupListeners, t]);
+  const stopWaiting = useCallback(
+    (showNotice = true) => {
+      const requestId = activeRequestIdRef.current;
+      activeRequestIdRef.current = null;
+      if (requestId) cleanupListeners(requestId);
+      setBusy(false);
+      setPhase('');
+      if (showNotice) setNotice(t('terminal_ai_stopped_waiting'));
+    },
+    [cleanupListeners, t],
+  );
 
   const insertCommand = (command: string) => {
     if (!activeTab) return;
@@ -250,7 +287,11 @@ export const TerminalAiDock: React.FC = () => {
       setBusy(false);
       setPhase('');
       setAnswer('');
-      setError(latestSettings?.enabled ? t('terminal_ai_model_unavailable') : t('terminal_ai_model_disabled'));
+      setError(
+        latestSettings?.enabled
+          ? t('terminal_ai_model_unavailable')
+          : t('terminal_ai_model_disabled'),
+      );
       return;
     }
     setAiSettings(latestSettings);
@@ -270,12 +311,13 @@ export const TerminalAiDock: React.FC = () => {
     const deltaEvent = `terminal-ai-delta-${requestId}`;
     const doneEvent = `terminal-ai-done-${requestId}`;
     const errorEvent = `terminal-ai-error-${requestId}`;
-    const timeoutMs = Math.max(1, latestSettings.request_timeout_secs + TERMINAL_AI_TIMEOUT_GRACE_SECS) * 1000;
+    const timeoutMs =
+      Math.max(1, latestSettings.request_timeout_secs + TERMINAL_AI_TIMEOUT_GRACE_SECS) * 1000;
     let timeoutHandle: ReturnType<typeof window.setTimeout> | null = null;
     let sawDelta = false;
     try {
       cleanupListeners();
-      const requestUnlisteners: Array<() => void> = [];
+      const requestUnlisteners: (() => void)[] = [];
       try {
         const unlistenDelta = await listen<TerminalAiEventPayload>(deltaEvent, (event) => {
           if (!isCurrentRequest() || !event.payload.textDelta) return;
@@ -310,13 +352,18 @@ export const TerminalAiDock: React.FC = () => {
         unlistenersRef.current = requestUnlisteners;
       } catch (listenErr) {
         requestUnlisteners.forEach((fn) => fn());
-        console.warn('Terminal AI event subscription failed; falling back to IPC result.', listenErr);
+        console.warn(
+          'Terminal AI event subscription failed; falling back to IPC result.',
+          listenErr,
+        );
       }
       if (!isCurrentRequest()) return;
       setPhase(t('terminal_ai_phase_requesting'));
       const timeoutPromise = new Promise<never>((_, reject) => {
         timeoutHandle = window.setTimeout(() => {
-          reject(new Error(t('terminal_ai_timeout_error', { seconds: Math.ceil(timeoutMs / 1000) })));
+          reject(
+            new Error(t('terminal_ai_timeout_error', { seconds: Math.ceil(timeoutMs / 1000) })),
+          );
         }, timeoutMs);
       });
       const fullText = await Promise.race([
@@ -361,7 +408,9 @@ export const TerminalAiDock: React.FC = () => {
     <div className="terminal-ai-dock">
       <div className="terminal-ai-topbar">
         <div className="terminal-ai-context">
-          <span className="terminal-ai-chip"><Folder size={15} /> {cwdChip}</span>
+          <span className="terminal-ai-chip">
+            <Folder size={15} /> {cwdChip}
+          </span>
           <span className="terminal-ai-chip">{promptChip}</span>
           <span
             className={`terminal-ai-chip terminal-ai-context-tag${selectionChars > 0 ? ' is-active' : ''}`}
@@ -407,7 +456,9 @@ export const TerminalAiDock: React.FC = () => {
           )}
           {commandSuggestions.length > 0 && (
             <div className="terminal-ai-command-list">
-              <div className="terminal-ai-command-title">{t('terminal_ai_command_suggestions')}</div>
+              <div className="terminal-ai-command-title">
+                {t('terminal_ai_command_suggestions')}
+              </div>
               {commandSuggestions.map((command) => (
                 <button
                   className="terminal-ai-command-chip"
@@ -457,10 +508,20 @@ export const TerminalAiDock: React.FC = () => {
       />
 
       <div className="terminal-ai-toolbar">
-        <button className="terminal-ai-primary" disabled={!input.trim() || busy} onClick={executeInput} type="button">
+        <button
+          className="terminal-ai-primary"
+          disabled={!input.trim() || busy}
+          onClick={executeInput}
+          type="button"
+        >
           <TerminalSquare size={15} /> {t('terminal_ai_execute')}
         </button>
-        <button className="terminal-ai-ghost" disabled={!input.trim() || busy} onClick={() => void askAgent()} type="button">
+        <button
+          className="terminal-ai-ghost"
+          disabled={!input.trim() || busy}
+          onClick={() => void askAgent()}
+          type="button"
+        >
           <Bot size={15} /> {t('terminal_ai_agent')}
         </button>
         <button
@@ -472,12 +533,28 @@ export const TerminalAiDock: React.FC = () => {
           {modelReady ? <Bot size={15} /> : <Plus size={15} />}
           <span>{modelReady ? modelLabel : t('terminal_ai_add_model')}</span>
         </button>
-        <button className="terminal-ai-icon-btn" onClick={() => { setAnswer(''); setError(''); setNotice(''); }} title={t('terminal_ai_clear')} type="button">
+        <button
+          className="terminal-ai-icon-btn"
+          onClick={() => {
+            setAnswer('');
+            setError('');
+            setNotice('');
+          }}
+          title={t('terminal_ai_clear')}
+          type="button"
+        >
           <RotateCcw size={15} />
         </button>
-        <span className="terminal-ai-safe"><ShieldCheck size={15} /></span>
+        <span className="terminal-ai-safe">
+          <ShieldCheck size={15} />
+        </span>
         <span className="terminal-ai-count">{input.length}</span>
-        <button className="terminal-ai-send" disabled={!input.trim() || busy} onClick={() => void askAgent()} type="button">
+        <button
+          className="terminal-ai-send"
+          disabled={!input.trim() || busy}
+          onClick={() => void askAgent()}
+          type="button"
+        >
           <SendHorizontal size={18} />
         </button>
       </div>

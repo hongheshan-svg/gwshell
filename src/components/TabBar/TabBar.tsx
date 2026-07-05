@@ -1,6 +1,16 @@
 import React, { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Plus, Menu, FolderOpen, Columns2, PanelLeftOpen, Square, Grid2x2, LayoutGrid } from 'lucide-react';
+import {
+  X,
+  Plus,
+  Menu,
+  FolderOpen,
+  Columns2,
+  PanelLeftOpen,
+  Square,
+  Grid2x2,
+  LayoutGrid,
+} from 'lucide-react';
 import {
   DndContext,
   PointerSensor,
@@ -27,7 +37,9 @@ const SortableTab: React.FC<{
   onMiddleClick: (e: React.MouseEvent) => void;
   onClose: () => void;
 }> = ({ tab, active, onSelect, onMiddleClick, onClose }) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: tab.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: tab.id,
+  });
   return (
     <div
       ref={setNodeRef}
@@ -62,7 +74,24 @@ const SortableTab: React.FC<{
 };
 
 export const TabBar: React.FC = () => {
-  const { tabs, activeTabId, setActiveTab, removeTab, reorderTabs, setShowNewSession, setShowSerialModal, setShowDockerModal, setShowLocalTerminalModal, setShowQuickConnect, sftpPanelOpen, toggleSftpPanel, splitCount, setSplitCount, sidebarCollapsed, toggleSidebar } = useAppStore();
+  const {
+    tabs,
+    activeTabId,
+    setActiveTab,
+    removeTab,
+    reorderTabs,
+    setShowNewSession,
+    setShowSerialModal,
+    setShowDockerModal,
+    setShowLocalTerminalModal,
+    setShowQuickConnect,
+    sftpPanelOpen,
+    toggleSftpPanel,
+    splitCount,
+    setSplitCount,
+    sidebarCollapsed,
+    toggleSidebar,
+  } = useAppStore();
   const { t } = useTranslation();
   const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
   const [splitMenuOpen, setSplitMenuOpen] = useState(false);
@@ -103,7 +132,10 @@ export const TabBar: React.FC = () => {
   };
 
   const handleNewAssetSelect = (type: string) => {
-    if (type === 'quickconnect') { setShowQuickConnect(true); return; }
+    if (type === 'quickconnect') {
+      setShowQuickConnect(true);
+      return;
+    }
     if (supportedQuickCreateTypes.has(type)) {
       setShowNewSession(true);
     } else if (type === 'serial') {
@@ -119,7 +151,9 @@ export const TabBar: React.FC = () => {
 
   // Drag starts only after the pointer moves a few pixels, so clicks still
   // select and middle clicks still close.
-  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
   const handleDragEnd = (e: DragEndEvent) => {
     const overId = e.over?.id;
     if (overId && overId !== e.active.id) {
@@ -135,18 +169,23 @@ export const TabBar: React.FC = () => {
         </button>
       )}
       {/* The asset-list home tab is pinned first and not draggable. */}
-      {tabs.filter((tab) => tab.type === 'asset-list').map((tab) => (
-        <div
-          key={tab.id}
-          className={`tab-item asset-list-tab ${tab.id === activeTabId ? 'active' : ''}`}
-          onClick={() => setActiveTab(tab.id)}
-        >
-          <Menu size={13} />
-          <span>{t('tab_list')}</span>
-        </div>
-      ))}
+      {tabs
+        .filter((tab) => tab.type === 'asset-list')
+        .map((tab) => (
+          <div
+            key={tab.id}
+            className={`tab-item asset-list-tab ${tab.id === activeTabId ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            <Menu size={13} />
+            <span>{t('tab_list')}</span>
+          </div>
+        ))}
       <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={terminalTabs.map((tab) => tab.id)} strategy={horizontalListSortingStrategy}>
+        <SortableContext
+          items={terminalTabs.map((tab) => tab.id)}
+          strategy={horizontalListSortingStrategy}
+        >
           {terminalTabs.map((tab) => (
             <SortableTab
               key={tab.id}
@@ -159,7 +198,12 @@ export const TabBar: React.FC = () => {
           ))}
         </SortableContext>
       </DndContext>
-      <button ref={addBtnRef} className="tab-add-btn" onClick={() => setShowNewAssetMenu(true)} title={t('tab_new')}>
+      <button
+        ref={addBtnRef}
+        className="tab-add-btn"
+        onClick={() => setShowNewAssetMenu(true)}
+        title={t('tab_new')}
+      >
         <Plus size={14} />
       </button>
       {showNewAssetMenu && (
@@ -187,9 +231,20 @@ export const TabBar: React.FC = () => {
                   <button
                     key={n}
                     className={`split-menu-item${splitCount === n ? ' active' : ''}`}
-                    onClick={() => { setSplitCount(n); setSplitMenuOpen(false); }}
+                    onClick={() => {
+                      setSplitCount(n);
+                      setSplitMenuOpen(false);
+                    }}
                   >
-                    {n === 1 ? <Square size={14} /> : n === 2 ? <Columns2 size={14} /> : n === 4 ? <Grid2x2 size={14} /> : <LayoutGrid size={14} />}
+                    {n === 1 ? (
+                      <Square size={14} />
+                    ) : n === 2 ? (
+                      <Columns2 size={14} />
+                    ) : n === 4 ? (
+                      <Grid2x2 size={14} />
+                    ) : (
+                      <LayoutGrid size={14} />
+                    )}
                     <span>{n === 1 ? t('split_single') : `${n}`}</span>
                   </button>
                 ))}
@@ -202,12 +257,18 @@ export const TabBar: React.FC = () => {
       {confirmTabId && (
         <div
           className="modal-overlay"
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setConfirmTabId(null); }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setConfirmTabId(null);
+          }}
         >
           <div className="confirm-dialog" role="alertdialog" aria-modal="true">
             <p className="confirm-dialog-text">{t('tab_close_confirm_msg')}</p>
             <div className="confirm-dialog-actions">
-              <button className="settings-btn-outline" onClick={() => setConfirmTabId(null)} autoFocus>
+              <button
+                className="settings-btn-outline"
+                onClick={() => setConfirmTabId(null)}
+                autoFocus
+              >
                 {t('common_cancel')}
               </button>
               <button

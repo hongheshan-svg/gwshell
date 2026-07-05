@@ -148,29 +148,29 @@ Key decisions:
 
 ### 5.1 New files
 
-| File | Responsibility |
-|---|---|
-| `src/components/Terminal/AutoModeWatcher.ts` | Core watcher class (plain TS, not React). One instance per tab. Subscribes to xterm events, runs heuristics, injects responses. |
-| `src/components/Terminal/autoModeRules.ts` | Built-in heuristic rule library for Claude Code, Codex, Gemini, and a generic y/N fallback. |
-| `src/components/Terminal/AutoModeToggle.tsx` | ⚡ toggle button rendered in tab bar. |
-| `src/components/Terminal/AutoModeLogPanel.tsx` | Collapsible drawer showing per-tab log entries. |
-| `src/components/StatusBar/AutoModeIndicator.tsx` | Status bar element: `⚡ Auto · N` with flash animation. |
-| `src/stores/autoModeStore.ts` | Zustand runtime store (in-memory): per-tab enabled flag, counters, logs, cooldown state. |
-| `scripts/mock-ai-cli.mjs` | Small Node script emitting mock Claude Code 3-option prompt for manual testing. |
+| File                                             | Responsibility                                                                                                                  |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `src/components/Terminal/AutoModeWatcher.ts`     | Core watcher class (plain TS, not React). One instance per tab. Subscribes to xterm events, runs heuristics, injects responses. |
+| `src/components/Terminal/autoModeRules.ts`       | Built-in heuristic rule library for Claude Code, Codex, Gemini, and a generic y/N fallback.                                     |
+| `src/components/Terminal/AutoModeToggle.tsx`     | ⚡ toggle button rendered in tab bar.                                                                                           |
+| `src/components/Terminal/AutoModeLogPanel.tsx`   | Collapsible drawer showing per-tab log entries.                                                                                 |
+| `src/components/StatusBar/AutoModeIndicator.tsx` | Status bar element: `⚡ Auto · N` with flash animation.                                                                         |
+| `src/stores/autoModeStore.ts`                    | Zustand runtime store (in-memory): per-tab enabled flag, counters, logs, cooldown state.                                        |
+| `scripts/mock-ai-cli.mjs`                        | Small Node script emitting mock Claude Code 3-option prompt for manual testing.                                                 |
 
 ### 5.2 Modified files
 
-| File | Change |
-|---|---|
-| `src/components/Terminal/TerminalView.tsx` | After xterm initialization, construct `AutoModeWatcher`. In `destroyTerminal`, dispose it. |
-| `src/App.tsx` | Mount `AutoModeLogPanel` at root level (same pattern as existing modals); rendered conditionally by `autoModeStore.logPanelOpen`. |
-| `src/components/TabBar/TabBar.tsx` | Render `AutoModeToggle` inline in each tab's control area (for `ssh` / `localshell` tabs only). |
-| `src/components/StatusBar/StatusBar.tsx` | Render `AutoModeIndicator` in the right-hand section. |
-| `src/stores/settingsStore.ts` | Add `autoModeDefaultEnabled`, `autoModeCooldownCount`, `autoModeCooldownWindowMs`, `autoModeCustomRules` to `AppSettings` and `defaultSettings`. |
-| `src/types/index.ts` | Add `AutoModeRule`, `AutoModeCustomRule`, `AutoModeLogEntry`, `AutoModeMatchResult`, `AutoModeDetectionContext`. |
-| `src/components/Settings/SettingsModal.tsx` | Add "Auto Mode" section with toggle, cooldown inputs, custom rule editor. |
-| `src/i18n/locales/gwshell.en.json` | Add translation keys listed in §9. |
-| `src/i18n/locales/gwshell.zh.json` | Same keys in Chinese. |
+| File                                        | Change                                                                                                                                           |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/components/Terminal/TerminalView.tsx`  | After xterm initialization, construct `AutoModeWatcher`. In `destroyTerminal`, dispose it.                                                       |
+| `src/App.tsx`                               | Mount `AutoModeLogPanel` at root level (same pattern as existing modals); rendered conditionally by `autoModeStore.logPanelOpen`.                |
+| `src/components/TabBar/TabBar.tsx`          | Render `AutoModeToggle` inline in each tab's control area (for `ssh` / `localshell` tabs only).                                                  |
+| `src/components/StatusBar/StatusBar.tsx`    | Render `AutoModeIndicator` in the right-hand section.                                                                                            |
+| `src/stores/settingsStore.ts`               | Add `autoModeDefaultEnabled`, `autoModeCooldownCount`, `autoModeCooldownWindowMs`, `autoModeCustomRules` to `AppSettings` and `defaultSettings`. |
+| `src/types/index.ts`                        | Add `AutoModeRule`, `AutoModeCustomRule`, `AutoModeLogEntry`, `AutoModeMatchResult`, `AutoModeDetectionContext`.                                 |
+| `src/components/Settings/SettingsModal.tsx` | Add "Auto Mode" section with toggle, cooldown inputs, custom rule editor.                                                                        |
+| `src/i18n/locales/gwshell.en.json`          | Add translation keys listed in §9.                                                                                                               |
+| `src/i18n/locales/gwshell.zh.json`          | Same keys in Chinese.                                                                                                                            |
 
 ## 6. Detection Algorithm
 
@@ -190,12 +190,12 @@ xterm.onWriteParsed ──► reset debounce(200ms)
 
 ```ts
 interface AutoModeDetectionContext {
-  visibleLines: string[];   // rendered text lines from buffer.active, top to bottom
+  visibleLines: string[]; // rendered text lines from buffer.active, top to bottom
   cursorRow: number;
   cursorCol: number;
-  inAltScreen: boolean;     // terminal.buffer.active.type === 'alternate'
-  idleMs: number;           // ms since last onWriteParsed
-  lastUserInputAt: number;  // ms timestamp
+  inAltScreen: boolean; // terminal.buffer.active.type === 'alternate'
+  idleMs: number; // ms since last onWriteParsed
+  lastUserInputAt: number; // ms timestamp
   now: number;
 }
 ```
@@ -207,7 +207,7 @@ trailing whitespace but retains content.
 ### 6.3 Gate (all must be true)
 
 1. `autoModeStore.enabled[tabId] === true`
-2. `ctx.inAltScreen === true`  ← hard gate against plain-shell false positives
+2. `ctx.inAltScreen === true` ← hard gate against plain-shell false positives
 3. `ctx.now - ctx.lastUserInputAt > 800`
 4. Tab is not in cooldown state
 5. `ctx.now - lastInjectionAt[tabId] > 500` (anti-double-fire)
@@ -225,8 +225,8 @@ interface AutoModeRule {
 }
 
 interface AutoModeMatchResult {
-  response: string;   // raw bytes to send, e.g. "2\r", "y\r", "\r"
-  label: string;      // for log: "Yes, and don't ask again"
+  response: string; // raw bytes to send, e.g. "2\r", "y\r", "\r"
+  label: string; // for log: "Yes, and don't ask again"
   ruleName: string;
 }
 ```
@@ -240,11 +240,11 @@ entry.
 
 Priorities are suggestions; exact values can be tuned at implementation time.
 
-| Priority | Rule name | Match summary | Response |
-|---|---|---|---|
-| 100 | `Claude Code 3-option` | Visible text contains `❯? 1. Yes` AND a line matching `/2\.\s*Yes,?\s*and\s*don'?t\s*ask\s*again/i` AND `/3\.\s*No/`. | `"2\r"` |
-| 90 | `Claude Code 2-option` | Contains `❯? 1. Yes` AND `/2\.\s*No/`, no "don't ask again" option. | `"1\r"` |
-| 50 | `Generic y/N` | Last non-empty visible line ends with one of: `[y/N]`, `[Y/n]`, `(y/n)`, `(Y/n)` (case-insensitive). | `"y\r"` |
+| Priority | Rule name              | Match summary                                                                                                         | Response |
+| -------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------- | -------- |
+| 100      | `Claude Code 3-option` | Visible text contains `❯? 1. Yes` AND a line matching `/2\.\s*Yes,?\s*and\s*don'?t\s*ask\s*again/i` AND `/3\.\s*No/`. | `"2\r"`  |
+| 90       | `Claude Code 2-option` | Contains `❯? 1. Yes` AND `/2\.\s*No/`, no "don't ask again" option.                                                   | `"1\r"`  |
+| 50       | `Generic y/N`          | Last non-empty visible line ends with one of: `[y/N]`, `[Y/n]`, `(y/n)`, `(Y/n)` (case-insensitive).                  | `"y\r"`  |
 
 The initial rule set ships with the two Claude Code rules and the generic
 y/N fallback. Codex and Gemini CLI prompts are covered by the generic
@@ -260,13 +260,13 @@ Users add entries in Settings → Auto Mode → 自定义规则:
 
 ```ts
 interface AutoModeCustomRule {
-  id: string;        // uuid
+  id: string; // uuid
   enabled: boolean;
-  priority: number;  // suggested ≥ 200 so they outrank built-in rules
-  pattern: string;   // regex source string
-  flags: string;     // regex flags (e.g. "im")
-  response: string;  // raw bytes, backslash-escapes decoded: "\\r" → "\r"
-  label: string;     // log label
+  priority: number; // suggested ≥ 200 so they outrank built-in rules
+  pattern: string; // regex source string
+  flags: string; // regex flags (e.g. "im")
+  response: string; // raw bytes, backslash-escapes decoded: "\\r" → "\r"
+  label: string; // log label
 }
 ```
 
@@ -340,24 +340,24 @@ spread pattern (`{ ...defaultSettings, ...saved }`) auto-backfills old configs.
 
 ```ts
 interface AutoModeStore {
-  enabled: Record<string, boolean>;          // per tabId
-  counters: Record<string, number>;          // cumulative triggers this session
-  logs: Record<string, AutoModeLogEntry[]>;  // bounded 500/tab
+  enabled: Record<string, boolean>; // per tabId
+  counters: Record<string, number>; // cumulative triggers this session
+  logs: Record<string, AutoModeLogEntry[]>; // bounded 500/tab
   logPanelOpen: boolean;
-  logPanelTabId: string | null;              // which tab's log is shown
+  logPanelTabId: string | null; // which tab's log is shown
 
   setEnabled(tabId: string, value: boolean): void;
   incrementCounter(tabId: string): void;
   pushLog(tabId: string, entry: Omit<AutoModeLogEntry, 'id'>): void;
   clearLog(tabId: string): void;
-  cleanup(tabId: string): void;              // called from destroyTerminal
+  cleanup(tabId: string): void; // called from destroyTerminal
   toggleLogPanel(tabId?: string): void;
 }
 
 interface AutoModeLogEntry {
   id: string;
   time: number;
-  kind: "info" | "warning" | "error";
+  kind: 'info' | 'warning' | 'error';
   label: string;
   ruleName?: string;
   response?: string;
@@ -369,6 +369,7 @@ interface AutoModeLogEntry {
 ### 7.3 Default state for a new tab
 
 On tab creation (existing `addTab` in `appStore`):
+
 - If the tab type is `ssh` or `localshell`: read `settings.autoModeDefaultEnabled`
   and initialize `autoModeStore.enabled[tabId]` accordingly.
 - Otherwise: leave undefined (watcher is never instantiated for non-terminal
@@ -460,18 +461,18 @@ placeholder showing intent.)
 
 ## 10. Edge Cases
 
-| Case | Handling |
-|---|---|
-| Split-pane with same session in multiple tabs | Each tab has its own xterm instance, thus its own watcher and counter. Independent. |
-| Non-active tab | Watcher keeps running. User may be working elsewhere while Claude runs in background. |
-| Tab close | `destroyTerminal(tabId)` calls `watcher.dispose()` which clears timers, unsubscribes events, and calls `autoModeStore.cleanup(tabId)`. |
-| Settings change (rule edit, cooldown change) | Watcher reads from `settingsStore.getState()` at each detection — no caching, instant effect. |
-| User types during idle window | `onData` sets `lastUserInputAt`; gate 3 rejects detection for 800ms. |
-| CLI exits / session disconnects | `onWriteParsed` stops firing naturally. Watcher remains idle until tab closes. On alt-screen exit, watcher writes one-line summary to scrollback. |
-| Ambiguous prompts (two rules could match) | Priority order, first non-null wins. |
-| Invalid custom regex | Caught in watcher, rule skipped, one-time warning logged. |
-| Log unbounded growth | Ring buffer cap 500 per tab. |
-| `invoke` send failure | Caught, logged as `error` kind, no retry. |
+| Case                                                                  | Handling                                                                                                                                                                                                      |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Split-pane with same session in multiple tabs                         | Each tab has its own xterm instance, thus its own watcher and counter. Independent.                                                                                                                           |
+| Non-active tab                                                        | Watcher keeps running. User may be working elsewhere while Claude runs in background.                                                                                                                         |
+| Tab close                                                             | `destroyTerminal(tabId)` calls `watcher.dispose()` which clears timers, unsubscribes events, and calls `autoModeStore.cleanup(tabId)`.                                                                        |
+| Settings change (rule edit, cooldown change)                          | Watcher reads from `settingsStore.getState()` at each detection — no caching, instant effect.                                                                                                                 |
+| User types during idle window                                         | `onData` sets `lastUserInputAt`; gate 3 rejects detection for 800ms.                                                                                                                                          |
+| CLI exits / session disconnects                                       | `onWriteParsed` stops firing naturally. Watcher remains idle until tab closes. On alt-screen exit, watcher writes one-line summary to scrollback.                                                             |
+| Ambiguous prompts (two rules could match)                             | Priority order, first non-null wins.                                                                                                                                                                          |
+| Invalid custom regex                                                  | Caught in watcher, rule skipped, one-time warning logged.                                                                                                                                                     |
+| Log unbounded growth                                                  | Ring buffer cap 500 per tab.                                                                                                                                                                                  |
+| `invoke` send failure                                                 | Caught, logged as `error` kind, no retry.                                                                                                                                                                     |
 | Non-AI alt-screen TUIs (tmux `confirm-before [y/N]`, some installers) | Known risk. Generic y/N rule may fire. Mitigations: (a) gate 3 suppresses while user is typing, (b) log panel gives immediate visibility, (c) user can disable auto mode for that tab. Documented limitation. |
 
 ## 11. Error Handling Principles
@@ -516,6 +517,7 @@ supplemented by `npm run smoke:check`.
 ### 12.2 Mock CLI script
 
 `scripts/mock-ai-cli.mjs`:
+
 - Node script, enters alt-screen (`\x1b[?1049h`).
 - Prints a Claude-Code-styled prompt:
   ```

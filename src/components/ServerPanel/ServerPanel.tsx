@@ -4,10 +4,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
-import type {
-  MetricsSnapshot,
-  MetricsErrorPayload,
-} from '../../types/serverMetrics';
+import type { MetricsSnapshot, MetricsErrorPayload } from '../../types/serverMetrics';
 import { HostCard } from './HostCard';
 import { CpuCard } from './CpuCard';
 import { MemCard } from './MemCard';
@@ -44,8 +41,10 @@ export const ServerPanel: React.FC = () => {
     s.sessions.find((sess) => sess.id === s.tabs.find((t) => t.id === s.activeTabId)?.sessionId),
   );
   const isSsh = activeTab?.type === 'ssh';
-  const sessionId = isSsh ? activeTab!.sessionId : null;
-  const hostIp = activeSession ? `${activeSession.host ?? ''}${activeSession.port ? `:${activeSession.port}` : ''}` : '';
+  const sessionId = isSsh ? activeTab.sessionId : null;
+  const hostIp = activeSession
+    ? `${activeSession.host ?? ''}${activeSession.port ? `:${activeSession.port}` : ''}`
+    : '';
 
   const [snapshot, setSnapshot] = useState<MetricsSnapshot | null>(null);
   const [status, setStatus] = useState<Status>('loading');
@@ -79,36 +78,35 @@ export const ServerPanel: React.FC = () => {
 
     (async () => {
       try {
-        dataUnlisten = await listen<MetricsSnapshot>(
-          `server-metrics-${sessionId}`,
-          (evt) => {
-            const snap = evt.payload;
-            setSnapshot(snap);
-            setStatus('ok');
-            if (snap.cpu) {
-              cpuHistoryRef.current = pushHistory(cpuHistoryRef.current, snap.cpu.total_percent);
-            }
-            if (snap.mem && snap.mem.mem_total_bytes > 0) {
-              const pct = (snap.mem.mem_used_bytes / snap.mem.mem_total_bytes) * 100;
-              memHistoryRef.current = pushHistory(memHistoryRef.current, pct);
-            }
-            if (snap.net) {
-              rxHistoryRef.current = pushHistory(rxHistoryRef.current, snap.net.rx_bytes_per_sec);
-              txHistoryRef.current = pushHistory(txHistoryRef.current, snap.net.tx_bytes_per_sec);
-            }
-            forceRender((n) => n + 1);
+        dataUnlisten = await listen<MetricsSnapshot>(`server-metrics-${sessionId}`, (evt) => {
+          const snap = evt.payload;
+          setSnapshot(snap);
+          setStatus('ok');
+          if (snap.cpu) {
+            cpuHistoryRef.current = pushHistory(cpuHistoryRef.current, snap.cpu.total_percent);
           }
-        );
+          if (snap.mem && snap.mem.mem_total_bytes > 0) {
+            const pct = (snap.mem.mem_used_bytes / snap.mem.mem_total_bytes) * 100;
+            memHistoryRef.current = pushHistory(memHistoryRef.current, pct);
+          }
+          if (snap.net) {
+            rxHistoryRef.current = pushHistory(rxHistoryRef.current, snap.net.rx_bytes_per_sec);
+            txHistoryRef.current = pushHistory(txHistoryRef.current, snap.net.tx_bytes_per_sec);
+          }
+          forceRender((n) => n + 1);
+        });
 
         errUnlisten = await listen<MetricsErrorPayload>(
           `server-metrics-error-${sessionId}`,
           (evt) => {
             const p = evt.payload;
             setStatus('error');
-            if (p.reason === 'unsupported') setErrorBanner(tRef.current('serverPanel_status_unsupported'));
-            else if (p.reason === 'timeout') setErrorBanner(tRef.current('serverPanel_status_timeout'));
+            if (p.reason === 'unsupported')
+              setErrorBanner(tRef.current('serverPanel_status_unsupported'));
+            else if (p.reason === 'timeout')
+              setErrorBanner(tRef.current('serverPanel_status_timeout'));
             else setErrorBanner(tRef.current('serverPanel_status_disconnected'));
-          }
+          },
         );
 
         if (cancelled) {
@@ -143,7 +141,11 @@ export const ServerPanel: React.FC = () => {
     <div className="sp-drawer" role="dialog" aria-label={t('serverPanel_title')}>
       <div className="sp-header">
         <div className="sp-header__title">{t('serverPanel_title')}</div>
-        <button className="sp-header__close" onClick={toggleServerPanel} title={t('serverPanel_close')}>
+        <button
+          className="sp-header__close"
+          onClick={toggleServerPanel}
+          title={t('serverPanel_close')}
+        >
           <X size={16} />
         </button>
       </div>
@@ -154,9 +156,7 @@ export const ServerPanel: React.FC = () => {
       {status === 'loading' && (
         <div className="sp-banner sp-banner--info">{t('serverPanel_status_loading')}</div>
       )}
-      {errorBanner && (
-        <div className="sp-banner sp-banner--error">{errorBanner}</div>
-      )}
+      {errorBanner && <div className="sp-banner sp-banner--error">{errorBanner}</div>}
 
       <div className={`sp-body ${greyed ? 'sp-body--greyed' : ''}`}>
         {status !== 'no-ssh' && (

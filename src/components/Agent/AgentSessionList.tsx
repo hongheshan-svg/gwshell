@@ -23,9 +23,12 @@ export const AgentSessionList: React.FC = () => {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return sessions.filter((session) => {
-      if (onlyCurrent && activeTab?.sessionId && session.target_session_id !== activeTab.sessionId) return false;
+      if (onlyCurrent && activeTab?.sessionId && session.target_session_id !== activeTab.sessionId)
+        return false;
       if (!q) return true;
-      return `${session.objective} ${session.status} ${session.target_session_id}`.toLowerCase().includes(q);
+      return `${session.objective} ${session.status} ${session.target_session_id}`
+        .toLowerCase()
+        .includes(q);
     });
   }, [activeTab?.sessionId, onlyCurrent, query, sessions]);
 

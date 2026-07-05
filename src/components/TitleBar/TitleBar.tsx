@@ -10,20 +10,32 @@ const getAppWindow = () => (isTauriRuntime() ? getCurrentWindow() : null);
 
 export const TitleBar: React.FC = () => {
   const { t } = useTranslation();
-  const { serverPanelOpen, toggleServerPanel, agentPanelOpen, toggleAgentPanel, setShowCommandPalette } = useAppStore();
+  const {
+    serverPanelOpen,
+    toggleServerPanel,
+    agentPanelOpen,
+    toggleAgentPanel,
+    setShowCommandPalette,
+  } = useAppStore();
 
   const handleMinimize = () => {
-    getAppWindow()?.minimize().catch(() => {});
+    getAppWindow()
+      ?.minimize()
+      .catch(() => {});
   };
 
   const handleMaximize = () => {
-    getAppWindow()?.toggleMaximize().catch(() => {});
+    getAppWindow()
+      ?.toggleMaximize()
+      .catch(() => {});
   };
 
   const handleClose = () => {
     if (isTauriRuntime()) {
       exit(0).catch(() => {});
-      getAppWindow()?.close().catch(() => {});
+      getAppWindow()
+        ?.close()
+        .catch(() => {});
     }
   };
 
@@ -61,13 +73,28 @@ export const TitleBar: React.FC = () => {
         </button>
         {!IS_MACOS && (
           <>
-            <button className="titlebar-btn" onClick={handleMinimize} data-gw-action="minimize" title={t('titlebar_minimize')}>
+            <button
+              className="titlebar-btn"
+              onClick={handleMinimize}
+              data-gw-action="minimize"
+              title={t('titlebar_minimize')}
+            >
               <Minus size={14} />
             </button>
-            <button className="titlebar-btn" onClick={handleMaximize} data-gw-action="toggle_maximize" title={t('titlebar_maximize')}>
+            <button
+              className="titlebar-btn"
+              onClick={handleMaximize}
+              data-gw-action="toggle_maximize"
+              title={t('titlebar_maximize')}
+            >
               <Square size={10} />
             </button>
-            <button className="titlebar-btn titlebar-close" onClick={handleClose} data-gw-action="exit" title={t('titlebar_close')}>
+            <button
+              className="titlebar-btn titlebar-close"
+              onClick={handleClose}
+              data-gw-action="exit"
+              title={t('titlebar_close')}
+            >
               <X size={14} />
             </button>
           </>

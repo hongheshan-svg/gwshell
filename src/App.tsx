@@ -14,9 +14,15 @@ import { UnlockScreen } from './components/UnlockScreen';
 // Heavy / interaction-only chunks: deferred until the user actually needs them.
 // On startup we only render the shell + asset list — every other resource (xterm,
 // SFTP editor, plugin-dialog, plugin-opener, deep-link, modals) loads on demand.
-const TerminalContainer = lazy(() => import('./components/Terminal/TerminalContainer').then(m => ({ default: m.TerminalContainer })));
-const SftpPanel = lazy(() => import('./components/SftpPanel/SftpPanel').then(m => ({ default: m.SftpPanel })));
-const TerminalSearchBar = lazy(() => import('./components/Terminal/TerminalSearchBar').then(m => ({ default: m.TerminalSearchBar })));
+const TerminalContainer = lazy(() =>
+  import('./components/Terminal/TerminalContainer').then((m) => ({ default: m.TerminalContainer })),
+);
+const SftpPanel = lazy(() =>
+  import('./components/SftpPanel/SftpPanel').then((m) => ({ default: m.SftpPanel })),
+);
+const TerminalSearchBar = lazy(() =>
+  import('./components/Terminal/TerminalSearchBar').then((m) => ({ default: m.TerminalSearchBar })),
+);
 import { useAppStore } from './stores/appStore';
 import { DockerContainerPicker } from './components/Terminal/DockerContainerPicker';
 import { useSettingsStore } from './stores/settingsStore';
@@ -29,31 +35,74 @@ import { saveOpenTabs, tabsSignature, loadOpenTabs } from './lib/tabSession';
 import './styles/theme.css';
 import './styles/global.css';
 
-const NewSessionModal = lazy(() => import('./components/Modals/NewSessionModal').then((m) => ({ default: m.NewSessionModal })));
-const QuickConnectModal = lazy(() => import('./components/Modals/QuickConnectModal').then((m) => ({ default: m.QuickConnectModal })));
-const DockerModal = lazy(() => import('./components/Modals/DockerModal').then((m) => ({ default: m.DockerModal })));
-const LocalTerminalModal = lazy(() => import('./components/Modals/LocalTerminalModal').then((m) => ({ default: m.LocalTerminalModal })));
-const SerialPortModal = lazy(() => import('./components/Modals/SerialPortModal').then((m) => ({ default: m.SerialPortModal })));
-const SettingsModal = lazy(() => import('./components/Settings/SettingsModal').then((m) => ({ default: m.SettingsModal })));
-const AppMenu = lazy(() => import('./components/AppMenu/AppMenu').then((m) => ({ default: m.AppMenu })));
-const UpdateChecker = lazy(() => import('./components/UpdateChecker/UpdateChecker').then((m) => ({ default: m.UpdateChecker })));
-const SecurityNotice = lazy(() => import('./components/SecurityNotice/SecurityNotice').then((m) => ({ default: m.SecurityNotice })));
-const ServerPanel = lazy(() => import('./components/ServerPanel').then((m) => ({ default: m.ServerPanel })));
-const AgentPanel = lazy(() => import('./components/Agent').then((m) => ({ default: m.AgentPanel })));
-const CommandPalette = lazy(() => import('./components/CommandPalette/CommandPalette').then((m) => ({ default: m.CommandPalette })));
-const GroupDefaultsModal = lazy(() => import('./components/Modals/GroupDefaultsModal').then((m) => ({ default: m.GroupDefaultsModal })));
+const NewSessionModal = lazy(() =>
+  import('./components/Modals/NewSessionModal').then((m) => ({ default: m.NewSessionModal })),
+);
+const QuickConnectModal = lazy(() =>
+  import('./components/Modals/QuickConnectModal').then((m) => ({ default: m.QuickConnectModal })),
+);
+const DockerModal = lazy(() =>
+  import('./components/Modals/DockerModal').then((m) => ({ default: m.DockerModal })),
+);
+const LocalTerminalModal = lazy(() =>
+  import('./components/Modals/LocalTerminalModal').then((m) => ({ default: m.LocalTerminalModal })),
+);
+const SerialPortModal = lazy(() =>
+  import('./components/Modals/SerialPortModal').then((m) => ({ default: m.SerialPortModal })),
+);
+const SettingsModal = lazy(() =>
+  import('./components/Settings/SettingsModal').then((m) => ({ default: m.SettingsModal })),
+);
+const AppMenu = lazy(() =>
+  import('./components/AppMenu/AppMenu').then((m) => ({ default: m.AppMenu })),
+);
+const UpdateChecker = lazy(() =>
+  import('./components/UpdateChecker/UpdateChecker').then((m) => ({ default: m.UpdateChecker })),
+);
+const SecurityNotice = lazy(() =>
+  import('./components/SecurityNotice/SecurityNotice').then((m) => ({ default: m.SecurityNotice })),
+);
+const ServerPanel = lazy(() =>
+  import('./components/ServerPanel').then((m) => ({ default: m.ServerPanel })),
+);
+const AgentPanel = lazy(() =>
+  import('./components/Agent').then((m) => ({ default: m.AgentPanel })),
+);
+const CommandPalette = lazy(() =>
+  import('./components/CommandPalette/CommandPalette').then((m) => ({ default: m.CommandPalette })),
+);
+const GroupDefaultsModal = lazy(() =>
+  import('./components/Modals/GroupDefaultsModal').then((m) => ({ default: m.GroupDefaultsModal })),
+);
 
 function App() {
   useSettingsEffects();
-  const { theme, setSessions, tabs, activeTabId, sftpPanelOpen, sessions,
-    showNewSession, showQuickConnect, showDockerModal, showLocalTerminalModal, showSerialModal, showSettings, showAppMenu,
+  const {
+    theme,
+    setSessions,
+    tabs,
+    activeTabId,
+    sftpPanelOpen,
+    sessions,
+    showNewSession,
+    showQuickConnect,
+    showDockerModal,
+    showLocalTerminalModal,
+    showSerialModal,
+    showSettings,
+    showAppMenu,
     showCommandPalette,
     showTerminalSearch,
     groupDefaultsTarget,
-    dockerPicker, setDockerPicker,
-    vaultLocked, setVaultLocked,
-    mainView, activeNavItem, sidebarCollapsed,
-    agentPanelOpen } = useAppStore();
+    dockerPicker,
+    setDockerPicker,
+    vaultLocked,
+    setVaultLocked,
+    mainView,
+    activeNavItem,
+    sidebarCollapsed,
+    agentPanelOpen,
+  } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
   const settingsLoaded = useSettingsStore((s) => s.loaded);
   const sessionTabMemory = useSettingsStore((s) => s.settings.sessionTabMemory);
@@ -63,8 +112,10 @@ function App() {
   // Show asset table directly (synchronous) when no terminal is active.
   // TerminalContainer is lazy-loaded with xterm.js (344KB); showing AssetTable
   // through it would cause the asset list to flash in only after the heavy chunk loads.
-  const showAssetTable = activeTabId === 'asset-list' || mainView === 'asset-list'
-    || tabs.filter(t => t.type !== 'asset-list').length === 0;
+  const showAssetTable =
+    activeTabId === 'asset-list' ||
+    mainView === 'asset-list' ||
+    tabs.filter((t) => t.type !== 'asset-list').length === 0;
   const needTerminals = !showAssetTable;
 
   useEffect(() => {
@@ -93,7 +144,9 @@ function App() {
     const MIN_SPLASH_MS = 2000;
     invoke('app_ready').catch(() => {});
 
-    const t0 = (window as unknown as { __GWSHELL_BOOT_T0__?: number }).__GWSHELL_BOOT_T0__ ?? performance.now();
+    const t0 =
+      (window as unknown as { __GWSHELL_BOOT_T0__?: number }).__GWSHELL_BOOT_T0__ ??
+      performance.now();
     const elapsed = performance.now() - t0;
     const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
 
@@ -104,7 +157,11 @@ function App() {
       if (splash) {
         splash.classList.add('fade-out');
         splash.addEventListener('transitionend', () => splash.remove(), { once: true });
-        setTimeout(() => { try { splash.remove(); } catch {} }, 600);
+        setTimeout(() => {
+          try {
+            splash.remove();
+          } catch {}
+        }, 600);
       }
     }, remaining);
 
@@ -115,7 +172,9 @@ function App() {
   // unlock overlay until the user authenticates. Runs once on boot.
   useEffect(() => {
     invoke<boolean>('vault_is_enabled')
-      .then((enabled) => { if (enabled) setVaultLocked(true); })
+      .then((enabled) => {
+        if (enabled) setVaultLocked(true);
+      })
       .catch(() => {});
   }, [setVaultLocked]);
 
@@ -124,7 +183,9 @@ function App() {
   useEffect(() => {
     if (sessions.length === 0) {
       invoke<SessionConfig[]>('get_sessions')
-        .then((s) => { if (s.length > 0) setSessions(s); })
+        .then((s) => {
+          if (s.length > 0) setSessions(s);
+        })
         .catch(() => {});
     }
   }, []);
@@ -152,7 +213,10 @@ function App() {
   const { addTab, setActiveTab } = useAppStore();
   useEffect(() => {
     if (restoredRef.current || !settingsLoaded) return;
-    if (!sessionTabMemory) { restoredRef.current = true; return; }
+    if (!sessionTabMemory) {
+      restoredRef.current = true;
+      return;
+    }
     // Wait for sessions to hydrate (sync injection or async get_sessions fallback).
     if (sessions.length === 0) return;
     restoredRef.current = true;
@@ -207,21 +271,30 @@ function App() {
                 </div>
               )}
               {needTerminals && (
-                <Suspense fallback={null}><TerminalContainer /></Suspense>
+                <Suspense fallback={null}>
+                  <TerminalContainer />
+                </Suspense>
               )}
               {needTerminals && showTerminalSearch && (
-                <Suspense fallback={null}><TerminalSearchBar /></Suspense>
+                <Suspense fallback={null}>
+                  <TerminalSearchBar />
+                </Suspense>
               )}
-              {sftpPanelOpen && (() => {
-                const activeTab = tabs.find(t => t.id === activeTabId);
-                if (activeTab?.type !== 'ssh') return null;
-                const sess = sessions.find(s => s.id === activeTab.sessionId);
-                return (
-                  <Suspense fallback={null}>
-                    <SftpPanel sessionId={activeTab.sessionId} username={sess?.username} connected={activeTab.connected} />
-                  </Suspense>
-                );
-              })()}
+              {sftpPanelOpen &&
+                (() => {
+                  const activeTab = tabs.find((t) => t.id === activeTabId);
+                  if (activeTab?.type !== 'ssh') return null;
+                  const sess = sessions.find((s) => s.id === activeTab.sessionId);
+                  return (
+                    <Suspense fallback={null}>
+                      <SftpPanel
+                        sessionId={activeTab.sessionId}
+                        username={sess?.username}
+                        connected={activeTab.connected}
+                      />
+                    </Suspense>
+                  );
+                })()}
               {agentPanelOpen && (
                 <Suspense fallback={null}>
                   <AgentPanel />
@@ -248,8 +321,20 @@ function App() {
         {dockerPicker && (
           <DockerContainerPicker
             containers={dockerPicker.containers}
-            onPick={(id) => { window.dispatchEvent(new CustomEvent('gwshell:docker-pick', { detail: { tabId: dockerPicker.tabId, id } })); setDockerPicker(null); }}
-            onCancel={() => { window.dispatchEvent(new CustomEvent('gwshell:docker-cancel', { detail: { tabId: dockerPicker.tabId } })); setDockerPicker(null); }}
+            onPick={(id) => {
+              window.dispatchEvent(
+                new CustomEvent('gwshell:docker-pick', {
+                  detail: { tabId: dockerPicker.tabId, id },
+                }),
+              );
+              setDockerPicker(null);
+            }}
+            onCancel={() => {
+              window.dispatchEvent(
+                new CustomEvent('gwshell:docker-cancel', { detail: { tabId: dockerPicker.tabId } }),
+              );
+              setDockerPicker(null);
+            }}
           />
         )}
       </div>

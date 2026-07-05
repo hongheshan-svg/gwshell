@@ -33,9 +33,7 @@ export const SnippetPanel: React.FC = () => {
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
   const canSend =
-    !!activeTab &&
-    activeTab.connected &&
-    INTERACTIVE_TERMINAL_TYPES.has(activeTab.type);
+    !!activeTab && activeTab.connected && INTERACTIVE_TERMINAL_TYPES.has(activeTab.type);
 
   const send = (snippet: Snippet) => {
     if (!canSend || !activeTab) {
@@ -98,7 +96,11 @@ export const SnippetPanel: React.FC = () => {
             rows={3}
           />
           <div className="snippet-form-actions">
-            <button className="snippet-icon-btn" onClick={() => void submit()} title={t('snippet_save')}>
+            <button
+              className="snippet-icon-btn"
+              onClick={() => void submit()}
+              title={t('snippet_save')}
+            >
               <Check size={16} />
             </button>
             <button className="snippet-icon-btn" onClick={cancel} title={t('snippet_cancel')}>
@@ -127,10 +129,21 @@ export const SnippetPanel: React.FC = () => {
               >
                 <Play size={14} />
               </button>
-              <button className="snippet-icon-btn" onClick={() => startEdit(s)} title={t('snippet_edit')}>
+              <button
+                className="snippet-icon-btn"
+                onClick={() => startEdit(s)}
+                title={t('snippet_edit')}
+              >
                 <Edit size={14} />
               </button>
-              <button className="snippet-icon-btn" onClick={() => { if (window.confirm(t('common_delete_confirm_body', { name: s.name }))) void remove(s.id); }} title={t('snippet_delete')}>
+              <button
+                className="snippet-icon-btn"
+                onClick={() => {
+                  if (window.confirm(t('common_delete_confirm_body', { name: s.name })))
+                    void remove(s.id);
+                }}
+                title={t('snippet_delete')}
+              >
                 <Trash2 size={14} />
               </button>
             </div>

@@ -18,25 +18,25 @@
 
 ### Implementiert ✅
 
-| Kategorie | Funktion | Beschreibung |
-|-----------|----------|-------------|
-| **SSH** | Multi-Tab SSH-Verbindungen | Gleichzeitige Verbindung zu mehreren Servern |
-| **SSH** | Passwort / Schlüssel / MFA-Auth | Passwort, privater Schlüssel, TOTP/2FA |
-| **SSH** | Jump Host (-J) | Proxy-Verbindungen über Bastion |
-| **SSH** | SOCKS4/5, HTTP Proxies | SSH-Verbindungen über Proxy-Server |
-| **SSH** | Portweiterleitung | Lokale Portweiterleitung (SSH-Tunnel) |
-| **SSH** | Verbindungslatenz (Ping) | Echtzeit-TCP-Latenzmessung |
-| **SFTP** | Dateibrowser | Remote-Dateisysteme durchsuchen |
-| **SFTP** | Upload / Download | Dateiübertragung zwischen lokal und remote |
-| **SFTP** | Inline-Texteditor | Remote-Dateien direkt bearbeiten |
-| **Terminal** | Lokales Terminal | PowerShell, CMD, Bash, Zsh usw. |
-| **Terminal** | Geteilter Bildschirm | 1×1, 1×2, 2×2, 2×3, 2×4 Layouts |
-| **Seriell** | Serielle Portkonsole | COM/ttyUSB Geräteverbindung |
-| **AI** | Anbieter-Verwaltung | AI CLI-Anbieter konfigurieren und wechseln |
-| **UI** | Dunkles / Helles Design | Automatische Systemerkennung |
-| **UI** | i18n (English, 中文) | Vollständig zweisprachig |
-| **Daten** | SQLite-Persistenz | Lokale Speicherung aller Sitzungen und Einstellungen |
-| **Update** | Automatisches Update | In-App Update-Prüfung und Installation |
+| Kategorie    | Funktion                        | Beschreibung                                         |
+| ------------ | ------------------------------- | ---------------------------------------------------- |
+| **SSH**      | Multi-Tab SSH-Verbindungen      | Gleichzeitige Verbindung zu mehreren Servern         |
+| **SSH**      | Passwort / Schlüssel / MFA-Auth | Passwort, privater Schlüssel, TOTP/2FA               |
+| **SSH**      | Jump Host (-J)                  | Proxy-Verbindungen über Bastion                      |
+| **SSH**      | SOCKS4/5, HTTP Proxies          | SSH-Verbindungen über Proxy-Server                   |
+| **SSH**      | Portweiterleitung               | Lokale Portweiterleitung (SSH-Tunnel)                |
+| **SSH**      | Verbindungslatenz (Ping)        | Echtzeit-TCP-Latenzmessung                           |
+| **SFTP**     | Dateibrowser                    | Remote-Dateisysteme durchsuchen                      |
+| **SFTP**     | Upload / Download               | Dateiübertragung zwischen lokal und remote           |
+| **SFTP**     | Inline-Texteditor               | Remote-Dateien direkt bearbeiten                     |
+| **Terminal** | Lokales Terminal                | PowerShell, CMD, Bash, Zsh usw.                      |
+| **Terminal** | Geteilter Bildschirm            | 1×1, 1×2, 2×2, 2×3, 2×4 Layouts                      |
+| **Seriell**  | Serielle Portkonsole            | COM/ttyUSB Geräteverbindung                          |
+| **AI**       | Anbieter-Verwaltung             | AI CLI-Anbieter konfigurieren und wechseln           |
+| **UI**       | Dunkles / Helles Design         | Automatische Systemerkennung                         |
+| **UI**       | i18n (English, 中文)            | Vollständig zweisprachig                             |
+| **Daten**    | SQLite-Persistenz               | Lokale Speicherung aller Sitzungen und Einstellungen |
+| **Update**   | Automatisches Update            | In-App Update-Prüfung und Installation               |
 
 ### Geplant 🚧
 

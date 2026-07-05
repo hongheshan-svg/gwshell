@@ -30,6 +30,7 @@
 ## Task 1: Pass real Windows build number to xterm.js
 
 **Files:**
+
 - Modify: `src/lib/terminalPtyOptions.ts`
 
 - [ ] **Step 1: Rewrite `terminalPtyOptions.ts`**
@@ -43,7 +44,7 @@ export interface TerminalOsInfo {
 }
 
 export interface XtermWindowsPtyOptions {
-  backend: "conpty";
+  backend: 'conpty';
   buildNumber: number;
 }
 
@@ -58,13 +59,13 @@ export function getXtermWindowsPty(
   osInfo: TerminalOsInfo,
   usesLocalConpty: boolean,
 ): XtermWindowsPtyOptions | undefined {
-  if (!usesLocalConpty || osInfo.os !== "windows") return undefined;
+  if (!usesLocalConpty || osInfo.os !== 'windows') return undefined;
 
   const build = osInfo.windowsBuild;
-  if (typeof build !== "number" || !Number.isFinite(build)) return undefined;
+  if (typeof build !== 'number' || !Number.isFinite(build)) return undefined;
 
   return {
-    backend: "conpty",
+    backend: 'conpty',
     buildNumber: Math.trunc(build),
   };
 }
@@ -94,6 +95,7 @@ git commit -m "fix: pass real windows build number to xterm.js for conpty heuris
 ## Task 2: Enable win32InputMode for local ConPTY sessions
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
 - [ ] **Step 1: Add `vtExtensions` to `termOpts`**
@@ -103,23 +105,23 @@ In `TerminalView.tsx`, inside the `initTerminal` async function, find the `termO
 Find this code (around line 555-556):
 
 ```ts
-        const windowsPty = getXtermWindowsPty(osInfo, usesLocalConpty());
-        if (windowsPty) termOpts.windowsPty = windowsPty;
+const windowsPty = getXtermWindowsPty(osInfo, usesLocalConpty());
+if (windowsPty) termOpts.windowsPty = windowsPty;
 ```
 
 Add after it:
 
 ```ts
-        // Enable Win32 INPUT_RECORD keyboard encoding (DECSET 9001) for local
-        // ConPTY sessions. ConPTY's default VT encoding is lossy with complex
-        // modifier keys (Ctrl+Shift+letter, Alt+arrows); win32InputMode lets
-        // TUI apps like Claude Code / Codex receive complete keyboard events.
-        // The option is opt-in: if the application doesn't request CSI ? 9001 h,
-        // there is no effect. SSH/serial sessions are excluded — their PTY is
-        // on a remote Unix host and never touches ConPTY.
-        if (usesLocalConpty()) {
-          (termOpts as Record<string, unknown>).vtExtensions = { win32InputMode: true };
-        }
+// Enable Win32 INPUT_RECORD keyboard encoding (DECSET 9001) for local
+// ConPTY sessions. ConPTY's default VT encoding is lossy with complex
+// modifier keys (Ctrl+Shift+letter, Alt+arrows); win32InputMode lets
+// TUI apps like Claude Code / Codex receive complete keyboard events.
+// The option is opt-in: if the application doesn't request CSI ? 9001 h,
+// there is no effect. SSH/serial sessions are excluded — their PTY is
+// on a remote Unix host and never touches ConPTY.
+if (usesLocalConpty()) {
+  (termOpts as Record<string, unknown>).vtExtensions = { win32InputMode: true };
+}
 ```
 
 Note: `termOpts` is typed as `Record<string, unknown>`, so the cast is safe. If tsc complains, use the cast shown above.
@@ -141,6 +143,7 @@ git commit -m "feat: enable win32InputMode for local conpty sessions"
 ## Task 3: Register DA1 response handler for ConPTY
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
 - [ ] **Step 1: Register the DA1 CSI handler after terminal open**
@@ -150,26 +153,26 @@ In `TerminalView.tsx`, inside the `initTerminal` function, find the WebGL render
 Insert this code:
 
 ```ts
-      // ConPTY 1.22+ sends a DA1 request (CSI c) at startup and waits for a
-      // terminal response before continuing to render. If we don't respond,
-      // ConPTY waits for a timeout, causing TUI apps (Claude Code, Codex) to
-      // appear frozen on launch. Register a CSI handler that responds
-      // immediately with VT220-level device attributes. Only for local ConPTY
-      // sessions — SSH/serial PTYs don't go through ConPTY.
-      if (usesLocalConpty()) {
-        try {
-          const da1Dispose = instance.terminal.parser.registerCsiHandler({ final: 'c' }, (params) => {
-            if (params.length === 0 || (params.length === 1 && params[0] === 0)) {
-              instance.terminal.write('\x1b[?61;4c');
-              return true;
-            }
-            return false;
-          });
-          // Store dispose alongside the other per-tab cleanups so it's torn
-          // down on remount/close (added to tabListenerCleanups later).
-          pendingDisposes.push(da1Dispose);
-        } catch {}
+// ConPTY 1.22+ sends a DA1 request (CSI c) at startup and waits for a
+// terminal response before continuing to render. If we don't respond,
+// ConPTY waits for a timeout, causing TUI apps (Claude Code, Codex) to
+// appear frozen on launch. Register a CSI handler that responds
+// immediately with VT220-level device attributes. Only for local ConPTY
+// sessions — SSH/serial PTYs don't go through ConPTY.
+if (usesLocalConpty()) {
+  try {
+    const da1Dispose = instance.terminal.parser.registerCsiHandler({ final: 'c' }, (params) => {
+      if (params.length === 0 || (params.length === 1 && params[0] === 0)) {
+        instance.terminal.write('\x1b[?61;4c');
+        return true;
       }
+      return false;
+    });
+    // Store dispose alongside the other per-tab cleanups so it's torn
+    // down on remount/close (added to tabListenerCleanups later).
+    pendingDisposes.push(da1Dispose);
+  } catch {}
+}
 ```
 
 - [ ] **Step 2: Add the `pendingDisposes` array**
@@ -179,21 +182,31 @@ The `pendingDisposes` array collects dispose functions that need to be cleaned u
 Find this existing pattern (around line 1439-1441):
 
 ```ts
-        try { dataDispose.dispose(); } catch {}
-        try { resizeDispose?.dispose(); } catch {}
-        try { osc7Dispose.dispose(); } catch {}
+try {
+  dataDispose.dispose();
+} catch {}
+try {
+  resizeDispose?.dispose();
+} catch {}
+try {
+  osc7Dispose.dispose();
+} catch {}
 ```
 
 Add `pendingDisposes` as a local array declared near the top of the `setupConnection` function (before the listener setup). Find a suitable spot — after the `cleanupTabListeners(tab.id);` call (around line 985), add:
 
 ```ts
-      const pendingDisposes: Array<{ dispose(): void }> = [];
+const pendingDisposes: Array<{ dispose(): void }> = [];
 ```
 
 Then, in the cleanup function (inside `tabListenerCleanups.set`), add before the existing dispose calls:
 
 ```ts
-        for (const d of pendingDisposes) { try { d.dispose(); } catch {} }
+for (const d of pendingDisposes) {
+  try {
+    d.dispose();
+  } catch {}
+}
 ```
 
 This should go right before the `try { dataDispose.dispose(); } catch {}` line.
@@ -215,6 +228,7 @@ git commit -m "feat: register DA1 response handler for conpty startup"
 ## Task 4: Enhanced resize/switch redraw for ConPTY
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
 - [ ] **Step 1: Add double-refresh to `forceTerminalRedraw`**
@@ -224,26 +238,42 @@ Find `forceTerminalRedraw` (line 368-391). After the existing `try { inst.termin
 Replace lines 379-381:
 
 ```ts
-  try { inst.fitAddon.fit(); } catch {}
-  try { inst.terminal.clearTextureAtlas(); } catch {}
-  try { inst.terminal.refresh(0, inst.terminal.rows - 1); } catch {}
+try {
+  inst.fitAddon.fit();
+} catch {}
+try {
+  inst.terminal.clearTextureAtlas();
+} catch {}
+try {
+  inst.terminal.refresh(0, inst.terminal.rows - 1);
+} catch {}
 ```
 
 With:
 
 ```ts
-  try { inst.fitAddon.fit(); } catch {}
-  try { inst.terminal.clearTextureAtlas(); } catch {}
-  try { inst.terminal.refresh(0, inst.terminal.rows - 1); } catch {}
+try {
+  inst.fitAddon.fit();
+} catch {}
+try {
+  inst.terminal.clearTextureAtlas();
+} catch {}
+try {
+  inst.terminal.refresh(0, inst.terminal.rows - 1);
+} catch {}
 
-  // ConPTY redraws asynchronously after receiving SIGWINCH. The first refresh
-  // clears the stale glyph atlas; this deferred second pass catches ConPTY's
-  // asynchronous repaint, eliminating ghost cells in TUI apps.
-  const term = inst.terminal;
-  requestAnimationFrame(() => {
-    try { term.clearTextureAtlas(); } catch {}
-    try { term.refresh(0, term.rows - 1); } catch {}
-  });
+// ConPTY redraws asynchronously after receiving SIGWINCH. The first refresh
+// clears the stale glyph atlas; this deferred second pass catches ConPTY's
+// asynchronous repaint, eliminating ghost cells in TUI apps.
+const term = inst.terminal;
+requestAnimationFrame(() => {
+  try {
+    term.clearTextureAtlas();
+  } catch {}
+  try {
+    term.refresh(0, term.rows - 1);
+  } catch {}
+});
 ```
 
 - [ ] **Step 2: Add alt-screen toggle on reparent for ConPTY sessions**
@@ -251,39 +281,39 @@ With:
 Find the reparenting block in `initTerminal` (around line 924-933):
 
 ```ts
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (wasReparented) {
-            forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
-          } else {
-            scheduleTerminalFit(tab.id);
-            scheduleTerminalResizeSettle(tab.id, tab.sessionId, tab.type, 80);
-          }
-        });
-      });
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    if (wasReparented) {
+      forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
+    } else {
+      scheduleTerminalFit(tab.id);
+      scheduleTerminalResizeSettle(tab.id, tab.sessionId, tab.type, 80);
+    }
+  });
+});
 ```
 
 Replace with:
 
 ```ts
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (wasReparented) {
-            forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
-            // For local ConPTY sessions, force ConPTY to re-send the current
-            // screen content by toggling alt-screen mode. \x1b[?1049h enters
-            // alt-screen (saving current screen), \x1b[?1049l exits (restoring)
-            // — the net effect is a full repaint. Unsupported terminals ignore
-            // these sequences safely.
-            if (usesLocalConpty()) {
-              sendInputToTab(tab.id, '\x1b[?1049h\x1b[?1049l');
-            }
-          } else {
-            scheduleTerminalFit(tab.id);
-            scheduleTerminalResizeSettle(tab.id, tab.sessionId, tab.type, 80);
-          }
-        });
-      });
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    if (wasReparented) {
+      forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
+      // For local ConPTY sessions, force ConPTY to re-send the current
+      // screen content by toggling alt-screen mode. \x1b[?1049h enters
+      // alt-screen (saving current screen), \x1b[?1049l exits (restoring)
+      // — the net effect is a full repaint. Unsupported terminals ignore
+      // these sequences safely.
+      if (usesLocalConpty()) {
+        sendInputToTab(tab.id, '\x1b[?1049h\x1b[?1049l');
+      }
+    } else {
+      scheduleTerminalFit(tab.id);
+      scheduleTerminalResizeSettle(tab.id, tab.sessionId, tab.type, 80);
+    }
+  });
+});
 ```
 
 - [ ] **Step 3: Verify build**
@@ -329,6 +359,7 @@ Expected: no whitespace errors.
 Run: `npm run tauri dev`
 
 Confirm on Windows:
+
 1. Open local shell, run `claude` or `codex`, confirm TUI renders correctly (no ghost cells, cursor positioned right, status bars visible)
 2. Resize window while TUI is running, confirm correct repaint (no stale content)
 3. Switch to another tab and back, confirm TUI screen fully restores

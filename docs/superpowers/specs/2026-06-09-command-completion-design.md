@@ -65,9 +65,9 @@ than adding a parallel one.
 
 ```ts
 type Completion = {
-  text: string;        // full text to complete to (replaces the current line)
+  text: string; // full text to complete to (replaces the current line)
   kind: 'history' | 'command';
-  desc?: string;       // localized description (command kind only)
+  desc?: string; // localized description (command kind only)
 };
 ```
 

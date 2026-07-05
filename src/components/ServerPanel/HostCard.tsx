@@ -31,13 +31,13 @@ export const HostCard: React.FC<Props> = ({ host, hostIp }) => {
         </div>
         <div className="sp-kv">
           <span className="sp-kv__k">{t('serverPanel_host_uptime')}</span>
-          <span className="sp-kv__v">
-            {host ? formatUptime(host.uptime_seconds) : placeholder}
-          </span>
+          <span className="sp-kv__v">{host ? formatUptime(host.uptime_seconds) : placeholder}</span>
         </div>
         <div className="sp-kv">
           <span className="sp-kv__k">{t('serverPanel_host_host')}</span>
-          <span className="sp-kv__v" title={hostIp}>{hostIp || placeholder}</span>
+          <span className="sp-kv__v" title={hostIp}>
+            {hostIp || placeholder}
+          </span>
         </div>
         <div className="sp-kv">
           <span className="sp-kv__k">{t('serverPanel_host_system')}</span>

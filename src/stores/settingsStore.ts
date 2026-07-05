@@ -99,19 +99,28 @@ function normalizeSettings(saved: Partial<AppSettings>): AppSettings {
   }
   if (settings.middleClickAction === 'Paste' || settings.middleClickAction === '\u7c98\u8d34') {
     settings.middleClickAction = 'paste';
-  } else if (settings.middleClickAction === 'None' || settings.middleClickAction === '\u4e0d\u6267\u884c') {
+  } else if (
+    settings.middleClickAction === 'None' ||
+    settings.middleClickAction === '\u4e0d\u6267\u884c'
+  ) {
     settings.middleClickAction = 'none';
   }
   if (settings.rightClickAction === 'Paste' || settings.rightClickAction === '\u7c98\u8d34') {
     settings.rightClickAction = 'paste';
-  } else if (settings.rightClickAction === 'Show Menu' || settings.rightClickAction === '\u663e\u793a\u83dc\u5355') {
+  } else if (
+    settings.rightClickAction === 'Show Menu' ||
+    settings.rightClickAction === '\u663e\u793a\u83dc\u5355'
+  ) {
     settings.rightClickAction = 'menu';
   }
   if (settings.keymapOverrides && typeof settings.keymapOverrides === 'object') {
     const valid: Record<string, string | null> = {};
     for (const [id, binding] of Object.entries(settings.keymapOverrides)) {
       if (!ACTION_IDS.has(id)) continue;
-      if (binding === null) { valid[id] = null; continue; }
+      if (binding === null) {
+        valid[id] = null;
+        continue;
+      }
       if (typeof binding === 'string' && parseBinding(binding)) valid[id] = binding;
     }
     settings.keymapOverrides = valid;
@@ -155,7 +164,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     // Only re-pull history when the load count actually changed; otherwise
     // every settings save clears and reloads entries, making active
     // completion candidates flicker.
-    if (normalized.sshHistoryCmd && normalized.sshHistoryCmdLoadCount !== prev.sshHistoryCmdLoadCount) {
+    if (
+      normalized.sshHistoryCmd &&
+      normalized.sshHistoryCmdLoadCount !== prev.sshHistoryCmdLoadCount
+    ) {
       commandHistory.init(parseInt(normalized.sshHistoryCmdLoadCount) || 100);
     }
   },

@@ -13,17 +13,28 @@
 ### Task 1: `src/lib/groupDefaults.ts`
 
 - [ ] Create with:
+
 ```ts
 import type { SessionConfig } from '../types';
 
 // Curated, non-secret fields a group can supply as defaults.
 export const INHERITABLE_FIELDS = [
-  'username', 'port', 'auth_method', 'private_key_path',
-  'jump_host', 'jump_port', 'jump_username', 'jump_private_key_path',
-  'proxy_type', 'proxy_host', 'proxy_port', 'proxy_username', 'env_vars',
+  'username',
+  'port',
+  'auth_method',
+  'private_key_path',
+  'jump_host',
+  'jump_port',
+  'jump_username',
+  'jump_private_key_path',
+  'proxy_type',
+  'proxy_host',
+  'proxy_port',
+  'proxy_username',
+  'env_vars',
 ] as const;
 
-export type GroupDefaults = Partial<Pick<SessionConfig, typeof INHERITABLE_FIELDS[number]>>;
+export type GroupDefaults = Partial<Pick<SessionConfig, (typeof INHERITABLE_FIELDS)[number]>>;
 export type GroupDefaultsMap = Record<string, GroupDefaults>;
 
 const KEY = 'gwshell.groupDefaults';
@@ -34,11 +45,17 @@ export function loadGroupDefaults(): GroupDefaultsMap {
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === 'object' ? (parsed as GroupDefaultsMap) : {};
-  } catch { return {}; }
+  } catch {
+    return {};
+  }
 }
 
 export function saveGroupDefaults(map: GroupDefaultsMap): void {
-  try { localStorage.setItem(KEY, JSON.stringify(map)); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(KEY, JSON.stringify(map));
+  } catch {
+    /* ignore */
+  }
 }
 
 function isUnset(v: unknown): boolean {
@@ -60,6 +77,7 @@ export function applyGroupDefaults(session: SessionConfig, all: GroupDefaultsMap
   return out;
 }
 ```
+
 - [ ] `npx tsc --noEmit` clean. Commit `feat(group-defaults): inheritable-fields resolver + localStorage`.
 
 ---
@@ -67,11 +85,14 @@ export function applyGroupDefaults(session: SessionConfig, all: GroupDefaultsMap
 ### Task 2: Apply resolver at connect (TerminalView)
 
 - [ ] In `src/components/Terminal/TerminalView.tsx`, find in `setupConnection` where the session is fetched: `const session = sessionsRef.current.find((s) => s.id === tab.sessionId);`. Replace the usage so the resolved config is used. Add import `import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';`. Change to:
+
 ```ts
-        const rawSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
-        const session = rawSession ? applyGroupDefaults(rawSession, loadGroupDefaults()) : rawSession;
+const rawSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
+const session = rawSession ? applyGroupDefaults(rawSession, loadGroupDefaults()) : rawSession;
 ```
-  (Keep the rest of setupConnection identical — it already reads `session`.) READ the file to confirm the exact `const session = ...find...` line and that `session` is used (not `rawSession`) downstream. If `session` is declared with a different pattern, adapt: resolve immediately after the find, keeping the variable name `session` for downstream code.
+
+(Keep the rest of setupConnection identical — it already reads `session`.) READ the file to confirm the exact `const session = ...find...` line and that `session` is used (not `rawSession`) downstream. If `session` is declared with a different pattern, adapt: resolve immediately after the find, keeping the variable name `session` for downstream code.
+
 - [ ] Do NOT touch terminal key handling, write path, or anything else.
 - [ ] `npx tsc --noEmit` clean. Commit `feat(group-defaults): apply group defaults to session on connect`.
 
@@ -80,21 +101,29 @@ export function applyGroupDefaults(session: SessionConfig, all: GroupDefaultsMap
 ### Task 3: appStore flag + SessionPanel trigger
 
 - [ ] In `src/stores/appStore.ts`: interface + impl add:
+
 ```ts
   groupDefaultsTarget: string | null;
   setGroupDefaultsTarget: (group: string | null) => void;
 ```
+
 impl: `groupDefaultsTarget: null, setGroupDefaultsTarget: (group) => set({ groupDefaultsTarget: group }),`
+
 - [ ] In `src/components/Sidebar/SessionPanel.tsx`: add `Settings` (gear) icon to the lucide import if not present; add `setGroupDefaultsTarget` to the `useAppStore()` destructure. In the group header (the `<div className="session-group-header" ...>` around line 189), add a small gear button AFTER the group name span that calls `setGroupDefaultsTarget(groupName)` (stopPropagation so it doesn't toggle the group):
+
 ```tsx
-                <button
-                  className="session-group-defaults-btn"
-                  onClick={(e) => { e.stopPropagation(); setGroupDefaultsTarget(groupName); }}
-                  title={t('group_defaults_title')}
-                >
-                  <Settings size={12} />
-                </button>
+<button
+  className="session-group-defaults-btn"
+  onClick={(e) => {
+    e.stopPropagation();
+    setGroupDefaultsTarget(groupName);
+  }}
+  title={t('group_defaults_title')}
+>
+  <Settings size={12} />
+</button>
 ```
+
 - [ ] `npx tsc --noEmit` clean. Commit `feat(group-defaults): store flag + group-header trigger`.
 
 ---
@@ -115,7 +144,9 @@ impl: `groupDefaultsTarget: null, setGroupDefaultsTarget: (group) => set({ group
 ---
 
 ### Task 5: Verify
+
 - [ ] `npm run build` + `npm run smoke:check` (retry/fallback tsc). Manual: set group defaults (e.g. username+key) → connect a member session that has those unset → it inherits; a session that sets its own value keeps it; non-SSH sessions unaffected.
 
 ## Self-review
+
 - Inheritable set excludes secrets (no password fields). Resolver pure, applied one spot. Frontend-only. localStorage like tabSession. Non-SSH sessions: inheritable fields are SSH-only so harmless. Types: `GroupDefaults`/`GroupDefaultsMap`/`applyGroupDefaults`/`loadGroupDefaults`/`saveGroupDefaults` (T1) used in T2/T4; `groupDefaultsTarget` (T3) used T3/T4.

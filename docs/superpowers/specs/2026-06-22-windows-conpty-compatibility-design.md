@@ -14,12 +14,12 @@ On Windows, Claude Code / Codex CLI exhibit three issues in GWShell's terminal:
 
 ## Root Causes (vs VSCode)
 
-| Issue | GWShell current | VSCode approach |
-|---|---|---|
-| TUI rendering | `buildNumber` clamped to ≥21376, disabling xterm.js wrapping heuristics even on old builds | Passes real build number; lets xterm.js decide heuristics |
-| Keyboard input | No `win32InputMode` enabled | `vtExtensions: { win32InputMode: true }` — ConPTY uses Win32 INPUT_RECORD encoding |
-| Startup delay | No DA1 response handler | Registers CSI 'c' handler responding `\x1b[?61;4c` to avoid ConPTY 1.22+ timeout |
-| Resize/switch redraw | Single `clearTextureAtlas` + `refresh` | Double-refresh via rAF + alt-screen toggle sequence for ConPTY |
+| Issue                | GWShell current                                                                            | VSCode approach                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| TUI rendering        | `buildNumber` clamped to ≥21376, disabling xterm.js wrapping heuristics even on old builds | Passes real build number; lets xterm.js decide heuristics                          |
+| Keyboard input       | No `win32InputMode` enabled                                                                | `vtExtensions: { win32InputMode: true }` — ConPTY uses Win32 INPUT_RECORD encoding |
+| Startup delay        | No DA1 response handler                                                                    | Registers CSI 'c' handler responding `\x1b[?61;4c` to avoid ConPTY 1.22+ timeout   |
+| Resize/switch redraw | Single `clearTextureAtlas` + `refresh`                                                     | Double-refresh via rAF + alt-screen toggle sequence for ConPTY                     |
 
 ## Scope
 
@@ -58,7 +58,7 @@ After the terminal is opened and attached, when `usesLocalConpty()` is true, reg
 ```ts
 const da1Dispose = terminal.parser.registerCsiHandler({ final: 'c' }, (params) => {
   if (params.length === 0 || (params.length === 1 && params[0] === 0)) {
-    terminal.write('\x1b[?61;4c');  // VT220 level, 4-color support
+    terminal.write('\x1b[?61;4c'); // VT220 level, 4-color support
     return true;
   }
   return false;
@@ -81,8 +81,12 @@ After the existing `clearTextureAtlas()` + `refresh(0, rows-1)`, schedule a seco
 
 ```ts
 requestAnimationFrame(() => {
-  try { terminal.clearTextureAtlas(); } catch {}
-  try { terminal.refresh(0, terminal.rows - 1); } catch {}
+  try {
+    terminal.clearTextureAtlas();
+  } catch {}
+  try {
+    terminal.refresh(0, terminal.rows - 1);
+  } catch {}
 });
 ```
 

@@ -1,0 +1,2 @@
+# Commits that should be ignored by git blame (bulk reformats, etc.)
+# One SHA per line.

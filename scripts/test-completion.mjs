@@ -31,7 +31,7 @@ const dict = loadTs('src/lib/commandDictionary.ts');
 const lMatches = dict.lookupCommands('ls', 'en').map((x) => x.cmd);
 assert.ok(
   lMatches.includes('lsof') && lMatches.includes('lscpu') && lMatches.includes('lsblk'),
-  'ls* commands are present for prefix "ls"'
+  'ls* commands are present for prefix "ls"',
 );
 assert.ok(!lMatches.includes('ls'), 'exact-length match is excluded (no empty suffix)');
 
@@ -54,11 +54,20 @@ console.log('commandDictionary tests passed');
 
 // ---- system-specific tables ----
 const cmdMatches = dict.lookupCommands('d', 'en', 'cmd').map((x) => x.cmd);
-assert.ok(cmdMatches.includes('dir') && cmdMatches.includes('del'), 'cmd table has dir/del for "d"');
-assert.ok(!cmdMatches.includes('df') && !cmdMatches.includes('du'), 'cmd table excludes unix-only commands');
+assert.ok(
+  cmdMatches.includes('dir') && cmdMatches.includes('del'),
+  'cmd table has dir/del for "d"',
+);
+assert.ok(
+  !cmdMatches.includes('df') && !cmdMatches.includes('du'),
+  'cmd table excludes unix-only commands',
+);
 
 const psMatches = dict.lookupCommands('Get-', 'en', 'powershell').map((x) => x.cmd);
-assert.ok(psMatches.includes('Get-ChildItem') && psMatches.includes('Get-Process'), 'powershell table has Get-* cmdlets');
+assert.ok(
+  psMatches.includes('Get-ChildItem') && psMatches.includes('Get-Process'),
+  'powershell table has Get-* cmdlets',
+);
 assert.ok(
   dict.lookupCommands('ls', 'en', 'powershell').some((x) => x.cmd === 'ls') === false,
   'exact-length alias excluded',
@@ -105,20 +114,22 @@ function loadCompletion(dictMatches, historyMatches) {
 
 {
   const c = loadCompletion(
-    [{ cmd: 'ls', desc: 'List' }, { cmd: 'ln', desc: 'Link' }],
+    [
+      { cmd: 'ls', desc: 'List' },
+      { cmd: 'ln', desc: 'Link' },
+    ],
     ['ls -al', 'less notes.txt'],
   );
   const r = c.buildCompletions('l', {}, 'en', 8);
   assert.equal(r[0].kind, 'history', 'history items rank first');
   assert.equal(r[0].text, 'ls -al');
   assert.equal(r[1].text, 'less notes.txt');
-  assert.ok(r.some((x) => x.kind === 'command' && x.text === 'ls'), 'dictionary appended');
-  assert.ok(r.some((x) => x.kind === 'command' && x.text === 'ln'));
-  assert.equal(
-    r.find((x) => x.text === 'ls').desc,
-    'List',
-    'command item carries description',
+  assert.ok(
+    r.some((x) => x.kind === 'command' && x.text === 'ls'),
+    'dictionary appended',
   );
+  assert.ok(r.some((x) => x.kind === 'command' && x.text === 'ln'));
+  assert.equal(r.find((x) => x.text === 'ls').desc, 'List', 'command item carries description');
 }
 
 {
@@ -131,13 +142,25 @@ function loadCompletion(dictMatches, historyMatches) {
 
 {
   // cap respected
-  const c = loadCompletion([{ cmd: 'ls', desc: 'd' }, { cmd: 'ln', desc: 'd' }], ['less x']);
+  const c = loadCompletion(
+    [
+      { cmd: 'ls', desc: 'd' },
+      { cmd: 'ln', desc: 'd' },
+    ],
+    ['less x'],
+  );
   assert.equal(c.buildCompletions('l', {}, 'en', 1).length, 1, 'max cap honored');
 }
 
 {
   // cap when history is empty and dictionary overflows
-  const c = loadCompletion([{ cmd: 'ls', desc: 'd' }, { cmd: 'ln', desc: 'd' }], []);
+  const c = loadCompletion(
+    [
+      { cmd: 'ls', desc: 'd' },
+      { cmd: 'ln', desc: 'd' },
+    ],
+    [],
+  );
   assert.equal(c.buildCompletions('l', {}, 'en', 1).length, 1, 'cap on dictionary-only results');
 }
 
@@ -148,7 +171,10 @@ function loadCompletion(dictMatches, historyMatches) {
     './commandHistory': { getSuggestions: () => ['git status'] },
   });
   const r = c.buildCompletions('git ', {}, 'en', 8);
-  assert.ok(r.every((x) => x.kind === 'history'), 'no dictionary once past command name');
+  assert.ok(
+    r.every((x) => x.kind === 'history'),
+    'no dictionary once past command name',
+  );
 }
 
 {
@@ -171,7 +197,10 @@ function loadCompletion(dictMatches, historyMatches) {
   });
   const r = c.buildCompletions('d', { table: 'cmd' }, 'en', 8);
   assert.equal(receivedTable, 'cmd', 'ctx.table is forwarded to lookupCommands');
-  assert.ok(r.some((x) => x.kind === 'command' && x.text === 'dir'), 'cmd dictionary result surfaces');
+  assert.ok(
+    r.some((x) => x.kind === 'command' && x.text === 'dir'),
+    'cmd dictionary result surfaces',
+  );
 }
 
 console.log('completion tests passed');

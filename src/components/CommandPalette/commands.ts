@@ -1,5 +1,18 @@
 import type { LucideIcon } from 'lucide-react';
-import { Settings, Plus, Terminal, Zap, Home, Sun, PanelLeft, Search, Radio, X, ArrowLeftRight, Bot } from 'lucide-react';
+import {
+  Settings,
+  Plus,
+  Terminal,
+  Zap,
+  Home,
+  Sun,
+  PanelLeft,
+  Search,
+  Radio,
+  X,
+  ArrowLeftRight,
+  Bot,
+} from 'lucide-react';
 import { KEY_ACTIONS } from '../../keymap/actions';
 import { parseBinding, formatStep } from '../../keymap/match';
 import type { SessionConfig, TabInfo } from '../../types';
@@ -56,12 +69,48 @@ export function buildCommands(ctx: CommandCtx): Command[] {
 
   // Create / nav commands
   cmds.push(
-    { id: 'create:ssh',   group: 'create', label: ctx.t('cmd_new_ssh',        'New SSH'),            icon: Plus,       run: () => ctx.setShowNewSession(true) },
-    { id: 'create:local', group: 'create', label: ctx.t('cmd_new_local',      'New local terminal'), icon: Terminal,   run: () => ctx.setShowLocalTerminalModal(true) },
-    { id: 'create:quick', group: 'create', label: ctx.t('cmd_quick_connect',  'Quick connect'),      icon: Zap,        run: () => ctx.setShowQuickConnect(true) },
-    { id: 'nav:home',     group: 'create', label: ctx.t('cmd_open_home',      'Open home'),          icon: Home,       run: () => ctx.setActiveTab('asset-list') },
-    { id: 'nav:theme',    group: 'create', label: ctx.t('cmd_toggle_theme',   'Toggle theme'),       icon: Sun,        run: ctx.toggleTheme },
-    { id: 'nav:sidebar',  group: 'create', label: ctx.t('cmd_toggle_sidebar', 'Toggle sidebar'),     icon: PanelLeft,  run: ctx.toggleSidebar },
+    {
+      id: 'create:ssh',
+      group: 'create',
+      label: ctx.t('cmd_new_ssh', 'New SSH'),
+      icon: Plus,
+      run: () => ctx.setShowNewSession(true),
+    },
+    {
+      id: 'create:local',
+      group: 'create',
+      label: ctx.t('cmd_new_local', 'New local terminal'),
+      icon: Terminal,
+      run: () => ctx.setShowLocalTerminalModal(true),
+    },
+    {
+      id: 'create:quick',
+      group: 'create',
+      label: ctx.t('cmd_quick_connect', 'Quick connect'),
+      icon: Zap,
+      run: () => ctx.setShowQuickConnect(true),
+    },
+    {
+      id: 'nav:home',
+      group: 'create',
+      label: ctx.t('cmd_open_home', 'Open home'),
+      icon: Home,
+      run: () => ctx.setActiveTab('asset-list'),
+    },
+    {
+      id: 'nav:theme',
+      group: 'create',
+      label: ctx.t('cmd_toggle_theme', 'Toggle theme'),
+      icon: Sun,
+      run: ctx.toggleTheme,
+    },
+    {
+      id: 'nav:sidebar',
+      group: 'create',
+      label: ctx.t('cmd_toggle_sidebar', 'Toggle sidebar'),
+      icon: PanelLeft,
+      run: ctx.toggleSidebar,
+    },
   );
 
   // Saved sessions (skip temporaries — they are split-screen clones, not real entries)
@@ -108,10 +157,10 @@ export function buildCommands(ctx: CommandCtx): Command[] {
 }
 
 function iconForAction(id: string): LucideIcon {
-  if (id.startsWith('settings'))   return Settings;
-  if (id.startsWith('agent'))      return Bot;
-  if (id.startsWith('terminal'))   return Search;
-  if (id.startsWith('broadcast'))  return Radio;
-  if (id === 'tab.close')          return X;
+  if (id.startsWith('settings')) return Settings;
+  if (id.startsWith('agent')) return Bot;
+  if (id.startsWith('terminal')) return Search;
+  if (id.startsWith('broadcast')) return Radio;
+  if (id === 'tab.close') return X;
   return ArrowLeftRight;
 }

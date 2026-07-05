@@ -11,7 +11,11 @@ export type CommandTable = 'unix' | 'cmd' | 'powershell';
 
 export const UNIX_DEFS: CommandDef[] = [
   { cmd: 'ls', en: 'List directory contents', zh: '列出目录内容' },
-  { cmd: 'll', en: "Long-format listing (alias of 'ls -l')", zh: 'ls -l 的别名，长格式列出目录内容' },
+  {
+    cmd: 'll',
+    en: "Long-format listing (alias of 'ls -l')",
+    zh: 'ls -l 的别名，长格式列出目录内容',
+  },
   { cmd: 'la', en: "List all incl. hidden (alias of 'ls -A')", zh: 'ls -A 的别名，列出包含隐藏项' },
   { cmd: 'cd', en: 'Change the working directory', zh: '切换工作目录' },
   { cmd: 'pwd', en: 'Print working directory', zh: '显示当前目录' },
@@ -246,9 +250,17 @@ export const POWERSHELL_DEFS: CommandDef[] = [
   { cmd: 'mi', en: 'Alias of Move-Item', zh: 'Move-Item 别名' },
   { cmd: 'rm', en: 'Delete (alias of Remove-Item)', zh: '删除（Remove-Item 别名）' },
   { cmd: 'ri', en: 'Alias of Remove-Item', zh: 'Remove-Item 别名' },
-  { cmd: 'pwd', en: 'Working directory (alias of Get-Location)', zh: '当前目录（Get-Location 别名）' },
+  {
+    cmd: 'pwd',
+    en: 'Working directory (alias of Get-Location)',
+    zh: '当前目录（Get-Location 别名）',
+  },
   { cmd: 'gl', en: 'Alias of Get-Location', zh: 'Get-Location 别名' },
-  { cmd: 'cd', en: 'Change directory (alias of Set-Location)', zh: '切换目录（Set-Location 别名）' },
+  {
+    cmd: 'cd',
+    en: 'Change directory (alias of Set-Location)',
+    zh: '切换目录（Set-Location 别名）',
+  },
   { cmd: 'sl', en: 'Alias of Set-Location', zh: 'Set-Location 别名' },
   { cmd: 'cls', en: 'Clear the screen (alias of Clear-Host)', zh: '清屏（Clear-Host 别名）' },
   { cmd: 'clear', en: 'Clear the screen (alias of Clear-Host)', zh: '清屏（Clear-Host 别名）' },
@@ -257,7 +269,11 @@ export const POWERSHELL_DEFS: CommandDef[] = [
   { cmd: 'where', en: 'Filter (alias of Where-Object)', zh: '过滤（Where-Object 别名）' },
   { cmd: 'sort', en: 'Sort (alias of Sort-Object)', zh: '排序（Sort-Object 别名）' },
   { cmd: 'ps', en: 'Processes (alias of Get-Process)', zh: '进程（Get-Process 别名）' },
-  { cmd: 'kill', en: 'Stop a process (alias of Stop-Process)', zh: '结束进程（Stop-Process 别名）' },
+  {
+    cmd: 'kill',
+    en: 'Stop a process (alias of Stop-Process)',
+    zh: '结束进程（Stop-Process 别名）',
+  },
   { cmd: 'man', en: 'Show help (alias of Get-Help)', zh: '帮助（Get-Help 别名）' },
 ];
 

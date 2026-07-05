@@ -8,8 +8,17 @@ import type { SessionConfig } from '../../types';
 import type { TranslationKeys } from '../../i18n';
 
 const colorLabels = [
-  '#ef4444', '#f97316', '#eab308', '#22c55e', '#10b981',
-  '#06b6d4', '#3b82f6', '#6366f1', '#a855f7', '#9ca3af', '#374151',
+  '#ef4444',
+  '#f97316',
+  '#eab308',
+  '#22c55e',
+  '#10b981',
+  '#06b6d4',
+  '#3b82f6',
+  '#6366f1',
+  '#a855f7',
+  '#9ca3af',
+  '#374151',
 ];
 
 const configTabKeys: { id: string; labelKey: TranslationKeys }[] = [
@@ -33,7 +42,14 @@ const authMethods: { id: AuthType; labelKey: TranslationKeys }[] = [
 ];
 
 export const NewSessionModal: React.FC = () => {
-  const { showNewSession, setShowNewSession, addSession, addTab, editingSession, setEditingSession } = useAppStore();
+  const {
+    showNewSession,
+    setShowNewSession,
+    addSession,
+    addTab,
+    editingSession,
+    setEditingSession,
+  } = useAppStore();
   const { t } = useTranslation();
 
   const [activeTab, setActiveTab] = useState('standard');
@@ -122,7 +138,7 @@ export const NewSessionModal: React.FC = () => {
       jump_password: form.jump_password || undefined,
       jump_private_key_path: form.jump_private_key_path || undefined,
       // Proxy
-      proxy_type: (form.proxy_type && form.proxy_type !== 'none') ? form.proxy_type : undefined,
+      proxy_type: form.proxy_type && form.proxy_type !== 'none' ? form.proxy_type : undefined,
       proxy_host: form.proxy_host || undefined,
       proxy_port: form.proxy_port || undefined,
       proxy_username: form.proxy_username || undefined,
@@ -140,7 +156,8 @@ export const NewSessionModal: React.FC = () => {
       idle_disconnect_minutes: form.idle_disconnect_minutes || undefined,
       compression: form.compression || undefined,
       agent_forward: form.agent_forward || undefined,
-      remote_shell: (form.remote_shell && form.remote_shell !== 'auto') ? form.remote_shell : undefined,
+      remote_shell:
+        form.remote_shell && form.remote_shell !== 'auto' ? form.remote_shell : undefined,
       // Env vars
       env_vars: form.env_vars || undefined,
       created_at: editingSession?.created_at || now,
@@ -183,15 +200,26 @@ export const NewSessionModal: React.FC = () => {
       if (typeof selected === 'string' && selected) {
         setForm((prev) => ({ ...prev, [field]: selected }));
       }
-    } catch { /* canceled */ }
+    } catch {
+      /* canceled */
+    }
   };
 
   return (
-    <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
+    <div
+      className="modal-overlay"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
       <div className="ssh-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="ssh-modal-header">
-          <h2>{editingSession ? t('ssh_config_title_edit', { name: editingSession.name }) : t('ssh_config_title_new')}</h2>
+          <h2>
+            {editingSession
+              ? t('ssh_config_title_edit', { name: editingSession.name })
+              : t('ssh_config_title_new')}
+          </h2>
           <button className="modal-close" onClick={handleClose}>
             <X size={16} />
           </button>
@@ -212,14 +240,15 @@ export const NewSessionModal: React.FC = () => {
 
         {/* Body */}
         <div className="ssh-modal-body">
-
           {/* ══════════════ 标准 Tab ══════════════ */}
           {activeTab === 'standard' && (
             <>
               {/* Name + Host — lead with the essential connection fields */}
               <div className="ssh-form-row">
                 <div className="ssh-form-group">
-                  <label className={nameError ? 'label-error' : ''}>{t('ssh_name')} <span className="required-mark">*</span></label>
+                  <label className={nameError ? 'label-error' : ''}>
+                    {t('ssh_name')} <span className="required-mark">*</span>
+                  </label>
                   <input
                     type="text"
                     value={form.name || ''}
@@ -230,7 +259,9 @@ export const NewSessionModal: React.FC = () => {
                   {nameError && <span className="field-error">{t('field_required')}</span>}
                 </div>
                 <div className="ssh-form-group">
-                  <label className={hostError ? 'label-error' : ''}>{t('ssh_host')} <span className="required-mark">*</span></label>
+                  <label className={hostError ? 'label-error' : ''}>
+                    {t('ssh_host')} <span className="required-mark">*</span>
+                  </label>
                   <input
                     type="text"
                     value={form.host || ''}
@@ -418,24 +449,18 @@ export const NewSessionModal: React.FC = () => {
                       onChange={(e) => setForm({ ...form, totp_code: e.target.value })}
                     />
                   </div>
-                  <div className="ssh-tab-desc">
-                    {t('ssh_mfa_desc')}
-                  </div>
+                  <div className="ssh-tab-desc">{t('ssh_mfa_desc')}</div>
                 </>
               )}
 
               {/* SSH Agent info */}
               {form.auth_method === 'agent' && (
-                <div className="ssh-tab-desc">
-                  {t('ssh_agent_desc')}
-                </div>
+                <div className="ssh-tab-desc">{t('ssh_agent_desc')}</div>
               )}
 
               {/* No-auth info */}
               {form.auth_method === 'none' && (
-                <div className="ssh-tab-desc">
-                  {t('ssh_noauth_desc')}
-                </div>
+                <div className="ssh-tab-desc">{t('ssh_noauth_desc')}</div>
               )}
 
               {/* Remark */}
@@ -471,7 +496,12 @@ export const NewSessionModal: React.FC = () => {
                     <label>{t('ssh_tunnel_type')}</label>
                     <select
                       value={form.tunnel_type || 'local'}
-                      onChange={(e) => setForm({ ...form, tunnel_type: e.target.value as 'local' | 'remote' | 'dynamic' })}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          tunnel_type: e.target.value as 'local' | 'remote' | 'dynamic',
+                        })
+                      }
                     >
                       <option value="local">{t('ssh_tunnel_local')}</option>
                       <option value="remote">{t('ssh_tunnel_remote')}</option>
@@ -488,7 +518,12 @@ export const NewSessionModal: React.FC = () => {
                         max={65535}
                         placeholder="e.g. 13306"
                         value={form.tunnel_local_port || ''}
-                        onChange={(e) => setForm({ ...form, tunnel_local_port: parseInt(e.target.value) || undefined })}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            tunnel_local_port: parseInt(e.target.value) || undefined,
+                          })
+                        }
                       />
                     </div>
                     <div className="ssh-form-group" />
@@ -512,14 +547,23 @@ export const NewSessionModal: React.FC = () => {
                         max={65535}
                         placeholder="e.g. 3306"
                         value={form.tunnel_remote_port || ''}
-                        onChange={(e) => setForm({ ...form, tunnel_remote_port: parseInt(e.target.value) || undefined })}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            tunnel_remote_port: parseInt(e.target.value) || undefined,
+                          })
+                        }
                       />
                     </div>
                   </div>
 
                   {form.tunnel_local_port && form.tunnel_remote_host && form.tunnel_remote_port && (
                     <div className="ssh-tab-desc">
-                      {t('ssh_tunnel_desc', { localPort: form.tunnel_local_port!, remoteHost: form.tunnel_remote_host!, remotePort: form.tunnel_remote_port! })}
+                      {t('ssh_tunnel_desc', {
+                        localPort: form.tunnel_local_port,
+                        remoteHost: form.tunnel_remote_host,
+                        remotePort: form.tunnel_remote_port,
+                      })}
                     </div>
                   )}
                 </>
@@ -540,7 +584,9 @@ export const NewSessionModal: React.FC = () => {
                 <label>{t('ssh_proxy_type')}</label>
                 <select
                   value={form.proxy_type || 'none'}
-                  onChange={(e) => setForm({ ...form, proxy_type: e.target.value as SessionConfig['proxy_type'] })}
+                  onChange={(e) =>
+                    setForm({ ...form, proxy_type: e.target.value as SessionConfig['proxy_type'] })
+                  }
                 >
                   <option value="none">{t('ssh_proxy_none')}</option>
                   <option value="socks5">SOCKS5</option>
@@ -566,7 +612,9 @@ export const NewSessionModal: React.FC = () => {
                         type="number"
                         placeholder={form.proxy_type === 'socks5' ? '1080' : '8080'}
                         value={form.proxy_port || ''}
-                        onChange={(e) => setForm({ ...form, proxy_port: parseInt(e.target.value) || undefined })}
+                        onChange={(e) =>
+                          setForm({ ...form, proxy_port: parseInt(e.target.value) || undefined })
+                        }
                       />
                     </div>
                   </div>
@@ -591,7 +639,12 @@ export const NewSessionModal: React.FC = () => {
                   </div>
 
                   <div className="ssh-tab-desc">
-                    {t('ssh_proxy_desc', { proxyType: form.proxy_type === 'socks5' ? 'SOCKS5' : 'HTTP CONNECT', proxyAddr: form.proxy_host ? ` ${form.proxy_host}:${form.proxy_port || (form.proxy_type === 'socks5' ? 1080 : 8080)}` : '' })}
+                    {t('ssh_proxy_desc', {
+                      proxyType: form.proxy_type === 'socks5' ? 'SOCKS5' : 'HTTP CONNECT',
+                      proxyAddr: form.proxy_host
+                        ? ` ${form.proxy_host}:${form.proxy_port || (form.proxy_type === 'socks5' ? 1080 : 8080)}`
+                        : '',
+                    })}
                   </div>
                 </>
               )}
@@ -617,9 +670,7 @@ export const NewSessionModal: React.FC = () => {
                   onChange={(e) => setForm({ ...form, env_vars: e.target.value })}
                 />
               </div>
-              <div className="ssh-tab-desc">
-                {t('ssh_env_desc')}
-              </div>
+              <div className="ssh-tab-desc">{t('ssh_env_desc')}</div>
             </>
           )}
 
@@ -635,7 +686,12 @@ export const NewSessionModal: React.FC = () => {
                     min={0}
                     placeholder="30"
                     value={form.connection_timeout || ''}
-                    onChange={(e) => setForm({ ...form, connection_timeout: parseInt(e.target.value) || undefined })}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        connection_timeout: parseInt(e.target.value) || undefined,
+                      })
+                    }
                   />
                 </div>
                 <div className="ssh-form-group">
@@ -645,7 +701,12 @@ export const NewSessionModal: React.FC = () => {
                     min={0}
                     placeholder="60"
                     value={form.keepalive_interval || ''}
-                    onChange={(e) => setForm({ ...form, keepalive_interval: parseInt(e.target.value) || undefined })}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        keepalive_interval: parseInt(e.target.value) || undefined,
+                      })
+                    }
                   />
                 </div>
               </div>
@@ -658,7 +719,12 @@ export const NewSessionModal: React.FC = () => {
                     min={1}
                     placeholder="3"
                     value={form.server_alive_count_max || ''}
-                    onChange={(e) => setForm({ ...form, server_alive_count_max: parseInt(e.target.value) || undefined })}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        server_alive_count_max: parseInt(e.target.value) || undefined,
+                      })
+                    }
                   />
                 </div>
                 <div className="ssh-form-group">
@@ -668,7 +734,12 @@ export const NewSessionModal: React.FC = () => {
                     min={0}
                     placeholder="0"
                     value={form.idle_disconnect_minutes || ''}
-                    onChange={(e) => setForm({ ...form, idle_disconnect_minutes: parseInt(e.target.value) || undefined })}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        idle_disconnect_minutes: parseInt(e.target.value) || undefined,
+                      })
+                    }
                   />
                 </div>
               </div>
@@ -689,7 +760,12 @@ export const NewSessionModal: React.FC = () => {
                   <label>{t('ssh_remote_shell')}</label>
                   <select
                     value={form.remote_shell || 'auto'}
-                    onChange={(e) => setForm({ ...form, remote_shell: e.target.value as 'auto' | 'linux' | 'cmd' | 'powershell' })}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        remote_shell: e.target.value as 'auto' | 'linux' | 'cmd' | 'powershell',
+                      })
+                    }
                   >
                     <option value="auto">{t('ssh_remote_shell_auto')}</option>
                     <option value="linux">{t('ssh_remote_shell_linux')}</option>
@@ -720,7 +796,9 @@ export const NewSessionModal: React.FC = () => {
                     type="number"
                     placeholder="22"
                     value={form.jump_port || ''}
-                    onChange={(e) => setForm({ ...form, jump_port: parseInt(e.target.value) || undefined })}
+                    onChange={(e) =>
+                      setForm({ ...form, jump_port: parseInt(e.target.value) || undefined })
+                    }
                   />
                 </div>
               </div>
@@ -762,7 +840,9 @@ export const NewSessionModal: React.FC = () => {
                         type="text"
                         placeholder="~/.ssh/id_rsa"
                         value={form.jump_private_key_path || ''}
-                        onChange={(e) => setForm({ ...form, jump_private_key_path: e.target.value })}
+                        onChange={(e) =>
+                          setForm({ ...form, jump_private_key_path: e.target.value })
+                        }
                       />
                       <button
                         type="button"
@@ -775,21 +855,31 @@ export const NewSessionModal: React.FC = () => {
                     </div>
                   </div>
                   <div className="ssh-tab-desc">
-                    {t('ssh_jump_desc', { jumpHost: form.jump_host!, jumpPort: form.jump_port || 22, host: form.host || 'target', port: form.port || 22 })}
+                    {t('ssh_jump_desc', {
+                      jumpHost: form.jump_host,
+                      jumpPort: form.jump_port || 22,
+                      host: form.host || 'target',
+                      port: form.port || 22,
+                    })}
                   </div>
                 </>
               )}
             </>
           )}
-
         </div>
 
         {/* Footer */}
         <div className="ssh-modal-footer">
-          <button className="ssh-footer-link" onClick={handleTestConnect}>{t('ssh_test_connect')}</button>
+          <button className="ssh-footer-link" onClick={handleTestConnect}>
+            {t('ssh_test_connect')}
+          </button>
           <div className="ssh-footer-actions">
-            <button className="ssh-footer-link" onClick={handleClose}>{t('common_cancel')}</button>
-            <button className="ssh-footer-link ssh-footer-primary" onClick={handleSave}>{t('ssh_save')}</button>
+            <button className="ssh-footer-link" onClick={handleClose}>
+              {t('common_cancel')}
+            </button>
+            <button className="ssh-footer-link ssh-footer-primary" onClick={handleSave}>
+              {t('ssh_save')}
+            </button>
           </div>
         </div>
       </div>

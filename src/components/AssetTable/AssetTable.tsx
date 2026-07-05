@@ -38,10 +38,15 @@ export const AssetTable: React.FC = () => {
   const homeView = useSettingsStore((s) => s.settings.homeView);
   const saveSettings = useSettingsStore((s) => s.save);
   const allSettings = useSettingsStore((s) => s.settings);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: SessionConfig } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    session: SessionConfig;
+  } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
-  const allSelected = filteredSessions.length > 0 && filteredSessions.every((s) => selectedSessionIds.includes(s.id));
+  const allSelected =
+    filteredSessions.length > 0 && filteredSessions.every((s) => selectedSessionIds.includes(s.id));
 
   const handleSelectAll = () => {
     if (allSelected) {
@@ -82,17 +87,21 @@ export const AssetTable: React.FC = () => {
   const hostInfo = (s: SessionConfig): string => {
     if (s.host) return s.host;
     switch (s.session_type) {
-      case 'serial':     return s.serial_port || '-';
-      case 'localshell': return s.shell_name || t('newasset_localshell');
-      case 'docker':     return s.docker_connect_method?.toLowerCase() === 'ssh' ? 'docker (SSH)' : 'docker';
-      default:           return '-';
+      case 'serial':
+        return s.serial_port || '-';
+      case 'localshell':
+        return s.shell_name || t('newasset_localshell');
+      case 'docker':
+        return s.docker_connect_method?.toLowerCase() === 'ssh' ? 'docker (SSH)' : 'docker';
+      default:
+        return '-';
     }
   };
 
   // Hide columns that carry no data for ANY visible row (到期时间/备注 are
   // usually all "-": fixed empty columns just waste width).
   const showExpired = useMemo(() => filteredSessions.some((s) => s.expired_at), [filteredSessions]);
-  const showRemark  = useMemo(() => filteredSessions.some((s) => s.remark),     [filteredSessions]);
+  const showRemark = useMemo(() => filteredSessions.some((s) => s.remark), [filteredSessions]);
   const colCount = 7 + (showExpired ? 1 : 0) + (showRemark ? 1 : 0);
 
   // Group rows like the card view does, so the list view keeps the same
@@ -144,7 +153,9 @@ export const AssetTable: React.FC = () => {
         <div className="asset-toolbar-center">
           {/* "0 selected" is permanent noise — only surface this when a selection exists. */}
           {selectedSessionIds.length > 0 && (
-            <span className="asset-toolbar-info">{t('table_selected', { count: selectedSessionIds.length })}</span>
+            <span className="asset-toolbar-info">
+              {t('table_selected', { count: selectedSessionIds.length })}
+            </span>
           )}
         </div>
         <div className="asset-toolbar-right">
@@ -157,14 +168,26 @@ export const AssetTable: React.FC = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <button className="asset-toolbar-btn" onClick={() => setShowNewSession(true)} title={t('table_new')}>
+          <button
+            className="asset-toolbar-btn"
+            onClick={() => setShowNewSession(true)}
+            title={t('table_new')}
+          >
             <Plus size={14} />
           </button>
-          <button className="asset-toolbar-btn" onClick={() => doPingRef.current()} title={t('table_refresh')}>
+          <button
+            className="asset-toolbar-btn"
+            onClick={() => doPingRef.current()}
+            title={t('table_refresh')}
+          >
             <RefreshCw size={14} />
           </button>
           {selectedSessionIds.length > 0 && (
-            <button className="asset-toolbar-btn danger" onClick={handleDeleteSelected} title={t('table_delete_selected')}>
+            <button
+              className="asset-toolbar-btn danger"
+              onClick={handleDeleteSelected}
+              title={t('table_delete_selected')}
+            >
               <Trash2 size={14} />
             </button>
           )}
@@ -176,7 +199,10 @@ export const AssetTable: React.FC = () => {
         <AssetDashboard
           sessions={filteredSessions}
           onConnect={handleConnect}
-          onEdit={(s) => { setEditingSession(s); setShowNewSession(true); }}
+          onEdit={(s) => {
+            setEditingSession(s);
+            setShowNewSession(true);
+          }}
         />
       ) : (
         <div className="asset-table-container">
@@ -215,67 +241,76 @@ export const AssetTable: React.FC = () => {
                       </tr>
                     )}
                     {groupSessions.map((session) => (
-                  <tr
-                    key={session.id}
-                    className={selectedSessionIds.includes(session.id) ? 'selected' : ''}
-                    onDoubleClick={() => handleConnect(session)}
-                    onContextMenu={(e) => handleContextMenu(e, session)}
-                  >
-                    <td className="col-check">
-                      <input
-                        type="checkbox"
-                        checked={selectedSessionIds.includes(session.id)}
-                        onChange={() => toggleSelectSession(session.id)}
-                      />
-                    </td>
-                    <td className="col-name">
-                      <span
-                        className="asset-name-color"
-                        style={{ background: session.color_label || 'var(--border-color)' }}
-                      />
-                      <span>{session.name}</span>
-                    </td>
-                    <td className="col-latency">{formatLatency(session.latency)}</td>
-                    <td className="col-host">{hostInfo(session)}</td>
-                    <td className="col-user">{session.username || '-'}</td>
-                    <td className="col-created">{session.created_at || '-'}</td>
-                    {showExpired && <td className="col-expired">{session.expired_at || '-'}</td>}
-                    {showRemark && <td className="col-remark">{session.remark || '-'}</td>}
-                    <td className="col-actions">
-                      <button
-                        className="asset-action-btn"
-                        onClick={() => handleConnect(session)}
-                        title={t('table_connect')}
+                      <tr
+                        key={session.id}
+                        className={selectedSessionIds.includes(session.id) ? 'selected' : ''}
+                        onDoubleClick={() => handleConnect(session)}
+                        onContextMenu={(e) => handleContextMenu(e, session)}
                       >
-                        <Play size={12} />
-                      </button>
-                      <button
-                        className="asset-action-btn"
-                        onClick={() => { setEditingSession(session); setShowNewSession(true); }}
-                        title={t('table_edit')}
-                      >
-                        <Edit size={12} />
-                      </button>
-                      <button
-                        className="asset-action-btn"
-                        onClick={() => handleCopySession(session)}
-                        title={t('table_copy')}
-                      >
-                        <Copy size={12} />
-                      </button>
-                      <button
-                        className="asset-action-btn danger"
-                        onClick={() => {
-                          if (window.confirm(t('common_delete_confirm_body', { name: session.name }))) {
-                            removeSession(session.id);
-                          }
-                        }}
-                        title={t('table_delete')}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </td>
-                  </tr>
+                        <td className="col-check">
+                          <input
+                            type="checkbox"
+                            checked={selectedSessionIds.includes(session.id)}
+                            onChange={() => toggleSelectSession(session.id)}
+                          />
+                        </td>
+                        <td className="col-name">
+                          <span
+                            className="asset-name-color"
+                            style={{ background: session.color_label || 'var(--border-color)' }}
+                          />
+                          <span>{session.name}</span>
+                        </td>
+                        <td className="col-latency">{formatLatency(session.latency)}</td>
+                        <td className="col-host">{hostInfo(session)}</td>
+                        <td className="col-user">{session.username || '-'}</td>
+                        <td className="col-created">{session.created_at || '-'}</td>
+                        {showExpired && (
+                          <td className="col-expired">{session.expired_at || '-'}</td>
+                        )}
+                        {showRemark && <td className="col-remark">{session.remark || '-'}</td>}
+                        <td className="col-actions">
+                          <button
+                            className="asset-action-btn"
+                            onClick={() => handleConnect(session)}
+                            title={t('table_connect')}
+                          >
+                            <Play size={12} />
+                          </button>
+                          <button
+                            className="asset-action-btn"
+                            onClick={() => {
+                              setEditingSession(session);
+                              setShowNewSession(true);
+                            }}
+                            title={t('table_edit')}
+                          >
+                            <Edit size={12} />
+                          </button>
+                          <button
+                            className="asset-action-btn"
+                            onClick={() => handleCopySession(session)}
+                            title={t('table_copy')}
+                          >
+                            <Copy size={12} />
+                          </button>
+                          <button
+                            className="asset-action-btn danger"
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  t('common_delete_confirm_body', { name: session.name }),
+                                )
+                              ) {
+                                removeSession(session.id);
+                              }
+                            }}
+                            title={t('table_delete')}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </td>
+                      </tr>
                     ))}
                   </React.Fragment>
                 ))
@@ -292,22 +327,43 @@ export const AssetTable: React.FC = () => {
           className="asset-context-menu"
           style={{ top: contextMenu.y, left: contextMenu.x }}
         >
-          <button onClick={() => { handleConnect(contextMenu.session); setContextMenu(null); }}>
+          <button
+            onClick={() => {
+              handleConnect(contextMenu.session);
+              setContextMenu(null);
+            }}
+          >
             <Play size={12} /> {t('table_connect')}
           </button>
-          <button onClick={() => { setEditingSession(contextMenu.session); setShowNewSession(true); setContextMenu(null); }}>
+          <button
+            onClick={() => {
+              setEditingSession(contextMenu.session);
+              setShowNewSession(true);
+              setContextMenu(null);
+            }}
+          >
             <Edit size={12} /> {t('table_edit')}
           </button>
-          <button onClick={() => { handleCopySession(contextMenu.session); setContextMenu(null); }}>
+          <button
+            onClick={() => {
+              handleCopySession(contextMenu.session);
+              setContextMenu(null);
+            }}
+          >
             <Copy size={12} /> {t('table_copy')}
           </button>
           <div className="context-menu-divider" />
-          <button className="danger" onClick={() => {
-            if (window.confirm(t('common_delete_confirm_body', { name: contextMenu.session.name }))) {
-              removeSession(contextMenu.session.id);
-              setContextMenu(null);
-            }
-          }}>
+          <button
+            className="danger"
+            onClick={() => {
+              if (
+                window.confirm(t('common_delete_confirm_body', { name: contextMenu.session.name }))
+              ) {
+                removeSession(contextMenu.session.id);
+                setContextMenu(null);
+              }
+            }}
+          >
             <Trash2 size={12} /> {t('table_delete')}
           </button>
         </div>

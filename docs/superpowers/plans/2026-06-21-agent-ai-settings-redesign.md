@@ -28,8 +28,12 @@
 
 ```ts
 // src/types/agent.ts (already exists, unchanged)
-export interface AiProviderSettings { /* ... existing ... */ }
-export interface AgentPolicySettings { /* ... existing ... */ }
+export interface AiProviderSettings {
+  /* ... existing ... */
+}
+export interface AgentPolicySettings {
+  /* ... existing ... */
+}
 
 // A partial updater passed to every policy card and to AiConnectionConfig.
 // Defined inline in each component's props — no new shared type file needed.
@@ -40,6 +44,7 @@ export interface AgentPolicySettings { /* ... existing ... */ }
 ## Task 1: i18n keys for policy card titles and collapse labels
 
 **Files:**
+
 - Modify: `src/i18n/locales/gwshell.en.json`
 - Modify: `src/i18n/locales/gwshell.zh.json`
 
@@ -90,6 +95,7 @@ git commit -m "feat: add agent policy card i18n keys"
 ## Task 2: Policy card components (4 files)
 
 **Files:**
+
 - Create: `src/components/Settings/policy/PolicyAutoAnalysis.tsx`
 - Create: `src/components/Settings/policy/PolicyAutoExecution.tsx`
 - Create: `src/components/Settings/policy/PolicyMaintenance.tsx`
@@ -160,7 +166,10 @@ export const PolicyAutoAnalysis: React.FC<Props> = ({ policy, busy, onChange }) 
             value={policy.max_auto_continuations}
             onChange={(e) =>
               onChange({
-                max_auto_continuations: Math.max(1, Math.min(30, parseInt(e.target.value, 10) || 8)),
+                max_auto_continuations: Math.max(
+                  1,
+                  Math.min(30, parseInt(e.target.value, 10) || 8),
+                ),
               })
             }
           />
@@ -245,7 +254,10 @@ export const PolicyAutoExecution: React.FC<Props> = ({ policy, busy, onChange })
                 value={policy.auto_execute_command_allowlist.join('\n')}
                 onChange={(e) =>
                   onChange({
-                    auto_execute_command_allowlist: e.target.value.split('\n').map((line) => line.trim()).filter(Boolean),
+                    auto_execute_command_allowlist: e.target.value
+                      .split('\n')
+                      .map((line) => line.trim())
+                      .filter(Boolean),
                   })
                 }
               />
@@ -264,7 +276,10 @@ export const PolicyAutoExecution: React.FC<Props> = ({ policy, busy, onChange })
                 value={policy.auto_execute_service_denylist.join('\n')}
                 onChange={(e) =>
                   onChange({
-                    auto_execute_service_denylist: e.target.value.split('\n').map((line) => line.trim()).filter(Boolean),
+                    auto_execute_service_denylist: e.target.value
+                      .split('\n')
+                      .map((line) => line.trim())
+                      .filter(Boolean),
                   })
                 }
               />
@@ -306,7 +321,9 @@ export const PolicyMaintenance: React.FC<Props> = ({ policy, busy, onChange }) =
           <button
             className={`settings-toggle ${policy.maintenance_window_enabled ? 'on' : ''}`}
             disabled={busy}
-            onClick={() => onChange({ maintenance_window_enabled: !policy.maintenance_window_enabled })}
+            onClick={() =>
+              onChange({ maintenance_window_enabled: !policy.maintenance_window_enabled })
+            }
             type="button"
           >
             <span className="settings-toggle-knob" />
@@ -389,7 +406,10 @@ export const PolicyAlerts: React.FC<Props> = ({ policy, busy, onChange }) => {
             value={policy.log_interest_keywords.join(', ')}
             onChange={(e) =>
               onChange({
-                log_interest_keywords: e.target.value.split(',').map((item) => item.trim()).filter(Boolean),
+                log_interest_keywords: e.target.value
+                  .split(',')
+                  .map((item) => item.trim())
+                  .filter(Boolean),
               })
             }
           />
@@ -408,7 +428,11 @@ export const PolicyAlerts: React.FC<Props> = ({ policy, busy, onChange }) => {
             style={{ width: 80 }}
             type="number"
             value={policy.disk_alert_percent}
-            onChange={(e) => onChange({ disk_alert_percent: Math.max(1, Math.min(100, parseInt(e.target.value, 10) || 90)) })}
+            onChange={(e) =>
+              onChange({
+                disk_alert_percent: Math.max(1, Math.min(100, parseInt(e.target.value, 10) || 90)),
+              })
+            }
           />
           <input
             className="settings-input"
@@ -418,7 +442,14 @@ export const PolicyAlerts: React.FC<Props> = ({ policy, busy, onChange }) => {
             style={{ width: 80, marginLeft: 8 }}
             type="number"
             value={policy.memory_alert_percent}
-            onChange={(e) => onChange({ memory_alert_percent: Math.max(1, Math.min(100, parseInt(e.target.value, 10) || 90)) })}
+            onChange={(e) =>
+              onChange({
+                memory_alert_percent: Math.max(
+                  1,
+                  Math.min(100, parseInt(e.target.value, 10) || 90),
+                ),
+              })
+            }
           />
         </span>
       </div>
@@ -444,6 +475,7 @@ git commit -m "feat: add 4 agent policy card components"
 ## Task 3: AgentPolicySection wrapper
 
 **Files:**
+
 - Create: `src/components/Settings/AgentPolicySection.tsx`
 
 This renders the 4 cards in a 2×2 grid and the single save button. It receives `policy`, `setPolicy`, `busy`, `onSave`, and the policy `message`.
@@ -468,11 +500,19 @@ interface Props {
   message: { kind: 'ok' | 'err'; text: string } | null;
 }
 
-export const AgentPolicySection: React.FC<Props> = ({ policy, busy, onChange, onSave, message }) => {
+export const AgentPolicySection: React.FC<Props> = ({
+  policy,
+  busy,
+  onChange,
+  onSave,
+  message,
+}) => {
   const { t } = useTranslation();
   return (
     <>
-      <div className="settings-section-title" style={{ marginTop: 12 }}>{t('agent_policy_title')}</div>
+      <div className="settings-section-title" style={{ marginTop: 12 }}>
+        {t('agent_policy_title')}
+      </div>
       <div className="policy-card-grid">
         <PolicyAutoAnalysis policy={policy} busy={busy} onChange={onChange} />
         <PolicyAutoExecution policy={policy} busy={busy} onChange={onChange} />
@@ -518,6 +558,7 @@ git commit -m "feat: add agent policy section wrapper"
 ## Task 4: AiModelPicker (left panel)
 
 **Files:**
+
 - Create: `src/components/Settings/AiModelPicker.tsx`
 
 Renders group tabs + model cards. Receives the preset list, the active preset id, the active tab, and callbacks.
@@ -545,10 +586,17 @@ interface Props {
   busy: boolean;
 }
 
-export const AiModelPicker: React.FC<Props> = ({ activePresetId, activeTab, onTabChange, onApply, busy }) => {
+export const AiModelPicker: React.FC<Props> = ({
+  activePresetId,
+  activeTab,
+  onTabChange,
+  onApply,
+  busy,
+}) => {
   const { t } = useTranslation();
   const visiblePresets = useMemo(
-    () => (activeTab === 'all' ? aiModelPresets : aiModelPresets.filter((p) => p.group === activeTab)),
+    () =>
+      activeTab === 'all' ? aiModelPresets : aiModelPresets.filter((p) => p.group === activeTab),
     [activeTab],
   );
   return (
@@ -589,7 +637,9 @@ export const AiModelPicker: React.FC<Props> = ({ activePresetId, activeTab, onTa
               </span>
               <span className="ai-model-card-name">{preset.title}</span>
               <span className="ai-model-card-scene">{t(preset.descriptionKey)}</span>
-              <span className="ai-model-card-proto">{compatibleProviderLabels[preset.provider]}</span>
+              <span className="ai-model-card-proto">
+                {compatibleProviderLabels[preset.provider]}
+              </span>
             </button>
           );
         })}
@@ -616,6 +666,7 @@ git commit -m "feat: add ai model picker panel"
 ## Task 5: AiConnectionConfig (right panel)
 
 **Files:**
+
 - Create: `src/components/Settings/AiConnectionConfig.tsx`
 
 Renders the status card, the compatible-provider segments, the connection fields, a collapsible advanced section, the action bar, and AI messages.
@@ -624,9 +675,23 @@ Renders the status card, the compatible-provider segments, the connection fields
 
 ```tsx
 import React, { useState } from 'react';
-import { AlertCircle, CheckCircle2, KeyRound, PlugZap, RotateCcw, Save, SlidersHorizontal, TestTube2 } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  KeyRound,
+  PlugZap,
+  RotateCcw,
+  Save,
+  SlidersHorizontal,
+  TestTube2,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { compatibleProviderLabels, findAiModelPreset, getAiModelDisplayName, providerDefaults } from '../../lib/aiModels';
+import {
+  compatibleProviderLabels,
+  findAiModelPreset,
+  getAiModelDisplayName,
+  providerDefaults,
+} from '../../lib/aiModels';
 import type { AiProviderSettings } from '../../types/agent';
 
 interface Props {
@@ -647,8 +712,20 @@ interface Props {
 }
 
 export const AiConnectionConfig: React.FC<Props> = ({
-  settings, apiKey, status, modelDisplayName, keyPlaceholder, usable, busy, message,
-  onSettingsChange, onApiKeyChange, onSelectProvider, onClearKey, onTest, onSave,
+  settings,
+  apiKey,
+  status,
+  modelDisplayName,
+  keyPlaceholder,
+  usable,
+  busy,
+  message,
+  onSettingsChange,
+  onApiKeyChange,
+  onSelectProvider,
+  onClearKey,
+  onTest,
+  onSave,
 }) => {
   const { t } = useTranslation();
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -659,7 +736,9 @@ export const AiConnectionConfig: React.FC<Props> = ({
       <div className="ai-settings-hero">
         <div className="ai-settings-hero-main">
           <span className="ai-settings-eyebrow">{t('agent_ai_current_model')}</span>
-          <div className="ai-settings-model-name"><span>{modelDisplayName}</span></div>
+          <div className="ai-settings-model-name">
+            <span>{modelDisplayName}</span>
+          </div>
           <div className="ai-settings-model-meta">
             <span>{selectedPreset?.vendor || compatibleProviderLabels[settings.provider]}</span>
             <span>{settings.model || '-'}</span>
@@ -695,7 +774,10 @@ export const AiConnectionConfig: React.FC<Props> = ({
       {/* Compatible provider segments */}
       <div className="ai-settings-block-header">
         <div>
-          <div className="ai-settings-block-title"><PlugZap size={16} />{t('agent_ai_compat_title')}</div>
+          <div className="ai-settings-block-title">
+            <PlugZap size={16} />
+            {t('agent_ai_compat_title')}
+          </div>
           <p>{t('agent_ai_compat_hint')}</p>
         </div>
       </div>
@@ -741,7 +823,9 @@ export const AiConnectionConfig: React.FC<Props> = ({
             type="password"
             value={apiKey}
             onChange={(e) => onApiKeyChange(e.target.value)}
-            placeholder={settings.provider === 'ollama' ? t('agent_ai_key_optional') : keyPlaceholder}
+            placeholder={
+              settings.provider === 'ollama' ? t('agent_ai_key_optional') : keyPlaceholder
+            }
           />
           <small>
             {settings.provider === 'ollama'
@@ -773,7 +857,9 @@ export const AiConnectionConfig: React.FC<Props> = ({
               min={1}
               type="number"
               value={settings.request_timeout_secs}
-              onChange={(e) => onSettingsChange({ request_timeout_secs: parseInt(e.target.value, 10) || 45 })}
+              onChange={(e) =>
+                onSettingsChange({ request_timeout_secs: parseInt(e.target.value, 10) || 45 })
+              }
             />
           </label>
           <label>
@@ -784,7 +870,9 @@ export const AiConnectionConfig: React.FC<Props> = ({
               min={2000}
               type="number"
               value={settings.max_input_chars}
-              onChange={(e) => onSettingsChange({ max_input_chars: parseInt(e.target.value, 10) || 24000 })}
+              onChange={(e) =>
+                onSettingsChange({ max_input_chars: parseInt(e.target.value, 10) || 24000 })
+              }
             />
           </label>
           <label>
@@ -810,7 +898,12 @@ export const AiConnectionConfig: React.FC<Props> = ({
           <span>{t('agent_ai_external_notice')}</span>
         </div>
         <div className="ai-settings-actions">
-          <button className="settings-btn-outline" disabled={busy} onClick={onClearKey} type="button">
+          <button
+            className="settings-btn-outline"
+            disabled={busy}
+            onClick={onClearKey}
+            type="button"
+          >
             <RotateCcw size={14} />
             {t('agent_ai_clear_key')}
           </button>
@@ -846,6 +939,7 @@ git commit -m "feat: add ai connection config panel"
 ## Task 6: Rewrite AiSettingsSection as the slim container
 
 **Files:**
+
 - Modify: `src/components/Settings/AiSettingsSection.tsx`
 
 Replace the 670-line monolith with a container that holds state + IPC, computes derived values, and delegates rendering to the three child areas. Keep all existing IPC logic (`persistAiSettings`, `save`, `testProvider`, `clearKey`, `savePolicySettings`, `applyModelPreset`, `selectCompatibleProvider`, `normalizedSettings`, `reloadSettings`) — only the JSX changes.
@@ -857,7 +951,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { useAgentPolicyStore } from '../../stores/agentPolicyStore';
-import { findAiModelPreset, getAiModelDisplayName, isAiProviderUsable, providerDefaults, type AiModelGroup } from '../../lib/aiModels';
+import {
+  findAiModelPreset,
+  getAiModelDisplayName,
+  isAiProviderUsable,
+  providerDefaults,
+  type AiModelGroup,
+} from '../../lib/aiModels';
 import type { AiProviderSettings } from '../../types/agent';
 import { AiModelPicker } from './AiModelPicker';
 import { AiConnectionConfig } from './AiConnectionConfig';
@@ -876,7 +976,8 @@ const defaults: AiProviderSettings = {
   request_timeout_secs: 45,
 };
 
-const emitAiSettingsChanged = () => window.dispatchEvent(new CustomEvent('gwshell-ai-settings-changed'));
+const emitAiSettingsChanged = () =>
+  window.dispatchEvent(new CustomEvent('gwshell-ai-settings-changed'));
 
 export const AiSettingsSection: React.FC = () => {
   const { t } = useTranslation();
@@ -887,7 +988,9 @@ export const AiSettingsSection: React.FC = () => {
   const savePolicy = useAgentPolicyStore((s) => s.save);
   const [apiKey, setApiKey] = useState('');
   const [aiMessage, setAiMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-  const [policyMessage, setPolicyMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [policyMessage, setPolicyMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(
+    null,
+  );
   const [busy, setBusy] = useState(false);
   const [activeModelTab, setActiveModelTab] = useState<ModelTab>('china');
 
@@ -902,16 +1005,22 @@ export const AiSettingsSection: React.FC = () => {
   const modelDisplayName = useMemo(() => getAiModelDisplayName(settings), [settings]);
   const usable =
     isAiProviderUsable(settings) ||
-    (settings.enabled && Boolean(settings.base_url.trim()) && Boolean(settings.model.trim()) && Boolean(apiKey.trim()));
+    (settings.enabled &&
+      Boolean(settings.base_url.trim()) &&
+      Boolean(settings.model.trim()) &&
+      Boolean(apiKey.trim()));
   const status = useMemo(() => {
     if (!settings.enabled) return { kind: 'off' as const, label: t('agent_ai_status_disabled') };
-    if (!settings.model.trim() || !settings.base_url.trim()) return { kind: 'warn' as const, label: t('agent_ai_status_incomplete') };
+    if (!settings.model.trim() || !settings.base_url.trim())
+      return { kind: 'warn' as const, label: t('agent_ai_status_incomplete') };
     if (settings.provider !== 'ollama' && !settings.api_key_configured && !apiKey.trim()) {
       return { kind: 'warn' as const, label: t('agent_ai_status_key_missing') };
     }
     return { kind: 'ok' as const, label: t('agent_ai_status_ready') };
   }, [apiKey, settings, t]);
-  const keyPlaceholder = selectedPreset?.apiKeyHint || (settings.provider === 'anthropic_compatible' ? 'sk-ant-...' : 'sk-...');
+  const keyPlaceholder =
+    selectedPreset?.apiKeyHint ||
+    (settings.provider === 'anthropic_compatible' ? 'sk-ant-...' : 'sk-...');
 
   const onSettingsChange = (partial: Partial<AiProviderSettings>) => {
     setSettings((s) => ({ ...s, ...partial }));
@@ -923,9 +1032,14 @@ export const AiSettingsSection: React.FC = () => {
     ...settings,
     base_url: settings.base_url.trim(),
     model: settings.model.trim(),
-    request_timeout_secs: Math.max(1, settings.request_timeout_secs || defaults.request_timeout_secs),
+    request_timeout_secs: Math.max(
+      1,
+      settings.request_timeout_secs || defaults.request_timeout_secs,
+    ),
     max_input_chars: Math.max(2000, settings.max_input_chars || defaults.max_input_chars),
-    temperature: Number.isFinite(settings.temperature) ? settings.temperature : defaults.temperature,
+    temperature: Number.isFinite(settings.temperature)
+      ? settings.temperature
+      : defaults.temperature,
   });
 
   const reloadSettings = async () => {
@@ -1007,7 +1121,13 @@ export const AiSettingsSection: React.FC = () => {
     import('../../lib/aiModels').then(({ aiModelPresets }) => {
       const found = aiModelPresets.find((item) => item.id === presetId);
       if (!found) return;
-      setSettings((s) => ({ ...s, enabled: true, provider: found.provider, base_url: found.base_url, model: found.model }));
+      setSettings((s) => ({
+        ...s,
+        enabled: true,
+        provider: found.provider,
+        base_url: found.base_url,
+        model: found.model,
+      }));
       setAiMessage(null);
     });
   };
@@ -1060,13 +1180,26 @@ export const AiSettingsSection: React.FC = () => {
 **Note on `applyModelPreset`:** the inline dynamic `import` above is awkward. Replace it with a static import at the top of the file. Add `aiModelPresets` to the existing import from `../../lib/aiModels`, then implement `applyModelPreset` cleanly:
 
 ```tsx
-import { aiModelPresets, findAiModelPreset, getAiModelDisplayName, isAiProviderUsable, providerDefaults, type AiModelGroup } from '../../lib/aiModels';
+import {
+  aiModelPresets,
+  findAiModelPreset,
+  getAiModelDisplayName,
+  isAiProviderUsable,
+  providerDefaults,
+  type AiModelGroup,
+} from '../../lib/aiModels';
 
 // ... inside the component:
 const applyModelPreset = (presetId: string) => {
   const preset = aiModelPresets.find((item) => item.id === presetId);
   if (!preset) return;
-  setSettings((s) => ({ ...s, enabled: true, provider: preset.provider, base_url: preset.base_url, model: preset.model }));
+  setSettings((s) => ({
+    ...s,
+    enabled: true,
+    provider: preset.provider,
+    base_url: preset.base_url,
+    model: preset.model,
+  }));
   setAiMessage(null);
 };
 ```
@@ -1095,6 +1228,7 @@ git commit -m "refactor: rewrite ai settings section as slim container"
 ## Task 7: CSS for dual-panel and policy cards
 
 **Files:**
+
 - Modify: `src/styles/global.css`
 
 Add styles for the dual-panel shell, the model card list, the policy card grid, and the collapse button. These sit alongside the existing `.ai-settings-*` rules (around line 3742+).
@@ -1138,7 +1272,9 @@ Append after the existing `.ai-settings-shell` rule block. Use existing CSS toke
   color: var(--text-secondary);
   text-align: left;
   cursor: pointer;
-  transition: border-color var(--transition-fast), background var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast);
 }
 
 .ai-model-card:hover {
@@ -1297,6 +1433,7 @@ Expected: no whitespace errors.
 
 Run: `npm run tauri dev`
 Confirm in the running app:
+
 1. Settings → Agent / AI shows the dual-panel layout (model cards on the left, config on the right).
 2. Clicking a model card fills the right-side config.
 3. Save / Test / Clear Key buttons work.

@@ -63,6 +63,7 @@ GWShell is a **Tauri 2** desktop application: a React/TypeScript frontend render
 ### IPC Event Pattern
 
 Backend pushes data to the frontend via Tauri events:
+
 - `pty-data-{session_id}` / `ssh-data-{session_id}` / `serial-data-{session_id}` — terminal output chunks (matching `*-exit-{session_id}` events signal session end)
 - `sftp-progress-{session_id}` — throttled file-transfer progress (`kind`, `file`, `fileIndex`, `fileTotal`, `bytes`, `total`)
 - `server-metrics-{session_id}` — server panel metric snapshots

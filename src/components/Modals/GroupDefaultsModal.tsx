@@ -24,7 +24,7 @@ export const GroupDefaultsModal: React.FC = () => {
       if (value === '' || value === undefined || value === null) {
         delete next[key];
       } else {
-        next[key] = value as GroupDefaults[K];
+        next[key] = value;
       }
       return next;
     });
@@ -45,16 +45,15 @@ export const GroupDefaultsModal: React.FC = () => {
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') { e.preventDefault(); close(); }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+    }
   };
 
   return (
     <div className="group-defaults-overlay" onMouseDown={close} onKeyDown={onKeyDown}>
-      <div
-        className="group-defaults-card"
-        onMouseDown={(e) => e.stopPropagation()}
-        tabIndex={-1}
-      >
+      <div className="group-defaults-card" onMouseDown={(e) => e.stopPropagation()} tabIndex={-1}>
         <div className="group-defaults-title">
           {t('group_defaults_title')}: <span className="group-defaults-group-name">{group}</span>
         </div>
@@ -79,7 +78,7 @@ export const GroupDefaultsModal: React.FC = () => {
             value={defs.port ?? ''}
             onChange={(e) => {
               const v = e.target.value;
-              set('port', v === '' ? '' : parseInt(v, 10) as unknown as undefined);
+              set('port', v === '' ? '' : (parseInt(v, 10) as unknown as undefined));
             }}
             placeholder="22"
             min={1}
@@ -91,7 +90,9 @@ export const GroupDefaultsModal: React.FC = () => {
           <select
             className="group-defaults-input"
             value={defs.auth_method ?? ''}
-            onChange={(e) => set('auth_method', e.target.value as GroupDefaults['auth_method'] || undefined)}
+            onChange={(e) =>
+              set('auth_method', (e.target.value as GroupDefaults['auth_method']) || undefined)
+            }
           >
             <option value="">—</option>
             <option value="password">password</option>
@@ -129,7 +130,7 @@ export const GroupDefaultsModal: React.FC = () => {
             value={defs.jump_port ?? ''}
             onChange={(e) => {
               const v = e.target.value;
-              set('jump_port', v === '' ? '' : parseInt(v, 10) as unknown as undefined);
+              set('jump_port', v === '' ? '' : (parseInt(v, 10) as unknown as undefined));
             }}
             placeholder="22"
             min={1}
@@ -161,7 +162,9 @@ export const GroupDefaultsModal: React.FC = () => {
           <select
             className="group-defaults-input"
             value={defs.proxy_type ?? ''}
-            onChange={(e) => set('proxy_type', e.target.value as GroupDefaults['proxy_type'] || undefined)}
+            onChange={(e) =>
+              set('proxy_type', (e.target.value as GroupDefaults['proxy_type']) || undefined)
+            }
           >
             <option value="">—</option>
             <option value="none">none</option>
@@ -187,7 +190,7 @@ export const GroupDefaultsModal: React.FC = () => {
             value={defs.proxy_port ?? ''}
             onChange={(e) => {
               const v = e.target.value;
-              set('proxy_port', v === '' ? '' : parseInt(v, 10) as unknown as undefined);
+              set('proxy_port', v === '' ? '' : (parseInt(v, 10) as unknown as undefined));
             }}
             placeholder="1080"
             min={1}
@@ -216,8 +219,12 @@ export const GroupDefaultsModal: React.FC = () => {
         </div>
 
         <div className="group-defaults-actions">
-          <button className="group-defaults-btn" onClick={close}>{t('group_defaults_cancel')}</button>
-          <button className="group-defaults-btn primary" onClick={save}>{t('group_defaults_save')}</button>
+          <button className="group-defaults-btn" onClick={close}>
+            {t('group_defaults_cancel')}
+          </button>
+          <button className="group-defaults-btn primary" onClick={save}>
+            {t('group_defaults_save')}
+          </button>
         </div>
       </div>
     </div>

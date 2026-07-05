@@ -28,7 +28,11 @@ export const AgentActionQueue: React.FC = () => {
       return;
     }
     if (action.risk === 'high' || action.risk === 'blocked') return;
-    if (action.risk !== 'read_only' && !window.confirm(t('agent_action_confirm', { risk: action.risk }))) return;
+    if (
+      action.risk !== 'read_only' &&
+      !window.confirm(t('agent_action_confirm', { risk: action.risk }))
+    )
+      return;
     setError(null);
     try {
       const result = await invoke<AgentToolResult>('execute_agent_action', { action });
@@ -69,7 +73,9 @@ export const AgentActionQueue: React.FC = () => {
         <div className={`agent-action agent-risk-${action.risk}`} key={action.id}>
           <div className="agent-action-tool">{action.tool}</div>
           <div className="agent-action-reason">{action.reason}</div>
-          {action.expected_result && <div className="agent-action-expected">{action.expected_result}</div>}
+          {action.expected_result && (
+            <div className="agent-action-expected">{action.expected_result}</div>
+          )}
           <code>{payloadLabel(action)}</code>
           <button
             className="settings-btn-outline"
@@ -82,10 +88,10 @@ export const AgentActionQueue: React.FC = () => {
               : action.tool === 'stream_log' || action.tool === 'docker_logs'
                 ? t('agent_action_start_stream')
                 : action.risk === 'read_only'
-              ? t('agent_action_run')
-              : action.risk === 'high' || action.risk === 'blocked'
-                ? t('agent_action_policy_blocked')
-                : t('agent_action_review_run')}
+                  ? t('agent_action_run')
+                  : action.risk === 'high' || action.risk === 'blocked'
+                    ? t('agent_action_policy_blocked')
+                    : t('agent_action_review_run')}
           </button>
         </div>
       ))}
