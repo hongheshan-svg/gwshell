@@ -1,0 +1,6 @@
+dist/
+node_modules/
+src-tauri/
+.vite/
+src/i18n/locales/
+**/*.min.js
