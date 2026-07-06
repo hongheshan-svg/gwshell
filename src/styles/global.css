@@ -4906,95 +4906,10 @@ a:focus-visible,
   background: var(--accent-hover);
 }
 
-/* ---- Update Toast ---- */
-.update-toast {
-  position: fixed;
-  bottom: 24px;
-  right: 20px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 8px 12px;
-  box-shadow: var(--shadow-md);
-  z-index: 10000;
-  font-size: 12px;
-  max-width: 420px;
-  line-height: 1.4;
-}
-
-.update-toast-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.update-toast-text strong {
-  color: var(--text-primary);
-}
-
-.update-toast-text span {
-  color: var(--text-secondary);
-}
-
-.update-toast-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  cursor: pointer;
-  font-size: 11px;
-  white-space: nowrap;
-  font-weight: 500;
-}
-
-.update-toast-btn:hover {
-  background: var(--bg-hover);
-}
-
-.update-toast-btn.primary {
-  background: var(--accent-primary);
-  color: #fff;
-  border-color: var(--accent-primary);
-}
-
-.update-toast-btn.primary:hover {
-  background: var(--accent-hover);
-}
-
-.update-progress {
-  flex: 1;
-  height: 4px;
-  background: var(--bg-tertiary);
-  border-radius: 0;
-  min-width: 100px;
-}
-
-.update-progress-bar {
-  height: 100%;
-  background: var(--accent-primary);
-  border-radius: 0;
-  transition: width 0.1s linear;
-}
-
-/* Credential-storage warning toast: sits above the update toast (so the two
-   never overlap) and carries a distinct warning accent. */
-.security-notice {
-  bottom: 76px;
-  border-color: var(--warning);
-  max-width: 360px;
-}
-
-.security-notice-icon {
-  color: var(--warning);
-  flex-shrink: 0;
-}
+/* ---- Update / security notices are now surfaced via the ToastProvider
+   (src/components/Toast/toast.css). The orphan .update-toast and
+   .security-notice rules below were removed when UpdateChecker and
+   SecurityNotice were migrated to the toast system. ---- */
 
 .snippet-panel {
   display: flex;
