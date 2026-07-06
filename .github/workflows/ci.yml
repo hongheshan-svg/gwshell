@@ -1,7 +1,9 @@
 name: CI
 
-# Fast pre-merge checks. The heavy 3-platform Tauri build lives in
-# release.yml and only runs on version tags / manual dispatch.
+# Pre-merge safety net. Splits into a fast frontend job (type-check, smoke,
+# lint, format, node tests) and a 3-OS backend matrix (fmt, clippy, test,
+# check). The heavy Tauri bundling build lives in release.yml and only runs
+# on version tags / manual dispatch.
 on:
   push:
     branches: [main]
@@ -14,36 +16,117 @@ permissions:
 
 # Cancel superseded runs on the same ref so rapid pushes don't queue up.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  checks:
-    name: Checks (type-check, smoke, cargo check)
+  frontend:
+    name: Frontend (build, smoke, lint, format, tests)
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - name: Install Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - name: Install npm dependencies
-        run: npm ci
+      # `npm ci` can be flaky on CI (npm/cli#4769 "Exit handler never called!"
+      # exits 0 with an incomplete install). Retry up to 3 times. Also guard
+      # against a CN-mirror lockfile regression: the committed lockfile must
+      # resolve tarballs from registry.npmjs.org.
+      - name: Install (retry, mirror-guard)
+        run: |
+          set +e
+          if grep -q 'registry\.npmmirror\.com' package-lock.json; then
+            echo "::error::package-lock.json resolves tarballs from registry.npmmirror.com; regenerate it against registry.npmjs.org"
+            exit 1
+          fi
+          for i in 1 2 3; do
+            echo "::group::npm ci (attempt $i)"
+            npm ci
+            status=$?
+            echo "::endgroup::"
+            if [ $status -eq 0 ]; then
+              exit 0
+            fi
+            echo "::warning::npm ci attempt $i failed (exit $status); retrying"
+            rm -rf node_modules
+            sleep 10
+          done
+          echo "::error::npm ci failed after 3 attempts"
+          exit 1
 
-      # `npm run build` = tsc (type-check) + vite build. It also emits ../dist,
-      # which tauri-build (build.rs) requires for `cargo check` to succeed.
+      # `npm run build` = tsc (type-check) + vite build. Emits ../dist which
+      # the backend job also needs for tauri-build (build.rs).
       - name: Build frontend (type-check)
         run: npm run build
 
       - name: Smoke check
         run: npm run smoke:check
 
-      # System libraries the tauri/-sys crates link against, so `cargo check`
-      # can resolve them at build-script time.
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Node tests
+        run: npm run test:node
+
+  backend:
+    name: Backend (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache: true
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install (retry, mirror-guard)
+        shell: bash
+        run: |
+          set +e
+          if grep -q 'registry\.npmmirror\.com' package-lock.json; then
+            echo "::error::package-lock.json resolves tarballs from registry.npmmirror.com; regenerate it against registry.npmjs.org"
+            exit 1
+          fi
+          for i in 1 2 3; do
+            echo "::group::npm ci (attempt $i)"
+            npm ci
+            status=$?
+            echo "::endgroup::"
+            if [ $status -eq 0 ]; then
+              exit 0
+            fi
+            echo "::warning::npm ci attempt $i failed (exit $status); retrying"
+            rm -rf node_modules
+            sleep 10
+          done
+          echo "::error::npm ci failed after 3 attempts"
+          exit 1
+
+      # `npm run build` emits ../dist, which tauri's build.rs requires for
+      # `cargo check` / `cargo clippy` / `cargo test` to succeed.
+      - name: Build frontend (produces ../dist for tauri build.rs)
+        run: npm run build
+
+      # Linux: system libs the tauri/-sys crates link against.
       - name: Install Linux dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -57,17 +140,23 @@ jobs:
             libudev-dev \
             libdbus-1-dev
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      # macOS: native compilation deps for the -sys crates.
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install openssl libssh2 pkg-config
 
-      - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
+      - name: Cargo fmt
+        working-directory: src-tauri
+        run: cargo fmt --check
 
-      # Type-check / borrow-check the whole backend without codegen, linking, or
-      # bundling — minutes faster than a release build, and catches what matters
-      # before merge.
+      - name: Cargo clippy
+        working-directory: src-tauri
+        run: cargo clippy -- -D warnings
+
+      - name: Cargo test
+        working-directory: src-tauri
+        run: cargo test
+
       - name: Cargo check
         working-directory: src-tauri
         run: cargo check
