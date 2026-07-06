@@ -248,14 +248,13 @@ function isInteractiveTerminal(type: string): boolean {
  * (proposed/internal) render service shape is unavailable.
  */
 function cellSize(term: Terminal, el: HTMLElement): { w: number; h: number } {
-  const cell = // eslint-disable-next-line no-restricted-syntax
-    (
-      term as unknown as {
-        _core?: {
-          _renderService?: { dimensions?: { css?: { cell?: { width: number; height: number } } } };
-        };
-      }
-    )._core?._renderService?.dimensions?.css?.cell;
+  // eslint-disable-next-line no-restricted-syntax
+  const termWithCore = term as unknown as {
+    _core?: {
+      _renderService?: { dimensions?: { css?: { cell?: { width: number; height: number } } } };
+    };
+  };
+  const cell = termWithCore._core?._renderService?.dimensions?.css?.cell;
   if (cell && cell.width > 0 && cell.height > 0) return { w: cell.width, h: cell.height };
   return { w: el.clientWidth / term.cols, h: el.clientHeight / term.rows };
 }

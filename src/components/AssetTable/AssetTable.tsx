@@ -65,8 +65,8 @@ export const AssetTable: React.FC = () => {
   useEffect(() => {
     if (!contextMenu) return;
     const handleClick = (e: MouseEvent) => {
+      // eslint-disable-next-line no-restricted-syntax
       if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
-        // eslint-disable-line no-restricted-syntax
         setContextMenu(null);
       }
     };

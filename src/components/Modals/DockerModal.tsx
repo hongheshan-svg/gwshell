@@ -189,9 +189,10 @@ export const DockerModal: React.FC = () => {
                   onChange={(e) =>
                     setForm({
                       ...form,
+                      // eslint-disable-next-line no-restricted-syntax
                       docker_protocol: e.target.value as 'unix' | 'tcp' | 'http' | 'https',
                     })
-                  } // eslint-disable-line no-restricted-syntax
+                  }
                 >
                   <option value="unix">Unix</option>
                   <option value="tcp">TCP</option>

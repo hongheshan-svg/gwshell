@@ -613,12 +613,12 @@ export const NewSessionModal: React.FC = () => {
                 <label>{t('ssh_proxy_type')}</label>
                 <select
                   value={form.proxy_type ?? 'none'}
-                  onChange={
-                    (e) =>
-                      setForm({
-                        ...form,
-                        proxy_type: e.target.value as SessionConfig['proxy_type'],
-                      }) // eslint-disable-line no-restricted-syntax
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      // eslint-disable-next-line no-restricted-syntax
+                      proxy_type: e.target.value as SessionConfig['proxy_type'],
+                    })
                   }
                 >
                   <option value="none">{t('ssh_proxy_none')}</option>

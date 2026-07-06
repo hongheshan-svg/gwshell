@@ -101,8 +101,8 @@ export const AiConnectionConfig: React.FC<Props> = ({
         </div>
         <p className="ai-custom-provider-hint">{t('agent_ai_compat_hint')}</p>
         <div className="ai-provider-segments">
+          {/* eslint-disable-next-line no-restricted-syntax */}
           {(Object.keys(providerDefaults) as AiProviderSettings['provider'][]).map((provider) => (
-            // eslint-disable-line no-restricted-syntax
             <button
               className={settings.provider === provider ? 'active' : ''}
               disabled={busy}
