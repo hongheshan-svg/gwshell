@@ -18,7 +18,8 @@ export const AppMenu: React.FC = () => {
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) { // eslint-disable-line no-restricted-syntax
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        // eslint-disable-line no-restricted-syntax
         setShowAppMenu(false);
       }
     };

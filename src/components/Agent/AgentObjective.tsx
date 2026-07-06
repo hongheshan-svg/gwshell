@@ -101,7 +101,9 @@ export const AgentObjective: React.FC = () => {
       <div className="agent-objective-actions">
         <button
           className="settings-btn-outline"
-          onClick={() => { void draftPlan(); }}
+          onClick={() => {
+            void draftPlan();
+          }}
           disabled={busy || !objective.trim()}
           type="button"
         >
@@ -109,7 +111,9 @@ export const AgentObjective: React.FC = () => {
         </button>
         <button
           className="settings-btn-primary"
-          onClick={() => { void start(); }}
+          onClick={() => {
+            void start();
+          }}
           disabled={busy || !objective.trim()}
           type="button"
         >

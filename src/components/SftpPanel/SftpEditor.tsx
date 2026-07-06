@@ -116,7 +116,9 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({
             </button>
             <button
               className="sftp-editor-btn sftp-editor-btn-save"
-              onClick={() => { void handleSave(); }}
+              onClick={() => {
+                void handleSave();
+              }}
               disabled={!isModified || saving}
               title={`${t('sftp_editor_save')} (Ctrl+S)`}
             >

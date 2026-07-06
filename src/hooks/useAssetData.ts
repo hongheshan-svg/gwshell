@@ -42,8 +42,8 @@ export function useAssetData() {
         (s) =>
           s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-          (s.host?.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          (s.username?.toLowerCase().includes(searchQuery.toLowerCase())),
+          s.host?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          s.username?.toLowerCase().includes(searchQuery.toLowerCase()),
       )
     : realSessions;
 

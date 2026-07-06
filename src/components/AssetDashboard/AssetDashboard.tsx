@@ -288,7 +288,12 @@ export const EmptyStateCtas: React.FC = () => {
             <span>{t('newasset_quickconnect')}</span>
             <span className="empty-cta-desc">{t('empty_cta_quick_desc')}</span>
           </button>
-          <button className="empty-cta-card" onClick={() => { void handleImportSshConfig(); }}>
+          <button
+            className="empty-cta-card"
+            onClick={() => {
+              void handleImportSshConfig();
+            }}
+          >
             <FileInput size={16} />
             <span>{t('empty_cta_import')}</span>
             <span className="empty-cta-desc">{t('empty_cta_import_desc')}</span>

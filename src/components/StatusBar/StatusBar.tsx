@@ -54,8 +54,8 @@ export const StatusBar: React.FC = () => {
     const target =
       sess.username && sess.host
         ? `${sess.username}@${sess.host}${sess.port ? `:${sess.port}` : ''}`
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-        : sess.host || sess.serial_port || sess.shell_name || null;
+        : // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+          sess.host || sess.serial_port || sess.shell_name || null;
     return target;
   }, [activeSession]);
 

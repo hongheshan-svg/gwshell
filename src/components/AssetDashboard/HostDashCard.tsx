@@ -218,8 +218,8 @@ export const HostDashCard: React.FC<Props> = ({
       case 'docker':
         return session.docker_connect_method?.toLowerCase() === 'ssh'
           ? 'docker via SSH'
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-          : session.docker_unix_path || 'docker';
+          : // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+            session.docker_unix_path || 'docker';
       default:
         return session.session_type;
     }

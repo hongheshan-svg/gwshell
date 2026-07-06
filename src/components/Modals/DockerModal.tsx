@@ -63,7 +63,6 @@ export const DockerModal: React.FC = () => {
 
   if (!showDockerModal) return null;
 
-
   const handleBlur = (field: string) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
   };
@@ -187,7 +186,12 @@ export const DockerModal: React.FC = () => {
                 <label>{t('docker_protocol')}</label>
                 <select
                   value={form.docker_protocol}
-                  onChange={(e) => setForm({ ...form, docker_protocol: e.target.value as 'unix' | 'tcp' | 'http' | 'https' })} // eslint-disable-line no-restricted-syntax
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      docker_protocol: e.target.value as 'unix' | 'tcp' | 'http' | 'https',
+                    })
+                  } // eslint-disable-line no-restricted-syntax
                 >
                   <option value="unix">Unix</option>
                   <option value="tcp">TCP</option>
@@ -272,7 +276,9 @@ export const DockerModal: React.FC = () => {
           <div style={{ display: 'flex', gap: 12, marginLeft: 'auto' }}>
             <button
               className="ssh-footer-link"
-              onClick={() => { void handleTest(); }}
+              onClick={() => {
+                void handleTest();
+              }}
               disabled={testState.kind === 'busy'}
               title={t('docker_test')}
             >

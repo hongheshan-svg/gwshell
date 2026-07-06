@@ -4343,10 +4343,9 @@ a:focus-visible,
 .ai-model-list-head,
 .ai-model-row {
   display: grid;
-  grid-template-columns: minmax(112px, 0.8fr) minmax(158px, 1fr) minmax(190px, 1.25fr) minmax(
-      220px,
-      1.35fr
-    ) minmax(122px, 0.75fr);
+  grid-template-columns:
+    minmax(112px, 0.8fr) minmax(158px, 1fr) minmax(190px, 1.25fr) minmax(220px, 1.35fr)
+    minmax(122px, 0.75fr);
   gap: 10px;
   align-items: center;
   min-width: 840px;

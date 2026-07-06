@@ -54,7 +54,8 @@ export const SessionPanel: React.FC = () => {
   useEffect(() => {
     if (!contextMenu) return;
     const handleClick = (e: MouseEvent) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) { // eslint-disable-line no-restricted-syntax
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        // eslint-disable-line no-restricted-syntax
         setContextMenu(null);
       }
     };
@@ -131,7 +132,7 @@ export const SessionPanel: React.FC = () => {
     ? allSessions.filter(
         (s) =>
           s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (s.host?.toLowerCase().includes(searchQuery.toLowerCase())),
+          s.host?.toLowerCase().includes(searchQuery.toLowerCase()),
       )
     : null;
 

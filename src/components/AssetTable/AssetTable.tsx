@@ -65,7 +65,8 @@ export const AssetTable: React.FC = () => {
   useEffect(() => {
     if (!contextMenu) return;
     const handleClick = (e: MouseEvent) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) { // eslint-disable-line no-restricted-syntax
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        // eslint-disable-line no-restricted-syntax
         setContextMenu(null);
       }
     };
@@ -137,7 +138,9 @@ export const AssetTable: React.FC = () => {
             <button
               type="button"
               className={`home-view-seg__btn${homeView === 'card' ? ' active' : ''}`}
-              onClick={() => { void saveSettings({ ...allSettings, homeView: 'card' }); }}
+              onClick={() => {
+                void saveSettings({ ...allSettings, homeView: 'card' });
+              }}
               aria-pressed={homeView === 'card'}
             >
               {t('home_view_card')}
@@ -145,7 +148,9 @@ export const AssetTable: React.FC = () => {
             <button
               type="button"
               className={`home-view-seg__btn${homeView === 'table' ? ' active' : ''}`}
-              onClick={() => { void saveSettings({ ...allSettings, homeView: 'table' }); }}
+              onClick={() => {
+                void saveSettings({ ...allSettings, homeView: 'table' });
+              }}
               aria-pressed={homeView === 'table'}
             >
               {t('home_view_list')}

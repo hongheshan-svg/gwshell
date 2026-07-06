@@ -20,7 +20,11 @@ import { resolveTerminalTheme } from '../../lib/terminalThemes';
 import { runLoginScript } from '../../lib/sendScript';
 import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';
 import { buildCompletions, type Completion } from '../../lib/completion';
-import { listenTypedEvent, type DockerPickPayload, type DockerCancelPayload } from '../../lib/ipcEvents';
+import {
+  listenTypedEvent,
+  type DockerPickPayload,
+  type DockerCancelPayload,
+} from '../../lib/ipcEvents';
 import {
   tableForShellName,
   tableForRemoteShell,
@@ -134,15 +138,15 @@ let osInfoPromise: Promise<{ os: string; windowsBuild?: number }> | null = null;
 async function getOsInfo(): Promise<{ os: string; windowsBuild?: number }> {
   if (cachedOsInfo) return cachedOsInfo;
   osInfoPromise ??= invoke<{ os: string; windowsBuild?: number }>('get_os_info')
-      .then((info) => {
-        cachedOsInfo = info;
-        return info;
-      })
-      .catch(() => {
-        const fallback = { os: 'unknown' };
-        cachedOsInfo = fallback;
-        return fallback;
-      });
+    .then((info) => {
+      cachedOsInfo = info;
+      return info;
+    })
+    .catch(() => {
+      const fallback = { os: 'unknown' };
+      cachedOsInfo = fallback;
+      return fallback;
+    });
   return osInfoPromise;
 }
 
@@ -244,14 +248,14 @@ function isInteractiveTerminal(type: string): boolean {
  * (proposed/internal) render service shape is unavailable.
  */
 function cellSize(term: Terminal, el: HTMLElement): { w: number; h: number } {
-  const cell = (
-    // eslint-disable-next-line no-restricted-syntax
-    term as unknown as {
-      _core?: {
-        _renderService?: { dimensions?: { css?: { cell?: { width: number; height: number } } } };
-      };
-    }
-  )._core?._renderService?.dimensions?.css?.cell;
+  const cell = // eslint-disable-next-line no-restricted-syntax
+    (
+      term as unknown as {
+        _core?: {
+          _renderService?: { dimensions?: { css?: { cell?: { width: number; height: number } } } };
+        };
+      }
+    )._core?._renderService?.dimensions?.css?.cell;
   if (cell && cell.width > 0 && cell.height > 0) return { w: cell.width, h: cell.height };
   return { w: el.clientWidth / term.cols, h: el.clientHeight / term.rows };
 }
@@ -708,7 +712,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         // keyboard protocol for enhanced key reporting. Both are opt-in: apps
         // must request them via CSI sequences to activate, so setting them for
         // SSH/serial is safe — remote TUI apps can then use these protocols.
-        (termOpts).vtExtensions = {
+        termOpts.vtExtensions = {
           win32InputMode: usesLocalConpty(),
           kittyKeyboard: false,
         };

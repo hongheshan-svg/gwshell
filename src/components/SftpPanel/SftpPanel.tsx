@@ -679,7 +679,9 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
           </button>
           <button
             className="sftp-tool-btn"
-            onClick={() => { void loadDir(currentPath); }}
+            onClick={() => {
+              void loadDir(currentPath);
+            }}
             title={t('sftp_refresh')}
           >
             <RefreshCw size={14} />
@@ -697,7 +699,9 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
           </button>
           <button
             className="sftp-tool-btn"
-            onClick={() => { void handleUpload(); }}
+            onClick={() => {
+              void handleUpload();
+            }}
             disabled={busy}
             title={t('sftp_upload')}
           >
@@ -790,7 +794,9 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                 className="sftp-rename-input"
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
-                onBlur={() => { void handleNewFolder(); }}
+                onBlur={() => {
+                  void handleNewFolder();
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') void handleNewFolder();
                   if (e.key === 'Escape') setNewFolderMode(false);
@@ -809,7 +815,9 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                 className="sftp-rename-input"
                 value={newFileName}
                 onChange={(e) => setNewFileName(e.target.value)}
-                onBlur={() => { void handleNewFile(); }}
+                onBlur={() => {
+                  void handleNewFile();
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') void handleNewFile();
                   if (e.key === 'Escape') setNewFileMode(false);
@@ -862,7 +870,9 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                   tabIndex={0}
                   aria-label={entry.name}
                   onClick={() => handleEntryClick(entry)}
-                  onDoubleClick={() => { void handleEntryDoubleClick(entry); }}
+                  onDoubleClick={() => {
+                    void handleEntryDoubleClick(entry);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
@@ -884,7 +894,9 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                       className="sftp-rename-input"
                       value={renameValue}
                       onChange={(e) => setRenameValue(e.target.value)}
-                      onBlur={() => { void handleRename(entry); }}
+                      onBlur={() => {
+                        void handleRename(entry);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') void handleRename(entry);
                         if (e.key === 'Escape') setRenamingEntry(null);
@@ -1170,7 +1182,12 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
                 >
                   {t('sftp_cancel')}
                 </button>
-                <button className="sftp-chmod-btn sftp-chmod-ok" onClick={() => { void handleChmod(); }}>
+                <button
+                  className="sftp-chmod-btn sftp-chmod-ok"
+                  onClick={() => {
+                    void handleChmod();
+                  }}
+                >
                   {t('sftp_confirm')}
                 </button>
               </div>

@@ -10,7 +10,11 @@ import { TabBar } from './components/TabBar/TabBar';
 import { AssetTable } from './components/AssetTable/AssetTable';
 import { StatusBar } from './components/StatusBar/StatusBar';
 import { UnlockScreen } from './components/UnlockScreen';
-import { dispatchTypedEvent, type DockerPickPayload, type DockerCancelPayload } from './lib/ipcEvents';
+import {
+  dispatchTypedEvent,
+  type DockerPickPayload,
+  type DockerCancelPayload,
+} from './lib/ipcEvents';
 
 // Heavy / interaction-only chunks: deferred until the user actually needs them.
 // On startup we only render the shell + asset list — every other resource (xterm,

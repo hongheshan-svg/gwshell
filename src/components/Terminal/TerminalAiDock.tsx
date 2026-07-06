@@ -55,8 +55,7 @@ const newRequestId = () =>
 const formatError = (err: unknown): string => {
   if (typeof err === 'string') return err;
   if (err instanceof Error) return err.message;
-  if (err && typeof err === 'object' && 'message' in err)
-    return String((err).message);
+  if (err && typeof err === 'object' && 'message' in err) return String(err.message);
   return String(err);
 };
 
@@ -88,7 +87,7 @@ const isCommandCandidate = (line: string) => {
   if (!line || line.length > 260) return false;
   if (line.startsWith('#') || line.startsWith('//')) return false;
   if (/^(output|result|返回|输出|说明)[:：]/i.test(line)) return false;
-  if (line.startsWith("```")) return false;
+  if (line.startsWith('```')) return false;
   return /^(?:sudo\s+)?(?:[A-Za-z0-9_./-]+)(?:\s|$)/.test(line);
 };
 

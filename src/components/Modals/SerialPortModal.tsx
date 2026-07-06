@@ -124,7 +124,6 @@ export const SerialPortModal: React.FC = () => {
 
   if (!showSerialModal) return null;
 
-
   const setField = <K extends keyof SerialForm>(key: K, value: SerialForm[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };

@@ -71,8 +71,8 @@ export const AiSettingsSection: React.FC = () => {
   const keyPlaceholder =
     settings.provider === 'ollama'
       ? ''
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-      : selectedPreset?.apiKeyHint ||
+      : // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+        selectedPreset?.apiKeyHint ||
         (settings.provider === 'anthropic_compatible' ? 'sk-ant-...' : 'sk-...');
 
   const onSettingsChange = (partial: Partial<AiProviderSettings>) => {
@@ -208,16 +208,24 @@ export const AiSettingsSection: React.FC = () => {
           onSettingsChange={onSettingsChange}
           onApiKeyChange={setApiKey}
           onSelectProvider={selectCompatibleProvider}
-          onClearKey={() => { void clearKey(); }}
-          onTest={() => { void testProvider(); }}
-          onSave={() => { void save(); }}
+          onClearKey={() => {
+            void clearKey();
+          }}
+          onTest={() => {
+            void testProvider();
+          }}
+          onSave={() => {
+            void save();
+          }}
         />
       </div>
       <AgentPolicySection
         policy={policy}
         busy={busy}
         onChange={onPolicyChange}
-        onSave={() => { void savePolicySettings(); }}
+        onSave={() => {
+          void savePolicySettings();
+        }}
         message={policyMessage}
       />
     </>
