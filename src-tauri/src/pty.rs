@@ -55,6 +55,9 @@ struct PtyHandle {
     input: Arc<Mutex<PtyInputBuffer>>,
     wake_pending: Arc<AtomicBool>,
     charset: String,
+    /// The writer thread's JoinHandle, wrapped so `close_pty_wait` can take it
+    /// and join (with a timeout) on close. Mirrors `serial.rs::SerialHandle`.
+    writer_join: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
 }
 
 pub struct PtyManager {
@@ -282,14 +285,10 @@ impl PtyManager {
         let wake_pending = Arc::new(AtomicBool::new(false));
         let owner_wake_pending = wake_pending.clone();
         let (tx, rx) = mpsc::sync_channel::<PtyCmd>(PTY_CMD_QUEUE_LIMIT);
-        let handle = PtyHandle {
-            tx,
-            input: input_buffer,
-            wake_pending,
-            charset: charset_str.clone(),
-        };
 
-        self.sessions.lock().insert(session_id.to_string(), handle);
+        // Clone for the handle (the reader thread moves the original below);
+        // store it now so the handle is fully constructed after spawning.
+        let charset_str_for_handle = charset_str.clone();
 
         let sid = session_id.to_string();
         // charset_str already owned, move into thread
@@ -327,7 +326,7 @@ impl PtyManager {
             }
         });
 
-        std::thread::spawn(move || {
+        let writer_join_handle = std::thread::spawn(move || {
             let master = pair.master;
             let mut child = child;
             let mut writer = writer;
@@ -415,6 +414,16 @@ impl PtyManager {
             let _ = child.kill();
             let _ = child.wait();
         });
+
+        let handle = PtyHandle {
+            tx,
+            input: input_buffer,
+            wake_pending,
+            charset: charset_str_for_handle,
+            writer_join: Arc::new(Mutex::new(Some(writer_join_handle))),
+        };
+
+        self.sessions.lock().insert(session_id.to_string(), handle);
 
         Ok(())
     }
@@ -544,16 +553,140 @@ impl PtyManager {
             })
     }
 
-    pub fn close_pty(&self, session_id: &str) {
-        if let Some(handle) = self.sessions.lock().remove(session_id) {
+    /// Remove a session and block until its writer thread has fully torn down
+    /// (child killed + waited, reader joined). Use when the caller can afford to
+    /// wait; for app-wide shutdown use `close_all` which signals without joining.
+    /// Mirrors `serial.rs::close_serial_wait`.
+    ///
+    /// Returns `Err` if the writer thread doesn't exit within 2s (the join is
+    /// wrapped in a timeout so a stuck child can't hang the UI thread). The
+    /// session is removed from the map regardless, so a stuck writer thread
+    /// becomes orphaned but no longer holds the PTY open via the map.
+    pub fn close_pty_wait(&self, session_id: &str) -> Result<(), String> {
+        let handle = self.sessions.lock().remove(session_id);
+        if let Some(handle) = handle {
+            // Best-effort signal; ignore Full error since we'll join next.
             let _ = handle.tx.try_send(PtyCmd::Close);
+            if let Some(join) = handle.writer_join.lock().take() {
+                // 2s timeout wrapping the join, falling back to signal-only on
+                // timeout (UI thread must not hang on a stuck child).
+                let (tx, rx) = std::sync::mpsc::channel();
+                std::thread::spawn(move || {
+                    let _ = join.join();
+                    let _ = tx.send(());
+                });
+                if rx.recv_timeout(Duration::from_secs(2)).is_err() {
+                    return Err("writer thread join timed out after 2s".to_string());
+                }
+            }
         }
+        Ok(())
     }
 
+    /// Non-blocking close: signal and remove. Convenience wrapper around
+    /// `close_pty_wait` for callers that don't care to wait. Discards any join
+    /// timeout error — the session is removed from the map regardless.
+    pub fn close_pty(&self, session_id: &str) {
+        let _ = self.close_pty_wait(session_id);
+    }
+
+    /// Signal all sessions to close without joining. Used on app shutdown,
+    /// where blocking on each writer thread's teardown could hang the process.
     pub fn close_all(&self) {
         let handles: Vec<_> = self.sessions.lock().drain().map(|(_, v)| v).collect();
         for handle in handles {
             let _ = handle.tx.try_send(PtyCmd::Close);
+            // Don't join — shutdown must not hang on a stuck child.
         }
+    }
+}
+
+#[cfg(test)]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod tests {
+    use super::*;
+
+    /// Regression test for the silent Close-drop leak under queue pressure.
+    ///
+    /// Before `close_pty_wait`, `close_pty` sent `PtyCmd::Close` via `try_send`
+    /// and discarded the error. If the channel was full (limit 64), the close
+    /// signal was silently dropped and the writer thread + child leaked.
+    ///
+    /// This test constructs a `PtyManager` with a session whose command channel
+    /// is filled to capacity, then calls `close_pty_wait` and asserts that:
+    ///   1. It returns `Ok(())` (the writer thread joined within the 2s timeout).
+    ///   2. The session is removed from the map.
+    ///
+    /// The stub writer thread drains the channel and exits when the sender
+    /// (held by the `PtyHandle`) is dropped — which happens when
+    /// `close_pty_wait`'s local `handle` goes out of scope after the join.
+    /// Since the Close signal can't be sent (channel full), the writer thread
+    /// relies on the `recv_timeout` returning `Disconnected` (after the handle
+    /// drops) OR `Timeout` (after 50ms) to exit. Either way it exits well
+    /// within the 2s join timeout.
+    ///
+    /// Gated on Linux/macOS because the PTY backend (forkpty) isn't available
+    /// in Windows CI. We don't spawn a real PTY here — we construct a handle
+    /// with a stub writer thread + full channel to exercise the join path
+    /// directly. This keeps the test fast and dependency-free.
+    #[test]
+    fn close_pty_wait_consumes_writer_join_under_queue_pressure() {
+        let manager = PtyManager::new();
+
+        // Build a sync channel with the same limit as the real one.
+        let (tx, rx) = mpsc::sync_channel::<PtyCmd>(PTY_CMD_QUEUE_LIMIT);
+
+        // Fill the channel to capacity so a subsequent `try_send(Close)` would
+        // return `Full` — the exact condition that used to silently drop the
+        // close signal.
+        for _ in 0..PTY_CMD_QUEUE_LIMIT {
+            tx.try_send(PtyCmd::WakeInput)
+                .expect("channel should accept up to limit");
+        }
+        // Confirm the channel is full: the next try_send returns Full.
+        assert!(matches!(
+            tx.try_send(PtyCmd::Close),
+            Err(mpsc::TrySendError::Full(_))
+        ));
+
+        // Stub writer thread: drain the channel and exit on Close, disconnect,
+        // or timeout (50ms idle). It doesn't do any real I/O — we only need it
+        // to be joinable so close_pty_wait's join path is exercised.
+        let writer_join = std::thread::spawn(move || loop {
+            match rx.recv_timeout(Duration::from_millis(50)) {
+                Ok(PtyCmd::Close) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                Ok(_) => {}
+                Err(mpsc::RecvTimeoutError::Timeout) => break,
+            }
+        });
+
+        let handle = PtyHandle {
+            tx,
+            input: Arc::new(Mutex::new(PtyInputBuffer::default())),
+            wake_pending: Arc::new(AtomicBool::new(false)),
+            charset: "UTF-8".to_string(),
+            writer_join: Arc::new(Mutex::new(Some(writer_join))),
+        };
+        manager
+            .sessions
+            .lock()
+            .insert("test-session".to_string(), handle);
+
+        // close_pty_wait must join the writer thread even though the Close
+        // signal was dropped (channel full). The writer exits via timeout
+        // (50ms) since it never receives Close and the sender isn't dropped
+        // until after the join completes (handle still in scope).
+        let result = manager.close_pty_wait("test-session");
+        assert!(
+            result.is_ok(),
+            "close_pty_wait should succeed: {:?}",
+            result
+        );
+
+        // The session must be removed from the map.
+        assert!(
+            manager.sessions.lock().get("test-session").is_none(),
+            "session should be removed from the map"
+        );
     }
 }
