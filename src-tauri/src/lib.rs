@@ -829,6 +829,7 @@ async fn serial_open(
     data_bits: String,
     stop_bits: String,
     parity: String,
+    flow_control: Option<String>,
     serial_encoding: Option<String>,
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
@@ -842,6 +843,7 @@ async fn serial_open(
             &data_bits,
             &stop_bits,
             &parity,
+            flow_control.as_deref().unwrap_or("none"),
             serial_encoding.as_deref(),
             app_handle,
         )

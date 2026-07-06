@@ -68,11 +68,20 @@ interface SerialForm {
   serial_stop_bits: string;
   serial_parity: string;
   serial_encoding: string;
+  serial_flow_control: string;
   serial_init_commands: string;
   backspace_remap: boolean;
   record_log: boolean;
   autofill_rows: AutoFillRow[];
   remark: string;
+}
+
+// Narrow a form string to the SessionConfig flow-control union. The select
+// only emits these three values; this guard makes the narrowing explicit and
+// eslint-friendly (no `as` cast).
+function narrowFlowControl(value: string): 'none' | 'software' | 'hardware' {
+  if (value === 'software' || value === 'hardware') return value;
+  return 'none';
 }
 
 const defaultAutofillRows: AutoFillRow[] = [
@@ -89,6 +98,7 @@ const defaultForm: SerialForm = {
   serial_stop_bits: '1',
   serial_parity: '无校验(None)',
   serial_encoding: 'UTF-8',
+  serial_flow_control: 'none',
   serial_init_commands: '',
   backspace_remap: true,
   record_log: false,
@@ -163,6 +173,7 @@ export const SerialPortModal: React.FC = () => {
       serial_stop_bits: form.serial_stop_bits,
       serial_parity: form.serial_parity,
       serial_encoding: form.serial_encoding,
+      serial_flow_control: narrowFlowControl(form.serial_flow_control),
       serial_init_commands: form.serial_init_commands || undefined,
       remark: form.remark || undefined,
       created_at: now,
@@ -338,6 +349,20 @@ export const SerialPortModal: React.FC = () => {
                         {enc}
                       </option>
                     ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="ssh-form-row">
+                <div className="ssh-form-group">
+                  <label>{t('serial_flow_control')}</label>
+                  <select
+                    value={form.serial_flow_control}
+                    onChange={(e) => setField('serial_flow_control', e.target.value)}
+                  >
+                    <option value="none">{t('serial_flow_control_none')}</option>
+                    <option value="software">{t('serial_flow_control_software')}</option>
+                    <option value="hardware">{t('serial_flow_control_hardware')}</option>
                   </select>
                 </div>
               </div>

@@ -57,6 +57,7 @@ export interface SessionConfig {
   serial_stop_bits?: string;
   serial_parity?: string;
   serial_encoding?: string;
+  serial_flow_control?: 'none' | 'software' | 'hardware';
   serial_init_commands?: string;
   // Local shell
   working_dir?: string;

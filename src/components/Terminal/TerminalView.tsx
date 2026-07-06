@@ -1996,6 +1996,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                 stopBits: freshSession.serial_stop_bits || '1',
                 // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                 parity: freshSession.serial_parity || 'None',
+                flowControl: freshSession.serial_flow_control ?? 'none',
                 // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                 serialEncoding: freshSession.serial_encoding || null,
               });
@@ -2218,6 +2219,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                   stopBits: session.serial_stop_bits || '1',
                   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                   parity: session.serial_parity || 'None',
+                  flowControl: session.serial_flow_control ?? 'none',
                   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                   serialEncoding: session.serial_encoding || null,
                 });
