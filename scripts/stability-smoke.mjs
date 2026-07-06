@@ -276,6 +276,50 @@ function checkEventNameParity() {
   return { ok: errors.length === 0, errors };
 }
 
+// ---- capabilities allowlist ----
+//
+// Enforces an explicit allowlist of Tauri capabilities (permissions) granted
+// to the main window. Adding a new permission forces a security review here —
+// the check fails until the new permission is added to this Set.
+
+function checkCapabilitiesAllowlist() {
+  const caps = JSON.parse(
+    fs.readFileSync(path.join(SRC_TAURI, 'capabilities/default.json'), 'utf8'),
+  );
+  const allowed = new Set([
+    'core:default',
+    'opener:allow-open-path',
+    'dialog:allow-open',
+    'dialog:allow-save',
+    'core:window:allow-start-dragging',
+    'core:window:allow-minimize',
+    'core:window:allow-maximize',
+    'core:window:allow-unmaximize',
+    'core:window:allow-close',
+    'core:window:allow-destroy',
+    'core:window:allow-toggle-maximize',
+    'core:window:allow-is-maximized',
+    'core:window:allow-show',
+    'core:window:allow-hide',
+    'core:window:allow-set-focus',
+    'updater:allow-check',
+    'updater:allow-download-and-install',
+    'deep-link:default',
+    'clipboard-manager:allow-read-text',
+    'clipboard-manager:allow-write-text',
+    'process:allow-exit',
+    'global-shortcut:default',
+  ]);
+  const errors = [];
+  for (const perm of caps.permissions || []) {
+    if (!allowed.has(perm))
+      errors.push(
+        `capabilities/default.json grants "${perm}" which is not on the allowlist — add it here (forces security review).`,
+      );
+  }
+  return { ok: errors.length === 0, errors };
+}
+
 const failures = [];
 const warnings = [];
 
@@ -352,12 +396,19 @@ if (!eventResult.ok) {
   for (const e of eventResult.errors) fail(`[event parity] ${e}`);
 }
 
+// ---- capabilities allowlist ----
+const capsResult = checkCapabilitiesAllowlist();
+if (!capsResult.ok) {
+  for (const e of capsResult.errors) fail(`[capabilities] ${e}`);
+}
+
 console.log('GWShell stability smoke check');
 console.log(`- frontend invokes scanned: ${frontendInvokeNames.length}`);
 console.log(`- backend commands scanned: ${backendCommands.length}`);
 console.log(`- settings store consumers: ok`);
 console.log(`- i18n en/zh key parity: ${i18nResult.ok ? 'ok' : 'FAIL'}`);
 console.log(`- event-name parity (backend↔frontend↔allowlist): ${eventResult.ok ? 'ok' : 'FAIL'}`);
+console.log(`- capabilities allowlist: ${capsResult.ok ? 'ok' : 'FAIL'}`);
 if (warnings.length) {
   console.log('');
   console.log('Warnings:');
