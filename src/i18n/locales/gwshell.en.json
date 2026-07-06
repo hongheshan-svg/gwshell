@@ -707,6 +707,7 @@
   },
   "toast": {
     "sessionDeleted": "Session deleted",
+    "sessionSaveFailed": "Failed to save session",
     "sessionDeleteFailed": "Failed to delete session",
     "snippetSaved": "Snippet saved",
     "snippetSaveFailed": "Failed to save snippet",

@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { TFunction } from 'i18next';
 import type { SessionConfig, TabInfo, ThemeMode, MainView } from '../types';
 import i18n, { detectLocale, type Locale } from '../i18n';
+import { useToastStore } from './toastStore';
 import { buildSplitPanes, clearSlot, fillFirstEmpty } from '../lib/splitLayout';
 
 export interface DockerContainer {
@@ -191,6 +192,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
     // Persist to backend; surface failures instead of silently dropping them.
     invoke('save_session', { config: session }).catch((err) => {
       console.error('Failed to save session, the UI may be out of sync:', err);
+      useToastStore.getState().pushToast({
+        kind: 'error',
+        title: i18n.t('toast.sessionSaveFailed'),
+        message: String(err),
+      });
     });
   },
   addTemporarySession: (session) => set((state) => ({ sessions: [...state.sessions, session] })),
@@ -207,6 +213,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
         set((state) => ({ sessions: [...state.sessions, removed] }));
       }
       console.error('Failed to delete session, rolled back:', err);
+      useToastStore.getState().pushToast({
+        kind: 'error',
+        title: i18n.t('toast.sessionDeleteFailed'),
+        message: String(err),
+      });
     });
   },
   updateSessionLatency: (id, latency) => {

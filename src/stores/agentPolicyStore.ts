@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { AgentPolicySettings } from '../types/agent';
+import { useToastStore } from './toastStore';
+import i18n from '../i18n';
 
 export const defaultAgentPolicySettings: AgentPolicySettings = {
   auto_continue_enabled: true,
@@ -40,7 +42,7 @@ interface AgentPolicyStore {
   save: (policy: AgentPolicySettings) => Promise<void>;
 }
 
-export const useAgentPolicyStore = create<AgentPolicyStore>((set) => ({
+export const useAgentPolicyStore = create<AgentPolicyStore>((set, get) => ({
   policy: defaultAgentPolicySettings,
   loaded: false,
 
@@ -52,7 +54,20 @@ export const useAgentPolicyStore = create<AgentPolicyStore>((set) => ({
   setPolicy: (policy) => set({ policy }),
 
   save: async (policy) => {
+    // Capture the pre-save policy so a rollback restores it.
+    const previous = get().policy;
     set({ policy, loaded: true });
-    await invoke('save_agent_policy_settings', { settings: policy });
+    try {
+      await invoke('save_agent_policy_settings', { settings: policy });
+    } catch (err) {
+      // Roll back the optimistic update so the UI matches the backend.
+      set({ policy: previous });
+      console.error('Failed to save agent policy, rolled back:', err);
+      useToastStore.getState().pushToast({
+        kind: 'error',
+        title: i18n.t('toast.agentPolicySaveFailed'),
+        message: String(err),
+      });
+    }
   },
 }));

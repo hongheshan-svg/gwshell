@@ -707,6 +707,7 @@
   },
   "toast": {
     "sessionDeleted": "会话已删除",
+    "sessionSaveFailed": "保存会话失败",
     "sessionDeleteFailed": "删除会话失败",
     "snippetSaved": "代码片段已保存",
     "snippetSaveFailed": "保存代码片段失败",
