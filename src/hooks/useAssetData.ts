@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../stores/appStore';
+import { useConfirm } from './useConfirm';
 import type { SessionConfig } from '../types';
 
 // A session reached through a jump host or proxy is NOT directly TCP-reachable
@@ -14,6 +15,7 @@ export function needsRelay(s: SessionConfig): boolean {
 
 export function useAssetData() {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   // Fine-grained selectors: subscribe to each field individually so a latency
   // update (which replaces `sessions`) doesn't re-render just because an
   // unrelated action reference was re-read. Action setters are stable.
@@ -63,10 +65,15 @@ export function useAssetData() {
     });
   };
 
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = async () => {
     if (selectedSessionIds.length === 0) return;
     // Confirm before irreversible bulk deletion (matches the per-item guard).
-    if (!window.confirm(t('common_delete_confirm_multi', { count: selectedSessionIds.length }))) {
+    const ok = await confirm({
+      title: t('common_delete_confirm_title'),
+      message: t('common_delete_confirm_multi', { count: selectedSessionIds.length }),
+      danger: true,
+    });
+    if (!ok) {
       return;
     }
     selectedSessionIds.forEach((id) => removeSession(id));

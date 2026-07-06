@@ -25,6 +25,7 @@ import {
   FileEdit,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import { useConfirm } from '../../hooks/useConfirm';
 import { fileIconFor } from '../../lib/fileIcons';
 import { getSftpHomeCandidates, normalizeResolvedSftpDirectory } from '../../lib/sftpPaths';
 import { SftpEditor } from './SftpEditor';
@@ -136,6 +137,7 @@ interface SftpProgress {
 
 export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, connected }) => {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const toggleSftpPanel = useAppStore((s) => s.toggleSftpPanel);
 
   const [currentPath, setCurrentPath] = useState('');
@@ -482,7 +484,12 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
 
   const handleDelete = async (entry: SftpEntry) => {
     // Remote deletion is irreversible (no recycle bin) — confirm first.
-    if (!window.confirm(t('common_delete_confirm_body', { name: entry.name }))) {
+    const ok = await confirm({
+      title: t('common_delete_confirm_title'),
+      message: t('common_delete_confirm_body', { name: entry.name }),
+      danger: true,
+    });
+    if (!ok) {
       return;
     }
     try {

@@ -16,6 +16,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import { useConfirm } from '../../hooks/useConfirm';
 import { NewAssetMenu } from './NewAssetMenu';
 import type { SessionConfig } from '../../types';
 
@@ -23,6 +24,7 @@ const SUPPORTED_QUICK_CREATE_TYPES = new Set(['ssh', 'ssh-tunnel']);
 
 export const SessionPanel: React.FC = () => {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   // Sessions drive the list; subscribe to the array directly (it only changes
   // on add/remove/edit/latency, all of which warrant a re-render here).
   const sessions = useAppStore((s) => s.sessions);
@@ -311,14 +313,22 @@ export const SessionPanel: React.FC = () => {
           <button
             role="menuitem"
             className="danger"
-            onClick={() => {
-              if (
-                window.confirm(t('common_delete_confirm_body', { name: contextMenu.session.name }))
-              ) {
-                removeSession(contextMenu.session.id);
-                setContextMenu(null);
-              }
-            }}
+            onClick={() =>
+              void (async () => {
+                if (
+                  await confirm({
+                    title: t('common_delete_confirm_title'),
+                    message: t('common_delete_confirm_body', {
+                      name: contextMenu.session.name,
+                    }),
+                    danger: true,
+                  })
+                ) {
+                  removeSession(contextMenu.session.id);
+                  setContextMenu(null);
+                }
+              })()
+            }
           >
             <Trash2 size={12} /> {t('table_delete')}
           </button>

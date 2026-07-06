@@ -95,8 +95,8 @@ export const TabBar: React.FC = () => {
   const { t } = useTranslation();
   const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
   const [splitMenuOpen, setSplitMenuOpen] = useState(false);
-  // Tab awaiting in-app close confirmation (replaces window.confirm, whose
-  // native dialog clashes with the app's visual language).
+  // Tab awaiting in-app close confirmation (replaces the native confirm
+  // dialog, whose UI clashes with the app's visual language).
   const [confirmTabId, setConfirmTabId] = useState<string | null>(null);
   const addBtnRef = useRef<HTMLButtonElement>(null);
   const supportedQuickCreateTypes = new Set(['ssh', 'ssh-tunnel']);
@@ -254,7 +254,7 @@ export const TabBar: React.FC = () => {
           )}
         </div>
       )}
-      {/* In-app close confirmation (replaces native window.confirm) */}
+      {/* In-app close confirmation (replaces the native confirm dialog) */}
       {confirmTabId && (
         <div
           className="modal-overlay"

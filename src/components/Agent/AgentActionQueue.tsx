@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { useAgentStore } from '../../stores/agentStore';
+import { useConfirm } from '../../hooks/useConfirm';
 import type { AgentToolCall, AgentToolResult } from '../../types/agent';
 
 function payloadLabel(action: AgentToolCall): string {
@@ -13,6 +14,7 @@ function payloadLabel(action: AgentToolCall): string {
 
 export const AgentActionQueue: React.FC = () => {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const actions = useAgentStore((s) => s.actions);
   const activeSession = useAgentStore((s) => s.activeSession);
   const setError = useAgentStore((s) => s.setError);
@@ -28,11 +30,16 @@ export const AgentActionQueue: React.FC = () => {
       return;
     }
     if (action.risk === 'high' || action.risk === 'blocked') return;
-    if (
-      action.risk !== 'read_only' &&
-      !window.confirm(t('agent_action_confirm', { risk: action.risk }))
-    )
-      return;
+    if (action.risk !== 'read_only') {
+      const ok = await confirm({
+        title: t('agent_action_confirm', { risk: action.risk }),
+        message: t('agent_action_confirm', { risk: action.risk }),
+        danger: true,
+        confirmLabel: t('common.confirm'),
+        cancelLabel: t('common.cancel'),
+      });
+      if (!ok) return;
+    }
     setError(null);
     try {
       const result = await invoke<AgentToolResult>('execute_agent_action', { action });

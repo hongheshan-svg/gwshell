@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { X, Save, RotateCcw } from 'lucide-react';
+import { useConfirm } from '../../hooks/useConfirm';
 
 interface SftpEditorProps {
   sessionId: string;
@@ -17,12 +18,22 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({
   onClose,
 }) => {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Guard against showing a confirm dialog after the editor has unmounted
+  // (e.g. user navigates away while the discard-check is pending).
+  const isUnmountedRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      isUnmountedRef.current = true;
+    };
+  }, []);
 
   const isModified = content !== originalContent;
 
@@ -62,10 +73,20 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({
 
   // Guard close so unsaved edits aren't silently lost via the X button.
   const handleClose = () => {
-    if (isModified && !window.confirm(t('sftp_editor_discard_confirm'))) {
-      return;
-    }
-    onClose();
+    void (async () => {
+      if (isModified) {
+        if (isUnmountedRef.current) return;
+        const ok = await confirm({
+          title: t('sftp_editor_discard_confirm'),
+          message: t('sftp_editor_discard_confirm'),
+          danger: true,
+          confirmLabel: t('common.confirm'),
+          cancelLabel: t('common.cancel'),
+        });
+        if (!ok) return;
+      }
+      onClose();
+    })();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

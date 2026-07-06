@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Plus, Play, Edit, Trash2, Check, X } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { useSnippetStore } from '../../stores/snippetStore';
+import { useConfirm } from '../../hooks/useConfirm';
 import { runScript } from '../../lib/sendScript';
 import { sendInputToTab } from '../Terminal/TerminalView';
 import type { Snippet } from '../../types';
@@ -15,6 +16,7 @@ const INTERACTIVE_TERMINAL_TYPES = new Set(['ssh', 'localshell', 'serial', 'dock
 
 export const SnippetPanel: React.FC = () => {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const { snippets, loaded, load, add, update, remove } = useSnippetStore();
   // Per-field selectors: snippet list/actions come from snippetStore; only the
   // active tab id + tab list are needed from appStore, selected individually so
@@ -138,10 +140,18 @@ export const SnippetPanel: React.FC = () => {
               </button>
               <button
                 className="snippet-icon-btn"
-                onClick={() => {
-                  if (window.confirm(t('common_delete_confirm_body', { name: s.name })))
-                    void remove(s.id);
-                }}
+                onClick={() =>
+                  void (async () => {
+                    if (
+                      await confirm({
+                        title: t('common_delete_confirm_title'),
+                        message: t('common_delete_confirm_body', { name: s.name }),
+                        danger: true,
+                      })
+                    )
+                      void remove(s.id);
+                  })()
+                }
                 title={t('snippet_delete')}
               >
                 <Trash2 size={14} />

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import type { SessionConfig } from '../../types';
 import { useAssetData } from '../../hooks/useAssetData';
+import { useConfirm } from '../../hooks/useConfirm';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { AssetDashboard, EmptyStateCtas } from '../AssetDashboard/AssetDashboard';
 
@@ -35,6 +36,7 @@ export const AssetTable: React.FC = () => {
     toggleSidebar,
   } = useAssetData();
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const homeView = useSettingsStore((s) => s.settings.homeView);
   const saveSettings = useSettingsStore((s) => s.save);
   const allSettings = useSettingsStore((s) => s.settings);
@@ -192,7 +194,7 @@ export const AssetTable: React.FC = () => {
           {selectedSessionIds.length > 0 && (
             <button
               className="asset-toolbar-btn danger"
-              onClick={handleDeleteSelected}
+              onClick={() => void handleDeleteSelected()}
               title={t('table_delete_selected')}
             >
               <Trash2 size={14} />
@@ -314,15 +316,21 @@ export const AssetTable: React.FC = () => {
                           </button>
                           <button
                             className="asset-action-btn danger"
-                            onClick={() => {
-                              if (
-                                window.confirm(
-                                  t('common_delete_confirm_body', { name: session.name }),
-                                )
-                              ) {
-                                removeSession(session.id);
-                              }
-                            }}
+                            onClick={() =>
+                              void (async () => {
+                                if (
+                                  await confirm({
+                                    title: t('common_delete_confirm_title'),
+                                    message: t('common_delete_confirm_body', {
+                                      name: session.name,
+                                    }),
+                                    danger: true,
+                                  })
+                                ) {
+                                  removeSession(session.id);
+                                }
+                              })()
+                            }
                             title={t('table_delete')}
                           >
                             <Trash2 size={12} />
@@ -373,14 +381,22 @@ export const AssetTable: React.FC = () => {
           <div className="context-menu-divider" />
           <button
             className="danger"
-            onClick={() => {
-              if (
-                window.confirm(t('common_delete_confirm_body', { name: contextMenu.session.name }))
-              ) {
-                removeSession(contextMenu.session.id);
-                setContextMenu(null);
-              }
-            }}
+            onClick={() =>
+              void (async () => {
+                if (
+                  await confirm({
+                    title: t('common_delete_confirm_title'),
+                    message: t('common_delete_confirm_body', {
+                      name: contextMenu.session.name,
+                    }),
+                    danger: true,
+                  })
+                ) {
+                  removeSession(contextMenu.session.id);
+                  setContextMenu(null);
+                }
+              })()
+            }
           >
             <Trash2 size={12} /> {t('table_delete')}
           </button>
