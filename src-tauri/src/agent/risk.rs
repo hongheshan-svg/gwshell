@@ -231,10 +231,7 @@ fn segment_contains_destructive_dd(segment: &str) -> bool {
 fn command_word_name(word: &str) -> String {
     let trimmed = clean_token(word);
     let basename = if trimmed.contains('/') || trimmed.contains(':') || trimmed.starts_with('\\') {
-        trimmed
-            .rsplit(['/', '\\'])
-            .next()
-            .unwrap_or(trimmed)
+        trimmed.rsplit(['/', '\\']).next().unwrap_or(trimmed)
     } else {
         trimmed.rsplit('/').next().unwrap_or(trimmed)
     };

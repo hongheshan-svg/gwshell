@@ -523,9 +523,10 @@ impl PtyManager {
 
         handle.input.lock().push(&bytes)?;
         if !handle.wake_pending.swap(true, Ordering::AcqRel)
-            && handle.tx.try_send(PtyCmd::WakeInput).is_err() {
-                handle.wake_pending.store(false, Ordering::Release);
-            }
+            && handle.tx.try_send(PtyCmd::WakeInput).is_err()
+        {
+            handle.wake_pending.store(false, Ordering::Release);
+        }
         Ok(())
     }
 

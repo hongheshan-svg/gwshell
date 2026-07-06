@@ -260,9 +260,10 @@ impl SerialManager {
 
         handle.input.lock().push(data)?;
         if !handle.wake_pending.swap(true, Ordering::AcqRel)
-            && handle.tx.try_send(SerialCmd::WakeInput).is_err() {
-                handle.wake_pending.store(false, Ordering::Release);
-            }
+            && handle.tx.try_send(SerialCmd::WakeInput).is_err()
+        {
+            handle.wake_pending.store(false, Ordering::Release);
+        }
         Ok(())
     }
 
