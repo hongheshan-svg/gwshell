@@ -1,9 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 
 const root = process.cwd();
 const srcRoot = path.join(root, 'src');
 const tauriRoot = path.join(root, 'src-tauri', 'src');
+const SRC = path.join(root, 'src');
+const SRC_TAURI = path.join(root, 'src-tauri');
 
 function readText(filePath) {
   return fs.readFileSync(filePath, 'utf8');
@@ -84,6 +87,38 @@ function findMarkers() {
   return markers;
 }
 
+// ---- i18n key parity ----
+
+function collectKeys(obj, prefix) {
+  const keys = [];
+  for (const [k, v] of Object.entries(obj)) {
+    const p = prefix ? `${prefix}.${k}` : k;
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) keys.push(...collectKeys(v, p));
+    else keys.push(p);
+  }
+  return keys;
+}
+
+function checkI18nKeyParity() {
+  const en = JSON.parse(fs.readFileSync(path.join(SRC, 'i18n/locales/gwshell.en.json'), 'utf8'));
+  const zh = JSON.parse(fs.readFileSync(path.join(SRC, 'i18n/locales/gwshell.zh.json'), 'utf8'));
+  const enKeys = collectKeys(en, '').sort();
+  const zhKeys = collectKeys(zh, '').sort();
+  const onlyInEn = enKeys.filter((k) => !zhKeys.includes(k));
+  const onlyInZh = zhKeys.filter((k) => !enKeys.includes(k));
+  if (onlyInEn.length === 0 && onlyInZh.length === 0) return { ok: true, errors: [] };
+  const errors = [];
+  if (onlyInEn.length)
+    errors.push(
+      `Keys only in en.json: ${onlyInEn.slice(0, 10).join(', ')}${onlyInEn.length > 10 ? ' (...)' : ''}`,
+    );
+  if (onlyInZh.length)
+    errors.push(
+      `Keys only in zh.json: ${onlyInZh.slice(0, 10).join(', ')}${onlyInZh.length > 10 ? ' (...)' : ''}`,
+    );
+  return { ok: false, errors };
+}
+
 const failures = [];
 const warnings = [];
 
@@ -148,10 +183,17 @@ if (markers.length) {
   if (markers.length > 12) warn(`  ... and ${markers.length - 12} more`);
 }
 
+// ---- i18n key parity ----
+const i18nResult = checkI18nKeyParity();
+if (!i18nResult.ok) {
+  for (const e of i18nResult.errors) fail(`[i18n parity] ${e}`);
+}
+
 console.log('GWShell stability smoke check');
 console.log(`- frontend invokes scanned: ${frontendInvokeNames.length}`);
 console.log(`- backend commands scanned: ${backendCommands.length}`);
 console.log(`- settings store consumers: ok`);
+console.log(`- i18n en/zh key parity: ${i18nResult.ok ? 'ok' : 'FAIL'}`);
 if (warnings.length) {
   console.log('');
   console.log('Warnings:');
