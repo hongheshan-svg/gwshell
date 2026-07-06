@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import type { TFunction } from 'i18next';
 import type { SessionConfig, TabInfo, ThemeMode, MainView } from '../types';
-import i18n, { detectLocale, type Locale, type TranslationKeys } from '../i18n';
+import i18n, { detectLocale, type Locale } from '../i18n';
 import { buildSplitPanes, clearSlot, fillFirstEmpty } from '../lib/splitLayout';
 
 export interface DockerContainer {
@@ -15,7 +16,7 @@ interface AppStore {
   // Locale
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  t: (key: TranslationKeys, params?: Record<string, string | number>) => string;
+  t: TFunction<'gwshell', undefined>;
 
   // Theme
   theme: ThemeMode;

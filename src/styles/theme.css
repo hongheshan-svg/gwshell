@@ -85,10 +85,15 @@
   --accent: var(--accent-primary);
   --accent-color: var(--accent-primary);
   --accent-subtle: var(--accent-bg);
+  --accent-danger: var(--danger);
+  --accent-warning: var(--warning);
+  --accent-success: var(--success);
   --border: var(--border-color);
   --hover-bg: var(--bg-hover);
   --input-bg: var(--bg-tertiary);
   --panel-bg: var(--bg-secondary);
+  --bg-elevated: var(--bg-tertiary);
+  --shadow-elevated: var(--shadow-lg);
   --text-tertiary: var(--text-muted);
 }
 

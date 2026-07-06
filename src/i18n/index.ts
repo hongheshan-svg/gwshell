@@ -28,7 +28,17 @@ i18n.on('languageChanged', (lng) => {
 export default i18n;
 export { detectLocale, persistLocale };
 export type { Locale };
-export type TranslationKeys = keyof typeof gwshellZh;
+
+// Collect every leaf key (dotted path) of the resource object — used to type
+// `t()` callers so unknown keys fail to compile. Nested objects produce
+// "section.key" entries; flat string values produce the string itself.
+type LeafKeys<T, Prefix extends string = ''> = T extends object
+  ? {
+      [K in keyof T & string]: LeafKeys<T[K], Prefix extends '' ? K : `${Prefix}.${K}`>;
+    }[keyof T & string]
+  : Prefix;
+
+export type TranslationKeys = LeafKeys<typeof gwshellZh>;
 
 export function getT(locale: 'zh' | 'en'): TFunction {
   return i18n.getFixedT(locale, 'gwshell');

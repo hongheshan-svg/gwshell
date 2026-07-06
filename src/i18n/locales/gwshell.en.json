@@ -695,5 +695,31 @@
   "terminal_ai_context_selection_label": "Selection",
   "terminal_ai_context_output_label": "Output",
   "terminal_ai_context_selection": "Selected terminal text sent to the model ({{chars}} chars)",
-  "terminal_ai_context_output": "Recent terminal output sent to the model (~{{kb}} KB)"
+  "terminal_ai_context_output": "Recent terminal output sent to the model (~{{kb}} KB)",
+  "common": {
+    "error": "Error",
+    "success": "Success",
+    "warning": "Warning",
+    "info": "Information",
+    "dismiss": "Dismiss",
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
+  "toast": {
+    "sessionDeleted": "Session deleted",
+    "sessionDeleteFailed": "Failed to delete session",
+    "snippetSaved": "Snippet saved",
+    "snippetSaveFailed": "Failed to save snippet",
+    "snippetDeleted": "Snippet deleted",
+    "snippetDeleteFailed": "Failed to delete snippet",
+    "agentPolicySaveFailed": "Failed to save agent policy",
+    "updateAvailable": "Update Available",
+    "updateAvailableBody": "New version: v{{version}}",
+    "updateDownload": "Download & Install",
+    "updateRestart": "Update downloaded. Restart to apply.",
+    "updateRestartNow": "Restart now",
+    "updateError": "Update check failed",
+    "secretStorageWarningTitle": "Credentials are not encrypted",
+    "secretStorageWarningBody": "No OS keyring is available, so saved passwords and TOTP secrets are stored unencrypted in the local database."
+  }
 }

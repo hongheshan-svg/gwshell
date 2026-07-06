@@ -695,5 +695,31 @@
   "terminal_ai_context_selection_label": "选中文本",
   "terminal_ai_context_output_label": "近期输出",
   "terminal_ai_context_selection": "已发送给模型的选中文本（{{chars}} 字符）",
-  "terminal_ai_context_output": "已发送给模型的近期输出（约 {{kb}} KB）"
+  "terminal_ai_context_output": "已发送给模型的近期输出（约 {{kb}} KB）",
+  "common": {
+    "error": "错误",
+    "success": "成功",
+    "warning": "警告",
+    "info": "提示",
+    "dismiss": "关闭",
+    "confirm": "确认",
+    "cancel": "取消"
+  },
+  "toast": {
+    "sessionDeleted": "会话已删除",
+    "sessionDeleteFailed": "删除会话失败",
+    "snippetSaved": "代码片段已保存",
+    "snippetSaveFailed": "保存代码片段失败",
+    "snippetDeleted": "代码片段已删除",
+    "snippetDeleteFailed": "删除代码片段失败",
+    "agentPolicySaveFailed": "保存 Agent 策略失败",
+    "updateAvailable": "有可用更新",
+    "updateAvailableBody": "新版本：v{{version}}",
+    "updateDownload": "下载并安装",
+    "updateRestart": "更新已下载，重启以应用。",
+    "updateRestartNow": "立即重启",
+    "updateError": "更新检查失败",
+    "secretStorageWarningTitle": "凭据未加密",
+    "secretStorageWarningBody": "没有可用的系统密钥环，已保存的密码和 TOTP 密钥将以未加密方式存储在本地数据库中。"
+  }
 }
