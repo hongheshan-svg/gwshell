@@ -10,6 +10,8 @@ import { TabBar } from './components/TabBar/TabBar';
 import { AssetTable } from './components/AssetTable/AssetTable';
 import { StatusBar } from './components/StatusBar/StatusBar';
 import { UnlockScreen } from './components/UnlockScreen';
+import { ToastProvider } from './components/Toast/ToastProvider';
+import { ConfirmDialog } from './components/ConfirmDialog/ConfirmDialog';
 import {
   dispatchTypedEvent,
   type DockerPickPayload,
@@ -348,6 +350,8 @@ function App() {
           />
         )}
       </div>
+      <ToastProvider />
+      <ConfirmDialog />
     </I18nextProvider>
   );
 }
