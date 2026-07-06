@@ -320,6 +320,32 @@ function checkCapabilitiesAllowlist() {
   return { ok: errors.length === 0, errors };
 }
 
+// ---- no window.confirm ----
+//
+// Enforces that no src/ code calls window.confirm — every confirmation must
+// go through the in-app useConfirm hook (renders ConfirmDialog) so the UI
+// stays consistent and accessible. Native window.confirm also blocks the
+// render thread and clashes with the app's visual language.
+
+function checkNoWindowConfirm() {
+  let result = '';
+  try {
+    result = execSync(
+      `grep -rn "window\\.confirm" src/ --include="*.ts" --include="*.tsx" || true`,
+      { encoding: 'utf8' },
+    );
+  } catch {
+    return { ok: true, errors: [] };
+  }
+  if (result.trim()) {
+    return {
+      ok: false,
+      errors: [`window.confirm calls remain (must use useConfirm instead):\n${result.trim()}`],
+    };
+  }
+  return { ok: true, errors: [] };
+}
+
 const failures = [];
 const warnings = [];
 
@@ -402,6 +428,12 @@ if (!capsResult.ok) {
   for (const e of capsResult.errors) fail(`[capabilities] ${e}`);
 }
 
+// ---- no window.confirm ----
+const noWindowConfirmResult = checkNoWindowConfirm();
+if (!noWindowConfirmResult.ok) {
+  for (const e of noWindowConfirmResult.errors) fail(`[no-window-confirm] ${e}`);
+}
+
 console.log('GWShell stability smoke check');
 console.log(`- frontend invokes scanned: ${frontendInvokeNames.length}`);
 console.log(`- backend commands scanned: ${backendCommands.length}`);
@@ -409,6 +441,7 @@ console.log(`- settings store consumers: ok`);
 console.log(`- i18n en/zh key parity: ${i18nResult.ok ? 'ok' : 'FAIL'}`);
 console.log(`- event-name parity (backend↔frontend↔allowlist): ${eventResult.ok ? 'ok' : 'FAIL'}`);
 console.log(`- capabilities allowlist: ${capsResult.ok ? 'ok' : 'FAIL'}`);
+console.log(`- no window.confirm calls: ${noWindowConfirmResult.ok ? 'ok' : 'FAIL'}`);
 if (warnings.length) {
   console.log('');
   console.log('Warnings:');
