@@ -277,11 +277,15 @@ export const POWERSHELL_DEFS: CommandDef[] = [
   { cmd: 'man', en: 'Show help (alias of Get-Help)', zh: '帮助（Get-Help 别名）' },
 ];
 
-// Each table sorted once at module load (case-insensitive on the command name).
+// Each table sorted once at module load. Uses case-insensitive locale-aware
+// comparison so PowerShell mixed-case cmdlets (Get-ChildItem, Set-Location)
+// sort intuitively, and so binary-search lookups with the same comparator
+// can find prefix runs reliably.
+const collator = new Intl.Collator(undefined, { sensitivity: 'base' });
 const SORTED: Record<CommandTable, CommandDef[]> = {
-  unix: [...UNIX_DEFS].sort((a, b) => a.cmd.localeCompare(b.cmd)),
-  cmd: [...CMD_DEFS].sort((a, b) => a.cmd.localeCompare(b.cmd)),
-  powershell: [...POWERSHELL_DEFS].sort((a, b) => a.cmd.localeCompare(b.cmd)),
+  unix: [...UNIX_DEFS].sort((a, b) => collator.compare(a.cmd, b.cmd)),
+  cmd: [...CMD_DEFS].sort((a, b) => collator.compare(a.cmd, b.cmd)),
+  powershell: [...POWERSHELL_DEFS].sort((a, b) => collator.compare(a.cmd, b.cmd)),
 };
 
 /** Map a local-shell `shell_name` to its command table. */
@@ -333,18 +337,21 @@ export function lookupCommands(
   if (!prefix || /\s/.test(prefix)) return [];
   const arr = SORTED[table];
   const out: { cmd: string; desc: string }[] = [];
-  // Binary search for the first entry whose cmd >= prefix.
+  // Binary search for the first entry whose cmd >= prefix (using the same
+  // case-insensitive collator as the sort, so the search is consistent).
   let lo = 0;
   let hi = arr.length;
   while (lo < hi) {
     const mid = (lo + hi) >>> 1;
-    if (arr[mid].cmd < prefix) lo = mid + 1;
+    if (collator.compare(arr[mid].cmd, prefix) < 0) lo = mid + 1;
     else hi = mid;
   }
-  // Collect the contiguous run of prefix matches.
+  // Collect the contiguous run of prefix matches (case-insensitive, matching
+  // the collator used for sort/search).
+  const prefixLower = prefix.toLowerCase();
   for (let i = lo; i < arr.length; i++) {
     const d = arr[i];
-    if (!d.cmd.startsWith(prefix)) break; // sorted: first non-match ends the run
+    if (!d.cmd.toLowerCase().startsWith(prefixLower)) break; // sorted: first non-match ends the run
     if (d.cmd.length > prefix.length) {
       out.push({ cmd: d.cmd, desc: locale === 'zh' ? d.zh : d.en });
     }
