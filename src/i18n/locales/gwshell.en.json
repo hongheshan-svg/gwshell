@@ -485,7 +485,6 @@
   "common_delete_confirm_title": "Confirm Delete",
   "common_delete_confirm_body": "Delete \"{{name}}\"? This cannot be undone.",
   "common_delete_confirm_multi": "Delete {{count}} selected item(s)? This cannot be undone.",
-  "common_cancel": "Cancel",
   "common_delete": "Delete",
   "split_title": "Split Layout",
   "split_single": "Single",
@@ -724,7 +723,7 @@
     "updateRestart": "Update downloaded. Restart to apply.",
     "updateRestartNow": "Restart now",
     "updateError": "Update check failed",
-    "secretStorageWarningTitle": "Credentials are not encrypted",
-    "secretStorageWarningBody": "No OS keyring is available, so saved passwords and TOTP secrets are stored unencrypted in the local database."
+    "secretStorageWarningTitle": "Passwords will not be saved",
+    "secretStorageWarningBody": "No OS keyring is available, so passwords and TOTP secrets cannot be encrypted and will NOT be saved. Only session metadata is stored; re-enter credentials when connecting."
   }
 }

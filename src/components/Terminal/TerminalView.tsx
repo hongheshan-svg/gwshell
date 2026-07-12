@@ -1929,7 +1929,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               setFingerprintInfo(null);
 
               if (accepted && !isMismatch) {
-                await invoke('ssh_trust_host', { host, port, fingerprint, keyType });
+                try {
+                  await invoke('ssh_trust_host', { host, port, fingerprint, keyType });
+                } catch (trustErr) {
+                  // Backend overwrite guard refused to re-pin (MITM hardening).
+                  instance?.terminal.write(
+                    `\r\n\x1b[31m[SECURITY] ${String(trustErr)}\x1b[0m\r\n`,
+                  );
+                  return;
+                }
                 await invokeSshConnect(sess);
               } else if (isMismatch) {
                 instance?.terminal.write(

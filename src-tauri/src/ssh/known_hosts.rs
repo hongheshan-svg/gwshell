@@ -102,21 +102,64 @@ fn save(hosts: &HashMap<String, KnownHostEntry>) {
             let _ = fs::create_dir_all(parent);
         }
         if let Ok(json) = serde_json::to_string_pretty(hosts) {
-            let _ = fs::write(path, json);
+            let _ = fs::write(&path, json);
+            // The trust store decides which servers we'll talk to — keep it
+            // out of reach of other local users.
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+            }
         }
     }
 }
 
-pub fn trust_host(host: &str, port: u16, fingerprint: &str, key_type: &str) {
+/// Record `fingerprint` as trusted for `host:port`.
+///
+/// Refuses to replace an existing entry of the same key family with a
+/// different fingerprint: that is exactly the MITM signal `verify` reports as
+/// `Mismatch`, and the UI deliberately offers no "trust anyway" path for it
+/// (the user must delete the stale entry by hand). Enforcing it here too means
+/// a compromised WebView cannot silently re-pin a hostile key through the
+/// `ssh_trust_host` IPC command. First-time hosts and cross-family additions
+/// (verdict `Unknown`) are recorded as before.
+pub fn trust_host(host: &str, port: u16, fingerprint: &str, key_type: &str) -> Result<(), String> {
     let mut hosts = load();
+    let key = format!("{}:{}", host, port);
+    check_overwrite(&hosts, &key, fingerprint, key_type)?;
     hosts.insert(
-        format!("{}:{}", host, port),
+        key,
         KnownHostEntry {
             fingerprint: fingerprint.to_string(),
             key_type: key_type.to_string(),
         },
     );
     save(&hosts);
+    Ok(())
+}
+
+/// The pure overwrite guard behind `trust_host` (split out for unit tests).
+fn check_overwrite(
+    hosts: &HashMap<String, KnownHostEntry>,
+    key: &str,
+    fingerprint: &str,
+    key_type: &str,
+) -> Result<(), String> {
+    if let Some(existing) = hosts.get(key) {
+        let same_family = key_family(&existing.key_type) == key_family(key_type);
+        let same_fp =
+            normalize_fingerprint(&existing.fingerprint) == normalize_fingerprint(fingerprint);
+        if same_family && !same_fp {
+            return Err(format!(
+                "Refusing to overwrite the pinned {} key for {} with a different \
+                 fingerprint. If the server was genuinely reinstalled, remove the \
+                 entry from known_hosts.json and reconnect.",
+                key_family(&existing.key_type),
+                key
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -171,6 +214,23 @@ mod tests {
             verify(&store(), "other", 22, "SHA256:CCC", "RSA"),
             HostKeyVerdict::Unknown { .. }
         ));
+    }
+
+    #[test]
+    fn overwrite_guard_blocks_same_family_repin() {
+        // Re-pinning a DIFFERENT fingerprint of the SAME family is the MITM
+        // signal — must be refused even when asked directly (IPC hardening).
+        assert!(check_overwrite(&store(), "h:22", "SHA256:EVIL", "ssh-ed25519").is_err());
+    }
+
+    #[test]
+    fn overwrite_guard_allows_first_pin_repin_and_cross_family() {
+        // First-time host.
+        assert!(check_overwrite(&store(), "new:22", "SHA256:X", "ssh-rsa").is_ok());
+        // Idempotent re-pin of the identical fingerprint (padding-insensitive).
+        assert!(check_overwrite(&store(), "h:22", "SHA256:AAA=", "ssh-ed25519").is_ok());
+        // Different key family = the Unknown verdict path, allowed after prompt.
+        assert!(check_overwrite(&store(), "h:22", "SHA256:Y", "ecdsa-sha2-nistp256").is_ok());
     }
 
     #[test]

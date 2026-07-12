@@ -10,8 +10,11 @@
 //  - Encrypted values are tagged with the `enc:v1:` prefix; values without it
 //    are treated as legacy plaintext and returned as-is on read (so existing
 //    databases keep working and are upgraded transparently on the next save).
-//  - If the OS keyring is unavailable, we degrade to plaintext (same behavior as
-//    before) rather than losing data or crashing.
+//  - If the OS keyring is unavailable (or encryption fails), we REFUSE to
+//    persist the secret: it is stored as an empty string so only session
+//    metadata reaches disk. The frontend queries `secret_storage_available`
+//    and warns the user that passwords will not be saved on this machine.
+//    Plaintext credentials must never be written to the database.
 
 use aes_gcm::{
     aead::{Aead, KeyInit},
@@ -35,31 +38,31 @@ fn random_bytes<const N: usize>() -> Option<[u8; N]> {
 }
 
 /// The process-wide master key, loaded from (or created in) the OS keyring once.
-/// `None` means no keyring backend is available — callers then fall back to
-/// plaintext so nothing breaks and no data is lost.
+/// `None` means no keyring backend is available — callers then refuse to
+/// persist secrets (stored empty) so plaintext never reaches the database.
 fn master_key() -> Option<[u8; 32]> {
     static KEY: OnceLock<Option<[u8; 32]>> = OnceLock::new();
     *KEY.get_or_init(load_or_create_key)
 }
 
 /// Whether secrets can actually be encrypted at rest (i.e. an OS keyring backend
-/// is available). When false, `encrypt_secret` degrades to plaintext storage —
-/// the frontend queries this to warn the user that saved credentials are not
-/// protected on this machine.
+/// is available). When false, `encrypt_secret` refuses to persist secrets —
+/// the frontend queries this to warn the user that passwords/TOTP secrets will
+/// not be saved on this machine.
 pub fn secret_storage_available() -> bool {
     master_key().is_some()
 }
 
-/// Log one prominent warning the first time a secret is persisted without
-/// encryption, so the degradation is never completely silent.
-fn warn_plaintext_once() {
+/// Log one prominent warning the first time a secret is dropped instead of
+/// persisted, so the degradation is never completely silent.
+fn warn_secret_dropped_once() {
     use std::sync::atomic::{AtomicBool, Ordering};
     static WARNED: AtomicBool = AtomicBool::new(false);
     if !WARNED.swap(true, Ordering::Relaxed) {
         eprintln!(
-            "[gwshell] WARNING: no OS keyring backend available — SSH/proxy \
-             passwords and TOTP secrets are being stored UNENCRYPTED in the \
-             local database."
+            "[gwshell] WARNING: no OS keyring backend available (or encryption \
+             failed) — SSH/proxy passwords and TOTP secrets will NOT be saved. \
+             Only session metadata is persisted; re-enter credentials on connect."
         );
     }
 }
@@ -85,18 +88,22 @@ fn load_or_create_key() -> Option<[u8; 32]> {
 }
 
 /// Encrypt a secret for at-rest storage. Empty input stays empty; an
-/// already-encrypted value is returned unchanged; if no keyring is available the
-/// plaintext is returned as-is (never lose data).
+/// already-encrypted value is returned unchanged. If no keyring is available or
+/// encryption fails, returns an EMPTY string: the secret is dropped from
+/// persistence rather than ever being written to disk in plaintext. The
+/// in-memory copy the caller holds is unaffected, so the current connection
+/// still works — the user just has to re-enter the credential next time.
 pub fn encrypt_secret(plaintext: &str) -> String {
     if plaintext.is_empty() || plaintext.starts_with(ENC_PREFIX) {
         return plaintext.to_string();
     }
     let Some(key) = master_key() else {
-        warn_plaintext_once();
-        return plaintext.to_string();
+        warn_secret_dropped_once();
+        return String::new();
     };
     let Some(nonce_bytes) = random_bytes::<NONCE_LEN>() else {
-        return plaintext.to_string();
+        warn_secret_dropped_once();
+        return String::new();
     };
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key));
     let nonce = Nonce::from_slice(&nonce_bytes);
@@ -107,7 +114,10 @@ pub fn encrypt_secret(plaintext: &str) -> String {
             blob.extend_from_slice(&ciphertext);
             format!("{}{}", ENC_PREFIX, BASE64.encode(blob))
         }
-        Err(_) => plaintext.to_string(),
+        Err(_) => {
+            warn_secret_dropped_once();
+            String::new()
+        }
     }
 }
 
@@ -189,11 +199,23 @@ mod tests {
 
     #[test]
     fn roundtrip_when_keyring_available() {
-        // Only meaningful where a keyring backend exists; otherwise both calls
-        // are no-ops and the assertion still holds.
         let enc = encrypt_secret("s3cr3t");
-        let dec = decrypt_secret(&enc);
-        assert_eq!(dec, "s3cr3t");
+        if secret_storage_available() {
+            assert!(enc.starts_with(ENC_PREFIX), "must never store plaintext");
+            assert_eq!(decrypt_secret(&enc), "s3cr3t");
+        } else {
+            // Degraded machines must DROP the secret, never persist plaintext.
+            assert_eq!(enc, "");
+        }
+    }
+
+    #[test]
+    fn encrypt_never_returns_plaintext_for_nonempty_input() {
+        // Regardless of keyring availability, the stored form of a non-empty
+        // secret is either encrypted (enc:v1:) or empty — plaintext must never
+        // be handed back for persistence.
+        let enc = encrypt_secret("hunter2");
+        assert!(enc.is_empty() || enc.starts_with(ENC_PREFIX));
     }
 
     #[test]

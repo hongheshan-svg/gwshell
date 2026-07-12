@@ -415,11 +415,15 @@ async fn ssh_connect_saved(
 }
 
 #[tauri::command]
-async fn ssh_trust_host(host: String, port: u16, fingerprint: String, key_type: String) {
-    let _ = tokio::task::spawn_blocking(move || {
-        ssh::trust_host(&host, port, &fingerprint, &key_type);
-    })
-    .await;
+async fn ssh_trust_host(
+    host: String,
+    port: u16,
+    fingerprint: String,
+    key_type: String,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || ssh::trust_host(&host, port, &fingerprint, &key_type))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
