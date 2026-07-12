@@ -6,6 +6,32 @@
 发布说明由 CI（`.github/workflows/release.yml`）按标签版本号自动从本文件提取，
 因此每个版本的小节标题必须形如 `## vX.Y.Z - YYYY-MM-DD`。
 
+## [未发布]
+
+### 🔒 安全
+
+- **无密钥环时不再明文落盘凭据**：此前当系统密钥环不可用（或加密失败）时，`encrypt_secret` 会回退为返回明文，导致 SSH / 跳板 / 代理密码与 TOTP 密钥以明文写入本地数据库。现改为丢弃该密钥（存为空串），仅持久化会话元数据；前端据 `secret_storage_available` 提示「密码将不会被保存」。
+- **`ssh_trust_host` 覆盖防护**：信任主机指纹的 IPC 命令此前会无条件覆盖已固定的指纹，MITM 判定完全依赖前端。现后端拒绝用不同指纹覆盖同密钥族的已固定条目（即指纹变更告警场景），并将命令改为返回错误由前端提示；Unix 下 `known_hosts.json` 权限收紧为 `0600`。
+- **SFTP 目录下载路径穿越**：递归下载时，恶意 / 被控 SFTP 服务器可通过含 `..`、`/`、`\` 的目录项名逃出本地下载根目录。现对每个远端条目名做校验，`.`/`..`/空名跳过、含分隔符或 NUL 的中止整个传输。
+- **PTY 写线程泄漏**：`close_pty_wait` 现会 join 写线程，修复队列压力下的线程泄漏。
+- **Argon2id 参数**：为主口令锁的 Argon2id 参数补充 OWASP 依据注释。
+
+### ✨ 新增
+
+- **串口流控**：串口配置新增流控选项（无 / 软件 XON-XOFF / 硬件 RTS-CTS）。
+- **Toast 通知 + 确认对话框系统**：新增 toast 通知与带焦点陷阱的确认对话框，替换原生 `window.confirm` 调用点；更新检查、安全提示、乐观回滚失败等改由 toast 呈现。
+
+### 🐛 修复
+
+- **命令补全**：`lookupCommands` 改为大小写不敏感，并修复历史预算下溢。
+
+### 🔧 发布 / CI
+
+- 新增 `cargo audit` + `npm audit` 工作流（PR 严格阻断、每周巡检告警）；发布产物附带 CycloneDX SBOM。
+- 扩充静态 smoke 检查：i18n en/zh key 对齐、后端 emit ↔ 前端 listen 事件名对齐、capabilities 白名单、无 `window.confirm`。
+- 依赖固定：xterm 全家桶 beta 版本改为精确 pin（去除 `^`），避免 `npm install` 滑到不同 beta 序号。
+- 迁移至 ESLint 9 flat config，补齐 lint / format / test:node / ci:check 脚本。
+
 ## v0.5.5 - 2026-06-19
 
 ### 🐛 修复

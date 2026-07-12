@@ -43,7 +43,13 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      # npm audit for production deps only, high+ severity. Warning-only
-      # (returns non-zero on findings) — surfaced as a CI warning, not a fail.
+      # npm audit for production deps only, high+ severity. Strict on PRs
+      # (fails the check, mirroring the cargo-audit policy above); warning-only
+      # on the weekly schedule so drift is surfaced without blocking.
       - name: npm audit (high+ only)
-        run: npm audit --omit=dev --audit-level=high || true
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            npm audit --omit=dev --audit-level=high
+          else
+            npm audit --omit=dev --audit-level=high || true
+          fi

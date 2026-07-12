@@ -22,9 +22,22 @@ npm run build
 
 # Static smoke check (scans for common code issues, no runtime)
 npm run smoke:check
+
+# Rust backend tests (170+ unit/integration tests)
+cd src-tauri && cargo test
+
+# Frontend node-based tests (completion, split layout, webgl lifecycle)
+npm run test:node
+
+# Full CI gate locally (build + smoke + lint + format:check + test:node)
+npm run ci:check
 ```
 
-There are no automated tests in this project. Use `npm run smoke:check` to catch common issues before committing.
+Testing: the Rust backend has 170+ tests (`cargo test`); the frontend has no
+component-test framework but ships targeted node scripts (`npm run test:node`)
+plus the static smoke check. Run `npm run ci:check` before committing to mirror
+what CI enforces. Backend CI additionally runs `cargo fmt`, `cargo clippy -- -D
+warnings`, and `cargo audit` across a 3-OS matrix.
 
 ### Prerequisites
 
@@ -57,8 +70,9 @@ GWShell is a **Tauri 2** desktop application: a React/TypeScript frontend render
 - **`metrics.rs`** — server panel poller: CPU/mem/disk/NIC/process stats over `ssh exec`
 - **`session.rs`** — `SessionConfig` data structure
 - **`database.rs`** — SQLite persistence via `rusqlite` (sessions, settings, command history, snippets), stored in `%LOCALAPPDATA%/gwshell/`
-- **`crypto.rs`** / **`vault.rs`** — secrets are encrypted before they touch SQLite (OS keyring master key); optional Argon2id master-passphrase app lock
+- **`crypto.rs`** / **`vault.rs`** — secrets are encrypted before they touch SQLite (OS keyring master key); optional Argon2id master-passphrase app lock. When no OS keyring is available, secrets are dropped (stored empty) rather than written in plaintext — the frontend warns via `secret_storage_available`.
 - **`history.rs`** — command history persistence helpers
+- **`agent/`** — the AI server-assistant backend. `manager` tracks agent sessions; `provider` streams from the configured LLM API (key stored encrypted, never returned to the frontend); `types` defines the tool/session data model; `tools` + `stream` build the read-only diagnostic commands (journal/service/docker/file tails); `risk` (`classify_tool_call`) classifies each proposed command's danger level; `policy` gates auto-execution; `redaction` strips secrets from evidence before it reaches the model; `audit` persists an audit trail; `prompt`, `alerts`, `log_filter`, `mock` support the rest. Security-sensitive: risk classification and the auto-execute allowlist live here.
 
 ### IPC Event Pattern
 
@@ -84,4 +98,4 @@ Every user-facing string goes through i18next. `gwshell.en.json` and `gwshell.zh
 
 ### Version Syncing
 
-`npm version` triggers a `postversion` script that syncs the version from `package.json` into `src-tauri/Cargo.toml` automatically.
+`npm version` triggers the `version` npm lifecycle script (see `package.json`), which rewrites the `version` field in `src-tauri/Cargo.toml` to match `package.json` and `git add`s it so the bump lands in the same commit/tag. `tauri.conf.json` has no `version` field — it inherits the version from Cargo.toml at build time.
