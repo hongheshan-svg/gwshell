@@ -1,6 +1,6 @@
 mod agent;
 mod crypto;
-mod database;
+pub mod database;
 mod docker;
 mod history;
 mod metrics;

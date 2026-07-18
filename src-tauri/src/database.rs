@@ -37,7 +37,13 @@ impl Database {
         })
     }
 
-    #[cfg(test)]
+    /// In-memory database for unit/integration tests. Runs the full refinery
+    /// migration path so the schema matches a production database.
+    ///
+    /// Exposed (not gated behind `#[cfg(test)]`) so the `tests/migrations.rs`
+    /// integration test can drive the from-scratch migration path. Not called
+    /// from app code.
+    #[doc(hidden)]
     pub fn new_in_memory_for_tests() -> Result<Self, String> {
         let mut conn = Connection::open_in_memory().map_err(|e| e.to_string())?;
         // In-memory DBs are always fresh - no bootstrap needed, refinery runs V001.
@@ -49,10 +55,14 @@ impl Database {
         })
     }
 
-    #[cfg(test)]
+    /// Open a database at an explicit path (rather than the platform data dir
+    /// used by [`Database::new`]). Runs the same bootstrap + migration path.
+    ///
+    /// Exposed (not gated behind `#[cfg(test)]`) so the `tests/migrations.rs`
+    /// integration test can drive the v0.5.5 baseline upgrade against a temp
+    /// file. Not part of the IPC surface and not called from app code.
+    #[doc(hidden)]
     pub fn new_from_path(db_path: &std::path::Path) -> Result<Self, String> {
-        // Test-only constructor: opens an arbitrary file path (used by the
-        // v0.5.5 baseline regression test which loads a pre-built fixture).
         let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
         conn.pragma_update(None, "journal_mode", "WAL").ok();
         conn.pragma_update(None, "synchronous", "NORMAL").ok();
@@ -63,6 +73,14 @@ impl Database {
         Ok(Self {
             conn: Mutex::new(conn),
         })
+    }
+
+    /// Lock and access the underlying connection. Exposed for migration tests
+    /// that need to inspect `sqlite_master` / `refinery_schema_history` directly.
+    /// Not part of the IPC surface.
+    #[doc(hidden)]
+    pub fn lock_conn_for_tests(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
+        self.conn.lock().map_err(|e| e.to_string())
     }
 
     fn db_path() -> Option<PathBuf> {
@@ -136,9 +154,15 @@ impl Database {
                         name TEXT NOT NULL,
                         applied_on TEXT NOT NULL,
                         checksum TEXT NOT NULL
-                    );
-                    INSERT INTO {HISTORY_TABLE} (version, name, applied_on, checksum)
-                    VALUES (?1, ?2, ?3, ?4);"
+                    );"
+                ),
+                [],
+            )
+            .map_err(|e| format!("baseline bootstrap failed: {}", e))?;
+            conn.execute(
+                &format!(
+                    "INSERT INTO {HISTORY_TABLE} (version, name, applied_on, checksum)
+                    VALUES (?1, ?2, ?3, ?4)"
                 ),
                 params![
                     v001.version() as i64,
