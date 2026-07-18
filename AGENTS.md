@@ -46,6 +46,23 @@ There is no Vitest/Jest runner. Tests are standalone Node scripts run directly:
 
 Both transpile TS in-memory via the `typescript` package; no build step needed.
 
+Rust unit/integration tests: `cd src-tauri && cargo test`. Integration tests live in `src-tauri/tests/` (e.g. `tests/migrations.rs` exercises the refinery migration path).
+
+## Database migrations
+
+Schema changes use [`refinery`](https://crates.io/crates/refinery) (embedded SQL files in `src-tauri/migrations/`). The current schema baseline is captured in `V001__initial.sql`. refinery tracks applied versions in a `refinery_schema_history` table (columns: `version`, `name`, `applied_on`, `checksum`) that it owns - do not edit it by hand.
+
+To add a schema change:
+
+1. Create `src-tauri/migrations/V0NN__description.sql` (zero-padded version, double-underscore separator, snake_case name).
+2. If the change has a migration-relevant regression case, add a fixture under `src-tauri/tests/fixtures/` and a test in `src-tauri/tests/migrations.rs`.
+3. Run `cd src-tauri && cargo test --test migrations` to verify both the from-scratch and upgrade paths.
+4. Commit the migration + test together.
+
+Never edit an existing migration file - always add a new one. refinery checksums each file at build time via `embed_migrations!`; editing an applied migration triggers a `DivergentVersion` error because the on-disk row's checksum no longer matches.
+
+The `Database::migrate_to_v001_baseline` helper in `database.rs` handles the one-time upgrade of pre-refinery (v0.5.5) databases: it detects databases that have a `sessions` table but no `refinery_schema_history`, inserts a V001 row with the exact checksum refinery would compute, and lets refinery skip V001 (treating it as already applied). Do not modify it - it is a one-shot bootstrap for the v0.5.5 -> v0.6.0 upgrade path and will never run on databases created after this change.
+
 ## Architecture notes (not obvious from filenames)
 
 - **IPC contract**: frontend `invoke(name)` ↔ backend `#[tauri::command] fn name` registered in `lib.rs` `generate_handler!`. Backend pushes events: `pty-data-{id}`, `ssh-data-{id}`, `serial-data-{id}`, `*-exit-{id}`, `sftp-progress-{id}`, `server-metrics-{id}`.
