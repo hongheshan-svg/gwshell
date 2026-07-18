@@ -2298,6 +2298,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "tempfile",
+ "time",
  "tokio",
  "toml 0.8.2",
  "uuid",

@@ -1,7 +1,12 @@
 use crate::session::SessionConfig;
+use refinery::embed_migrations;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::PathBuf;
 use std::sync::Mutex;
+
+// Embeds every `VNN__name.sql` file under src-tauri/migrations/ as a `migrations`
+// module exposing `runner()`. Path is relative to CARGO_MANIFEST_DIR (src-tauri/).
+embed_migrations!("migrations");
 
 pub struct Database {
     conn: Mutex<Connection>,
@@ -13,81 +18,139 @@ impl Database {
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-        let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
-        // Enable WAL mode for faster reads and concurrent access
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
-            .map_err(|e| e.to_string())?;
-        let db = Self {
+        let mut conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
+        // Enable WAL mode for faster reads and concurrent access.
+        conn.pragma_update(None, "journal_mode", "WAL").ok();
+        conn.pragma_update(None, "synchronous", "NORMAL").ok();
+        // Bootstrap pre-refinery (v0.5.5) databases into refinery's bookkeeping
+        // so V001 is treated as already applied. Fresh installs are left to
+        // refinery to create from scratch. Must run before `migrations::runner`
+        // and uses an immutable borrow (refinery takes `&mut conn` next).
+        Self::migrate_to_v001_baseline(&conn)?;
+        // Apply any pending migrations (V001 for fresh installs, V002+ going
+        // forward). refinery creates/owns the `refinery_schema_history` table.
+        migrations::runner()
+            .run(&mut conn)
+            .map_err(|e| format!("migration failed: {}", e))?;
+        Ok(Self {
             conn: Mutex::new(conn),
-        };
-        db.init_tables()?;
-        Ok(db)
+        })
     }
 
     #[cfg(test)]
     pub fn new_in_memory_for_tests() -> Result<Self, String> {
-        let conn = Connection::open_in_memory().map_err(|e| e.to_string())?;
-        let db = Self {
+        let mut conn = Connection::open_in_memory().map_err(|e| e.to_string())?;
+        // In-memory DBs are always fresh - no bootstrap needed, refinery runs V001.
+        migrations::runner()
+            .run(&mut conn)
+            .map_err(|e| format!("migration failed: {}", e))?;
+        Ok(Self {
             conn: Mutex::new(conn),
-        };
-        db.init_tables()?;
-        Ok(db)
+        })
+    }
+
+    #[cfg(test)]
+    pub fn new_from_path(db_path: &std::path::Path) -> Result<Self, String> {
+        // Test-only constructor: opens an arbitrary file path (used by the
+        // v0.5.5 baseline regression test which loads a pre-built fixture).
+        let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+        conn.pragma_update(None, "journal_mode", "WAL").ok();
+        conn.pragma_update(None, "synchronous", "NORMAL").ok();
+        Self::migrate_to_v001_baseline(&conn)?;
+        migrations::runner()
+            .run(&mut conn)
+            .map_err(|e| format!("migration failed: {}", e))?;
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
     }
 
     fn db_path() -> Option<PathBuf> {
         dirs::data_local_dir().map(|d| d.join("gwshell").join("gwshell.db"))
     }
 
-    fn init_tables(&self) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS sessions (
-                id TEXT PRIMARY KEY,
-                data TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS groups (
-                name TEXT PRIMARY KEY,
-                data TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS app_settings (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS agent_audit (
-                id TEXT PRIMARY KEY,
-                agent_session_id TEXT NOT NULL,
-                target_session_id TEXT NOT NULL,
-                started_at INTEGER NOT NULL,
-                finished_at INTEGER,
-                objective TEXT NOT NULL,
-                status TEXT NOT NULL,
-                report_json TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_agent_audit_target ON agent_audit(target_session_id, started_at DESC);
-            CREATE TABLE IF NOT EXISTS command_history (
-                id      INTEGER PRIMARY KEY AUTOINCREMENT,
-                command TEXT NOT NULL,
-                ts      INTEGER NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_cmd_ts ON command_history(ts DESC);
-            CREATE TABLE IF NOT EXISTS snippets (
-                id   TEXT PRIMARY KEY,
-                data TEXT NOT NULL
-            );",
-        )
-        .map_err(|e| e.to_string())?;
+    /// Bootstrap a pre-refinery (v0.5.5) database into the refinery world.
+    ///
+    /// refinery tracks applied migrations in `refinery_schema_history`. Old
+    /// databases created by the removed `init_tables` have no such table but
+    /// DO have a `sessions` table whose schema already matches V001 (the old
+    /// `init_tables` created the same tables). We detect this case and insert
+    /// a V001 row into `refinery_schema_history` with the exact checksum
+    /// refinery computes for V001, so refinery skips V001 (treating it as
+    /// already applied) and only applies V002+ going forward.
+    ///
+    /// If neither `refinery_schema_history` nor `sessions` exists, this is a
+    /// fresh install - we do nothing and let refinery run V001 from scratch.
+    ///
+    /// Must be called BEFORE `migrations::runner().run(&mut conn)` and takes
+    /// an immutable `&Connection` so the caller can still hand refinery a
+    /// `&mut Connection` afterwards (no borrow conflict).
+    fn migrate_to_v001_baseline(conn: &Connection) -> Result<(), String> {
+        const HISTORY_TABLE: &str = "refinery_schema_history";
 
-        // Idempotent migration: add scoping columns to command_history if absent.
-        // ALTER errors with "duplicate column name" on later runs — ignored.
-        for col in ["cwd", "scope", "session_type"] {
-            let _ = conn.execute(
-                &format!(
-                    "ALTER TABLE command_history ADD COLUMN {} TEXT NOT NULL DEFAULT ''",
-                    col
-                ),
-                [],
-            );
+        // 1. Is refinery already managing this database? (any DB created via
+        //    `migrations::runner().run()` after this code shipped)
+        let already_managed: bool = conn
+            .query_row(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1",
+                params![HISTORY_TABLE],
+                |_| Ok(true),
+            )
+            .unwrap_or(false);
+        if already_managed {
+            return Ok(());
         }
+
+        // 2. Does the old sessions table exist? (v0.5.5 database)
+        let has_sessions: bool = conn
+            .query_row(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='sessions'",
+                [],
+                |_| Ok(true),
+            )
+            .unwrap_or(false);
+
+        if has_sessions {
+            // Recompute the V001 checksum so refinery's `verify_migrations`
+            // treats the inserted row as identical to the filesystem migration
+            // (same name+version+checksum => not divergent => V001 is skipped).
+            // `Migration::unapplied` parses "V001__initial" -> version=1,
+            // name="initial" and SipHashes (name, version, sql) the same way
+            // refinery's `embed_migrations!` does at build time.
+            let sql = migrations::runner()
+                .get_migrations()
+                .iter()
+                .find(|m| m.version() == 1)
+                .and_then(|m| m.sql())
+                .ok_or_else(|| "V001 migration not found in embedded migrations".to_string())?
+                .to_string();
+            let v001 = refinery::Migration::unapplied("V001__initial", &sql)
+                .map_err(|e| format!("failed to compute V001 checksum: {}", e))?;
+            let applied_on = time::OffsetDateTime::now_utc()
+                .format(&time::format_description::well_known::Rfc3339)
+                .map_err(|e| format!("failed to format timestamp: {}", e))?;
+            conn.execute(
+                &format!(
+                    "CREATE TABLE IF NOT EXISTS {HISTORY_TABLE} (
+                        version INTEGER PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        applied_on TEXT NOT NULL,
+                        checksum TEXT NOT NULL
+                    );
+                    INSERT INTO {HISTORY_TABLE} (version, name, applied_on, checksum)
+                    VALUES (?1, ?2, ?3, ?4);"
+                ),
+                params![
+                    v001.version() as i64,
+                    v001.name(),
+                    applied_on,
+                    v001.checksum().to_string()
+                ],
+            )
+            .map_err(|e| format!("baseline bootstrap failed: {}", e))?;
+        }
+        // else: fresh install - refinery will create everything via V001.
+
         Ok(())
     }
 

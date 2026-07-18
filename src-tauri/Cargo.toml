@@ -54,6 +54,9 @@ argon2 = "0.5"
 # Schema migrations: refinery embeds SQL files in src-tauri/migrations/ and
 # tracks applied versions in the schema_migrations table.
 refinery = { version = "0.8", features = ["rusqlite"] }
+# Used by database.rs to format refinery bootstrap timestamps as RFC3339.
+# Pinned to match refinery-core's version to avoid pulling a duplicate.
+time = { version = "0.3", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"
