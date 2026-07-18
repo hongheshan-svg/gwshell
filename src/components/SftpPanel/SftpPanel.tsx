@@ -453,7 +453,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
         const files = Array.isArray(selected) ? selected : [selected];
         for (const fileEntry of files) {
           const path =
-            typeof fileEntry === 'string' ? fileEntry : (fileEntry as { path: string }).path; // eslint-disable-line no-restricted-syntax
+            typeof fileEntry === 'string' ? fileEntry : (fileEntry as { path: string }).path; // eslint-disable-line no-restricted-syntax -- Tauri open() returns string|object union; narrowing to {path}
           // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- || correct: pop() can return "" for trailing-slash paths, fallback to 'file'
           const fileName = path.replace(/\\/g, '/').split('/').pop() || 'file';
           const remotePath = currentPath === '/' ? `/${fileName}` : `${currentPath}/${fileName}`;

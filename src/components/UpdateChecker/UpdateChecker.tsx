@@ -151,6 +151,15 @@ export const UpdateChecker: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
+  // Reset ready/error surfacing flags when starting a new check cycle,
+  // so a retry after error (or re-download after ready) can re-surface the toast.
+  useEffect(() => {
+    if (state === 'idle' || state === 'checking') {
+      surfacedReadyRef.current = false;
+      surfacedErrorRef.current = false;
+    }
+  }, [state]);
+
   // Progress is captured for potential future status-bar display; the toast
   // system doesn't support in-place updates so we don't spam per-tick toasts.
   useEffect(() => {

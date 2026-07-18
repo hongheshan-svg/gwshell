@@ -18,7 +18,7 @@ const colorLabels = [
   '#9ca3af',
 ];
 
-const serialTabKeys = ['standard', 'advanced'] as const; // eslint-disable-line no-restricted-syntax
+const serialTabKeys = ['standard', 'advanced'] as const; // eslint-disable-line no-restricted-syntax -- literal tuple type for discriminated union keys
 
 const BAUD_RATES = [
   '300',

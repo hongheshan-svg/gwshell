@@ -32,7 +32,7 @@ export const AgentActionQueue: React.FC = () => {
     if (action.risk === 'high' || action.risk === 'blocked') return;
     if (action.risk !== 'read_only') {
       const ok = await confirm({
-        title: t('agent_action_confirm', { risk: action.risk }),
+        title: t('agent_action_confirm_title'),
         message: t('agent_action_confirm', { risk: action.risk }),
         danger: true,
         confirmLabel: t('common.confirm'),

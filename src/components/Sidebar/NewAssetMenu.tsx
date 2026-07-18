@@ -78,7 +78,7 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
   const handleItemMouseEnter = (itemId: string, e: React.MouseEvent) => {
     setHoveredItem(itemId);
     if (itemId === 'remote') {
-      const target = e.currentTarget as HTMLElement; // eslint-disable-line no-restricted-syntax
+      const target = e.currentTarget as HTMLElement; // eslint-disable-line no-restricted-syntax -- DOM EventTarget narrowing; getBoundingClientRect needs HTMLElement
       const rect = target.getBoundingClientRect();
       // Flush against the panel's right edge (no gap). The submenu is a DOM child
       // of .new-asset-menu, so a flush position lets the cursor move from the

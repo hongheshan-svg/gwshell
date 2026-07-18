@@ -23,7 +23,7 @@ export const useSnippetStore = create<SnippetStore>((set, get) => ({
       const snippets = rows
         .map((r) => {
           try {
-            return JSON.parse(r) as Snippet; // eslint-disable-line no-restricted-syntax
+            return JSON.parse(r) as Snippet; // eslint-disable-line no-restricted-syntax -- JSON.parse returns unknown; narrowing via Snippet
           } catch {
             return null;
           }

@@ -344,6 +344,7 @@
   "agent_action_start_stream": "实时监听",
   "agent_action_stop_stream": "停止监听",
   "agent_action_confirm": "确认执行 {{risk}} 风险动作？",
+  "agent_action_confirm_title": "确认操作",
   "settings_section_basic": "基本",
   "settings_theme": "主题",
   "settings_middle_close": "鼠标中键关闭选项卡",
@@ -706,7 +707,8 @@
     "info": "提示",
     "dismiss": "关闭",
     "confirm": "确认",
-    "cancel": "取消"
+    "cancel": "取消",
+    "notifications": "通知"
   },
   "toast": {
     "sessionDeleted": "会话已删除",

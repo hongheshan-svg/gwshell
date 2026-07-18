@@ -33,7 +33,7 @@ export const DockerModal: React.FC = () => {
     name: '',
     color_label: '',
     environment: '',
-    docker_protocol: 'unix' as 'unix' | 'tcp' | 'http' | 'https', // eslint-disable-line no-restricted-syntax
+    docker_protocol: 'unix' as 'unix' | 'tcp' | 'http' | 'https', // eslint-disable-line no-restricted-syntax -- literal widening for union default value
     docker_unix_path: '/var/run/docker.sock',
     docker_connect_method: 'SSH',
     docker_ssh_tunnel: '',

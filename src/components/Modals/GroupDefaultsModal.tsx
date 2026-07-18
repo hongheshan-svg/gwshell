@@ -35,7 +35,7 @@ export const GroupDefaultsModal: React.FC = () => {
     const cleaned: GroupDefaults = {};
     for (const [k, v] of Object.entries(defs)) {
       if (v !== undefined && v !== null && v !== '') {
-        (cleaned as Record<string, unknown>)[k] = v; // eslint-disable-line no-restricted-syntax
+        (cleaned as Record<string, unknown>)[k] = v; // eslint-disable-line no-restricted-syntax -- dynamic field assignment on GroupDefaults; index signature required
       }
     }
     const all = loadGroupDefaults();
@@ -78,7 +78,7 @@ export const GroupDefaultsModal: React.FC = () => {
             value={defs.port ?? ''}
             onChange={(e) => {
               const v = e.target.value;
-              set('port', v === '' ? '' : (parseInt(v, 10) as unknown as undefined)); // eslint-disable-line no-restricted-syntax
+              set('port', v === '' ? '' : (parseInt(v, 10) as unknown as undefined)); // eslint-disable-line no-restricted-syntax -- number-to-undefined cast; union field accepts number|undefined|''
             }}
             placeholder="22"
             min={1}
@@ -93,7 +93,7 @@ export const GroupDefaultsModal: React.FC = () => {
             onChange={
               (e) =>
                 // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-                set('auth_method', (e.target.value as GroupDefaults['auth_method']) || undefined) // eslint-disable-line no-restricted-syntax
+                set('auth_method', (e.target.value as GroupDefaults['auth_method']) || undefined) // eslint-disable-line no-restricted-syntax -- select value union; runtime-validated by onChange
             }
           >
             <option value="">—</option>
@@ -132,7 +132,7 @@ export const GroupDefaultsModal: React.FC = () => {
             value={defs.jump_port ?? ''}
             onChange={(e) => {
               const v = e.target.value;
-              set('jump_port', v === '' ? '' : (parseInt(v, 10) as unknown as undefined)); // eslint-disable-line no-restricted-syntax
+              set('jump_port', v === '' ? '' : (parseInt(v, 10) as unknown as undefined)); // eslint-disable-line no-restricted-syntax -- number-to-undefined cast; union field accepts number|undefined|''
             }}
             placeholder="22"
             min={1}
@@ -167,7 +167,7 @@ export const GroupDefaultsModal: React.FC = () => {
             onChange={
               (e) =>
                 // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-                set('proxy_type', (e.target.value as GroupDefaults['proxy_type']) || undefined) // eslint-disable-line no-restricted-syntax
+                set('proxy_type', (e.target.value as GroupDefaults['proxy_type']) || undefined) // eslint-disable-line no-restricted-syntax -- select value union; runtime-validated by onChange
             }
           >
             <option value="">—</option>
@@ -194,7 +194,7 @@ export const GroupDefaultsModal: React.FC = () => {
             value={defs.proxy_port ?? ''}
             onChange={(e) => {
               const v = e.target.value;
-              set('proxy_port', v === '' ? '' : (parseInt(v, 10) as unknown as undefined)); // eslint-disable-line no-restricted-syntax
+              set('proxy_port', v === '' ? '' : (parseInt(v, 10) as unknown as undefined)); // eslint-disable-line no-restricted-syntax -- number-to-undefined cast; union field accepts number|undefined|''
             }}
             placeholder="1080"
             min={1}

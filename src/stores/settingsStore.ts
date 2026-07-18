@@ -139,7 +139,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     try {
       const json = await invoke<string | null>('load_app_settings');
       if (json) {
-        const saved = JSON.parse(json) as Partial<AppSettings>; // eslint-disable-line no-restricted-syntax
+        const saved = JSON.parse(json) as Partial<AppSettings>; // eslint-disable-line no-restricted-syntax -- JSON.parse returns unknown; narrowing via Partial<AppSettings>
         const merged = { ...defaultSettings, ...saved };
         const settings = normalizeSettings(saved);
         set({ settings, loaded: true, hasSaved: true });

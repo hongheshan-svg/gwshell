@@ -344,6 +344,7 @@
   "agent_action_start_stream": "Start live",
   "agent_action_stop_stream": "Stop live",
   "agent_action_confirm": "Run this {{risk}} risk action?",
+  "agent_action_confirm_title": "Confirm Action",
   "settings_section_basic": "Basic",
   "settings_theme": "Theme",
   "settings_middle_close": "Middle-click Close Tab",
@@ -706,7 +707,8 @@
     "info": "Information",
     "dismiss": "Dismiss",
     "confirm": "Confirm",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "notifications": "Notifications"
   },
   "toast": {
     "sessionDeleted": "Session deleted",

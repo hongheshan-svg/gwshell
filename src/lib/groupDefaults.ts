@@ -28,7 +28,7 @@ export function loadGroupDefaults(): GroupDefaultsMap {
     const raw = localStorage.getItem(KEY);
     if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? (parsed as GroupDefaultsMap) : {}; // eslint-disable-line no-restricted-syntax
+    return parsed && typeof parsed === 'object' ? (parsed as GroupDefaultsMap) : {}; // eslint-disable-line no-restricted-syntax -- JSON.parse returns unknown; narrowing via GroupDefaultsMap
   } catch {
     return {};
   }
@@ -55,7 +55,7 @@ export function applyGroupDefaults(session: SessionConfig, all: GroupDefaultsMap
   const out: SessionConfig = { ...session };
   for (const f of INHERITABLE_FIELDS) {
     if (isUnset(out[f]) && !isUnset(defs[f])) {
-      (out as unknown as Record<string, unknown>)[f] = defs[f]; // eslint-disable-line no-restricted-syntax
+      (out as unknown as Record<string, unknown>)[f] = defs[f]; // eslint-disable-line no-restricted-syntax -- dynamic field assignment on SessionConfig; index signature required
     }
   }
   return out;

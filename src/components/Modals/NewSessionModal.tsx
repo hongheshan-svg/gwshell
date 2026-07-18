@@ -528,7 +528,7 @@ export const NewSessionModal: React.FC = () => {
                       onChange={(e) =>
                         setForm({
                           ...form,
-                          tunnel_type: e.target.value as 'local' | 'remote' | 'dynamic', // eslint-disable-line no-restricted-syntax
+                          tunnel_type: e.target.value as 'local' | 'remote' | 'dynamic', // eslint-disable-line no-restricted-syntax -- select value union; runtime-validated by onChange
                         })
                       }
                     >
@@ -796,7 +796,7 @@ export const NewSessionModal: React.FC = () => {
                     onChange={(e) =>
                       setForm({
                         ...form,
-                        remote_shell: e.target.value as 'auto' | 'linux' | 'cmd' | 'powershell', // eslint-disable-line no-restricted-syntax
+                        remote_shell: e.target.value as 'auto' | 'linux' | 'cmd' | 'powershell', // eslint-disable-line no-restricted-syntax -- select value union; runtime-validated by onChange
                       })
                     }
                   >

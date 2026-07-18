@@ -53,7 +53,7 @@ const ShellPicker: React.FC<{
   useEffect(() => {
     if (!open) return;
     const handle = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); // eslint-disable-line no-restricted-syntax
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); // eslint-disable-line no-restricted-syntax -- DOM EventTarget to Node; runtime-checked by contains()
     };
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
