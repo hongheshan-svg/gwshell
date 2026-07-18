@@ -1,0 +1,44 @@
+# cargo-audit ignore list (documentation).
+#
+# cargo-audit 0.22 reads ignore IDs from the `--ignore` CLI flag, NOT from
+# this file. The actual ignore list lives in `.github/workflows/security.yml`
+# as `--ignore RUSTSEC-XXXX-YYYYX` arguments.
+#
+# This file exists to document the RATIONALE and RE-TRIAGE DATES for each
+# ignored advisory. Review quarterly: remove entries when the upstream
+# advisory is fixed (transitive dep upgraded) or the advisory is withdrawn.
+
+# === Re-triage: 2026-10-31 ===
+
+# quick-xml 0.38.4 / 0.39.2: DoS via namespace allocation + quadratic attribute check.
+# Transitive via tauri -> tauri-codegen. Cannot bump independently without
+# forking Tauri. Tracked upstream: tauri-apps/tauri.
+RUSTSEC-2026-0195  # quick-xml unbounded namespace allocation (DoS)
+RUSTSEC-2026-0194  # quick-xml quadratic duplicate-attribute check (DoS)
+
+# quinn-proto 0.11.14: remote memory exhaustion.
+# Transitive via reqwest/h3. Fix: upgrade reqwest when a patched quinn-proto
+# is available upstream.
+RUSTSEC-2026-0185  # quinn-proto remote memory exhaustion
+
+# GTK3 unmaintained crate family (transitive via tauri -> webkit2gtk on Linux).
+# Ecosystem-wide: webkit2gtk-4.1 pulls the gtk3 crate family, unmaintained as
+# of RustSec 2024-04xx. Cannot be removed until Tauri drops GTK3 or gtk-rs
+# resumes maintenance.
+RUSTSEC-2024-0411  # gdkwayland-sys unmaintained
+RUSTSEC-2024-0412  # gdk unmaintained
+RUSTSEC-2024-0413  # atk unmaintained
+RUSTSEC-2024-0414  # gdkx11-sys unmaintained
+RUSTSEC-2024-0415  # gtk unmaintained
+RUSTSEC-2024-0416  # atk-sys unmaintained
+RUSTSEC-2024-0417  # gdkx11 unmaintained
+RUSTSEC-2024-0418  # gdk-sys unmaintained
+RUSTSEC-2024-0419  # gtk3-macros unmaintained
+RUSTSEC-2024-0420  # gtk-sys unmaintained
+
+# Other unmaintained transitive crates.
+RUSTSEC-2025-0057  # fxhash unmaintained (transitive via tauri build deps)
+RUSTSEC-2024-0370  # proc-macro-error unmaintained (transitive via older proc-macro crates)
+RUSTSEC-2017-0008  # serial crate unmaintained (transitive; we use serialport, NOT serial)
+RUSTSEC-2025-0081  # unic-char-property unmaintained (transitive via tauri codegen)
+RUSTSEC-2025-0075  # unic-char-range unmaintained (transitive via tauri codegen)

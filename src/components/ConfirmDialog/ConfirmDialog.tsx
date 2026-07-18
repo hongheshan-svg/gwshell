@@ -14,8 +14,22 @@ export function ConfirmDialog() {
     if (!open) return;
     confirmBtnRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') respond(false);
-      if (e.key === 'Enter') respond(true);
+      if (e.key === 'Escape') {
+        respond(false);
+        return;
+      }
+      // Enter: only confirm if no button is focused. If a button IS focused,
+      // let its native click handler fire (so Enter on Cancel cancels, not
+      // confirms). This fixes the a11y bug where Tab to Cancel + Enter would
+      // confirm instead of cancel.
+      if (e.key === 'Enter') {
+        const active = document.activeElement;
+        const isButtonFocused =
+          active instanceof HTMLButtonElement && active.closest('.confirm-dialog');
+        if (!isButtonFocused) {
+          respond(true);
+        }
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
