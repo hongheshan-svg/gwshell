@@ -59,6 +59,7 @@ F. terminalConnection.ts  (depends on A, B, C, D - the setupConnection body)
 ### 2.2 Extraction A - `src/lib/terminalClipboard.ts`
 
 **Move from TerminalView.tsx:**
+
 - `PASSWORD_PROMPT_RE` (const regex, line 80)
 - `isPasteAction` (function, line 67)
 - `writeClipboardText` (function, line 83)
@@ -74,6 +75,7 @@ F. terminalConnection.ts  (depends on A, B, C, D - the setupConnection body)
 ### 2.3 Extraction B - `src/lib/terminalPlatform.ts`
 
 **Move from TerminalView.tsx:**
+
 - `cachedOsInfo` (let, line 135)
 - `osInfoPromise` (let, line 136)
 - `getOsInfo` (function, line 138)
@@ -90,6 +92,7 @@ F. terminalConnection.ts  (depends on A, B, C, D - the setupConnection body)
 ### 2.4 Extraction C - `src/lib/terminalCompletionState.ts`
 
 **Move from TerminalView.tsx (13 Maps + 3 Sets + helpers):**
+
 - `inputBuffers` (Map, 207)
 - `completionSetters` (Map, 208)
 - `completionAccept` (Map, 212)
@@ -113,6 +116,7 @@ F. terminalConnection.ts  (depends on A, B, C, D - the setupConnection body)
 ### 2.5 Extraction D - `src/lib/terminalLifecycle.ts`
 
 **Move from TerminalView.tsx (8 Maps/Sets/lets + helpers):**
+
 - `connectedTabs` (Set, 159)
 - `reconnectableTabs` (Set, 204)
 - `tabListenerCleanups` (Map, 188)
@@ -126,6 +130,7 @@ F. terminalConnection.ts  (depends on A, B, C, D - the setupConnection body)
 - Exported: `destroyTerminal` (333), `sendInputToTab` (324) -- **these are imported by 5 external files**
 
 **External caller import path updates (5 files):**
+
 - `src/components/Sidebar/SnippetPanel.tsx` -- `sendInputToTab` from `TerminalView` -> from `lib/terminalLifecycle`
 - `src/components/Terminal/TerminalAiDock.tsx` -- `sendInputToTab` same
 - `src/components/TabBar/TabBar.tsx` -- `destroyTerminal` same
@@ -158,6 +163,7 @@ F. terminalConnection.ts  (depends on A, B, C, D - the setupConnection body)
 
 **Move from TerminalView.tsx:**
 The `setupConnection` function body (lines ~1291-2335, ~1000 lines) -- the connection orchestration:
+
 - Tauri event wiring (`listen("ssh-data-{id}")`, `listen("ssh-exit-{id}")`, etc.)
 - writeQueue with backpressure
 - render coalescing (RAF-batched `terminal.write`)
@@ -170,6 +176,7 @@ The `setupConnection` function body (lines ~1291-2335, ~1000 lines) -- the conne
 - reconnect logic
 
 **Design:** factory function returning a cleanup handle:
+
 ```typescript
 export interface TerminalConnectionHandle {
   cleanup: () => void;
@@ -185,7 +192,7 @@ export function createTerminalConnection(opts: {
   onFingerprintPrompt: (info: FingerprintInfo) => Promise<boolean>;
   onDockerPick: (containers: DockerContainer[]) => Promise<string | null>;
   onCancelled: () => void;
-}): TerminalConnectionHandle
+}): TerminalConnectionHandle;
 ```
 
 **The `cancelled` flag pattern:** the current code uses a local `let cancelled = false` inside the effect, set to `true` in the cleanup function. All async callbacks check `if (cancelled) return` before writing to the terminal. The factory function captures this internally -- `cleanup()` sets `cancelled = true`, and all internal callbacks check it.
@@ -199,6 +206,7 @@ export function createTerminalConnection(opts: {
 ### 3.1 Strategy
 
 `global.css` (5981 lines, 100 sections) -> co-located per-component CSS. Keep `global.css` as a thin shell (≤ 200 lines) with only:
+
 - CSS reset / base styles
 - `:root` / `body` / `#root` layout
 - App-level layout (app-root, titlebar, sidebar shell, main content shell)
@@ -208,34 +216,34 @@ export function createTerminalConnection(opts: {
 
 Each major section in `global.css` moves to a co-located `.css` file next to its component:
 
-| global.css section (line range) | Target file | ~Lines |
-|---|---|---|
-| Icon Navbar (148-180) | `src/components/Sidebar/Sidebar.css` | 33 |
-| Sidebar Panel (181-306) | `src/components/Sidebar/Sidebar.css` | 126 |
-| Session Tree (307-451) | `src/components/Sidebar/SessionPanel.css` | 145 |
-| Tab Bar (461-593) | `src/components/TabBar/TabBar.css` | 133 |
-| Terminal Container (594-686) | `src/components/Terminal/TerminalContainer.css` | 93 |
-| Terminal AI dock (687-1123) | `src/components/Terminal/TerminalAiDock.css` | 437 |
-| Command completion dropdown (1124-1173) | `src/components/Terminal/CompletionDropdown.css` | 50 |
-| xterm scrollbar (1174-1268) | `src/components/Terminal/TerminalView.css` | 95 |
-| Terminal + SFTP Wrapper (1269-1279) | `src/components/SftpPanel/SftpPanel.css` | 11 |
-| In-terminal Search Bar (1280-1326) | `src/components/Terminal/TerminalSearchBar.css` | 47 |
-| SFTP Panel (1327-1925) | `src/components/SftpPanel/SftpPanel.css` | 599 |
-| SFTP Editor (1926-...) | `src/components/SftpPanel/SftpEditor.css` | ~100 |
-| Settings Modal (...-...) | `src/components/Settings/SettingsModal.css` | ~200 |
-| New Session Modal | `src/components/Modals/NewSessionModal.css` | ~150 |
-| Docker Modal | `src/components/Modals/DockerModal.css` | ~80 |
-| Local Terminal Modal | `src/components/Modals/LocalTerminalModal.css` | ~60 |
-| Serial Port Modal | `src/components/Modals/SerialPortModal.css` | ~70 |
-| Asset Table | `src/components/AssetTable/AssetTable.css` | ~120 |
-| Asset Dashboard | (already co-located) | - |
-| Server Panel | (already co-located) | - |
-| Command Palette | `src/components/CommandPalette/CommandPalette.css` | ~60 |
-| Agent Panel | `src/components/Agent/AgentPanel.css` | ~150 |
-| Unlock Screen | `src/components/UnlockScreen.css` | ~30 |
-| Update Checker / Security Notice | (already removed in wave 1) | - |
-| Status Bar | `src/components/StatusBar/StatusBar.css` | ~40 |
-| Title Bar (71-138) | `src/components/TitleBar/TitleBar.css` | 68 |
+| global.css section (line range)         | Target file                                        | ~Lines |
+| --------------------------------------- | -------------------------------------------------- | ------ |
+| Icon Navbar (148-180)                   | `src/components/Sidebar/Sidebar.css`               | 33     |
+| Sidebar Panel (181-306)                 | `src/components/Sidebar/Sidebar.css`               | 126    |
+| Session Tree (307-451)                  | `src/components/Sidebar/SessionPanel.css`          | 145    |
+| Tab Bar (461-593)                       | `src/components/TabBar/TabBar.css`                 | 133    |
+| Terminal Container (594-686)            | `src/components/Terminal/TerminalContainer.css`    | 93     |
+| Terminal AI dock (687-1123)             | `src/components/Terminal/TerminalAiDock.css`       | 437    |
+| Command completion dropdown (1124-1173) | `src/components/Terminal/CompletionDropdown.css`   | 50     |
+| xterm scrollbar (1174-1268)             | `src/components/Terminal/TerminalView.css`         | 95     |
+| Terminal + SFTP Wrapper (1269-1279)     | `src/components/SftpPanel/SftpPanel.css`           | 11     |
+| In-terminal Search Bar (1280-1326)      | `src/components/Terminal/TerminalSearchBar.css`    | 47     |
+| SFTP Panel (1327-1925)                  | `src/components/SftpPanel/SftpPanel.css`           | 599    |
+| SFTP Editor (1926-...)                  | `src/components/SftpPanel/SftpEditor.css`          | ~100   |
+| Settings Modal (...-...)                | `src/components/Settings/SettingsModal.css`        | ~200   |
+| New Session Modal                       | `src/components/Modals/NewSessionModal.css`        | ~150   |
+| Docker Modal                            | `src/components/Modals/DockerModal.css`            | ~80    |
+| Local Terminal Modal                    | `src/components/Modals/LocalTerminalModal.css`     | ~60    |
+| Serial Port Modal                       | `src/components/Modals/SerialPortModal.css`        | ~70    |
+| Asset Table                             | `src/components/AssetTable/AssetTable.css`         | ~120   |
+| Asset Dashboard                         | (already co-located)                               | -      |
+| Server Panel                            | (already co-located)                               | -      |
+| Command Palette                         | `src/components/CommandPalette/CommandPalette.css` | ~60    |
+| Agent Panel                             | `src/components/Agent/AgentPanel.css`              | ~150   |
+| Unlock Screen                           | `src/components/UnlockScreen.css`                  | ~30    |
+| Update Checker / Security Notice        | (already removed in wave 1)                        | -      |
+| Status Bar                              | `src/components/StatusBar/StatusBar.css`           | ~40    |
+| Title Bar (71-138)                      | `src/components/TitleBar/TitleBar.css`             | 68     |
 
 **Each co-located CSS file is imported by its component's `.tsx` file** (e.g. `import './TabBar.css'` at the top of `TabBar.tsx`). This matches the existing `Toast/toast.css` + `ToastProvider.tsx` pattern.
 
@@ -253,11 +261,13 @@ Each major section in `global.css` moves to a co-located `.css` file next to its
 ### 4.1 List row memoization
 
 **`SessionRow` (already `React.memo` in `SessionPanel.tsx:345`):**
+
 - Verify the memo comparison is correct (default shallow compare should work).
 - Verify the callbacks passed to it (`onConnect`, `onContextMenu`) are stabilized with `useCallback` in the parent.
 - If callbacks are inline, wrap them in `useCallback` with proper deps.
 
 **`AssetRow` (new `React.memo`):**
+
 - Extract the per-row JSX in `AssetTable.tsx` (the `.map((session) => ...)` at line 252) into a `AssetRow` component.
 - Wrap with `React.memo`.
 - Stabilize callbacks (`onConnect`, `onContextMenu`, `onDelete`) with `useCallback` in `AssetTable`.
@@ -265,13 +275,14 @@ Each major section in `global.css` moves to a co-located `.css` file next to its
 ### 4.2 useCallback stabilization
 
 Audit all callbacks passed to memoized children. The most common pattern to fix:
+
 ```tsx
 // Before (inline callback - breaks memo):
-<SessionRow onConnect={(s) => connect(s)} />
+<SessionRow onConnect={(s) => connect(s)} />;
 
 // After (stabilized):
 const handleConnect = useCallback((s: SessionConfig) => connect(s), [connect]);
-<SessionRow onConnect={handleConnect} />
+<SessionRow onConnect={handleConnect} />;
 ```
 
 ### 4.3 High-frequency-rerender components
@@ -313,13 +324,13 @@ PR1-2 are independent and can land in parallel. PR3 depends on PR1 (C imports fr
 
 ### 6.1 What's tested
 
-| Layer | Coverage |
-|---|---|
-| Existing Rust tests (170) | Unchanged - no backend changes. |
-| Existing Node tests (3 scripts) | Unchanged. |
-| Smoke check (6 checks) | Enforces IPC parity, i18n parity, event-name parity, capabilities allowlist, no-window-confirm. |
-| ESLint (0 violations) | Enforces no `any`, no `as` casts without disable-comment + reason, no floating promises. |
-| Manual verification | Terminal connect (SSH/local/serial/docker), copy/paste, completion dropdown, resize, theme switch, split panes, SFTP, context menu, fingerprint dialog, paste confirm. |
+| Layer                           | Coverage                                                                                                                                                               |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Existing Rust tests (170)       | Unchanged - no backend changes.                                                                                                                                        |
+| Existing Node tests (3 scripts) | Unchanged.                                                                                                                                                             |
+| Smoke check (6 checks)          | Enforces IPC parity, i18n parity, event-name parity, capabilities allowlist, no-window-confirm.                                                                        |
+| ESLint (0 violations)           | Enforces no `any`, no `as` casts without disable-comment + reason, no floating promises.                                                                               |
+| Manual verification             | Terminal connect (SSH/local/serial/docker), copy/paste, completion dropdown, resize, theme switch, split panes, SFTP, context menu, fingerprint dialog, paste confirm. |
 
 ### 6.2 What's NOT tested (acknowledged gaps)
 
@@ -330,6 +341,7 @@ PR1-2 are independent and can land in parallel. PR3 depends on PR1 (C imports fr
 ### 6.3 Verification checklist (per PR)
 
 After each PR:
+
 - `npm run lint` (0 violations)
 - `npm run build` (tsc + vite)
 - `npm run smoke:check` (6 checks)
@@ -341,13 +353,13 @@ After each PR:
 
 ## 7. Risk & Rollback
 
-| Risk | Mitigation |
-|---|---|
-| Extraction F (terminalConnection) breaks terminal behavior | PR5 is revertible independently of PR1-4. If F is unstable, revert just PR5 and keep A-E. |
-| CSS split causes visual regression | All class names stay the same; only file locations change. Vite bundles them identically. Manual visual check per PR6. |
-| `React.memo` causes stale UI (memo too aggressive) | Use default shallow compare. If a row shows stale data, the callback dep array is wrong -- fix the `useCallback` deps, don't remove the memo. |
-| External caller import path breaks (PR4) | CI's `smoke:check` + `tsc` catch missing imports. The 5 callers are known. |
-| Module-level state initialization order | The pre-warm IIFE in `terminalPlatform.ts` fires on import. As long as `TerminalView.tsx` imports the new modules, the IIFE runs. Verify with a `console.log` during dev. |
+| Risk                                                       | Mitigation                                                                                                                                                                |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Extraction F (terminalConnection) breaks terminal behavior | PR5 is revertible independently of PR1-4. If F is unstable, revert just PR5 and keep A-E.                                                                                 |
+| CSS split causes visual regression                         | All class names stay the same; only file locations change. Vite bundles them identically. Manual visual check per PR6.                                                    |
+| `React.memo` causes stale UI (memo too aggressive)         | Use default shallow compare. If a row shows stale data, the callback dep array is wrong -- fix the `useCallback` deps, don't remove the memo.                             |
+| External caller import path breaks (PR4)                   | CI's `smoke:check` + `tsc` catch missing imports. The 5 callers are known.                                                                                                |
+| Module-level state initialization order                    | The pre-warm IIFE in `terminalPlatform.ts` fires on import. As long as `TerminalView.tsx` imports the new modules, the IIFE runs. Verify with a `console.log` during dev. |
 
 ---
 

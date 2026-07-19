@@ -31,10 +31,12 @@ Implements `docs/superpowers/specs/2026-07-19-technical-debt-wave-design.md`.
 ### Task 1.1: Create `src/lib/terminalPlatform.ts`
 
 **Files:**
+
 - Create: `src/lib/terminalPlatform.ts`
 - Modify: `src/components/Terminal/TerminalView.tsx` (remove moved code, add import)
 
 **Interfaces:**
+
 - Produces: `getOsInfo`, `isMacPlatform`, `webglDebugEnabled`, `cellSize`, `isInteractiveTerminal`, `cachedOsInfo` (for internal use by clipboard module)
 
 - [ ] **Step 1: Read the source code to move**
@@ -115,6 +117,7 @@ export function cellSize(term: Terminal, el: HTMLElement): { w: number; h: numbe
 - [ ] **Step 3: Remove the moved code from `TerminalView.tsx`**
 
 Delete from `TerminalView.tsx`:
+
 - `cachedOsInfo` + `osInfoPromise` declarations (lines 135-136)
 - `getOsInfo` function (lines 138-153)
 - `void getOsInfo()` pre-warm (line 155)
@@ -128,7 +131,13 @@ Delete from `TerminalView.tsx`:
 Add to the imports at the top of `TerminalView.tsx`:
 
 ```typescript
-import { getOsInfo, isMacPlatform, webglDebugEnabled, isInteractiveTerminal, cellSize } from '../../lib/terminalPlatform';
+import {
+  getOsInfo,
+  isMacPlatform,
+  webglDebugEnabled,
+  isInteractiveTerminal,
+  cellSize,
+} from '../../lib/terminalPlatform';
 ```
 
 - [ ] **Step 5: Verify build + lint + smoke**
@@ -151,10 +160,12 @@ git commit -m "refactor(terminal): extract terminalPlatform (OS info cache, isMa
 ### Task 1.2: Create `src/lib/terminalClipboard.ts`
 
 **Files:**
+
 - Create: `src/lib/terminalClipboard.ts`
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
 **Interfaces:**
+
 - Consumes: `isMacPlatform` from `terminalPlatform.ts`
 - Produces: `PASSWORD_PROMPT_RE`, `isPasteAction`, `writeClipboardText`, `readClipboardText`, `readTerminalSelection`, `isCopyShortcut`, `isPasteShortcut`
 
@@ -169,13 +180,17 @@ Copy the following from `TerminalView.tsx` into the new file:
 // detection depends on isMacPlatform() from terminalPlatform.ts.
 
 import type { Terminal } from '@xterm/xterm';
-import { readText as clipboardRead, writeText as clipboardWrite } from '@tauri-apps/plugin-clipboard-manager';
+import {
+  readText as clipboardRead,
+  writeText as clipboardWrite,
+} from '@tauri-apps/plugin-clipboard-manager';
 import { isMacPlatform } from './terminalPlatform';
 
 // --- Password prompt detection (used by render coalescing to suppress
 // completions and history capture while the shell is asking for a password) ---
 
-export const PASSWORD_PROMPT_RE = /password:\s*$|passphrase:\s*$|verification code:\s*$|2fa code:\s*$|totp:\s*$|pin:\s*$/i;
+export const PASSWORD_PROMPT_RE =
+  /password:\s*$|passphrase:\s*$|verification code:\s*$|2fa code:\s*$|totp:\s*$|pin:\s*$/i;
 
 // --- Paste action detection (right/middle-click menu) ---
 
@@ -213,6 +228,7 @@ export function isPasteShortcut(e: KeyboardEvent, ctrlVPaste: boolean): boolean 
 - [ ] **Step 2: Remove the moved code from `TerminalView.tsx`**
 
 Delete from `TerminalView.tsx`:
+
 - `PASSWORD_PROMPT_RE` (lines 80-81)
 - `isPasteAction` (lines 67-68)
 - `writeClipboardText` (lines 83-91)
@@ -255,6 +271,7 @@ git commit -m "refactor(terminal): extract terminalClipboard (clipboard I/O, sho
 ### Task 2.1: Create `src/components/Terminal/types.ts`
 
 **Files:**
+
 - Create: `src/components/Terminal/types.ts`
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
@@ -308,6 +325,7 @@ git commit -m "refactor(terminal): extract shared overlay types to types.ts"
 ### Task 2.2: Create `TerminalContextMenu.tsx`
 
 **Files:**
+
 - Create: `src/components/Terminal/TerminalContextMenu.tsx`
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
@@ -352,15 +370,17 @@ Copy the EXACT JSX from the source. The `t('...')` calls stay the same.
 Replace the `contextMenu && isActive && (...)` block with:
 
 ```tsx
-{contextMenu && isActive && (
-  <TerminalContextMenu
-    state={contextMenu}
-    onCopy={copySelection}
-    onPaste={pasteClipboard}
-    onSelectAll={selectAllTerminal}
-    onClear={clearTerminal}
-  />
-)}
+{
+  contextMenu && isActive && (
+    <TerminalContextMenu
+      state={contextMenu}
+      onCopy={copySelection}
+      onPaste={pasteClipboard}
+      onSelectAll={selectAllTerminal}
+      onClear={clearTerminal}
+    />
+  );
+}
 ```
 
 - [ ] **Step 4: Add import in `TerminalView.tsx`**
@@ -387,6 +407,7 @@ git commit -m "refactor(terminal): extract TerminalContextMenu component"
 ### Task 2.3: Create `FingerprintDialog.tsx`
 
 **Files:**
+
 - Create: `src/components/Terminal/FingerprintDialog.tsx`
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
@@ -418,19 +439,21 @@ export function FingerprintDialog({ info, onAccept, onReject }: FingerprintDialo
 - [ ] **Step 3: Replace the inline JSX in `TerminalView.tsx`**
 
 ```tsx
-{fingerprintInfo && isActive && (
-  <FingerprintDialog
-    info={fingerprintInfo}
-    onAccept={() => {
-      fingerprintResolveRef.current?.(true);
-      setFingerprintInfo(null);
-    }}
-    onReject={() => {
-      fingerprintResolveRef.current?.(false);
-      setFingerprintInfo(null);
-    }}
-  />
-)}
+{
+  fingerprintInfo && isActive && (
+    <FingerprintDialog
+      info={fingerprintInfo}
+      onAccept={() => {
+        fingerprintResolveRef.current?.(true);
+        setFingerprintInfo(null);
+      }}
+      onReject={() => {
+        fingerprintResolveRef.current?.(false);
+        setFingerprintInfo(null);
+      }}
+    />
+  );
+}
 ```
 
 - [ ] **Step 4: Add import + verify**
@@ -455,6 +478,7 @@ git commit -m "refactor(terminal): extract FingerprintDialog component"
 ### Task 2.4: Create `PasteConfirmDialog.tsx`
 
 **Files:**
+
 - Create: `src/components/Terminal/PasteConfirmDialog.tsx`
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
@@ -485,17 +509,19 @@ export function PasteConfirmDialog({ text, onCancel, onPaste }: PasteConfirmDial
 - [ ] **Step 3: Replace the inline JSX in `TerminalView.tsx`**
 
 ```tsx
-{pasteConfirm !== null && (
-  <PasteConfirmDialog
-    text={pasteConfirm}
-    onCancel={() => setPasteConfirm(null)}
-    onPaste={() => {
-      const terminal = terminalInstances.get(tab.id)?.terminal;
-      if (terminal) terminal.paste(pasteConfirm);
-      setPasteConfirm(null);
-    }}
-  />
-)}
+{
+  pasteConfirm !== null && (
+    <PasteConfirmDialog
+      text={pasteConfirm}
+      onCancel={() => setPasteConfirm(null)}
+      onPaste={() => {
+        const terminal = terminalInstances.get(tab.id)?.terminal;
+        if (terminal) terminal.paste(pasteConfirm);
+        setPasteConfirm(null);
+      }}
+    />
+  );
+}
 ```
 
 - [ ] **Step 4: Add import + verify**
@@ -522,10 +548,12 @@ git commit -m "refactor(terminal): extract PasteConfirmDialog component"
 ### Task 3.1: Create `src/lib/terminalCompletionState.ts`
 
 **Files:**
+
 - Create: `src/lib/terminalCompletionState.ts`
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
 **Interfaces:**
+
 - Consumes: `CommandTable` type, `Completion` type, `tableForShellName`/`tableForRemoteShell` from `commandDictionary`
 - Produces: 13 named-export Maps + 4 helper functions + `resetCompletionState`
 
@@ -569,11 +597,11 @@ export const tabCommandTable = new Map<string, CommandTable>();
 
 export function tabScope(
   // Copy exact signature + body from TerminalView.tsx lines 263-275.
-)
+);
 
 export function syncTable(
   // Copy exact signature + body from TerminalView.tsx lines 277-285.
-)
+);
 
 export function normalizeTable(s: string): CommandTable {
   // Copy exact body from TerminalView.tsx lines 287-293.
@@ -607,6 +635,7 @@ export function resetCompletionState(tabId: string): void {
 - [ ] **Step 3: Remove the moved code from `TerminalView.tsx`**
 
 Delete from `TerminalView.tsx`:
+
 - All 13 Map/Set declarations (lines 207-237, excluding `REMOTE_OS_TTL_MS` if it's a const)
 - `tabScope`, `syncTable`, `normalizeTable`, `estimateDropdownRows` functions (lines 263-300)
 - The per-tab cleanup of these Maps inside `destroyTerminal` (replace with `resetCompletionState(tabId)` call)
@@ -615,11 +644,24 @@ Delete from `TerminalView.tsx`:
 
 ```typescript
 import {
-  inputBuffers, completionSetters, completionAccept, tabCwd,
-  remoteOsCache, REMOTE_OS_TTL_MS, tabCompletions, tabCompletionIdx,
-  completionNav, tabInputSenders, bracketedPaste, awaitingPassword,
-  awaitingPasswordTimer, tabCommandTable,
-  tabScope, syncTable, normalizeTable, estimateDropdownRows,
+  inputBuffers,
+  completionSetters,
+  completionAccept,
+  tabCwd,
+  remoteOsCache,
+  REMOTE_OS_TTL_MS,
+  tabCompletions,
+  tabCompletionIdx,
+  completionNav,
+  tabInputSenders,
+  bracketedPaste,
+  awaitingPassword,
+  awaitingPasswordTimer,
+  tabCommandTable,
+  tabScope,
+  syncTable,
+  normalizeTable,
+  estimateDropdownRows,
   resetCompletionState,
 } from '../../lib/terminalCompletionState';
 ```
@@ -646,10 +688,12 @@ git commit -m "refactor(terminal): extract terminalCompletionState (13 Maps + he
 ### Task 4.1: Create `src/lib/terminalLifecycle.ts`
 
 **Files:**
+
 - Create: `src/lib/terminalLifecycle.ts`
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
 **Interfaces:**
+
 - Consumes: `terminalInstances` from `terminalRegistry`, `resetCompletionState` + `tabInputSenders` from `terminalCompletionState`, `clearTerminalAiContext` from `terminalContext`
 - Produces: `connectedTabs`, `reconnectableTabs`, `tabListenerCleanups`, `terminalInteractionCleanups`, `fitFrameIds`, `settleTimerIds`, `pendingBackendResize`, `sentFirstResize`, `suggestedRendererTypeDom`, `cleanupTabListeners`, `cleanupTerminalInteractions`, `safeFit`, `scheduleTerminalFit`, `scheduleTerminalResizeSettle`, `forceTerminalRedraw`, `destroyTerminal`, `sendInputToTab`
 
@@ -669,10 +713,7 @@ Move the 8 Maps/Sets/lets and the 8 helper functions. Add imports for the depend
 
 import { invoke } from '@tauri-apps/api/core';
 import { terminalInstances } from '../components/Terminal/terminalRegistry';
-import {
-  tabInputSenders,
-  resetCompletionState,
-} from './terminalCompletionState';
+import { tabInputSenders, resetCompletionState } from './terminalCompletionState';
 import { clearTerminalAiContext } from './terminalContext';
 
 // --- Per-tab lifecycle state (module-level singletons) ---
@@ -729,14 +770,15 @@ export function scheduleTerminalFit(tabId: string): void {
 
 export function scheduleTerminalResizeSettle(
   // Copy exact signature + body from TerminalView.tsx lines 406-438.
-)
+);
 
 export function forceTerminalRedraw(
   // Copy exact signature + body from TerminalView.tsx lines 440-482.
-)
+);
 ```
 
-**IMPORTANT:** 
+**IMPORTANT:**
+
 1. `suggestedRendererTypeDom` is a `let` that's written to inside the WebGL catch block. Since `let` can't be exported mutably, add a `setSuggestedRendererTypeDom` setter and update the write site in `TerminalView.tsx` to call it.
 2. `destroyTerminal` currently inlines the cleanup of all completion Maps. Replace that with `resetCompletionState(tabId)` (from PR3).
 3. Copy ALL function bodies EXACTLY. No logic changes.
@@ -749,11 +791,23 @@ Delete the 8 Maps/Sets/lets (lines 159-204) and the 8 helper functions (lines 30
 
 ```typescript
 import {
-  connectedTabs, reconnectableTabs, tabListenerCleanups, terminalInteractionCleanups,
-  fitFrameIds, settleTimerIds, pendingBackendResize, sentFirstResize,
-  suggestedRendererTypeDom, setSuggestedRendererTypeDom,
-  cleanupTabListeners, cleanupTerminalInteractions, sendInputToTab,
-  destroyTerminal, safeFit, scheduleTerminalFit, scheduleTerminalResizeSettle,
+  connectedTabs,
+  reconnectableTabs,
+  tabListenerCleanups,
+  terminalInteractionCleanups,
+  fitFrameIds,
+  settleTimerIds,
+  pendingBackendResize,
+  sentFirstResize,
+  suggestedRendererTypeDom,
+  setSuggestedRendererTypeDom,
+  cleanupTabListeners,
+  cleanupTerminalInteractions,
+  sendInputToTab,
+  destroyTerminal,
+  safeFit,
+  scheduleTerminalFit,
+  scheduleTerminalResizeSettle,
   forceTerminalRedraw,
 } from '../../lib/terminalLifecycle';
 ```
@@ -780,6 +834,7 @@ git commit -m "refactor(terminal): extract terminalLifecycle (fit/resize/cleanup
 ### Task 4.2: Update 5 external callers' import paths
 
 **Files:**
+
 - Modify: `src/components/Sidebar/SnippetPanel.tsx`
 - Modify: `src/components/Terminal/TerminalAiDock.tsx`
 - Modify: `src/components/TabBar/TabBar.tsx`
@@ -788,10 +843,13 @@ git commit -m "refactor(terminal): extract terminalLifecycle (fit/resize/cleanup
 - [ ] **Step 1: Update `SnippetPanel.tsx`**
 
 Change:
+
 ```typescript
 import { sendInputToTab } from '../Terminal/TerminalView';
 ```
+
 To:
+
 ```typescript
 import { sendInputToTab } from '../../lib/terminalLifecycle';
 ```
@@ -799,10 +857,13 @@ import { sendInputToTab } from '../../lib/terminalLifecycle';
 - [ ] **Step 2: Update `TerminalAiDock.tsx`**
 
 Change:
+
 ```typescript
 import { sendInputToTab } from './TerminalView';
 ```
+
 To:
+
 ```typescript
 import { sendInputToTab } from '../../lib/terminalLifecycle';
 ```
@@ -810,10 +871,13 @@ import { sendInputToTab } from '../../lib/terminalLifecycle';
 - [ ] **Step 3: Update `TabBar.tsx`**
 
 Change:
+
 ```typescript
 import { destroyTerminal } from '../Terminal/TerminalView';
 ```
+
 To:
+
 ```typescript
 import { destroyTerminal } from '../../lib/terminalLifecycle';
 ```
@@ -821,10 +885,13 @@ import { destroyTerminal } from '../../lib/terminalLifecycle';
 - [ ] **Step 4: Update `keymap/actions.ts`**
 
 Change:
+
 ```typescript
 import { destroyTerminal } from '../components/Terminal/TerminalView';
 ```
+
 To:
+
 ```typescript
 import { destroyTerminal } from '../lib/terminalLifecycle';
 ```
@@ -851,10 +918,12 @@ git commit -m "refactor(terminal): update 4 external callers to import from term
 ### Task 5.1: Create `src/lib/terminalConnection.ts`
 
 **Files:**
+
 - Create: `src/lib/terminalConnection.ts`
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
 **Interfaces:**
+
 - Consumes: `TerminalInstance` from `terminalRegistry`, all exports from `terminalClipboard`, `terminalPlatform`, `terminalCompletionState`, `terminalLifecycle`
 - Produces: `createTerminalConnection(opts) => TerminalConnectionHandle`
 
@@ -863,6 +932,7 @@ git commit -m "refactor(terminal): update 4 external callers to import from term
 - [ ] **Step 1: Read the full `setupConnection` body**
 
 Read `TerminalView.tsx` from the `const setupConnection = async () => {` line (~1291) to its closing `};` (~2335). This is the code to move. Understand:
+
 - What closure variables it reads: `tab`, `instance` (the TerminalInstance), `sessionsRef`, `t`, `cancelled`, and the React state setters (`setFingerprintInfo`, `setPasteConfirm`, `setCompletionItems`/`setCompletionIndex`/`setCompletionPos` via `completionSetters`).
 - What it defines internally: `renderQueue`, `writeQueue`, `renderRafId`, various `listen()` cleanup functions.
 - The 4 connect branches: `localshell`, `ssh`, `serial`, `docker`.
@@ -900,7 +970,9 @@ export interface TerminalConnectionHandle {
   reconnect: () => Promise<void>;
 }
 
-export function createTerminalConnection(opts: TerminalConnectionOptions): TerminalConnectionHandle {
+export function createTerminalConnection(
+  opts: TerminalConnectionOptions,
+): TerminalConnectionHandle {
   let cancelled = false;
   // ... move the entire setupConnection body here ...
   // Replace `setFingerprintInfo(x)` with `opts.onFingerprintPrompt(x)` (await it).
@@ -912,6 +984,7 @@ export function createTerminalConnection(opts: TerminalConnectionOptions): Termi
 - [ ] **Step 3: Move the `setupConnection` body into `createTerminalConnection`**
 
 This is the hardest step. Copy the ENTIRE `setupConnection` function body into `createTerminalConnection`. Then:
+
 - Replace all `tab` references with `opts.tab`.
 - Replace `instance` with `opts.instance`.
 - Replace `sessionsRef` with `opts.sessionsRef`.
@@ -952,7 +1025,9 @@ const connection = createTerminalConnection({
       // Cancel handling stays the same.
     });
   },
-  onCancelled: () => { /* same as current cancelled = true effect */ },
+  onCancelled: () => {
+    /* same as current cancelled = true effect */
+  },
   terminalCmdHint,
   pasteWarnMultiline,
 });
@@ -974,6 +1049,7 @@ npm run build && npm run lint && npm run smoke:check && npm run format:check
 - [ ] **Step 6: Manual verification**
 
 Open the app and test:
+
 - Local shell: type commands, verify output appears.
 - SSH: connect to a host, verify fingerprint dialog appears, accept, type commands.
 - Serial: connect to a port (if available).
@@ -1010,6 +1086,7 @@ If unstable, revert this commit -- PR1-4 are valuable on their own."
 ### Task 6.1: Split global.css into ~20 co-located CSS files
 
 **Files:**
+
 - Create: ~20 co-located `.css` files (one per component directory)
 - Modify: `src/styles/global.css` (shrink to ≤ 200 lines)
 - Modify: ~20 `.tsx` files (add `import './ComponentName.css'`)
@@ -1019,11 +1096,13 @@ If unstable, revert this commit -- PR1-4 are valuable on their own."
 - [ ] **Step 1: Map global.css sections to component files**
 
 Run this to get the section list with line ranges:
+
 ```bash
 grep -n "^/\*" src/styles/global.css | head -40
 ```
 
 Expected mapping (section -> target file):
+
 - TitleBar (71-138) -> `src/components/TitleBar/TitleBar.css`
 - Icon Navbar + Sidebar Panel + Session Tree (148-451) -> `src/components/Sidebar/Sidebar.css` + `src/components/Sidebar/SessionPanel.css`
 - Tab Bar (461-593) -> `src/components/TabBar/TabBar.css`
@@ -1045,6 +1124,7 @@ Expected mapping (section -> target file):
 - [ ] **Step 2: Move each section**
 
 For each section:
+
 1. Create the target `.css` file with the section content (exact CSS, no changes).
 2. Delete the section from `global.css`.
 3. Add `import './ComponentName.css'` to the component's `.tsx` file (after existing imports, before any JSX).
@@ -1054,6 +1134,7 @@ For each section:
 - [ ] **Step 3: Keep `global.css` as the base shell**
 
 `global.css` should retain only:
+
 - The header comment + `@import './theme.css'` (if it exists)
 - `:root` / `*` / `body` / `#root` base styles
 - `#app-root` layout (the flex shell)
@@ -1068,6 +1149,7 @@ npm run build && npm run lint && npm run smoke:check && npm run format:check
 ```
 
 Open the app and visually verify:
+
 - All panels render correctly (sidebar, tabs, terminal, SFTP, status bar).
 - Dark/light theme both look correct.
 - No missing styles (blank elements, unstyled buttons).
@@ -1092,6 +1174,7 @@ No class names or selectors changed -- pure file-location move."
 ### Task 7.1: Memoize `AssetRow` + stabilize callbacks
 
 **Files:**
+
 - Modify: `src/components/AssetTable/AssetTable.tsx`
 
 - [ ] **Step 1: Read the current AssetTable row rendering**
@@ -1110,7 +1193,12 @@ interface AssetRowProps {
   onDelete: (session: SessionConfig) => void;
 }
 
-const AssetRow = React.memo(function AssetRow({ session, onConnect, onContextMenu, onDelete }: AssetRowProps) {
+const AssetRow = React.memo(function AssetRow({
+  session,
+  onConnect,
+  onContextMenu,
+  onDelete,
+}: AssetRowProps) {
   // Move the per-row JSX here.
 });
 ```
@@ -1118,31 +1206,42 @@ const AssetRow = React.memo(function AssetRow({ session, onConnect, onContextMen
 - [ ] **Step 3: Stabilize callbacks in `AssetTable` with `useCallback`**
 
 ```tsx
-const handleConnect = useCallback((s: SessionConfig) => {
-  // same body as the inline handler
-}, [/* deps */]);
+const handleConnect = useCallback(
+  (s: SessionConfig) => {
+    // same body as the inline handler
+  },
+  [/* deps */],
+);
 
-const handleContextMenu = useCallback((e: React.MouseEvent, s: SessionConfig) => {
-  // same body
-}, [/* deps */]);
+const handleContextMenu = useCallback(
+  (e: React.MouseEvent, s: SessionConfig) => {
+    // same body
+  },
+  [/* deps */],
+);
 
-const handleDelete = useCallback((s: SessionConfig) => {
-  // same body
-}, [/* deps */]);
+const handleDelete = useCallback(
+  (s: SessionConfig) => {
+    // same body
+  },
+  [/* deps */],
+);
 ```
 
 - [ ] **Step 4: Replace inline `.map` with `<AssetRow>`**
 
 ```tsx
-{groupSessions.map((session) => (
-  <AssetRow
-    key={session.id}
-    session={session}
-    onConnect={handleConnect}
-    onContextMenu={handleContextMenu}
-    onDelete={handleDelete}
-  />
-))}
+{
+  groupSessions.map((session) => (
+    <AssetRow
+      key={session.id}
+      session={session}
+      onConnect={handleConnect}
+      onContextMenu={handleContextMenu}
+      onDelete={handleDelete}
+    />
+  ));
+}
 ```
 
 - [ ] **Step 5: Verify build + lint**
@@ -1163,6 +1262,7 @@ git commit -m "perf(asset-table): memoize AssetRow + stabilize callbacks with us
 ### Task 7.2: Memoize `TabItem` + stabilize callbacks
 
 **Files:**
+
 - Modify: `src/components/TabBar/TabBar.tsx`
 
 - [ ] **Step 1: Extract `TabItem` + `React.memo`**
@@ -1170,7 +1270,13 @@ git commit -m "perf(asset-table): memoize AssetRow + stabilize callbacks with us
 Find the per-tab rendering in `TabBar.tsx` (the `.map((tab) => (...))`). Extract into:
 
 ```tsx
-const TabItem = React.memo(function TabItem({ tab, isActive, onClose, onActivate, onReorder }: TabItemProps) {
+const TabItem = React.memo(function TabItem({
+  tab,
+  isActive,
+  onClose,
+  onActivate,
+  onReorder,
+}: TabItemProps) {
   // per-tab JSX
 });
 ```
@@ -1190,6 +1296,7 @@ git commit -m "perf(tabbar): memoize TabItem + stabilize callbacks"
 ### Task 7.3: Memoize ServerPanel metric cards
 
 **Files:**
+
 - Modify: `src/components/ServerPanel/CpuCard.tsx` (and MemCard, DiskCard, NetCard, NicList, ProcessList)
 
 - [ ] **Step 1: Wrap each metric card with `React.memo`**
@@ -1217,6 +1324,7 @@ git commit -m "perf(server-panel): memoize metric cards (CpuCard/MemCard/DiskCar
 ### Task 7.4: Verify `SessionRow` memo + stabilize parent callbacks
 
 **Files:**
+
 - Modify: `src/components/Sidebar/SessionPanel.tsx`
 
 - [ ] **Step 1: Verify `SessionRow` is already `React.memo`**
@@ -1228,9 +1336,12 @@ Confirm `SessionRow` at line 345 is wrapped with `React.memo`.
 Check that `onConnect` and `onContextMenu` are wrapped in `useCallback` with proper deps. If they're inline, wrap them:
 
 ```tsx
-const handleConnect = useCallback((s: SessionConfig) => {
-  // same body
-}, [/* deps */]);
+const handleConnect = useCallback(
+  (s: SessionConfig) => {
+    // same body
+  },
+  [/* deps */],
+);
 ```
 
 - [ ] **Step 3: Verify + commit**
@@ -1287,20 +1398,20 @@ git commit -m "docs: document TerminalView decomposition in AGENTS.md"
 
 ### Spec coverage
 
-| Spec section | Tasks implementing it |
-|---|---|
-| §2.2 Extraction A (terminalClipboard) | Task 1.2 |
-| §2.3 Extraction B (terminalPlatform) | Task 1.1 |
-| §2.4 Extraction C (terminalCompletionState) | Task 3.1 |
-| §2.5 Extraction D (terminalLifecycle) | Tasks 4.1, 4.2 |
-| §2.6 Extraction E (overlay components) | Tasks 2.1, 2.2, 2.3, 2.4 |
-| §2.7 Extraction F (terminalConnection) | Task 5.1 |
-| §3 global.css split | Task 6.1 |
-| §4.1 AssetRow memoization | Task 7.1 |
-| §4.1 TabItem memoization | Task 7.2 |
-| §4.3 ServerPanel cards | Task 7.3 |
-| §4.1 SessionRow stabilization | Task 7.4 |
-| AGENTS.md update | Task 7.5 |
+| Spec section                                | Tasks implementing it    |
+| ------------------------------------------- | ------------------------ |
+| §2.2 Extraction A (terminalClipboard)       | Task 1.2                 |
+| §2.3 Extraction B (terminalPlatform)        | Task 1.1                 |
+| §2.4 Extraction C (terminalCompletionState) | Task 3.1                 |
+| §2.5 Extraction D (terminalLifecycle)       | Tasks 4.1, 4.2           |
+| §2.6 Extraction E (overlay components)      | Tasks 2.1, 2.2, 2.3, 2.4 |
+| §2.7 Extraction F (terminalConnection)      | Task 5.1                 |
+| §3 global.css split                         | Task 6.1                 |
+| §4.1 AssetRow memoization                   | Task 7.1                 |
+| §4.1 TabItem memoization                    | Task 7.2                 |
+| §4.3 ServerPanel cards                      | Task 7.3                 |
+| §4.1 SessionRow stabilization               | Task 7.4                 |
+| AGENTS.md update                            | Task 7.5                 |
 
 ### Type consistency check
 
