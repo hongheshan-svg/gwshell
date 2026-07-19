@@ -21,11 +21,7 @@ import {
   type DockerPickPayload,
   type DockerCancelPayload,
 } from '../../lib/ipcEvents';
-import {
-  tableForShellName,
-  tableForRemoteShell,
-  type CommandTable,
-} from '../../lib/commandDictionary';
+import { tableForRemoteShell } from '../../lib/commandDictionary';
 import { getXtermWindowsPty } from '../../lib/terminalPtyOptions';
 import {
   appendTerminalOutput,
@@ -39,6 +35,27 @@ import {
   isInteractiveTerminal,
   cellSize,
 } from '../../lib/terminalPlatform';
+import {
+  inputBuffers,
+  completionSetters,
+  completionAccept,
+  tabCwd,
+  remoteOsCache,
+  REMOTE_OS_TTL_MS,
+  tabCompletions,
+  tabCompletionIdx,
+  completionNav,
+  tabInputSenders,
+  bracketedPaste,
+  awaitingPassword,
+  awaitingPasswordTimer,
+  tabCommandTable,
+  tabScope,
+  syncTable,
+  normalizeTable,
+  estimateDropdownRows,
+  resetCompletionState,
+} from '../../lib/terminalCompletionState';
 import {
   PASSWORD_PROMPT_RE,
   isPasteAction,
@@ -99,82 +116,6 @@ const sentFirstResize = new Set<string>();
  *  listener cleanup. Only SSH and serial sessions are ever armed. */
 const reconnectableTabs = new Set<string>();
 
-// Command history: per-tab line buffer, completion state, and callbacks.
-const inputBuffers = new Map<string, string>();
-const completionSetters = new Map<
-  string,
-  (items: Completion[], index: number, x: number, y: number, above: boolean) => void
->();
-const completionAccept = new Map<string, (suffix: string) => void>();
-
-const tabCwd = new Map<string, string>();
-// Cache of remote-OS probe results keyed by host, so opening multiple SSH
-// tabs to the same host doesn't re-run `uname`/`%COMSPEC%` exec probes each
-// time. Entries expire after 5 minutes (a host's OS doesn't change often,
-// but a re-provisioned box should eventually be re-detected).
-const remoteOsCache = new Map<string, { table: CommandTable; at: number }>();
-const REMOTE_OS_TTL_MS = 5 * 60 * 1000;
-const tabCompletions = new Map<string, Completion[]>();
-const tabCompletionIdx = new Map<string, number>();
-const completionNav = new Map<string, boolean>(); // user moved selection with ↑/↓
-const tabInputSenders = new Map<string, (data: string) => void>(); // populated by the snippet input-sender task
-const bracketedPaste = new Map<string, boolean>();
-// Set when the terminal's last output line looks like a password / passphrase
-// / verification-code prompt. While set, typed input is NOT recorded as command
-// history and completions are suppressed — otherwise a password entered at a
-// sudo/mysql/su prompt would be captured verbatim and later surfaced as a
-// completion suggestion.
-const awaitingPassword = new Map<string, boolean>();
-// Auto-clears awaitingPassword after a few seconds so a stale prompt (or a rare
-// false positive) can't permanently disable history/completions for a tab.
-const awaitingPasswordTimer = new Map<string, ReturnType<typeof setTimeout>>();
-// Resolved completion table per tab. For SSH 'auto', filled in asynchronously
-// by detect_remote_os; for other types it is derived synchronously (see syncTable).
-const tabCommandTable = new Map<string, CommandTable>();
-
-// Per-tab scope key for history ranking.
-
-function tabScope(
-  type: string,
-  session: { host?: string; serial_port?: string; name?: string } | undefined,
-): string {
-  if (type === 'ssh') return session?.host ?? '';
-  if (type === 'localshell') return 'local';
-  if (type === 'serial') return session?.serial_port ?? 'serial';
-  if (type === 'docker') return session?.name ?? 'docker';
-  return '';
-}
-
-// Synchronous best-guess completion table for a tab. SSH with an 'auto'/unset
-// override returns 'unix' until the async probe (detect_remote_os) resolves and
-// writes the real value into tabCommandTable.
-function syncTable(
-  type: string,
-  session: { shell_name?: string; remote_shell?: string } | undefined,
-): CommandTable {
-  if (type === 'localshell') return tableForShellName(session?.shell_name);
-  if (type === 'ssh') return tableForRemoteShell(session?.remote_shell) ?? 'unix';
-  return 'unix'; // docker, serial
-}
-
-// Normalize a backend table string to a CommandTable (defensive against drift).
-function normalizeTable(s: string): CommandTable {
-  return s === 'cmd' || s === 'powershell' ? s : 'unix';
-}
-
-// Estimate how many terminal rows a completion dropdown will occupy, so the
-// `placeAbove` heuristic can decide whether it fits below the cursor. Command-
-// dictionary items carry a description line (~1.5x row height), history items
-// are single-row. Capped at 8 visible items.
-function estimateDropdownRows(items: Completion[]): number {
-  const visible = items.slice(0, 8);
-  let rows = 0;
-  for (const it of visible) {
-    rows += it.desc ? 1.5 : 1;
-  }
-  return Math.ceil(rows);
-}
-
 /** Remove event listeners for a tab (idempotent). */
 function cleanupTabListeners(tabId: string): void {
   const fn = tabListenerCleanups.get(tabId);
@@ -219,22 +160,7 @@ export function destroyTerminal(tabId: string): void {
   sentFirstResize.delete(tabId);
   connectedTabs.delete(tabId);
   reconnectableTabs.delete(tabId);
-  inputBuffers.delete(tabId);
-  tabCommandTable.delete(tabId);
-  completionSetters.delete(tabId);
-  completionAccept.delete(tabId);
-  tabCwd.delete(tabId);
-  tabCompletions.delete(tabId);
-  tabCompletionIdx.delete(tabId);
-  completionNav.delete(tabId);
-  tabInputSenders.delete(tabId);
-  bracketedPaste.delete(tabId);
-  const apTimer = awaitingPasswordTimer.get(tabId);
-  if (apTimer) {
-    clearTimeout(apTimer);
-    awaitingPasswordTimer.delete(tabId);
-  }
-  awaitingPassword.delete(tabId);
+  resetCompletionState(tabId);
   clearTerminalAiContext(tabId);
   const inst = terminalInstances.get(tabId);
   if (inst) {
