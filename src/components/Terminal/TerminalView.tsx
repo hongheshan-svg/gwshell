@@ -50,6 +50,7 @@ import {
 } from '../../lib/terminalClipboard';
 import { CompletionDropdown } from './CompletionDropdown';
 import { TerminalContextMenu } from './TerminalContextMenu';
+import { FingerprintDialog } from './FingerprintDialog';
 import type { FingerprintInfo, TerminalContextMenuState } from './types';
 import i18n from '../../i18n';
 import '@xterm/xterm/css/xterm.css';
@@ -2426,36 +2427,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       )}
 
       {fingerprintInfo && isActive && (
-        <div className="fingerprint-overlay">
-          <div className="fingerprint-dialog">
-            <div className="fingerprint-dialog-title">🔒 {t('fp_title')}</div>
-            <div className="fingerprint-dialog-body">
-              <p>{t('fp_desc')}</p>
-              <div className="fingerprint-host">
-                {fingerprintInfo.host}:{fingerprintInfo.port}
-              </div>
-              <div className="fingerprint-hash">
-                <span className="fingerprint-label">{fingerprintInfo.keyType}</span>
-                <code>{fingerprintInfo.fingerprint}</code>
-              </div>
-              <p className="fingerprint-warning">{t('fp_warning')}</p>
-            </div>
-            <div className="fingerprint-dialog-footer">
-              <button
-                className="fingerprint-btn fingerprint-btn-reject"
-                onClick={() => fingerprintResolveRef.current(false)}
-              >
-                {t('fp_reject')}
-              </button>
-              <button
-                className="fingerprint-btn fingerprint-btn-accept"
-                onClick={() => fingerprintResolveRef.current(true)}
-              >
-                {t('fp_accept')}
-              </button>
-            </div>
-          </div>
-        </div>
+        <FingerprintDialog
+          info={fingerprintInfo}
+          onAccept={() => {
+            fingerprintResolveRef.current?.(true);
+            setFingerprintInfo(null);
+          }}
+          onReject={() => {
+            fingerprintResolveRef.current?.(false);
+            setFingerprintInfo(null);
+          }}
+        />
       )}
 
       {pasteConfirm !== null && isActive && (
