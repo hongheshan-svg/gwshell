@@ -49,6 +49,7 @@ import {
   isPasteShortcut,
 } from '../../lib/terminalClipboard';
 import { CompletionDropdown } from './CompletionDropdown';
+import { TerminalContextMenu } from './TerminalContextMenu';
 import type { FingerprintInfo, TerminalContextMenuState } from './types';
 import i18n from '../../i18n';
 import '@xterm/xterm/css/xterm.css';
@@ -2415,29 +2416,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         )}
 
       {contextMenu && isActive && (
-        <div
-          className="context-menu terminal-context-menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-        >
-          <button
-            type="button"
-            className="context-menu-item"
-            disabled={!contextMenu.canCopy}
-            onClick={copySelection}
-          >
-            {t('settings_sc_copy')}
-          </button>
-          <button type="button" className="context-menu-item" onClick={pasteClipboard}>
-            {t('settings_sc_paste')}
-          </button>
-          <div className="context-menu-divider" />
-          <button type="button" className="context-menu-item" onClick={selectAllTerminal}>
-            {t('settings_sc_selectall')}
-          </button>
-          <button type="button" className="context-menu-item" onClick={clearTerminal}>
-            {t('settings_sc_clear')}
-          </button>
-        </div>
+        <TerminalContextMenu
+          state={contextMenu}
+          onCopy={copySelection}
+          onPaste={pasteClipboard}
+          onSelectAll={selectAllTerminal}
+          onClear={clearTerminal}
+        />
       )}
 
       {fingerprintInfo && isActive && (
