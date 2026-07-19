@@ -49,6 +49,7 @@ import {
   isPasteShortcut,
 } from '../../lib/terminalClipboard';
 import { CompletionDropdown } from './CompletionDropdown';
+import type { FingerprintInfo, TerminalContextMenuState } from './types';
 import i18n from '../../i18n';
 import '@xterm/xterm/css/xterm.css';
 
@@ -57,22 +58,9 @@ interface TerminalViewProps {
   isActive: boolean;
   // Opt-in split: when defined, controls pane visibility independently of
   // isActive (so a non-active tab can still be shown as a side-by-side pane).
-  // When undefined the pane falls back to isActive — the single-pane path,
+  // When undefined the pane falls back to isActive - the single-pane path,
   // byte-for-byte unchanged.
   visible?: boolean;
-}
-
-interface FingerprintInfo {
-  fingerprint: string;
-  keyType: string;
-  host: string;
-  port: number;
-}
-
-interface TerminalContextMenu {
-  x: number;
-  y: number;
-  canCopy: boolean;
 }
 
 // Track which tab IDs have active backend connections (SSH/PTY/serial)
@@ -389,7 +377,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
   }, [tab.id]);
 
   const [fingerprintInfo, setFingerprintInfo] = useState<FingerprintInfo | null>(null);
-  const [contextMenu, setContextMenu] = useState<TerminalContextMenu | null>(null);
+  const [contextMenu, setContextMenu] = useState<TerminalContextMenuState | null>(null);
   const [completionItems, setCompletionItems] = useState<Completion[]>([]);
   const [completionIndex, setCompletionIndex] = useState(0);
   const [completionPos, setCompletionPos] = useState({ x: 0, y: 0, above: false });
