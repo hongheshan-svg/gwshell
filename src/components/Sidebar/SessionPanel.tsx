@@ -16,6 +16,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import { useConfirm } from '../../hooks/useConfirm';
 import { NewAssetMenu } from './NewAssetMenu';
 import type { SessionConfig } from '../../types';
 
@@ -23,6 +24,7 @@ const SUPPORTED_QUICK_CREATE_TYPES = new Set(['ssh', 'ssh-tunnel']);
 
 export const SessionPanel: React.FC = () => {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   // Sessions drive the list; subscribe to the array directly (it only changes
   // on add/remove/edit/latency, all of which warrant a re-render here).
   const sessions = useAppStore((s) => s.sessions);
@@ -43,13 +45,18 @@ export const SessionPanel: React.FC = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
   const plusBtnRef = useRef<HTMLButtonElement>(null);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: SessionConfig } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    session: SessionConfig;
+  } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
   // Close context menu on click outside
   useEffect(() => {
     if (!contextMenu) return;
     const handleClick = (e: MouseEvent) => {
+      // eslint-disable-next-line no-restricted-syntax
       if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
         setContextMenu(null);
       }
@@ -62,6 +69,7 @@ export const SessionPanel: React.FC = () => {
   const allSessions = sessions.filter((s) => !s._temporary);
   const groups: Record<string, SessionConfig[]> = {};
   allSessions.forEach((s) => {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
     const g = s.group || t('panel_default_group');
     if (!groups[g]) groups[g] = [];
     groups[g].push(s);
@@ -87,16 +95,19 @@ export const SessionPanel: React.FC = () => {
     });
   }, []);
 
-  const handleCopySession = useCallback((session: SessionConfig) => {
-    const copied: SessionConfig = {
-      ...session,
-      id: crypto.randomUUID(),
-      name: `${session.name} - ${t('common_copy_suffix')}`,
-      created_at: new Date().toISOString().slice(0, 10),
-      _temporary: undefined,
-    };
-    useAppStore.getState().addSession(copied);
-  }, [t]);
+  const handleCopySession = useCallback(
+    (session: SessionConfig) => {
+      const copied: SessionConfig = {
+        ...session,
+        id: crypto.randomUUID(),
+        name: `${session.name} - ${t('common_copy_suffix')}`,
+        created_at: new Date().toISOString().slice(0, 10),
+        _temporary: undefined,
+      };
+      useAppStore.getState().addSession(copied);
+    },
+    [t],
+  );
 
   const handleContextMenu = useCallback((e: React.MouseEvent, session: SessionConfig) => {
     e.preventDefault();
@@ -104,7 +115,10 @@ export const SessionPanel: React.FC = () => {
   }, []);
 
   const handleNewAssetSelect = (type: string) => {
-    if (type === 'quickconnect') { setShowQuickConnect(true); return; }
+    if (type === 'quickconnect') {
+      setShowQuickConnect(true);
+      return;
+    }
     if (SUPPORTED_QUICK_CREATE_TYPES.has(type)) {
       setShowNewSession(true);
     } else if (type === 'serial') {
@@ -120,7 +134,7 @@ export const SessionPanel: React.FC = () => {
     ? allSessions.filter(
         (s) =>
           s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (s.host && s.host.toLowerCase().includes(searchQuery.toLowerCase()))
+          s.host?.toLowerCase().includes(searchQuery.toLowerCase()),
       )
     : null;
 
@@ -129,8 +143,18 @@ export const SessionPanel: React.FC = () => {
       {/* Header row 1: title + search */}
       <div className="sidebar-header">
         <div className="sidebar-header-row">
-          <h3 className="sidebar-title-link" onClick={() => setActiveTab('asset-list')} title={t('nav_assetlist')}>{t('panel_asset_list')}</h3>
-          <button className="sidebar-action-btn" onClick={() => setShowSearch(!showSearch)} title={t('panel_search')}>
+          <h3
+            className="sidebar-title-link"
+            onClick={() => setActiveTab('asset-list')}
+            title={t('nav_assetlist')}
+          >
+            {t('panel_asset_list')}
+          </h3>
+          <button
+            className="sidebar-action-btn"
+            onClick={() => setShowSearch(!showSearch)}
+            title={t('panel_search')}
+          >
             <Search size={13} />
           </button>
         </div>
@@ -166,7 +190,12 @@ export const SessionPanel: React.FC = () => {
       <div className="sidebar-content">
         {filteredSessions ? (
           filteredSessions.map((session) => (
-            <SessionItem key={session.id} session={session} onConnect={handleConnect} onContextMenu={handleContextMenu} />
+            <SessionItem
+              key={session.id}
+              session={session}
+              onConnect={handleConnect}
+              onContextMenu={handleContextMenu}
+            />
           ))
         ) : allSessions.length === 0 ? (
           <div className="sidebar-empty">
@@ -190,7 +219,10 @@ export const SessionPanel: React.FC = () => {
                 aria-expanded={expandedGroups[groupName] !== false}
                 onClick={() => toggleGroup(groupName)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(groupName); }
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleGroup(groupName);
+                  }
                 }}
               >
                 {expandedGroups[groupName] !== false ? (
@@ -199,23 +231,33 @@ export const SessionPanel: React.FC = () => {
                   <ChevronRight size={12} />
                 )}
                 <span className="session-group-icon">
-                  {expandedGroups[groupName] !== false ? <FolderOpen size={14} /> : <Folder size={14} />}
+                  {expandedGroups[groupName] !== false ? (
+                    <FolderOpen size={14} />
+                  ) : (
+                    <Folder size={14} />
+                  )}
                 </span>
                 <span>{groupName}</span>
                 <button
                   className="session-group-defaults-btn"
-                  onClick={(e) => { e.stopPropagation(); setGroupDefaultsTarget(groupName); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setGroupDefaultsTarget(groupName);
+                  }}
                   title={t('group_defaults_title')}
                 >
                   <Settings size={12} />
                 </button>
-                <span className="session-group-count">
-                  {groupSessions.length}
-                </span>
+                <span className="session-group-count">{groupSessions.length}</span>
               </div>
               {expandedGroups[groupName] !== false &&
                 groupSessions.map((session) => (
-                  <SessionItem key={session.id} session={session} onConnect={handleConnect} onContextMenu={handleContextMenu} />
+                  <SessionItem
+                    key={session.id}
+                    session={session}
+                    onConnect={handleConnect}
+                    onContextMenu={handleContextMenu}
+                  />
                 ))}
             </div>
           ))
@@ -239,22 +281,55 @@ export const SessionPanel: React.FC = () => {
           style={{ top: contextMenu.y, left: contextMenu.x }}
           role="menu"
         >
-          <button role="menuitem" onClick={() => { handleConnect(contextMenu.session); setContextMenu(null); }}>
+          <button
+            role="menuitem"
+            onClick={() => {
+              handleConnect(contextMenu.session);
+              setContextMenu(null);
+            }}
+          >
             <Play size={12} /> {t('table_connect')}
           </button>
-          <button role="menuitem" onClick={() => { setEditingSession(contextMenu.session); setShowNewSession(true); setContextMenu(null); }}>
+          <button
+            role="menuitem"
+            onClick={() => {
+              setEditingSession(contextMenu.session);
+              setShowNewSession(true);
+              setContextMenu(null);
+            }}
+          >
             <Edit size={12} /> {t('table_edit')}
           </button>
-          <button role="menuitem" onClick={() => { handleCopySession(contextMenu.session); setContextMenu(null); }}>
+          <button
+            role="menuitem"
+            onClick={() => {
+              handleCopySession(contextMenu.session);
+              setContextMenu(null);
+            }}
+          >
             <Copy size={12} /> {t('table_copy')}
           </button>
           <div className="context-menu-divider" />
-          <button role="menuitem" className="danger" onClick={() => {
-            if (window.confirm(t('common_delete_confirm_body', { name: contextMenu.session.name }))) {
-              removeSession(contextMenu.session.id);
-              setContextMenu(null);
+          <button
+            role="menuitem"
+            className="danger"
+            onClick={() =>
+              void (async () => {
+                if (
+                  await confirm({
+                    title: t('common_delete_confirm_title'),
+                    message: t('common_delete_confirm_body', {
+                      name: contextMenu.session.name,
+                    }),
+                    danger: true,
+                  })
+                ) {
+                  removeSession(contextMenu.session.id);
+                  setContextMenu(null);
+                }
+              })()
             }
-          }}>
+          >
             <Trash2 size={12} /> {t('table_delete')}
           </button>
         </div>
@@ -283,11 +358,20 @@ const SessionItem: React.FC<{
       aria-label={session.name}
       aria-pressed={isActive}
       onDoubleClick={() => onConnect(session)}
-      onClick={(e) => { if (e.detail === 1) onConnect(session); }}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onConnect(session); } }}
+      onClick={(e) => {
+        if (e.detail === 1) onConnect(session);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onConnect(session);
+        }
+      }}
       onContextMenu={(e) => onContextMenu(e, session)}
     >
-      <span className="session-item-icon"><Server size={14} /></span>
+      <span className="session-item-icon">
+        <Server size={14} />
+      </span>
       <span className="session-item-name">{session.name}</span>
       <span className={`session-status-dot ${isConnected ? 'connected' : 'disconnected'}`} />
     </div>

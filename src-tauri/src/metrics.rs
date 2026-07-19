@@ -899,7 +899,7 @@ pub fn build_snapshot(
     let net_stats = {
         let mut total_rx: u64 = 0;
         let mut total_tx: u64 = 0;
-        for (_, (rx, tx)) in &new_net {
+        for (rx, tx) in new_net.values() {
             total_rx += rx;
             total_tx += tx;
         }
@@ -911,7 +911,7 @@ pub fn build_snapshot(
                     .max(0.001);
                 let mut prx: u64 = 0;
                 let mut ptx: u64 = 0;
-                for (_, (rx, tx)) in &p.net_bytes {
+                for (rx, tx) in p.net_bytes.values() {
                     prx += rx;
                     ptx += tx;
                 }

@@ -1,4 +1,4 @@
-import i18n from 'i18next';
+import i18n, { type TFunction } from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
 import gwshellZh from './locales/gwshell.zh.json';
@@ -28,11 +28,18 @@ i18n.on('languageChanged', (lng) => {
 export default i18n;
 export { detectLocale, persistLocale };
 export type { Locale };
-export type TranslationKeys = keyof typeof gwshellZh;
 
-export function getT(locale: 'zh' | 'en') {
-  const fn = i18n.getFixedT(locale, 'gwshell');
-  return function t(key: TranslationKeys, params?: Record<string, string | number>): string {
-    return fn(key as string, params as any);
-  };
+// Collect every leaf key (dotted path) of the resource object — used to type
+// `t()` callers so unknown keys fail to compile. Nested objects produce
+// "section.key" entries; flat string values produce the string itself.
+type LeafKeys<T, Prefix extends string = ''> = T extends object
+  ? {
+      [K in keyof T & string]: LeafKeys<T[K], Prefix extends '' ? K : `${Prefix}.${K}`>;
+    }[keyof T & string]
+  : Prefix;
+
+export type TranslationKeys = LeafKeys<typeof gwshellZh>;
+
+export function getT(locale: 'zh' | 'en'): TFunction {
+  return i18n.getFixedT(locale, 'gwshell');
 }

@@ -86,7 +86,7 @@ Restructure the single array into three pre-sorted arrays of the existing
   - Aliases (work in PowerShell): `ls`, `dir`, `gci`, `cat`, `gc`, `cp`, `cpi`,
     `mv`, `mi`, `rm`, `ri`, `pwd`, `gl`, `cd`, `sl`, `cls`, `clear`, `echo`,
     `select`, `where`, `sort`, `ps`, `kill`.
-  Bilingual descriptions.
+    Bilingual descriptions.
 
 Update the lookup signature (sorting done once per array at module load):
 
@@ -95,7 +95,7 @@ function lookupCommands(
   prefix: string,
   locale: 'en' | 'zh',
   table: CommandTable = 'unix',
-): { cmd: string; desc: string }[]
+): { cmd: string; desc: string }[];
 ```
 
 The default `'unix'` keeps any existing caller / test that omits the argument
@@ -109,7 +109,7 @@ Extend the merge so the dictionary receives the table. Either add `table` to the
 `buildCompletions` parameter; the `ctx`-field approach keeps the call site tidy:
 
 ```ts
-buildCompletions(line, { scope, cwd, sessionType, table }, locale, max)
+buildCompletions(line, { scope, cwd, sessionType, table }, locale, max);
 // internally: lookupCommands(line, locale, ctx.table ?? 'unix')
 ```
 
@@ -190,7 +190,7 @@ existing `server-metrics-{id}` event pattern.
    `tabCommandTable`. Local/docker/serial tabs set their table synchronously at
    tab creation (no event needed).
 4. On each keystroke, `buildCompletions(buf, { scope, cwd, sessionType, table },
-   locale)` runs; the dictionary half uses the resolved table.
+locale)` runs; the dictionary half uses the resolved table.
 
 ## i18n
 

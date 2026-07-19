@@ -21,11 +21,13 @@ The panel augments — it does not replace — the terminal. It is an opt-in ove
 ## 3. User-Facing Behavior
 
 ### 3.1 Entry point
+
 - A new icon button in `TitleBar` (between existing title-bar actions), tooltip "显示服务器面板 / Show server panel".
 - Enabled only when the active tab's session type is `ssh`. Otherwise rendered disabled with tooltip "仅 SSH 会话支持 / SSH sessions only".
 - Clicking toggles a global `serverPanelOpen` flag in `appStore`.
 
 ### 3.2 Panel layout
+
 - Right-side drawer, 380 px wide, slides in over the terminal content area in 200 ms.
 - Close `X` in the drawer's top-right corner mirrors the toggle.
 - Content is scrollable vertically, laid out as stacked cards:
@@ -37,6 +39,7 @@ The panel augments — it does not replace — the terminal. It is an opt-in ove
   6. **NicList** — interface name, IPv4 address, MAC
 
 ### 3.3 State transitions
+
 - **Panel opens on SSH tab** → metrics begin streaming within 2 s; cards fill in.
 - **Active tab changes to another SSH tab** → panel auto-switches to the new session; previous session's polling stops.
 - **Active tab changes to non-SSH** → panel shows empty state "请切换到 SSH 会话 / Switch to an SSH session".
@@ -61,6 +64,7 @@ src/components/ServerPanel/
 ```
 
 ### 4.2 State management
+
 - `appStore` additions:
   - `serverPanelOpen: boolean`
   - `toggleServerPanel(): void`
@@ -71,6 +75,7 @@ src/components/ServerPanel/
 - Rationale: 2 s updates into a global store would trigger cross-component re-renders; state is ephemeral and dies with the drawer.
 
 ### 4.3 Event subscription
+
 - `useEffect` on `[activeTabId, serverPanelOpen]`:
   - If open AND active tab is SSH:
     - `invoke('start_server_metrics', { sessionId })`
@@ -79,10 +84,12 @@ src/components/ServerPanel/
   - Cleanup: unlisten both, `invoke('stop_server_metrics', { sessionId })`
 
 ### 4.4 i18n
+
 - Add `serverPanel.*` namespace entries to `i18n/locales/gwshell.zh.json` and `gwshell.en.json`.
 - All visible strings (card titles, column headers, status banners, tooltip, confirm-kill dialog) use `t('serverPanel.*')`.
 
 ### 4.5 Styling
+
 - Reuses existing CSS variables (`--bg-primary`, `--bg-secondary`, `--text-primary`, accent colors). No hard-coded colors.
 - Icons from `lucide-react` (already a project dependency).
 
@@ -222,7 +229,9 @@ SSH session disconnects
 The project has no automated tests. MVP verification is manual + `npm run smoke:check`.
 
 ### 8.1 Smoke-check additions
+
 `scripts/smoke-check.js` gains assertions:
+
 - `ServerPanel.tsx` useEffect cleanup contains `stop_server_metrics`.
 - `metrics.rs` polling loop has a per-tick timeout.
 - New Tauri commands (`start_server_metrics`, `stop_server_metrics`, `kill_remote_process`) appear in `lib.rs` `invoke_handler!`.

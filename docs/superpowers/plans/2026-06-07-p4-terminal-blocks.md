@@ -18,16 +18,16 @@
 
 ## 文件结构
 
-| 文件 | 改动 |
-|---|---|
-| `src-tauri/src/pty.rs` | `resolve_shell` 接受注入标志，按 shell 生成临时 rc/init 并设 args/env；临时文件清理 |
-| `src-tauri/src/lib.rs` | `create_local_shell` 命令加 `shell_integration: bool` 参数并下传 |
+| 文件                                       | 改动                                                                                                            |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `src-tauri/src/pty.rs`                     | `resolve_shell` 接受注入标志，按 shell 生成临时 rc/init 并设 args/env；临时文件清理                             |
+| `src-tauri/src/lib.rs`                     | `create_local_shell` 命令加 `shell_integration: bool` 参数并下传                                                |
 | `src/components/Terminal/TerminalView.tsx` | invoke 传 `shellIntegration`；OSC 133→CommandBlock 模型+markers+退出码；gutter decorations；导航/复制操作；清理 |
-| `src/components/Terminal/blocks.ts` | 新增：CommandBlock 类型 + per-tab 存储 + 读输出文本工具 |
-| `src/keymap/actions.ts` | `block.prev` / `block.next` |
-| `src/styles/global.css` | `.gw-block-deco-*` 状态条 + 单命令小菜单（令牌） |
-| `src/i18n/locales/gwshell.{en,zh}.json` | 复制命令/复制输出/重跑/上一条/下一条 |
-| `src/stores/settingsStore.ts` | 仅**消费** `cmdHintShellIntegration`（不新增字段） |
+| `src/components/Terminal/blocks.ts`        | 新增：CommandBlock 类型 + per-tab 存储 + 读输出文本工具                                                         |
+| `src/keymap/actions.ts`                    | `block.prev` / `block.next`                                                                                     |
+| `src/styles/global.css`                    | `.gw-block-deco-*` 状态条 + 单命令小菜单（令牌）                                                                |
+| `src/i18n/locales/gwshell.{en,zh}.json`    | 复制命令/复制输出/重跑/上一条/下一条                                                                            |
+| `src/stores/settingsStore.ts`              | 仅**消费** `cmdHintShellIntegration`（不新增字段）                                                              |
 
 ---
 
@@ -48,6 +48,7 @@ Read：`lib.rs` 的 `create_local_shell` 命令（约 :110，参数含 `shell_na
 `resolve_shell(name, shell_integration)`：当 `shell_integration` 为真且 shell ∈ {bash,zsh,fish} 时，生成临时集成文件并设对应 args/env；否则原样。其它 shell（pwsh/cmd/wsl）忽略标志。集成脚本（写入 temp_dir，文件名带 session/uuid，发射 OSC 133）：
 
 **bash** —— 临时 rc，bash 加 `--rcfile <path>`：
+
 ```bash
 [ -f ~/.bashrc ] && source ~/.bashrc
 __gw_precmd() { local e=$?; printf '\033]133;D;%s\007' "$e"; }
@@ -57,6 +58,7 @@ PS0='\[\033]133;C\007\]'"$PS0"
 ```
 
 **zsh** —— 临时目录作 `ZDOTDIR`，写其中 `.zshrc`，并设 env `ZDOTDIR=<tmpdir>`、保存原值到 `__gw_user_zdotdir`：
+
 ```zsh
 [ -f "${__gw_user_zdotdir:-$HOME}/.zshrc" ] && source "${__gw_user_zdotdir:-$HOME}/.zshrc"
 autoload -Uz add-zsh-hook
@@ -65,9 +67,11 @@ __gw_precmd()  { print -n "\033]133;D;$?\007\033]133;A\007" }
 add-zsh-hook preexec __gw_preexec
 add-zsh-hook precmd  __gw_precmd
 ```
+
 （注：还需让 zsh 读到我们的 ZDOTDIR——设 env 即可；A 也可由 precmd 发，B 省略时前端用 A 作命令起点。）
 
 **fish** —— 用 `fish --init-command='...'`：
+
 ```fish
 function __gw_pre --on-event fish_preexec; printf '\033]133;C\007'; end
 function __gw_post --on-event fish_postexec; printf '\033]133;D;%s\007' $status; end
@@ -84,6 +88,7 @@ function __gw_prompt --on-event fish_prompt; printf '\033]133;A\007'; end
 
 Run: `cd src-tauri && cargo build`；`cd .. && npm run build`（分类器可能挡 node 类命令，挡则据读校验，勿超 ~2 次）。
 （真 shell 验证留终验。）
+
 ```bash
 git add src-tauri/src/pty.rs src-tauri/src/lib.rs src/components/Terminal/TerminalView.tsx
 git commit -m "feat(terminal): inject OSC133 shell integration for local bash/zsh/fish (P4)"
@@ -98,14 +103,17 @@ git commit -m "feat(terminal): inject OSC133 shell integration for local bash/zs
 - [ ] **Step 1: 连接后写集成片段**
 
 在 SSH 连接建立后（复用 `init_command` 写入点附近，约 :1371），当 `settings.cmdHintShellIntegration` 为真时，向通道写一段**单行、静默**的 bash/zsh 兼容片段（同 T1 的 hook，但合成一行 `eval`），失败静默。例如对 POSIX shell：
+
 ```
 printf '%s' '<oneliner that defines precmd/preexec via PROMPT_COMMAND/PS0/PS1>' | source /dev/stdin 2>/dev/null
 ```
+
 （远端 shell 类型未知 → best-effort；只发一次；不报错。）标注为尽力而为。
 
 - [ ] **Step 2: 验证 + Commit**
 
 Run: `npm run build`。
+
 ```bash
 git add src/components/Terminal/TerminalView.tsx
 git commit -m "feat(terminal): best-effort OSC133 integration over SSH (P4)"
@@ -124,8 +132,8 @@ import type { Terminal, IMarker } from '@xterm/xterm';
 
 export interface CommandBlock {
   id: number;
-  promptMarker: IMarker | null;   // command start (A/B)
-  outputMarker: IMarker | null;   // pre-exec (C)
+  promptMarker: IMarker | null; // command start (A/B)
+  outputMarker: IMarker | null; // pre-exec (C)
   command: string;
   exitCode?: number;
   state: 'running' | 'done';
@@ -136,20 +144,36 @@ const MAX_BLOCKS = 200;
 const tabBlocks = new Map<string, CommandBlock[]>();
 let seq = 0;
 
-export function blocksFor(tabId: string): CommandBlock[] { return tabBlocks.get(tabId) ?? []; }
-export function startBlock(tabId: string, term: Terminal): CommandBlock { /* registerMarker, push, trim to MAX_BLOCKS (dispose oldest markers) */ }
-export function markOutput(tabId: string, term: Terminal): void { /* set outputMarker on last running block */ }
-export function setCommand(tabId: string, cmd: string): void { /* last running block.command */ }
-export function finishBlock(tabId: string, exitCode?: number): void { /* last running → done + exitCode */ }
-export function clearTab(tabId: string): void { /* dispose markers + delete */ }
+export function blocksFor(tabId: string): CommandBlock[] {
+  return tabBlocks.get(tabId) ?? [];
+}
+export function startBlock(tabId: string, term: Terminal): CommandBlock {
+  /* registerMarker, push, trim to MAX_BLOCKS (dispose oldest markers) */
+}
+export function markOutput(tabId: string, term: Terminal): void {
+  /* set outputMarker on last running block */
+}
+export function setCommand(tabId: string, cmd: string): void {
+  /* last running block.command */
+}
+export function finishBlock(tabId: string, exitCode?: number): void {
+  /* last running → done + exitCode */
+}
+export function clearTab(tabId: string): void {
+  /* dispose markers + delete */
+}
 // read output text between outputMarker.line and next block's promptMarker.line (or buffer end)
-export function readOutput(tabId: string, term: Terminal, block: CommandBlock): string { /* iterate term.buffer.active lines translateToString */ }
+export function readOutput(tabId: string, term: Terminal, block: CommandBlock): string {
+  /* iterate term.buffer.active lines translateToString */
+}
 ```
+
 实现：trim 超过 MAX_BLOCKS 时 `dispose()` 最旧 block 的 markers；marker 为 null（裁剪失效）时跳过。
 
 - [ ] **Step 2: 接到 OSC 133 handler（TerminalView ~:943）**
 
 在现有 handler 内（**不动历史逻辑**）追加：
+
 - `A`/`B`：`startBlock(tab.id, term133)`（B 若紧随 A 可只在 A 建、B 忽略——按真 shell 行为，二选一避免重复建块；建议在 A 建块、B 跳过）。
 - `C`：`markOutput(tab.id, term133)`；`setCommand(tab.id, (inputBuffers.get(tab.id) ?? '').trim())`。
 - `D`：解析退出码 `const m = payload.match(/^D(?:;(\d+))?/); finishBlock(tab.id, m?.[1] ? Number(m[1]) : undefined)`。
@@ -158,6 +182,7 @@ export function readOutput(tabId: string, term: Terminal, block: CommandBlock): 
 - [ ] **Step 3: 验证 + Commit**
 
 Run: `npm run build && npm run smoke:check`。
+
 ```bash
 git add src/components/Terminal/blocks.ts src/components/Terminal/TerminalView.tsx
 git commit -m "feat(terminal): command-block model via OSC133 markers + exit code (P4)"
@@ -172,6 +197,7 @@ git commit -m "feat(terminal): command-block model via OSC133 markers + exit cod
 - [ ] **Step 1: 给每个 block 注册 decoration**
 
 在 block 状态变化时（startBlock 后、finishBlock 后）为其 `promptMarker` 注册/更新 decoration：
+
 ```ts
 const deco = term.registerDecoration({ marker: block.promptMarker, x: 0, width: 1 });
 deco?.onRender((el) => {
@@ -181,19 +207,34 @@ deco?.onRender((el) => {
   el.classList.toggle('err', block.state === 'done' && (block.exitCode ?? 0) !== 0);
 });
 ```
+
 存 decoration 句柄随 block；block 回收/clearTab 时 `deco.dispose()`。仅当 `tabHasOsc133.get(tab.id)` 时启用。
 
 - [ ] **Step 2: 样式（global.css，令牌）**
+
 ```css
-.gw-block-deco{ width:3px; height:100%; border-radius:var(--radius-pill); margin-left:1px; }
-.gw-block-deco.running{ background:var(--accent-primary); opacity:.6; }
-.gw-block-deco.ok{ background:var(--success); }
-.gw-block-deco.err{ background:var(--danger); }
+.gw-block-deco {
+  width: 3px;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  margin-left: 1px;
+}
+.gw-block-deco.running {
+  background: var(--accent-primary);
+  opacity: 0.6;
+}
+.gw-block-deco.ok {
+  background: var(--success);
+}
+.gw-block-deco.err {
+  background: var(--danger);
+}
 ```
 
 - [ ] **Step 3: 验证（编译 + 桩"无OSC133不画"）+ Commit**
 
 Run: `npm run build && npm run smoke:check`。桩：普通终端无状态条、无报错。
+
 ```bash
 git add src/components/Terminal/TerminalView.tsx src/styles/global.css
 git commit -m "feat(terminal): gutter status decorations per command block (P4)"
@@ -208,19 +249,22 @@ git commit -m "feat(terminal): gutter status decorations per command block (P4)"
 - [ ] **Step 1: 导航动作（keymap）**
 
 `actions.ts` 加：
+
 ```ts
 { id:'block.prev', labelKey:'action_block_prev', defaultBinding: IS_MACOS ? 'Meta+Up' : 'Ctrl+Up', run: () => scrollToAdjacentBlock(-1) },
 { id:'block.next', labelKey:'action_block_next', defaultBinding: IS_MACOS ? 'Meta+Down' : 'Ctrl+Down', run: () => scrollToAdjacentBlock(1) },
 ```
+
 `scrollToAdjacentBlock(dir)`：取活跃 tab 的 blocks，按当前视口找相邻 block 的 `promptMarker.line`，`term.scrollToLine(line)`。实现放 TerminalView 并导出给 actions（或经一个轻量 registry，参考现有 cycleTab 取 activeTab 的方式）。
 
 - [ ] **Step 2: 单命令操作（hover 状态条弹小菜单）**
 
 decoration 元素加 hover/点击 → 弹出小菜单（复制命令 / 复制输出 / 重跑）：
+
 - 复制命令：`navigator.clipboard.writeText(block.command)`
 - 复制输出：`readOutput(tab.id, term, block)` → clipboard
 - 重跑：把 `block.command` 写回当前 shell（`invoke('write_to_pty'/ssh write, {data: block.command})`，不自动回车）
-菜单容器加 class，样式见 Step 4。位置按 decoration 元素定位。
+  菜单容器加 class，样式见 Step 4。位置按 decoration 元素定位。
 
 - [ ] **Step 3: i18n（两文件 en/zh）**
 - `action_block_prev`/`action_block_next` —— 上一条命令/下一条命令
@@ -231,6 +275,7 @@ decoration 元素加 hover/点击 → 弹出小菜单（复制命令 / 复制输
 - [ ] **Step 5: 验证 + Commit**
 
 Run: `npm run build && npm run smoke:check`。
+
 ```bash
 git add src/keymap/actions.ts src/components/Terminal/TerminalView.tsx src/styles/global.css src/i18n/locales/gwshell.en.json src/i18n/locales/gwshell.zh.json
 git commit -m "feat(terminal): block navigation + copy command/output + rerun (P4)"

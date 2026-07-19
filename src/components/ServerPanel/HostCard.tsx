@@ -27,21 +27,25 @@ export const HostCard: React.FC<Props> = ({ host, hostIp }) => {
       <div className="sp-grid-2">
         <div className="sp-kv">
           <span className="sp-kv__k">{t('serverPanel_host_user')}</span>
-          <span className="sp-kv__v">{host?.user || placeholder}</span>
-        </div>
-        <div className="sp-kv">
-          <span className="sp-kv__k">{t('serverPanel_host_uptime')}</span>
           <span className="sp-kv__v">
-            {host ? formatUptime(host.uptime_seconds) : placeholder}
+            {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing */}
+            {host?.user || placeholder}
           </span>
         </div>
         <div className="sp-kv">
+          <span className="sp-kv__k">{t('serverPanel_host_uptime')}</span>
+          <span className="sp-kv__v">{host ? formatUptime(host.uptime_seconds) : placeholder}</span>
+        </div>
+        <div className="sp-kv">
           <span className="sp-kv__k">{t('serverPanel_host_host')}</span>
-          <span className="sp-kv__v" title={hostIp}>{hostIp || placeholder}</span>
+          <span className="sp-kv__v" title={hostIp}>
+            {hostIp || placeholder}
+          </span>
         </div>
         <div className="sp-kv">
           <span className="sp-kv__k">{t('serverPanel_host_system')}</span>
           <span className="sp-kv__v" title={host?.os_pretty ?? ''}>
+            {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing */}
             {host?.os_pretty || placeholder}
           </span>
         </div>

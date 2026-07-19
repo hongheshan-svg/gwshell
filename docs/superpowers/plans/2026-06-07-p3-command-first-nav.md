@@ -16,15 +16,15 @@
 
 ## 文件结构
 
-| 文件 | 职责 |
-|---|---|
-| `src/lib/platform.ts` | 新增：导出 `IS_MACOS`（TitleBar 与 actions 共用） |
-| `src/components/CommandPalette/commands.ts` | 新增：`Command` 类型 + `buildCommands(ctx)` |
-| `src/components/CommandPalette/CommandPalette.tsx` | 重写：分组/过滤/键盘/图标/hint |
-| `src/keymap/actions.ts` | `palette.open` 重绑 ⌘K（按平台） |
-| `src/components/TitleBar/TitleBar.tsx` | 中央 ⌘K 药丸；改用 `lib/platform` |
-| `src/styles/global.css` | `.command-palette-*` 增强 + `.titlebar-cmdk` |
-| `src/i18n/locales/gwshell.{en,zh}.json` | 文案 |
+| 文件                                               | 职责                                              |
+| -------------------------------------------------- | ------------------------------------------------- |
+| `src/lib/platform.ts`                              | 新增：导出 `IS_MACOS`（TitleBar 与 actions 共用） |
+| `src/components/CommandPalette/commands.ts`        | 新增：`Command` 类型 + `buildCommands(ctx)`       |
+| `src/components/CommandPalette/CommandPalette.tsx` | 重写：分组/过滤/键盘/图标/hint                    |
+| `src/keymap/actions.ts`                            | `palette.open` 重绑 ⌘K（按平台）                  |
+| `src/components/TitleBar/TitleBar.tsx`             | 中央 ⌘K 药丸；改用 `lib/platform`                 |
+| `src/styles/global.css`                            | `.command-palette-*` 增强 + `.titlebar-cmdk`      |
+| `src/i18n/locales/gwshell.{en,zh}.json`            | 文案                                              |
 
 ---
 
@@ -35,12 +35,14 @@
 - [ ] **Step 1: 创建 platform.ts**
 
 Read `TitleBar.tsx:14` 看现有 IS_MACOS 的判定表达式，原样搬入：
+
 ```ts
 // src/lib/platform.ts
 export const IS_MACOS =
   typeof navigator !== 'undefined' &&
   /mac/i.test(navigator.platform || (navigator as any).userAgentData?.platform || '');
 ```
+
 （用 TitleBar 里**实际的**判定式，保持一致。）
 
 - [ ] **Step 2: TitleBar 改用共享常量**
@@ -50,6 +52,7 @@ export const IS_MACOS =
 - [ ] **Step 3: 验证 + Commit**
 
 Run: `npm run build`（分类器可能间歇挡 npm/node；若挡则据读校验，勿超 ~2 次重试）。
+
 ```bash
 git add src/lib/platform.ts src/components/TitleBar/TitleBar.tsx
 git commit -m "refactor: extract IS_MACOS to lib/platform (P3)"
@@ -69,7 +72,19 @@ Read：`src/keymap/actions.ts`（`KEY_ACTIONS` 形状：`{id,labelKey,defaultBin
 
 ```ts
 import type { LucideIcon } from 'lucide-react';
-import { Settings, Plus, Terminal, Zap, Home, Sun, PanelLeft, Search, Radio, X, ArrowLeftRight } from 'lucide-react';
+import {
+  Settings,
+  Plus,
+  Terminal,
+  Zap,
+  Home,
+  Sun,
+  PanelLeft,
+  Search,
+  Radio,
+  X,
+  ArrowLeftRight,
+} from 'lucide-react';
 import { KEY_ACTIONS } from '../../keymap/actions';
 import { parseBinding, formatStep } from '../../keymap/match';
 import type { SessionConfig, TabInfo } from '../../types';
@@ -116,32 +131,82 @@ export function buildCommands(ctx: CommandCtx): Command[] {
     if (a.id === 'palette.open') continue;
     const binding = ctx.keymapOverrides[a.id] ?? a.defaultBinding;
     cmds.push({
-      id: `action:${a.id}`, group: 'action',
-      label: ctx.t(a.labelKey), hint: fmtBinding(binding),
-      icon: iconForAction(a.id), run: a.run,
+      id: `action:${a.id}`,
+      group: 'action',
+      label: ctx.t(a.labelKey),
+      hint: fmtBinding(binding),
+      icon: iconForAction(a.id),
+      run: a.run,
     });
   }
 
   // 2) create / navigate
   cmds.push(
-    { id:'create:ssh', group:'create', label: ctx.t('cmd_new_ssh','New SSH'), icon: Plus, run: () => ctx.setShowNewSession(true) },
-    { id:'create:local', group:'create', label: ctx.t('cmd_new_local','New local terminal'), icon: Terminal, run: () => ctx.setShowLocalTerminal(true) },
-    { id:'create:quick', group:'create', label: ctx.t('cmd_quick_connect','Quick connect'), icon: Zap, run: () => ctx.setShowQuickConnect(true) },
-    { id:'nav:home', group:'create', label: ctx.t('cmd_open_home','Open home'), icon: Home, run: () => ctx.setActiveTab('asset-list') },
-    { id:'nav:theme', group:'create', label: ctx.t('cmd_toggle_theme','Toggle theme'), icon: Sun, run: ctx.toggleTheme },
-    { id:'nav:sidebar', group:'create', label: ctx.t('cmd_toggle_sidebar','Toggle sidebar'), icon: PanelLeft, run: ctx.toggleSidebar },
+    {
+      id: 'create:ssh',
+      group: 'create',
+      label: ctx.t('cmd_new_ssh', 'New SSH'),
+      icon: Plus,
+      run: () => ctx.setShowNewSession(true),
+    },
+    {
+      id: 'create:local',
+      group: 'create',
+      label: ctx.t('cmd_new_local', 'New local terminal'),
+      icon: Terminal,
+      run: () => ctx.setShowLocalTerminal(true),
+    },
+    {
+      id: 'create:quick',
+      group: 'create',
+      label: ctx.t('cmd_quick_connect', 'Quick connect'),
+      icon: Zap,
+      run: () => ctx.setShowQuickConnect(true),
+    },
+    {
+      id: 'nav:home',
+      group: 'create',
+      label: ctx.t('cmd_open_home', 'Open home'),
+      icon: Home,
+      run: () => ctx.setActiveTab('asset-list'),
+    },
+    {
+      id: 'nav:theme',
+      group: 'create',
+      label: ctx.t('cmd_toggle_theme', 'Toggle theme'),
+      icon: Sun,
+      run: ctx.toggleTheme,
+    },
+    {
+      id: 'nav:sidebar',
+      group: 'create',
+      label: ctx.t('cmd_toggle_sidebar', 'Toggle sidebar'),
+      icon: PanelLeft,
+      run: ctx.toggleSidebar,
+    },
   );
 
   // 3) sessions (connect)
   for (const s of ctx.sessions) {
     if (s._temporary) continue;
     cmds.push({
-      id:`session:${s.id}`, group:'session', label: s.name, sub: s.host ?? s.session_type,
-      keywords: `${s.host ?? ''} ${s.username ?? ''}`, icon: Search,
+      id: `session:${s.id}`,
+      group: 'session',
+      label: s.name,
+      sub: s.host ?? s.session_type,
+      keywords: `${s.host ?? ''} ${s.username ?? ''}`,
+      icon: Search,
       run: () => {
         const existing = ctx.tabs.find((tb) => tb.sessionId === s.id);
         if (existing) ctx.setActiveTab(existing.id);
-        else ctx.addTab({ id: crypto.randomUUID(), sessionId: s.id, title: s.name, type: s.session_type, connected: false });
+        else
+          ctx.addTab({
+            id: crypto.randomUUID(),
+            sessionId: s.id,
+            title: s.name,
+            type: s.session_type,
+            connected: false,
+          });
       },
     });
   }
@@ -149,7 +214,14 @@ export function buildCommands(ctx: CommandCtx): Command[] {
   // 4) open tabs (switch)
   for (const tb of ctx.tabs) {
     if (tb.type === 'asset-list') continue;
-    cmds.push({ id:`tab:${tb.id}`, group:'tab', label: tb.title, sub: tb.type, icon: ArrowLeftRight, run: () => ctx.setActiveTab(tb.id) });
+    cmds.push({
+      id: `tab:${tb.id}`,
+      group: 'tab',
+      label: tb.title,
+      sub: tb.type,
+      icon: ArrowLeftRight,
+      run: () => ctx.setActiveTab(tb.id),
+    });
   }
 
   return cmds;
@@ -163,11 +235,13 @@ function iconForAction(id: string): LucideIcon {
   return ArrowLeftRight; // tab.next/prev
 }
 ```
+
 （**确认** ctx 里的方法名/是否存在与 store 一致；`toggleTheme` 若 store 无现成方法，在组件里实现成读 settings.theme 取反并 `save`/`setTheme`。`setShowLocalTerminal`/`setShowQuickConnect` 若名字不同，按 NewAssetMenu 实际用法改。）
 
 - [ ] **Step 3: 验证 + Commit**
 
 Run: `npm run build`（仅类型，未渲染）。
+
 ```bash
 git add src/components/CommandPalette/commands.ts
 git commit -m "feat(palette): unified command model buildCommands (P3)"
@@ -190,8 +264,13 @@ import { useAppStore } from '../../stores/appStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { buildCommands, type Command } from './commands';
 
-const GROUP_ORDER: Command['group'][] = ['action','create','session','tab'];
-const GROUP_LABEL: Record<Command['group'], string> = { action:'cmd_grp_action', create:'cmd_grp_create', session:'cmd_grp_session', tab:'cmd_grp_tab' };
+const GROUP_ORDER: Command['group'][] = ['action', 'create', 'session', 'tab'];
+const GROUP_LABEL: Record<Command['group'], string> = {
+  action: 'cmd_grp_action',
+  create: 'cmd_grp_create',
+  session: 'cmd_grp_session',
+  tab: 'cmd_grp_tab',
+};
 
 export const CommandPalette: React.FC = () => {
   const { t } = useTranslation('gwshell');
@@ -203,37 +282,69 @@ export const CommandPalette: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
-  const commands = useMemo(() => buildCommands({
-    sessions: store.sessions, tabs: store.tabs, keymapOverrides: settings.keymapOverrides ?? {}, t,
-    addTab: store.addTab, setActiveTab: store.setActiveTab,
-    setShowNewSession: store.setShowNewSession, setShowQuickConnect: store.setShowQuickConnect,
-    setShowLocalTerminal: store.setShowLocalTerminal, setShowSettings: store.setShowSettings,
-    toggleSidebar: store.toggleSidebar,
-    toggleTheme: () => saveSettings({ ...settings, theme: settings.theme === 'dark' ? 'light' : 'dark' }),
-  }), [store.sessions, store.tabs, settings, t, saveSettings]);
+  const commands = useMemo(
+    () =>
+      buildCommands({
+        sessions: store.sessions,
+        tabs: store.tabs,
+        keymapOverrides: settings.keymapOverrides ?? {},
+        t,
+        addTab: store.addTab,
+        setActiveTab: store.setActiveTab,
+        setShowNewSession: store.setShowNewSession,
+        setShowQuickConnect: store.setShowQuickConnect,
+        setShowLocalTerminal: store.setShowLocalTerminal,
+        setShowSettings: store.setShowSettings,
+        toggleSidebar: store.toggleSidebar,
+        toggleTheme: () =>
+          saveSettings({ ...settings, theme: settings.theme === 'dark' ? 'light' : 'dark' }),
+      }),
+    [store.sessions, store.tabs, settings, t, saveSettings],
+  );
   // NOTE: confirm each store.* name exists; adjust to real names.
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return commands;
-    return commands.filter((c) =>
-      c.label.toLowerCase().includes(q) ||
-      (c.sub?.toLowerCase().includes(q)) ||
-      (c.keywords?.toLowerCase().includes(q)));
+    return commands.filter(
+      (c) =>
+        c.label.toLowerCase().includes(q) ||
+        c.sub?.toLowerCase().includes(q) ||
+        c.keywords?.toLowerCase().includes(q),
+    );
   }, [commands, query]);
 
-  useEffect(() => { setIndex(0); }, [query]);
+  useEffect(() => {
+    setIndex(0);
+  }, [query]);
 
   const close = () => store.setShowCommandPalette(false);
-  const runAt = (i: number) => { const c = filtered[i]; if (c) { close(); c.run(); } };
+  const runAt = (i: number) => {
+    const c = filtered[i];
+    if (c) {
+      close();
+      c.run();
+    }
+  };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); setIndex((i) => Math.min(i + 1, filtered.length - 1)); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setIndex((i) => Math.max(i - 1, 0)); }
-    else if (e.key === 'Enter') { e.preventDefault(); runAt(index); }
-    else if (e.key === 'Escape') { e.preventDefault(); close(); }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setIndex((i) => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setIndex((i) => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      runAt(index);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+    }
   };
 
   useEffect(() => {
@@ -245,11 +356,22 @@ export const CommandPalette: React.FC = () => {
   let flat = -1;
   return (
     <div className="command-palette-overlay" onMouseDown={close}>
-      <div className="command-palette-card" onMouseDown={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
-        <input ref={inputRef} className="command-palette-input" placeholder={t('palette_placeholder')}
-               value={query} onChange={(e) => setQuery(e.target.value)} />
+      <div
+        className="command-palette-card"
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
+      >
+        <input
+          ref={inputRef}
+          className="command-palette-input"
+          placeholder={t('palette_placeholder')}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
         <div className="command-palette-list" ref={listRef}>
-          {filtered.length === 0 && <div className="command-palette-empty">{t('palette_no_results')}</div>}
+          {filtered.length === 0 && (
+            <div className="command-palette-empty">{t('palette_no_results')}</div>
+          )}
           {GROUP_ORDER.map((g) => {
             const items = filtered.filter((c) => c.group === g);
             if (items.length === 0) return null;
@@ -257,11 +379,16 @@ export const CommandPalette: React.FC = () => {
               <div key={g} className="command-palette-group">
                 <div className="command-palette-group-title">{t(GROUP_LABEL[g])}</div>
                 {items.map((c) => {
-                  flat += 1; const my = flat; const Icon = c.icon;
+                  flat += 1;
+                  const my = flat;
+                  const Icon = c.icon;
                   return (
-                    <div key={c.id}
-                         className={`command-palette-item${my === index ? ' active' : ''}`}
-                         onMouseEnter={() => setIndex(my)} onClick={() => runAt(my)}>
+                    <div
+                      key={c.id}
+                      className={`command-palette-item${my === index ? ' active' : ''}`}
+                      onMouseEnter={() => setIndex(my)}
+                      onClick={() => runAt(my)}
+                    >
                       {Icon && <Icon size={14} className="command-palette-item-icon" />}
                       <span className="command-palette-item-label">{c.label}</span>
                       {c.sub && <span className="command-palette-item-sub">{c.sub}</span>}
@@ -278,6 +405,7 @@ export const CommandPalette: React.FC = () => {
   );
 };
 ```
+
 （**严格对齐真实 store 方法名**——逐一在 appStore 确认 `setShowQuickConnect`/`setShowLocalTerminal`/`setShowNewSession`/`setShowSettings`/`toggleSidebar` 存在；不存在的用 NewAssetMenu 实际触发方式替换。theme 取反用 settingsStore.save。）
 
 - [ ] **Step 3: 验证（桩截图）**
@@ -286,6 +414,7 @@ Run: `npm run build && npm run smoke:check`。
 浏览器桩：打开面板（设 `store.setShowCommandPalette(true)` 或点药丸——T4后）；空查询显示分组；输入过滤；↑↓+Enter；点击执行（如"切换主题"立即变亮/暗）。
 
 - [ ] **Step 4: Commit**
+
 ```bash
 git add src/components/CommandPalette/CommandPalette.tsx
 git commit -m "feat(palette): grouped command palette with actions/create/session/tab (P3)"
@@ -300,14 +429,17 @@ git commit -m "feat(palette): grouped command palette with actions/create/sessio
 - [ ] **Step 1: 重绑**
 
 `actions.ts`：`import { IS_MACOS } from '../lib/platform';`，把 `palette.open` 的 `defaultBinding` 改为：
+
 ```ts
 defaultBinding: IS_MACOS ? 'Meta+K' : 'Ctrl+K',
 ```
+
 其余不动。
 
 - [ ] **Step 2: 验证 + Commit**
 
 Run: `npm run build`。桩/真机：mac 按 ⌘K 打开（桩环境无法测真实键，构建通过即可，真机由 T7 人工验）。
+
 ```bash
 git add src/keymap/actions.ts
 git commit -m "feat(palette): bind palette.open to Cmd/Ctrl+K by platform (P3)"
@@ -322,6 +454,7 @@ git commit -m "feat(palette): bind palette.open to Cmd/Ctrl+K by platform (P3)"
 - [ ] **Step 1: 药丸**
 
 `TitleBar.tsx`：把空的 `.titlebar-center` 改为含按钮（确认 `setShowCommandPalette` 来自 useAppStore；`Search` 图标来自 lucide）：
+
 ```tsx
 <div className="titlebar-center" data-tauri-drag-region>
   <button type="button" className="titlebar-cmdk" onClick={() => setShowCommandPalette(true)}>
@@ -335,17 +468,37 @@ git commit -m "feat(palette): bind palette.open to Cmd/Ctrl+K by platform (P3)"
 - [ ] **Step 2: 样式（global.css，令牌）**
 
 ```css
-.titlebar-cmdk{
-  -webkit-app-region: no-drag; app-region: no-drag;
-  display:flex; align-items:center; gap:6px;
-  height:22px; padding:0 10px; min-width:200px; max-width:360px;
-  background:var(--bg-tertiary); border:1px solid var(--border-color);
-  border-radius:var(--radius-md); color:var(--text-secondary);
-  font-size:12px; cursor:pointer; justify-content:center;
+.titlebar-cmdk {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 10px;
+  min-width: 200px;
+  max-width: 360px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  justify-content: center;
 }
-.titlebar-cmdk:hover{ color:var(--text-primary); border-color:var(--border-light); background:var(--bg-hover); }
-.titlebar-cmdk kbd{ margin-left:6px; padding:0 5px; border-radius:var(--radius-sm);
-  background:var(--bg-secondary); color:var(--text-muted); font-size:10.5px; }
+.titlebar-cmdk:hover {
+  color: var(--text-primary);
+  border-color: var(--border-light);
+  background: var(--bg-hover);
+}
+.titlebar-cmdk kbd {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
 ```
 
 - [ ] **Step 3: palette 增强样式（global.css）**
@@ -355,6 +508,7 @@ git commit -m "feat(palette): bind palette.open to Cmd/Ctrl+K by platform (P3)"
 - [ ] **Step 4: 验证（桩截图）+ Commit**
 
 Run: `npm run build && npm run smoke:check`。桩截图：titlebar 中央出现 ⌘K 药丸；点击打开面板；面板分组/图标/hint 样式正确。
+
 ```bash
 git add src/components/TitleBar/TitleBar.tsx src/styles/global.css
 git commit -m "feat(nav): titlebar Cmd-K command entry pill + palette styles (P3)"
@@ -385,6 +539,7 @@ git commit -m "feat(nav): titlebar Cmd-K command entry pill + palette styles (P3
 - [ ] **Step 2: 验证 + Commit**
 
 Run: `npm run build`。
+
 ```bash
 git add src/i18n/locales/gwshell.en.json src/i18n/locales/gwshell.zh.json
 git commit -m "i18n(palette): command groups, create commands, entry pill (P3)"

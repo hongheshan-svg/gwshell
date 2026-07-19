@@ -40,7 +40,10 @@ export const ProcessList: React.FC<Props> = ({ sessionId, procs }) => {
       }, 3000);
       return;
     }
-    if (armedTimerRef.current) { clearTimeout(armedTimerRef.current); armedTimerRef.current = null; }
+    if (armedTimerRef.current) {
+      clearTimeout(armedTimerRef.current);
+      armedTimerRef.current = null;
+    }
     setArmedPid(null);
     setPending((prev) => new Set(prev).add(p.pid));
     try {
@@ -59,7 +62,7 @@ export const ProcessList: React.FC<Props> = ({ sessionId, procs }) => {
   return (
     <div className="sp-card sp-card--procs">
       <div className="sp-card__title">{t('serverPanel_proc_title')}</div>
-      {(!procs || procs.length === 0) ? (
+      {!procs || procs.length === 0 ? (
         <div className="sp-empty">—</div>
       ) : (
         <table className="sp-table sp-table--procs">
@@ -83,7 +86,9 @@ export const ProcessList: React.FC<Props> = ({ sessionId, procs }) => {
                   <button
                     className={`sp-kill-btn${armedPid === p.pid ? ' sp-kill-btn--armed' : ''}`}
                     disabled={pending.has(p.pid)}
-                    onClick={() => handleKillClick(p)}
+                    onClick={() => {
+                      void handleKillClick(p);
+                    }}
                     title={
                       armedPid === p.pid
                         ? t('serverPanel_proc_kill_confirm_body', { pid: p.pid, name: p.comm })

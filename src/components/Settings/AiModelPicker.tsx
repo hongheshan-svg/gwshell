@@ -19,10 +19,17 @@ interface Props {
   busy: boolean;
 }
 
-export const AiModelPicker: React.FC<Props> = ({ activePresetId, activeTab, onTabChange, onApply, busy }) => {
+export const AiModelPicker: React.FC<Props> = ({
+  activePresetId,
+  activeTab,
+  onTabChange,
+  onApply,
+  busy,
+}) => {
   const { t } = useTranslation();
   const visiblePresets = useMemo(
-    () => (activeTab === 'all' ? aiModelPresets : aiModelPresets.filter((p) => p.group === activeTab)),
+    () =>
+      activeTab === 'all' ? aiModelPresets : aiModelPresets.filter((p) => p.group === activeTab),
     [activeTab],
   );
   return (
@@ -57,11 +64,19 @@ export const AiModelPicker: React.FC<Props> = ({ activePresetId, activeTab, onTa
               type="button"
             >
               <span className="ai-model-card-head">
-                <strong>{preset.vendor} · {preset.title}</strong>
-                {active ? <Check size={14} className="ai-model-card-check" /> : <small>{t(preset.badgeKey)}</small>}
+                <strong>
+                  {preset.vendor} · {preset.title}
+                </strong>
+                {active ? (
+                  <Check size={14} className="ai-model-card-check" />
+                ) : (
+                  <small>{t(preset.badgeKey)}</small>
+                )}
               </span>
               <span className="ai-model-card-scene">{t(preset.descriptionKey)}</span>
-              <span className="ai-model-card-proto">{compatibleProviderLabels[preset.provider]}</span>
+              <span className="ai-model-card-proto">
+                {compatibleProviderLabels[preset.provider]}
+              </span>
             </button>
           );
         })}

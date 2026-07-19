@@ -21,10 +21,10 @@
 
 ## 2. 已锁定方向（分两阶段）
 
-| | 内容 | 本期 |
-|---|---|---|
+|             | 内容                                                                                          | 本期            |
+| ----------- | --------------------------------------------------------------------------------------------- | --------------- |
 | **Phase A** | 注入 + 命令边界数据模型 + **轻量 block 表现**（左侧状态条 + 命令导航 + 复制命令/输出 + 重跑） | ✅ 本 spec 实现 |
-| **Phase B** | 完整 **block 卡片**（命令+输出框成卡、退出码角标、可折叠、粘性命令头） | ⏳ 后续 spec |
+| **Phase B** | 完整 **block 卡片**（命令+输出框成卡、退出码角标、可折叠、粘性命令头）                        | ⏳ 后续 spec    |
 
 Phase A 在"OSC 133 存在时"即生效，且对**任何**发射 OSC 133 的 shell（自带或我们注入）都成立。Phase B 是重渲染工作，留作第二阶段。
 
@@ -37,6 +37,7 @@ Phase A 在"OSC 133 存在时"即生效，且对**任何**发射 OSC 133 的 she
 目标：让本地 shell 可靠发射 OSC 133 `A`(prompt-start) / `B`(command-start) / `C`(pre-exec) / `D;<exit>`(done+退出码)。
 
 **本地 shell（我们控制启动）——按 shell 注入，避免回显闪烁：**
+
 - **bash**：`CommandBuilder` 加 `--rcfile <tmp>`，临时 rc 先 `source ~/.bashrc`（若存在）再追加：`PROMPT_COMMAND` 发 `\e]133;D;$?\a` + `\e]133;A\a`，`trap '...133;C' DEBUG` 发 `B`/`C`。
 - **zsh**：设 `ZDOTDIR=<tmpdir>`，其 `.zshrc` 先 source 用户 zdotdir 再加 `precmd`(发 D;$? 与 A)/`preexec`(发 B/C) 函数。
 - **fish**：`--init-command` 或注入 `function fish_prompt`/`fish_preexec`/`fish_postexec` 发对应序列。
@@ -51,13 +52,14 @@ Phase A 在"OSC 133 存在时"即生效，且对**任何**发射 OSC 133 的 she
 ### A2 · 命令区间模型 + xterm markers
 
 扩展 OSC 133 handler（不破坏现有历史逻辑）：
+
 - 维护 per-tab `CommandBlock[]`：
   ```ts
   interface CommandBlock {
-    promptMarker: IMarker;     // term.registerMarker() at prompt/command start (A/B)
-    outputMarker?: IMarker;    // at pre-exec (C)
-    command: string;           // from existing inputBuffer captured at C
-    exitCode?: number;         // parsed from D payload "D;<code>"
+    promptMarker: IMarker; // term.registerMarker() at prompt/command start (A/B)
+    outputMarker?: IMarker; // at pre-exec (C)
+    command: string; // from existing inputBuffer captured at C
+    exitCode?: number; // parsed from D payload "D;<code>"
     state: 'running' | 'done';
     startedAt: number;
   }
@@ -70,6 +72,7 @@ Phase A 在"OSC 133 存在时"即生效，且对**任何**发射 OSC 133 的 she
 ### A3 · 左侧状态条 decorations
 
 用 `term.registerDecoration({ marker })` 给每个 block 在**左边距**画一条状态条：
+
 - running → `--accent-primary`（脉冲/半透明）；exit 0 → `--success`；exit≠0 → `--danger`。
 - 宽度 ~3px，靠左 gutter；hover 高亮。点击/hover 暴露该命令的操作（A4）。
 - 全部用 P1 令牌色；decoration 元素加 class，样式在 global.css。
@@ -95,28 +98,28 @@ Phase A 在"OSC 133 存在时"即生效，且对**任何**发射 OSC 133 的 she
 
 ## 5. 影响文件
 
-| 文件 | 改动 |
-|---|---|
-| `src-tauri/src/pty.rs`（+ ssh 路径） | 按 shell 注入集成脚本（rcfile/env/临时文件）；gated by 设置 |
-| `src-tauri/src/lib.rs` | 传递"是否注入"标志 / 生成临时集成文件命令 |
+| 文件                                       | 改动                                                                                       |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `src-tauri/src/pty.rs`（+ ssh 路径）       | 按 shell 注入集成脚本（rcfile/env/临时文件）；gated by 设置                                |
+| `src-tauri/src/lib.rs`                     | 传递"是否注入"标志 / 生成临时集成文件命令                                                  |
 | `src/components/Terminal/TerminalView.tsx` | OSC 133 handler 扩展：markers、退出码、CommandBlock 模型；decorations；导航/复制操作；清理 |
-| `src/keymap/actions.ts` | `block.prev`/`block.next` 动作 |
-| `src/styles/global.css` | 状态条 decoration + 单命令小菜单样式（令牌） |
-| `src/i18n/locales/gwshell.{en,zh}.json` | 导航/复制命令/复制输出/重跑 文案 |
-| `src/stores/settingsStore.ts` | 接活 `cmdHintShellIntegration`（仅消费，不新增字段） |
+| `src/keymap/actions.ts`                    | `block.prev`/`block.next` 动作                                                             |
+| `src/styles/global.css`                    | 状态条 decoration + 单命令小菜单样式（令牌）                                               |
+| `src/i18n/locales/gwshell.{en,zh}.json`    | 导航/复制命令/复制输出/重跑 文案                                                           |
+| `src/stores/settingsStore.ts`              | 接活 `cmdHintShellIntegration`（仅消费，不新增字段）                                       |
 
 ---
 
 ## 6. 风险与缓解
 
-| 风险 | 缓解 |
-|---|---|
+| 风险                                  | 缓解                                                                                                                               |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | **注入跨 shell/平台脆弱**（最大风险） | 仅 bash/zsh/fish 本地，用 rcfile/env 干净注入；pwsh/cmd v1 跳过；远端 best-effort + 文档标注；全程 gated by 开关，关闭则完全旧行为 |
-| 集成脚本污染用户 rc / 回显闪烁 | rcfile/env 先 source 用户配置再追加；不用 eval 回显路线（仅 fallback） |
-| marker 随滚动裁剪失效 | marker `onDispose` 清理对应 block + decoration；保留上限 N |
-| decorations 多导致性能 | 仅 OSC 133 tab 启用；每命令一个轻量元素；超上限回收 |
-| 退出码格式差异（`D` 无码/有码） | `D` 无码按 done 处理、状态中性；有码才上色 |
-| 与现有命令历史/补全逻辑冲突 | 扩展而非替换 handler；历史路径不动 |
+| 集成脚本污染用户 rc / 回显闪烁        | rcfile/env 先 source 用户配置再追加；不用 eval 回显路线（仅 fallback）                                                             |
+| marker 随滚动裁剪失效                 | marker `onDispose` 清理对应 block + decoration；保留上限 N                                                                         |
+| decorations 多导致性能                | 仅 OSC 133 tab 启用；每命令一个轻量元素；超上限回收                                                                                |
+| 退出码格式差异（`D` 无码/有码）       | `D` 无码按 done 处理、状态中性；有码才上色                                                                                         |
+| 与现有命令历史/补全逻辑冲突           | 扩展而非替换 handler；历史路径不动                                                                                                 |
 
 ---
 

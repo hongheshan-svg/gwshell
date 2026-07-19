@@ -46,6 +46,7 @@ setSplitCount: (n: 1 | 2 | 4 | 6 | 8) => void;
 ```
 
 `setSplitCount(n)`:
+
 - `n === 1` → `splitCount = 1`, `splitPanes = []` (single-pane mode).
 - else → `splitCount = n`; rebuild `splitPanes` of length `n` from the CURRENT
   terminal tabs: the active tab first, then the rest in tab-bar order, take up to
@@ -72,7 +73,7 @@ slot, leave it out of the grid (still an open tab, reachable via the tab bar).
 - When active: render a grid with class `terminal-split-grid split-{splitCount}`.
   Render exactly `splitCount` cells in slot order. Each cell:
   - non-null slot → `<TerminalView tab={tab} isActive={tab.id===activeTabId}
-    visible />` wrapped in a pane div that, on click/focus, calls
+visible />` wrapped in a pane div that, on click/focus, calls
     `setActiveTab(slot.tabId)`. The active pane gets an `is-active-pane` class
     (highlight border).
   - null slot → an empty placeholder cell (muted, e.g. a centered "—" or a
@@ -90,13 +91,30 @@ Replace the single `.terminal-split-grid { grid-template-columns: 1fr 1fr }`
 with count-specific templates:
 
 ```css
-.terminal-split-grid { display: grid; gap: 1px; width: 100%; height: 100%; }
-.terminal-split-grid.split-2 { grid-template: 1fr / repeat(2, 1fr); }
-.terminal-split-grid.split-4 { grid-template: repeat(2, 1fr) / repeat(2, 1fr); }
-.terminal-split-grid.split-6 { grid-template: repeat(2, 1fr) / repeat(3, 1fr); }
-.terminal-split-grid.split-8 { grid-template: repeat(2, 1fr) / repeat(4, 1fr); }
-.terminal-pane.is-active-pane { /* highlight border via existing accent var */ }
-.terminal-pane-empty { /* muted placeholder cell */ }
+.terminal-split-grid {
+  display: grid;
+  gap: 1px;
+  width: 100%;
+  height: 100%;
+}
+.terminal-split-grid.split-2 {
+  grid-template: 1fr / repeat(2, 1fr);
+}
+.terminal-split-grid.split-4 {
+  grid-template: repeat(2, 1fr) / repeat(2, 1fr);
+}
+.terminal-split-grid.split-6 {
+  grid-template: repeat(2, 1fr) / repeat(3, 1fr);
+}
+.terminal-split-grid.split-8 {
+  grid-template: repeat(2, 1fr) / repeat(4, 1fr);
+}
+.terminal-pane.is-active-pane {
+  /* highlight border via existing accent var */
+}
+.terminal-pane-empty {
+  /* muted placeholder cell */
+}
 ```
 
 (Reuse the existing pane/active styling conventions; check what classes the

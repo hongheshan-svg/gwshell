@@ -13,6 +13,7 @@
 ## Verification approach (read first)
 
 Per `CLAUDE.md`: **there are no automated tests in this project.** Do NOT create a test framework. Each task verifies via:
+
 - Frontend: `npm run build` (runs `tsc` type-check + Vite build) — must pass with no errors.
 - Backend: `cd src-tauri && cargo check` — must compile with no errors.
 - Static: `npm run smoke:check` — must report no new issues.
@@ -25,11 +26,13 @@ Commit after every task.
 ## File structure
 
 **Backend (`src-tauri/src/`)**
+
 - `history.rs` — MODIFY: `HistoryEntry` struct + multi-field `load_history`/`save_command`.
 - `database.rs` — MODIFY: schema migration (ALTER columns), `snippets` table, wrapper methods.
 - `lib.rs` — MODIFY: extend history IPC; add 3 snippet IPC commands; register all in `invoke_handler!`.
 
 **Frontend (`src/`)**
+
 - `lib/commandHistory.ts` — MODIFY: structured entries, ranked `getSuggestions`, `getSuggestion` shim.
 - `lib/snippetExpand.ts` — CREATE: `\xNN`/`\sNNN`/`\n`/`\r`/`\t`/`\\` expansion into send segments.
 - `stores/snippetStore.ts` — CREATE: Zustand snippet CRUD + IPC side effects.
@@ -52,6 +55,7 @@ Commit after every task.
 ### Task A1: Backend — multi-field history store
 
 **Files:**
+
 - Modify: `src-tauri/src/history.rs` (whole file)
 - Modify: `src-tauri/src/database.rs` (`init_tables` ~31-54; `load_command_history`/`save_command_history` ~213-224)
 
@@ -130,7 +134,9 @@ In `init_tables` (`src-tauri/src/database.rs`), after the existing `conn.execute
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS sessions (
 ```
+
 ...through the closing...
+
 ```rust
             CREATE INDEX IF NOT EXISTS idx_cmd_ts ON command_history(ts DESC);",
         )
@@ -218,6 +224,7 @@ git commit -m "feat(history): scope command history by cwd/host/type; add snippe
 ### Task A2: Backend — history IPC signature
 
 **Files:**
+
 - Modify: `src-tauri/src/lib.rs` (`get_command_history`/`save_command_history` ~594-617)
 
 - [ ] **Step 1: Replace the two history commands**
@@ -276,6 +283,7 @@ git commit -m "feat(history): extend save_command_history IPC with cwd/scope/typ
 ### Task B1+B2: Backend — snippet persistence + IPC
 
 **Files:**
+
 - Modify: `src-tauri/src/database.rs` (add methods near other CRUD, after `clear_all_sessions` ~209)
 - Modify: `src-tauri/src/lib.rs` (add 3 commands; register in `invoke_handler!` ~792-843)
 
@@ -384,6 +392,7 @@ git commit -m "feat(snippets): backend CRUD + IPC commands"
 ### Task A3: Frontend — ranked suggestions
 
 **Files:**
+
 - Modify: `src/lib/commandHistory.ts` (whole file)
 
 - [ ] **Step 1: Rewrite `commandHistory.ts`**
@@ -488,6 +497,7 @@ git commit -m "feat(history): ranked multi-candidate suggestions with scope/cwd 
 ### Task A8: Settings — new flags + rows + i18n
 
 **Files:**
+
 - Modify: `src/stores/settingsStore.ts` (`AppSettings` ~8-73; `defaultSettings` ~75-140)
 - Modify: `src/components/Settings/SettingsModal.tsx` (duplicate `AppSettings` ~33-95; duplicate `defaultSettings` ~136-165; SSH/SFTP rows ~434-437)
 - Modify: `src/i18n/locales/gwshell.en.json`, `gwshell.zh.json`
@@ -497,10 +507,10 @@ git commit -m "feat(history): ranked multi-candidate suggestions with scope/cwd 
 In `src/stores/settingsStore.ts`, in `interface AppSettings`, after `sshHistoryCmdLoadCount: string;` (line ~41) add:
 
 ```ts
-  cmdHintAllSessions: boolean;
-  cmdHintShellIntegration: boolean;
-  cmdHintDeferToRemote: boolean;
-  cmdHintScopeByHost: boolean;
+cmdHintAllSessions: boolean;
+cmdHintShellIntegration: boolean;
+cmdHintDeferToRemote: boolean;
+cmdHintScopeByHost: boolean;
 ```
 
 In `defaultSettings`, after `sshHistoryCmdLoadCount: '100',` (line ~108) add:
@@ -517,10 +527,10 @@ In `defaultSettings`, after `sshHistoryCmdLoadCount: '100',` (line ~108) add:
 In `src/components/Settings/SettingsModal.tsx`, in its `export interface AppSettings`, after `sshHistoryCmdLoadCount: string;` (line ~67) add the identical 4 lines:
 
 ```ts
-  cmdHintAllSessions: boolean;
-  cmdHintShellIntegration: boolean;
-  cmdHintDeferToRemote: boolean;
-  cmdHintScopeByHost: boolean;
+cmdHintAllSessions: boolean;
+cmdHintShellIntegration: boolean;
+cmdHintDeferToRemote: boolean;
+cmdHintScopeByHost: boolean;
 ```
 
 In its local `defaultSettings`, after `sshHistoryCmdLoadCount: '100',` (line ~139) add:
@@ -608,6 +618,7 @@ git commit -m "feat(settings): command-hint scope/integration flags + snippet i1
 ### Task A4: TerminalView — generalize capture, scope/cwd, hardened editing
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx` (module maps ~187-193; `destroyTerminal` ~208-226; `onData` history block ~892-930; overlay gate ~1391; cleanup ~1004-1016)
 
 - [ ] **Step 1: Add module-level maps + helpers**
@@ -615,12 +626,12 @@ git commit -m "feat(settings): command-hint scope/integration flags + snippet i1
 In `src/components/Terminal/TerminalView.tsx`, after the existing `const ghostAcceptCallbacks = new Map<...>();` (line ~193) add:
 
 ```ts
-const tabCwd            = new Map<string, string>();
-const tabHasOsc133      = new Map<string, boolean>();
-const tabCandidates     = new Map<string, string[]>();
-const candidateIndex    = new Map<string, number>();
-const tabInputSenders   = new Map<string, (data: string) => void>();
-const bracketedPaste    = new Map<string, boolean>();
+const tabCwd = new Map<string, string>();
+const tabHasOsc133 = new Map<string, boolean>();
+const tabCandidates = new Map<string, string[]>();
+const candidateIndex = new Map<string, number>();
+const tabInputSenders = new Map<string, (data: string) => void>();
+const bracketedPaste = new Map<string, boolean>();
 
 function isInteractiveTerminal(type: string): boolean {
   return type === 'ssh' || type === 'localshell' || type === 'serial' || type === 'docker';
@@ -644,12 +655,12 @@ function tabScope(
 In `destroyTerminal` (~208-226), after `ghostAcceptCallbacks.delete(tabId);` add:
 
 ```ts
-  tabCwd.delete(tabId);
-  tabHasOsc133.delete(tabId);
-  tabCandidates.delete(tabId);
-  candidateIndex.delete(tabId);
-  tabInputSenders.delete(tabId);
-  bracketedPaste.delete(tabId);
+tabCwd.delete(tabId);
+tabHasOsc133.delete(tabId);
+tabCandidates.delete(tabId);
+candidateIndex.delete(tabId);
+tabInputSenders.delete(tabId);
+bracketedPaste.delete(tabId);
 ```
 
 - [ ] **Step 3: Replace the `onData` history block**
@@ -657,86 +668,91 @@ In `destroyTerminal` (~208-226), after `ghostAcceptCallbacks.delete(tabId);` add
 In `src/components/Terminal/TerminalView.tsx`, replace the whole history block inside `onData` — from `// SSH command history: intercept keystrokes...` (line ~892) through `inputBuffers.set(tab.id, buf);` and its closing `}` (line ~930) — with:
 
 ```ts
-        // Command history: track input line and compute ghost text.
-        // Generalized beyond SSH; gated by sshHistoryCmd (capture) + cmdHintAllSessions.
-        {
-          const st = useSettingsStore.getState().settings;
-          const captureOn =
-            st.sshHistoryCmd &&
-            isInteractiveTerminal(tab.type) &&
-            (tab.type === 'ssh' || st.cmdHintAllSessions);
-          if (captureOn) {
-            const sess = sessionsRef.current.find((s) => s.id === tab.sessionId);
-            const scope = st.cmdHintScopeByHost ? tabScope(tab.type, sess) : '';
-            const cwd = st.cmdHintScopeByHost ? (tabCwd.get(tab.id) ?? '') : '';
-            const sessionType = tab.type;
+// Command history: track input line and compute ghost text.
+// Generalized beyond SSH; gated by sshHistoryCmd (capture) + cmdHintAllSessions.
+{
+  const st = useSettingsStore.getState().settings;
+  const captureOn =
+    st.sshHistoryCmd &&
+    isInteractiveTerminal(tab.type) &&
+    (tab.type === 'ssh' || st.cmdHintAllSessions);
+  if (captureOn) {
+    const sess = sessionsRef.current.find((s) => s.id === tab.sessionId);
+    const scope = st.cmdHintScopeByHost ? tabScope(tab.type, sess) : '';
+    const cwd = st.cmdHintScopeByHost ? (tabCwd.get(tab.id) ?? '') : '';
+    const sessionType = tab.type;
 
-            let buf = inputBuffers.get(tab.id) ?? '';
-            const setter = ghostTextSetters.get(tab.id);
-            const inst = terminalInstances.get(tab.id);
-            const cursorX = inst?.terminal.buffer.active.cursorX ?? 0;
-            const cursorY = inst?.terminal.buffer.active.cursorY ?? 0;
+    let buf = inputBuffers.get(tab.id) ?? '';
+    const setter = ghostTextSetters.get(tab.id);
+    const inst = terminalInstances.get(tab.id);
+    const cursorX = inst?.terminal.buffer.active.cursorX ?? 0;
+    const cursorY = inst?.terminal.buffer.active.cursorY ?? 0;
 
-            const showGhost = () => {
-              const cands = commandHistory.getSuggestions(buf, { scope, cwd, sessionType });
-              tabCandidates.set(tab.id, cands);
-              candidateIndex.set(tab.id, 0);
-              const suffix = cands[0] ? cands[0].slice(buf.length) : '';
-              ghostTextState.set(tab.id, suffix);
-              setter?.(suffix, cursorX, cursorY);
-            };
-            const clearGhost = () => {
-              tabCandidates.set(tab.id, []);
-              candidateIndex.set(tab.id, 0);
-              ghostTextState.set(tab.id, '');
-              setter?.('', 0, 0);
-            };
+    const showGhost = () => {
+      const cands = commandHistory.getSuggestions(buf, { scope, cwd, sessionType });
+      tabCandidates.set(tab.id, cands);
+      candidateIndex.set(tab.id, 0);
+      const suffix = cands[0] ? cands[0].slice(buf.length) : '';
+      ghostTextState.set(tab.id, suffix);
+      setter?.(suffix, cursorX, cursorY);
+    };
+    const clearGhost = () => {
+      tabCandidates.set(tab.id, []);
+      candidateIndex.set(tab.id, 0);
+      ghostTextState.set(tab.id, '');
+      setter?.('', 0, 0);
+    };
 
-            // Bracketed paste: buffer the pasted content into the line, no ghost.
-            if (data.includes('\x1b[200~')) bracketedPaste.set(tab.id, true);
-            if (bracketedPaste.get(tab.id)) {
-              const end = data.indexOf('\x1b[201~');
-              const chunk = (end >= 0 ? data.slice(0, end) : data)
-                .replace('\x1b[200~', '');
-              buf += chunk;
-              if (end >= 0) bracketedPaste.set(tab.id, false);
-              clearGhost();
-            } else if (data === '\r' || data === '\n') {
-              const trimmed = buf.trim();
-              if (trimmed.length > 0) commandHistory.record(trimmed, { scope, cwd, sessionType });
-              buf = '';
-              clearGhost();
-            } else if (data === '\x7f' || data === '\b') {
-              // Backspace
-              buf = buf.slice(0, -1);
-              if (buf.length > 0) showGhost();
-              else clearGhost();
-            } else if (data === '\x17') {
-              // Ctrl+W — delete the previous word
-              buf = buf.replace(/\s*\S+\s*$/, '');
-              if (buf.length > 0) showGhost();
-              else clearGhost();
-            } else if (data === '\x15' || data === '\x0b' || data === '\x0c') {
-              // Ctrl+U / Ctrl+K / Ctrl+L — clear line / kill / clear screen
-              if (data === '\x15') buf = '';
-              clearGhost();
-            } else if (
-              data === '\x1b[A' || data === '\x1b[B' || data === '\x1b[C' || data === '\x1b[D' ||
-              data === '\x1b[H' || data === '\x1b[F' || data === '\x01' || data === '\x05'
-            ) {
-              // Arrows / Home / End / Ctrl-A / Ctrl-E — cursor moves: clear ghost only.
-              clearGhost();
-            } else if (data.startsWith('\x1b')) {
-              // Other escape sequences — clear ghost only.
-              clearGhost();
-            } else if (data.length >= 1 && data.charCodeAt(0) >= 0x20) {
-              // Printable text (single char or multi-char without bracketed markers).
-              buf += data;
-              showGhost();
-            }
-            inputBuffers.set(tab.id, buf);
-          }
-        }
+    // Bracketed paste: buffer the pasted content into the line, no ghost.
+    if (data.includes('\x1b[200~')) bracketedPaste.set(tab.id, true);
+    if (bracketedPaste.get(tab.id)) {
+      const end = data.indexOf('\x1b[201~');
+      const chunk = (end >= 0 ? data.slice(0, end) : data).replace('\x1b[200~', '');
+      buf += chunk;
+      if (end >= 0) bracketedPaste.set(tab.id, false);
+      clearGhost();
+    } else if (data === '\r' || data === '\n') {
+      const trimmed = buf.trim();
+      if (trimmed.length > 0) commandHistory.record(trimmed, { scope, cwd, sessionType });
+      buf = '';
+      clearGhost();
+    } else if (data === '\x7f' || data === '\b') {
+      // Backspace
+      buf = buf.slice(0, -1);
+      if (buf.length > 0) showGhost();
+      else clearGhost();
+    } else if (data === '\x17') {
+      // Ctrl+W — delete the previous word
+      buf = buf.replace(/\s*\S+\s*$/, '');
+      if (buf.length > 0) showGhost();
+      else clearGhost();
+    } else if (data === '\x15' || data === '\x0b' || data === '\x0c') {
+      // Ctrl+U / Ctrl+K / Ctrl+L — clear line / kill / clear screen
+      if (data === '\x15') buf = '';
+      clearGhost();
+    } else if (
+      data === '\x1b[A' ||
+      data === '\x1b[B' ||
+      data === '\x1b[C' ||
+      data === '\x1b[D' ||
+      data === '\x1b[H' ||
+      data === '\x1b[F' ||
+      data === '\x01' ||
+      data === '\x05'
+    ) {
+      // Arrows / Home / End / Ctrl-A / Ctrl-E — cursor moves: clear ghost only.
+      clearGhost();
+    } else if (data.startsWith('\x1b')) {
+      // Other escape sequences — clear ghost only.
+      clearGhost();
+    } else if (data.length >= 1 && data.charCodeAt(0) >= 0x20) {
+      // Printable text (single char or multi-char without bracketed markers).
+      buf += data;
+      showGhost();
+    }
+    inputBuffers.set(tab.id, buf);
+  }
+}
 ```
 
 - [ ] **Step 4: Generalize the ghost-accept callback registration**
@@ -766,9 +782,9 @@ to (also require an interactive tab):
 In the `tabListenerCleanups.set(tab.id, () => { ... })` body (~1004-1016), after `ghostAcceptCallbacks.delete(tab.id);` add:
 
 ```ts
-        tabCandidates.delete(tab.id);
-        candidateIndex.delete(tab.id);
-        bracketedPaste.delete(tab.id);
+tabCandidates.delete(tab.id);
+candidateIndex.delete(tab.id);
+bracketedPaste.delete(tab.id);
 ```
 
 > Do NOT delete `tabCwd`/`tabHasOsc133` here — those are reset by OSC handlers and fully cleared in `destroyTerminal`.
@@ -794,6 +810,7 @@ git commit -m "feat(history): generalize capture to all sessions; scope/cwd; har
 ### Task A5: TerminalView — OSC 133 / OSC 7 hybrid capture
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx` (terminal creation / listener setup region; cleanup)
 
 - [ ] **Step 1: Register OSC handlers after the terminal instance exists**
@@ -801,41 +818,41 @@ git commit -m "feat(history): generalize capture to all sessions; scope/cwd; har
 In `src/components/Terminal/TerminalView.tsx`, locate where `dataDispose` is created (the `instance!.terminal.onData(...)` at ~883). Immediately **before** that line, add OSC handler registration:
 
 ```ts
-      // Hybrid capture: OSC 7 (cwd) + OSC 133 (prompt/command boundaries).
-      // When present, OSC 133 gives authoritative command capture; we still keep
-      // the heuristic onData buffer as the universal fallback.
-      const term133 = instance!.terminal;
-      const osc7Dispose = term133.parser.registerOscHandler(7, (payload) => {
-        // payload like file://host/abs/path
-        const m = /^file:\/\/[^/]*(\/.*)$/.exec(payload);
-        if (m) tabCwd.set(tab.id, decodeURIComponent(m[1]));
-        return false; // let other handlers run
-      });
-      const osc133Dispose = term133.parser.registerOscHandler(133, (payload) => {
-        // FinalTerm/iTerm2: A=prompt-start, B=command-start, C=pre-exec, D=done
-        const kind = payload.charAt(0);
-        tabHasOsc133.set(tab.id, true);
-        if (kind === 'A' || kind === 'B') {
-          // New prompt / command start — reset the heuristic buffer & ghost.
-          inputBuffers.set(tab.id, '');
-          tabCandidates.set(tab.id, []);
-          candidateIndex.set(tab.id, 0);
-          ghostTextState.set(tab.id, '');
-          ghostTextSetters.get(tab.id)?.('', 0, 0);
-        } else if (kind === 'C') {
-          // Command submitted: record the authoritative line (heuristic buffer).
-          const sess = sessionsRef.current.find((s) => s.id === tab.sessionId);
-          const st = useSettingsStore.getState().settings;
-          const scope = st.cmdHintScopeByHost ? tabScope(tab.type, sess) : '';
-          const cwd = st.cmdHintScopeByHost ? (tabCwd.get(tab.id) ?? '') : '';
-          const line = (inputBuffers.get(tab.id) ?? '').trim();
-          if (st.sshHistoryCmd && line.length > 0) {
-            commandHistory.record(line, { scope, cwd, sessionType: tab.type });
-          }
-          inputBuffers.set(tab.id, '');
-        }
-        return false;
-      });
+// Hybrid capture: OSC 7 (cwd) + OSC 133 (prompt/command boundaries).
+// When present, OSC 133 gives authoritative command capture; we still keep
+// the heuristic onData buffer as the universal fallback.
+const term133 = instance!.terminal;
+const osc7Dispose = term133.parser.registerOscHandler(7, (payload) => {
+  // payload like file://host/abs/path
+  const m = /^file:\/\/[^/]*(\/.*)$/.exec(payload);
+  if (m) tabCwd.set(tab.id, decodeURIComponent(m[1]));
+  return false; // let other handlers run
+});
+const osc133Dispose = term133.parser.registerOscHandler(133, (payload) => {
+  // FinalTerm/iTerm2: A=prompt-start, B=command-start, C=pre-exec, D=done
+  const kind = payload.charAt(0);
+  tabHasOsc133.set(tab.id, true);
+  if (kind === 'A' || kind === 'B') {
+    // New prompt / command start — reset the heuristic buffer & ghost.
+    inputBuffers.set(tab.id, '');
+    tabCandidates.set(tab.id, []);
+    candidateIndex.set(tab.id, 0);
+    ghostTextState.set(tab.id, '');
+    ghostTextSetters.get(tab.id)?.('', 0, 0);
+  } else if (kind === 'C') {
+    // Command submitted: record the authoritative line (heuristic buffer).
+    const sess = sessionsRef.current.find((s) => s.id === tab.sessionId);
+    const st = useSettingsStore.getState().settings;
+    const scope = st.cmdHintScopeByHost ? tabScope(tab.type, sess) : '';
+    const cwd = st.cmdHintScopeByHost ? (tabCwd.get(tab.id) ?? '') : '';
+    const line = (inputBuffers.get(tab.id) ?? '').trim();
+    if (st.sshHistoryCmd && line.length > 0) {
+      commandHistory.record(line, { scope, cwd, sessionType: tab.type });
+    }
+    inputBuffers.set(tab.id, '');
+  }
+  return false;
+});
 ```
 
 > Note: with OSC 133 present, both the heuristic `\r` path (Task A4) and the OSC-`C` path could record the same command. To avoid double-recording, see Step 2.
@@ -869,18 +886,18 @@ to (skip recording if OSC 133 already records on `C`):
 In the same block's `showGhost` (Task A4), gate on the defer setting:
 
 ```ts
-            const showGhost = () => {
-              if (st.cmdHintDeferToRemote && tabHasOsc133.get(tab.id)) {
-                clearGhost();
-                return;
-              }
-              const cands = commandHistory.getSuggestions(buf, { scope, cwd, sessionType });
-              tabCandidates.set(tab.id, cands);
-              candidateIndex.set(tab.id, 0);
-              const suffix = cands[0] ? cands[0].slice(buf.length) : '';
-              ghostTextState.set(tab.id, suffix);
-              setter?.(suffix, cursorX, cursorY);
-            };
+const showGhost = () => {
+  if (st.cmdHintDeferToRemote && tabHasOsc133.get(tab.id)) {
+    clearGhost();
+    return;
+  }
+  const cands = commandHistory.getSuggestions(buf, { scope, cwd, sessionType });
+  tabCandidates.set(tab.id, cands);
+  candidateIndex.set(tab.id, 0);
+  const suffix = cands[0] ? cands[0].slice(buf.length) : '';
+  ghostTextState.set(tab.id, suffix);
+  setter?.(suffix, cursorX, cursorY);
+};
 ```
 
 - [ ] **Step 4: Dispose OSC handlers in cleanup**
@@ -888,8 +905,12 @@ In the same block's `showGhost` (Task A4), gate on the defer setting:
 In the `tabListenerCleanups.set(tab.id, () => { ... })` body, after the `try { resizeDispose?.dispose(); } catch {}` line, add:
 
 ```ts
-        try { osc7Dispose.dispose(); } catch {}
-        try { osc133Dispose.dispose(); } catch {}
+try {
+  osc7Dispose.dispose();
+} catch {}
+try {
+  osc133Dispose.dispose();
+} catch {}
 ```
 
 - [ ] **Step 5: Verify type-check**
@@ -913,6 +934,7 @@ git commit -m "feat(history): OSC 133/OSC 7 hybrid capture with cwd + double-gho
 ### Task A6: TerminalView — multi-candidate cycling
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx` (`attachCustomKeyEventHandler` ghost block ~627-635)
 
 - [ ] **Step 1: Replace the ghost-acceptance key block with accept + cycle**
@@ -920,53 +942,53 @@ git commit -m "feat(history): OSC 133/OSC 7 hybrid capture with cwd + double-gho
 In `src/components/Terminal/TerminalView.tsx`, replace this block (~627-635):
 
 ```ts
-          // Ghost text acceptance: Tab or → when SSH and ghost text is active.
-          if (tab.type === 'ssh') {
-            const ghost = ghostTextState.get(tab.id) ?? '';
-            if (ghost && (e.key === 'Tab' || (e.key === 'ArrowRight' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey))) {
-              e.preventDefault();
-              ghostAcceptCallbacks.get(tab.id)?.(ghost);
-              return false;
-            }
-          }
+// Ghost text acceptance: Tab or → when SSH and ghost text is active.
+if (tab.type === 'ssh') {
+  const ghost = ghostTextState.get(tab.id) ?? '';
+  if (
+    ghost &&
+    (e.key === 'Tab' ||
+      (e.key === 'ArrowRight' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey))
+  ) {
+    e.preventDefault();
+    ghostAcceptCallbacks.get(tab.id)?.(ghost);
+    return false;
+  }
+}
 ```
 
 with:
 
 ```ts
-          // Ghost text: accept (Tab / →) or cycle candidates (↓ Ctrl-N / ↑ Ctrl-P).
-          if (isInteractiveTerminal(tab.type)) {
-            const ghost = ghostTextState.get(tab.id) ?? '';
-            const cands = tabCandidates.get(tab.id) ?? [];
-            const plainArrow = !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
+// Ghost text: accept (Tab / →) or cycle candidates (↓ Ctrl-N / ↑ Ctrl-P).
+if (isInteractiveTerminal(tab.type)) {
+  const ghost = ghostTextState.get(tab.id) ?? '';
+  const cands = tabCandidates.get(tab.id) ?? [];
+  const plainArrow = !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
 
-            if (ghost && (e.key === 'Tab' || (e.key === 'ArrowRight' && plainArrow))) {
-              e.preventDefault();
-              ghostAcceptCallbacks.get(tab.id)?.(ghost);
-              return false;
-            }
+  if (ghost && (e.key === 'Tab' || (e.key === 'ArrowRight' && plainArrow))) {
+    e.preventDefault();
+    ghostAcceptCallbacks.get(tab.id)?.(ghost);
+    return false;
+  }
 
-            const cycleNext =
-              (e.key === 'ArrowDown' && plainArrow) || (e.key === 'n' && e.ctrlKey);
-            const cyclePrev =
-              (e.key === 'ArrowUp' && plainArrow) || (e.key === 'p' && e.ctrlKey);
-            if ((cycleNext || cyclePrev) && cands.length > 1) {
-              e.preventDefault();
-              const buf = inputBuffers.get(tab.id) ?? '';
-              let idx = candidateIndex.get(tab.id) ?? 0;
-              idx = cycleNext
-                ? (idx + 1) % cands.length
-                : (idx - 1 + cands.length) % cands.length;
-              candidateIndex.set(tab.id, idx);
-              const suffix = cands[idx].slice(buf.length);
-              ghostTextState.set(tab.id, suffix);
-              const inst = terminalInstances.get(tab.id);
-              const cx = inst?.terminal.buffer.active.cursorX ?? 0;
-              const cy = inst?.terminal.buffer.active.cursorY ?? 0;
-              ghostTextSetters.get(tab.id)?.(suffix, cx, cy);
-              return false;
-            }
-          }
+  const cycleNext = (e.key === 'ArrowDown' && plainArrow) || (e.key === 'n' && e.ctrlKey);
+  const cyclePrev = (e.key === 'ArrowUp' && plainArrow) || (e.key === 'p' && e.ctrlKey);
+  if ((cycleNext || cyclePrev) && cands.length > 1) {
+    e.preventDefault();
+    const buf = inputBuffers.get(tab.id) ?? '';
+    let idx = candidateIndex.get(tab.id) ?? 0;
+    idx = cycleNext ? (idx + 1) % cands.length : (idx - 1 + cands.length) % cands.length;
+    candidateIndex.set(tab.id, idx);
+    const suffix = cands[idx].slice(buf.length);
+    ghostTextState.set(tab.id, suffix);
+    const inst = terminalInstances.get(tab.id);
+    const cx = inst?.terminal.buffer.active.cursorX ?? 0;
+    const cy = inst?.terminal.buffer.active.cursorY ?? 0;
+    ghostTextSetters.get(tab.id)?.(suffix, cx, cy);
+    return false;
+  }
+}
 ```
 
 - [ ] **Step 2: Verify type-check**
@@ -992,6 +1014,7 @@ git commit -m "feat(history): cycle multiple candidates with arrows / Ctrl-N/P"
 ### Task B3: types + snippet store
 
 **Files:**
+
 - Modify: `src/types/index.ts` (add `Snippet`)
 - Create: `src/stores/snippetStore.ts`
 
@@ -1089,6 +1112,7 @@ git commit -m "feat(snippets): Snippet type + Zustand store with IPC persistence
 ### Task B4: snippet escape expansion
 
 **Files:**
+
 - Create: `src/lib/snippetExpand.ts`
 
 - [ ] **Step 1: Create `snippetExpand.ts`**
@@ -1098,9 +1122,7 @@ Create `src/lib/snippetExpand.ts`:
 ```ts
 // A send plan is an ordered list of segments. `delayMs` segments pause the
 // sender; `text` segments are written to the terminal.
-export type SendSegment =
-  | { kind: 'text'; text: string }
-  | { kind: 'delay'; delayMs: number };
+export type SendSegment = { kind: 'text'; text: string } | { kind: 'delay'; delayMs: number };
 
 // Expands snippet escapes into a send plan:
 //   \xNN  -> control byte from two hex digits (e.g. \x03 = Ctrl-C)
@@ -1139,13 +1161,21 @@ export function expandSnippet(raw: string): SendSegment[] {
         continue;
       }
     } else if (next === 'n') {
-      buf += '\n'; i += 1; continue;
+      buf += '\n';
+      i += 1;
+      continue;
     } else if (next === 'r') {
-      buf += '\r'; i += 1; continue;
+      buf += '\r';
+      i += 1;
+      continue;
     } else if (next === 't') {
-      buf += '\t'; i += 1; continue;
+      buf += '\t';
+      i += 1;
+      continue;
     } else if (next === '\\') {
-      buf += '\\'; i += 1; continue;
+      buf += '\\';
+      i += 1;
+      continue;
     }
     // Unknown escape — keep the backslash literally.
     buf += ch;
@@ -1176,6 +1206,7 @@ git commit -m "feat(snippets): escape expansion (\\xNN, \\sNNN, \\n/\\r/\\t/\\\\
 ### Task B5: TerminalView — per-tab input sender
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx` (register `tabInputSenders` next to `ghostAcceptCallbacks` ~944-960; cleanup ~1004-1016)
 
 - [ ] **Step 1: Register a sender for the active tab's write path**
@@ -1183,18 +1214,21 @@ git commit -m "feat(snippets): escape expansion (\\xNN, \\sNNN, \\n/\\r/\\t/\\\\
 In `src/components/Terminal/TerminalView.tsx`, right after the `ghostAcceptCallbacks.set(...)` block closes (the `}` ending the `if (isInteractiveTerminal(tab.type)) { ghostAcceptCallbacks.set(... ) }` from Task A4 Step 4, ~line 960), add:
 
 ```ts
-      // Generic external input injection (used by the snippet panel). Reuses the
-      // same writeQueue/flush path as keystrokes, so backpressure & retry apply.
-      tabInputSenders.set(tab.id, (payload: string) => {
-        if (writeDisposed || !payload) return;
-        writeQueue += payload;
-        if (writeQueue.length >= WRITE_CHUNK_SIZE) {
-          if (writeTimer) { clearTimeout(writeTimer); writeTimer = null; }
-          flushWrites();
-        } else {
-          scheduleWriteFlush();
-        }
-      });
+// Generic external input injection (used by the snippet panel). Reuses the
+// same writeQueue/flush path as keystrokes, so backpressure & retry apply.
+tabInputSenders.set(tab.id, (payload: string) => {
+  if (writeDisposed || !payload) return;
+  writeQueue += payload;
+  if (writeQueue.length >= WRITE_CHUNK_SIZE) {
+    if (writeTimer) {
+      clearTimeout(writeTimer);
+      writeTimer = null;
+    }
+    flushWrites();
+  } else {
+    scheduleWriteFlush();
+  }
+});
 ```
 
 - [ ] **Step 2: Clean up the sender on listener teardown**
@@ -1202,7 +1236,7 @@ In `src/components/Terminal/TerminalView.tsx`, right after the `ghostAcceptCallb
 In the `tabListenerCleanups.set(tab.id, () => { ... })` body, after `ghostAcceptCallbacks.delete(tab.id);` add:
 
 ```ts
-        tabInputSenders.delete(tab.id);
+tabInputSenders.delete(tab.id);
 ```
 
 - [ ] **Step 3: Export a helper to send to a tab**
@@ -1236,6 +1270,7 @@ git commit -m "feat(snippets): per-tab input sender reusing the writeQueue path"
 ### Task B6: Snippet sidebar panel + nav + render
 
 **Files:**
+
 - Create: `src/components/Sidebar/SnippetPanel.tsx`
 - Modify: `src/components/Sidebar/IconNav.tsx` (nav item + handler)
 - Modify: `src/App.tsx` (render panel; load snippets)
@@ -1289,10 +1324,7 @@ export const SnippetPanel: React.FC = () => {
   if (sidebarCollapsed) return null;
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
-  const canSend =
-    !!activeTab &&
-    activeTab.connected &&
-    activeTab.type !== 'asset-list';
+  const canSend = !!activeTab && activeTab.connected && activeTab.type !== 'asset-list';
 
   const send = (snippet: Snippet) => {
     if (!canSend || !activeTab) {
@@ -1393,10 +1425,18 @@ export const SnippetPanel: React.FC = () => {
               >
                 <Play size={14} />
               </button>
-              <button className="snippet-icon-btn" onClick={() => startEdit(s)} title={t('snippet_edit')}>
+              <button
+                className="snippet-icon-btn"
+                onClick={() => startEdit(s)}
+                title={t('snippet_edit')}
+              >
                 <Edit size={14} />
               </button>
-              <button className="snippet-icon-btn" onClick={() => void remove(s.id)} title={t('snippet_delete')}>
+              <button
+                className="snippet-icon-btn"
+                onClick={() => void remove(s.id)}
+                title={t('snippet_delete')}
+              >
                 <Trash2 size={14} />
               </button>
             </div>
@@ -1426,8 +1466,10 @@ Add `activeNavItem` to the destructured `useAppStore()` call (~line 36-38). Then
 with:
 
 ```tsx
-          <Sidebar />
-          {activeNavItem === 'snippets' ? <SnippetPanel /> : <SessionPanel />}
+<Sidebar />;
+{
+  activeNavItem === 'snippets' ? <SnippetPanel /> : <SessionPanel />;
+}
 ```
 
 - [ ] **Step 4: Load snippets at boot**
@@ -1441,10 +1483,10 @@ import { useSnippetStore } from './stores/snippetStore';
 Then inside `App()` add:
 
 ```tsx
-  const loadSnippets = useSnippetStore((s) => s.load);
-  useEffect(() => {
-    void loadSnippets();
-  }, [loadSnippets]);
+const loadSnippets = useSnippetStore((s) => s.load);
+useEffect(() => {
+  void loadSnippets();
+}, [loadSnippets]);
 ```
 
 - [ ] **Step 5: Add panel styles**
@@ -1471,22 +1513,94 @@ In `src/styles/global.css`, append:
   font-size: 13px;
   border-bottom: 1px solid var(--border-color, #2a2a2a);
 }
-.snippet-error { padding: 6px 12px; color: #e06c75; font-size: 12px; }
-.snippet-form { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border-color, #2a2a2a); }
-.snippet-input { background: var(--input-bg, #111); border: 1px solid var(--border-color, #333); color: inherit; border-radius: 4px; padding: 6px 8px; font-size: 12px; font-family: inherit; }
-.snippet-textarea { resize: vertical; }
-.snippet-form-actions { display: flex; gap: 6px; justify-content: flex-end; }
-.snippet-list { flex: 1; overflow-y: auto; }
-.snippet-empty { padding: 16px 12px; color: var(--text-muted, #888); font-size: 12px; }
-.snippet-item { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-bottom: 1px solid var(--border-color, #232323); }
-.snippet-item:hover { background: var(--hover-bg, #232323); }
-.snippet-item-main { flex: 1; min-width: 0; }
-.snippet-item-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.snippet-item-cmd { font-size: 11px; color: var(--text-muted, #888); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: monospace; }
-.snippet-item-actions { display: flex; gap: 2px; }
-.snippet-icon-btn { background: none; border: none; color: var(--text-muted, #aaa); cursor: pointer; padding: 4px; border-radius: 4px; display: inline-flex; }
-.snippet-icon-btn:hover:not(:disabled) { background: var(--hover-bg, #333); color: inherit; }
-.snippet-icon-btn:disabled { opacity: 0.4; cursor: default; }
+.snippet-error {
+  padding: 6px 12px;
+  color: #e06c75;
+  font-size: 12px;
+}
+.snippet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color, #2a2a2a);
+}
+.snippet-input {
+  background: var(--input-bg, #111);
+  border: 1px solid var(--border-color, #333);
+  color: inherit;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.snippet-textarea {
+  resize: vertical;
+}
+.snippet-form-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.snippet-list {
+  flex: 1;
+  overflow-y: auto;
+}
+.snippet-empty {
+  padding: 16px 12px;
+  color: var(--text-muted, #888);
+  font-size: 12px;
+}
+.snippet-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-color, #232323);
+}
+.snippet-item:hover {
+  background: var(--hover-bg, #232323);
+}
+.snippet-item-main {
+  flex: 1;
+  min-width: 0;
+}
+.snippet-item-name {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.snippet-item-cmd {
+  font-size: 11px;
+  color: var(--text-muted, #888);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: monospace;
+}
+.snippet-item-actions {
+  display: flex;
+  gap: 2px;
+}
+.snippet-icon-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted, #aaa);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+}
+.snippet-icon-btn:hover:not(:disabled) {
+  background: var(--hover-bg, #333);
+  color: inherit;
+}
+.snippet-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 ```
 
 > If the project uses CSS variables under different names, the fallbacks after the commas keep this readable regardless. Adjust variable names to match the existing theme tokens if obvious from `global.css`.
@@ -1514,16 +1628,19 @@ git commit -m "feat(snippets): sidebar panel with CRUD + send-to-terminal"
 - [ ] **Step 1: Full build + checks**
 
 Run:
+
 ```bash
 npm run build
 npm run smoke:check
 cd src-tauri && cargo check && cd ..
 ```
+
 Expected: all pass with no errors.
 
 - [ ] **Step 2: Run the manual test checklist (spec §5)**
 
 Run `npm run tauri dev` and verify:
+
 1. SSH: ranked ghost (frequent/recent first); `↓` cycles; `Tab`/`→` accepts.
 2. Local shell / serial: capture + hint also work.
 3. Scope: commands from host A rank below host B's own history on host B (with `cmdHintScopeByHost` on).

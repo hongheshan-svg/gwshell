@@ -7,7 +7,7 @@ import { resolveTerminalTheme } from '../lib/terminalThemes';
 const LANG_MAP: Record<string, 'zh' | 'en'> = {
   zh: 'zh',
   en: 'en',
-  '简体中文': 'zh',
+  简体中文: 'zh',
   English: 'en',
 };
 
@@ -57,7 +57,7 @@ export function useSettingsEffects() {
 
   useEffect(() => {
     const zoom = ZOOM_MAP[settings.zoomLevel] ?? 1.0;
-    (document.documentElement.style as unknown as Record<string, string>).zoom = String(zoom);
+    (document.documentElement.style as unknown as Record<string, string>).zoom = String(zoom); // eslint-disable-line no-restricted-syntax -- CSSStyleDeclaration lacks zoom prop; index access required
   }, [settings.zoomLevel]);
 
   useEffect(() => {
@@ -65,7 +65,10 @@ export function useSettingsEffects() {
   }, [settings.enableAnimation]);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('terminal-stripe-bg', settings.terminalStripeBackground);
+    document.documentElement.classList.toggle(
+      'terminal-stripe-bg',
+      settings.terminalStripeBackground,
+    );
   }, [settings.terminalStripeBackground]);
 
   useEffect(() => {
@@ -82,9 +85,15 @@ export function useSettingsEffects() {
       terminal.options.scrollback = scrollback;
 
       requestAnimationFrame(() => {
-        try { fitAddon.fit(); } catch {}
-        try { terminal.clearTextureAtlas(); } catch {}
-        try { terminal.refresh(0, terminal.rows - 1); } catch {}
+        try {
+          fitAddon.fit();
+        } catch {}
+        try {
+          terminal.clearTextureAtlas();
+        } catch {}
+        try {
+          terminal.refresh(0, terminal.rows - 1);
+        } catch {}
       });
     });
   }, [
@@ -97,10 +106,32 @@ export function useSettingsEffects() {
 
   useEffect(() => {
     const theme = resolveTerminalTheme(settings.terminalColorScheme, settings.theme);
+    // Dev-only observability (see TerminalView.tsx webglDebugEnabled). Trace
+    // the atlas clear so a developer can runtime-verify the theme-switch fix
+    // is actually invoked (clearTextureAtlas does NOT fire onChangeTextureAtlas
+    // — it clears pixels + requests a redraw — so this trace is the signal).
+    let dbg = false;
+    try {
+      dbg = localStorage.getItem('gwshell:webgl-debug') === '1';
+    } catch {}
     terminalInstances.forEach(({ terminal }) => {
       terminal.options.theme = theme;
+      // Match VSCode: the WebGL renderer's texture atlas bakes glyph pixels
+      // with the *current* theme's RGB values (the atlas stores rendered
+      // bitmaps, not color indices). When the color scheme changes, those
+      // cached bitmaps hold stale colors — a plain refresh() re-draws cells
+      // but the renderer pulls the old-colored glyph textures, so dim/bright
+      // ANSI colors and the default fg/bg lag by one theme switch. Clearing
+      // the atlas forces a re-rasterize with the new palette on the next
+      // paint. Harmless no-op for the DOM renderer.
       requestAnimationFrame(() => {
-        try { terminal.refresh(0, terminal.rows - 1); } catch {}
+        try {
+          terminal.clearTextureAtlas();
+          if (dbg) console.debug('[gwshell:webgl] clearTextureAtlas (color-scheme change)');
+        } catch {}
+        try {
+          terminal.refresh(0, terminal.rows - 1);
+        } catch {}
       });
     });
   }, [settings.terminalColorScheme, settings.theme]);
@@ -115,7 +146,7 @@ export function useSettingsEffects() {
       // settings.autoCopyOnSelect re-runs this effect whenever the setting
       // changes to ensure any newly-created terminal instance also has the flag
       // cleared, but the written value is always false — this is correct.
-      (terminal.options as unknown as { copyOnSelect?: boolean }).copyOnSelect = false;
+      (terminal.options as unknown as { copyOnSelect?: boolean }).copyOnSelect = false; // eslint-disable-line no-restricted-syntax -- xterm ITerminalOptions type omits copyOnSelect; runtime field exists
     });
   }, [settings.autoCopyOnSelect]);
 }

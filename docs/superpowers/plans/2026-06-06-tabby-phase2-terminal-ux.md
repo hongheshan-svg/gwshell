@@ -13,6 +13,7 @@
 ## Verification approach (read first)
 
 Per `CLAUDE.md`: **no automated test framework.** Each task verifies via:
+
 - `npx tsc --noEmit` (type gate; `npm run build` may be blocked by an environment classifier — `npx tsc --noEmit` is the reliable substitute, run `npm run build` if available).
 - `npm run smoke:check` when runnable.
 - Manual checks per task.
@@ -43,6 +44,7 @@ Per `CLAUDE.md`: **no automated test framework.** Each task verifies via:
 ## Task 1: `terminalThemes.ts` (color-scheme registry)
 
 **Files:**
+
 - Create: `src/lib/terminalThemes.ts`
 
 - [ ] **Step 1: Create the file with EXACTLY:**
@@ -57,24 +59,54 @@ import type { ThemeMode } from '../types';
 // previous getTerminalThemeColors pattern.
 
 const AUTO_DARK = {
-  background: '#0c0c14', foreground: '#d4d4d8', cursor: '#a0a0b0', cursorAccent: '#0c0c14',
+  background: '#0c0c14',
+  foreground: '#d4d4d8',
+  cursor: '#a0a0b0',
+  cursorAccent: '#0c0c14',
   selectionBackground: 'rgba(160, 160, 176, 0.3)',
-  black: '#1a1a28', red: '#ff5555', green: '#50fa7b', yellow: '#f1fa8c',
-  blue: '#5ac8fa', magenta: '#c084fc', cyan: '#22d3ee', white: '#d4d4d8',
-  brightBlack: '#555570', brightRed: '#ff6e6e', brightGreen: '#69ff94', brightYellow: '#ffffa5',
-  brightBlue: '#7dd6fc', brightMagenta: '#d8b4fe', brightCyan: '#67e8f9', brightWhite: '#ffffff',
+  black: '#1a1a28',
+  red: '#ff5555',
+  green: '#50fa7b',
+  yellow: '#f1fa8c',
+  blue: '#5ac8fa',
+  magenta: '#c084fc',
+  cyan: '#22d3ee',
+  white: '#d4d4d8',
+  brightBlack: '#555570',
+  brightRed: '#ff6e6e',
+  brightGreen: '#69ff94',
+  brightYellow: '#ffffa5',
+  brightBlue: '#7dd6fc',
+  brightMagenta: '#d8b4fe',
+  brightCyan: '#67e8f9',
+  brightWhite: '#ffffff',
   scrollbarSliderBackground: 'rgba(255, 255, 255, 0.18)',
   scrollbarSliderHoverBackground: 'rgba(255, 255, 255, 0.32)',
   scrollbarSliderActiveBackground: 'rgba(255, 255, 255, 0.46)',
 };
 
 const AUTO_LIGHT = {
-  background: '#f0f0f4', foreground: '#1a1a2e', cursor: '#6e6e7a', cursorAccent: '#f0f0f4',
+  background: '#f0f0f4',
+  foreground: '#1a1a2e',
+  cursor: '#6e6e7a',
+  cursorAccent: '#f0f0f4',
   selectionBackground: 'rgba(110, 110, 122, 0.25)',
-  black: '#1a1a2e', red: '#dc2626', green: '#16a34a', yellow: '#ca8a04',
-  blue: '#0078d4', magenta: '#9333ea', cyan: '#0891b2', white: '#d4d4d8',
-  brightBlack: '#8888a0', brightRed: '#ef4444', brightGreen: '#22c55e', brightYellow: '#eab308',
-  brightBlue: '#2a8de6', brightMagenta: '#a855f7', brightCyan: '#06b6d4', brightWhite: '#ffffff',
+  black: '#1a1a2e',
+  red: '#dc2626',
+  green: '#16a34a',
+  yellow: '#ca8a04',
+  blue: '#0078d4',
+  magenta: '#9333ea',
+  cyan: '#0891b2',
+  white: '#d4d4d8',
+  brightBlack: '#8888a0',
+  brightRed: '#ef4444',
+  brightGreen: '#22c55e',
+  brightYellow: '#eab308',
+  brightBlue: '#2a8de6',
+  brightMagenta: '#a855f7',
+  brightCyan: '#06b6d4',
+  brightWhite: '#ffffff',
   scrollbarSliderBackground: 'rgba(0, 0, 0, 0.18)',
   scrollbarSliderHoverBackground: 'rgba(0, 0, 0, 0.30)',
   scrollbarSliderActiveBackground: 'rgba(0, 0, 0, 0.42)',
@@ -92,62 +124,152 @@ const LIGHT_SCROLLBAR = {
 };
 
 const CAMPBELL = {
-  background: '#0c0c0c', foreground: '#cccccc', cursor: '#cccccc', cursorAccent: '#0c0c0c',
+  background: '#0c0c0c',
+  foreground: '#cccccc',
+  cursor: '#cccccc',
+  cursorAccent: '#0c0c0c',
   selectionBackground: 'rgba(204, 204, 204, 0.3)',
-  black: '#0c0c0c', red: '#c50f1f', green: '#13a10e', yellow: '#c19c00',
-  blue: '#0037da', magenta: '#881798', cyan: '#3a96dd', white: '#cccccc',
-  brightBlack: '#767676', brightRed: '#e74856', brightGreen: '#16c60c', brightYellow: '#f9f1a5',
-  brightBlue: '#3b78ff', brightMagenta: '#b4009e', brightCyan: '#61d6d6', brightWhite: '#f2f2f2',
+  black: '#0c0c0c',
+  red: '#c50f1f',
+  green: '#13a10e',
+  yellow: '#c19c00',
+  blue: '#0037da',
+  magenta: '#881798',
+  cyan: '#3a96dd',
+  white: '#cccccc',
+  brightBlack: '#767676',
+  brightRed: '#e74856',
+  brightGreen: '#16c60c',
+  brightYellow: '#f9f1a5',
+  brightBlue: '#3b78ff',
+  brightMagenta: '#b4009e',
+  brightCyan: '#61d6d6',
+  brightWhite: '#f2f2f2',
   ...DARK_SCROLLBAR,
 };
 
 const ONEDARK = {
-  background: '#282c34', foreground: '#abb2bf', cursor: '#528bff', cursorAccent: '#282c34',
+  background: '#282c34',
+  foreground: '#abb2bf',
+  cursor: '#528bff',
+  cursorAccent: '#282c34',
   selectionBackground: 'rgba(171, 178, 191, 0.3)',
-  black: '#282c34', red: '#e06c75', green: '#98c379', yellow: '#e5c07b',
-  blue: '#61afef', magenta: '#c678dd', cyan: '#56b6c2', white: '#abb2bf',
-  brightBlack: '#5c6370', brightRed: '#e06c75', brightGreen: '#98c379', brightYellow: '#e5c07b',
-  brightBlue: '#61afef', brightMagenta: '#c678dd', brightCyan: '#56b6c2', brightWhite: '#ffffff',
+  black: '#282c34',
+  red: '#e06c75',
+  green: '#98c379',
+  yellow: '#e5c07b',
+  blue: '#61afef',
+  magenta: '#c678dd',
+  cyan: '#56b6c2',
+  white: '#abb2bf',
+  brightBlack: '#5c6370',
+  brightRed: '#e06c75',
+  brightGreen: '#98c379',
+  brightYellow: '#e5c07b',
+  brightBlue: '#61afef',
+  brightMagenta: '#c678dd',
+  brightCyan: '#56b6c2',
+  brightWhite: '#ffffff',
   ...DARK_SCROLLBAR,
 };
 
 const DRACULA = {
-  background: '#282a36', foreground: '#f8f8f2', cursor: '#f8f8f2', cursorAccent: '#282a36',
+  background: '#282a36',
+  foreground: '#f8f8f2',
+  cursor: '#f8f8f2',
+  cursorAccent: '#282a36',
   selectionBackground: 'rgba(248, 248, 242, 0.25)',
-  black: '#21222c', red: '#ff5555', green: '#50fa7b', yellow: '#f1fa8c',
-  blue: '#bd93f9', magenta: '#ff79c6', cyan: '#8be9fd', white: '#f8f8f2',
-  brightBlack: '#6272a4', brightRed: '#ff6e6e', brightGreen: '#69ff94', brightYellow: '#ffffa5',
-  brightBlue: '#d6acff', brightMagenta: '#ff92df', brightCyan: '#a4ffff', brightWhite: '#ffffff',
+  black: '#21222c',
+  red: '#ff5555',
+  green: '#50fa7b',
+  yellow: '#f1fa8c',
+  blue: '#bd93f9',
+  magenta: '#ff79c6',
+  cyan: '#8be9fd',
+  white: '#f8f8f2',
+  brightBlack: '#6272a4',
+  brightRed: '#ff6e6e',
+  brightGreen: '#69ff94',
+  brightYellow: '#ffffa5',
+  brightBlue: '#d6acff',
+  brightMagenta: '#ff92df',
+  brightCyan: '#a4ffff',
+  brightWhite: '#ffffff',
   ...DARK_SCROLLBAR,
 };
 
 const SOLARIZED_DARK = {
-  background: '#002b36', foreground: '#839496', cursor: '#839496', cursorAccent: '#002b36',
+  background: '#002b36',
+  foreground: '#839496',
+  cursor: '#839496',
+  cursorAccent: '#002b36',
   selectionBackground: 'rgba(131, 148, 150, 0.3)',
-  black: '#073642', red: '#dc322f', green: '#859900', yellow: '#b58900',
-  blue: '#268bd2', magenta: '#d33682', cyan: '#2aa198', white: '#eee8d5',
-  brightBlack: '#002b36', brightRed: '#cb4b16', brightGreen: '#586e75', brightYellow: '#657b83',
-  brightBlue: '#839496', brightMagenta: '#6c71c4', brightCyan: '#93a1a1', brightWhite: '#fdf6e3',
+  black: '#073642',
+  red: '#dc322f',
+  green: '#859900',
+  yellow: '#b58900',
+  blue: '#268bd2',
+  magenta: '#d33682',
+  cyan: '#2aa198',
+  white: '#eee8d5',
+  brightBlack: '#002b36',
+  brightRed: '#cb4b16',
+  brightGreen: '#586e75',
+  brightYellow: '#657b83',
+  brightBlue: '#839496',
+  brightMagenta: '#6c71c4',
+  brightCyan: '#93a1a1',
+  brightWhite: '#fdf6e3',
   ...DARK_SCROLLBAR,
 };
 
 const SOLARIZED_LIGHT = {
-  background: '#fdf6e3', foreground: '#657b83', cursor: '#657b83', cursorAccent: '#fdf6e3',
+  background: '#fdf6e3',
+  foreground: '#657b83',
+  cursor: '#657b83',
+  cursorAccent: '#fdf6e3',
   selectionBackground: 'rgba(101, 123, 131, 0.2)',
-  black: '#073642', red: '#dc322f', green: '#859900', yellow: '#b58900',
-  blue: '#268bd2', magenta: '#d33682', cyan: '#2aa198', white: '#eee8d5',
-  brightBlack: '#002b36', brightRed: '#cb4b16', brightGreen: '#586e75', brightYellow: '#657b83',
-  brightBlue: '#839496', brightMagenta: '#6c71c4', brightCyan: '#93a1a1', brightWhite: '#fdf6e3',
+  black: '#073642',
+  red: '#dc322f',
+  green: '#859900',
+  yellow: '#b58900',
+  blue: '#268bd2',
+  magenta: '#d33682',
+  cyan: '#2aa198',
+  white: '#eee8d5',
+  brightBlack: '#002b36',
+  brightRed: '#cb4b16',
+  brightGreen: '#586e75',
+  brightYellow: '#657b83',
+  brightBlue: '#839496',
+  brightMagenta: '#6c71c4',
+  brightCyan: '#93a1a1',
+  brightWhite: '#fdf6e3',
   ...LIGHT_SCROLLBAR,
 };
 
 const NORD = {
-  background: '#2e3440', foreground: '#d8dee9', cursor: '#d8dee9', cursorAccent: '#2e3440',
+  background: '#2e3440',
+  foreground: '#d8dee9',
+  cursor: '#d8dee9',
+  cursorAccent: '#2e3440',
   selectionBackground: 'rgba(216, 222, 233, 0.25)',
-  black: '#3b4252', red: '#bf616a', green: '#a3be8c', yellow: '#ebcb8b',
-  blue: '#81a1c1', magenta: '#b48ead', cyan: '#88c0d0', white: '#e5e9f0',
-  brightBlack: '#4c566a', brightRed: '#bf616a', brightGreen: '#a3be8c', brightYellow: '#ebcb8b',
-  brightBlue: '#81a1c1', brightMagenta: '#b48ead', brightCyan: '#8fbcbb', brightWhite: '#eceff4',
+  black: '#3b4252',
+  red: '#bf616a',
+  green: '#a3be8c',
+  yellow: '#ebcb8b',
+  blue: '#81a1c1',
+  magenta: '#b48ead',
+  cyan: '#88c0d0',
+  white: '#e5e9f0',
+  brightBlack: '#4c566a',
+  brightRed: '#bf616a',
+  brightGreen: '#a3be8c',
+  brightYellow: '#ebcb8b',
+  brightBlue: '#81a1c1',
+  brightMagenta: '#b48ead',
+  brightCyan: '#8fbcbb',
+  brightWhite: '#eceff4',
   ...DARK_SCROLLBAR,
 };
 
@@ -163,7 +285,13 @@ export const TERMINAL_THEMES: Record<string, ITheme> = {
 
 // Order shown in the settings dropdown.
 export const TERMINAL_SCHEME_OPTIONS: string[] = [
-  'auto', 'campbell', 'onedark', 'dracula', 'solarized-dark', 'solarized-light', 'nord',
+  'auto',
+  'campbell',
+  'onedark',
+  'dracula',
+  'solarized-dark',
+  'solarized-light',
+  'nord',
 ];
 
 // Resolves a scheme name to an xterm ITheme. 'auto' (and unknown values) follow
@@ -193,6 +321,7 @@ git commit -m "feat(theme): terminal color-scheme registry (6 presets + auto)"
 ## Task 2: Settings + i18n (both new settings + all Phase 2 keys)
 
 **Files:**
+
 - Modify: `src/stores/settingsStore.ts` (`AppSettings` + `defaultSettings`)
 - Modify: `src/components/Settings/SettingsModal.tsx` (duplicate `AppSettings` + `defaultSettings` + rows)
 - Modify: `src/i18n/locales/gwshell.en.json`, `gwshell.zh.json`
@@ -200,11 +329,14 @@ git commit -m "feat(theme): terminal color-scheme registry (6 presets + auto)"
 - [ ] **Step 1: Add fields to `settingsStore.ts`**
 
 In `interface AppSettings`, after `sshHistoryCmdLoadCount: string;` add:
+
 ```ts
-  pasteWarnMultiline: boolean;
-  terminalColorScheme: string;
+pasteWarnMultiline: boolean;
+terminalColorScheme: string;
 ```
+
 In `defaultSettings`, after `sshHistoryCmdLoadCount: '100',` add:
+
 ```ts
   pasteWarnMultiline: true,
   terminalColorScheme: 'auto',
@@ -213,11 +345,14 @@ In `defaultSettings`, after `sshHistoryCmdLoadCount: '100',` add:
 - [ ] **Step 2: Add the same fields to `SettingsModal.tsx`'s duplicate declarations**
 
 In its `export interface AppSettings`, after `sshHistoryCmdLoadCount: string;` add the same two lines:
+
 ```ts
-  pasteWarnMultiline: boolean;
-  terminalColorScheme: string;
+pasteWarnMultiline: boolean;
+terminalColorScheme: string;
 ```
+
 In its local `defaultSettings`, after `sshHistoryCmdLoadCount: '100',` add:
+
 ```ts
   pasteWarnMultiline: true,
   terminalColorScheme: 'auto',
@@ -226,19 +361,24 @@ In its local `defaultSettings`, after `sshHistoryCmdLoadCount: '100',` add:
 - [ ] **Step 3: Add the two setting rows + import in `SettingsModal.tsx`**
 
 At the top of `SettingsModal.tsx`, add the import:
+
 ```ts
 import { TERMINAL_SCHEME_OPTIONS } from '../../lib/terminalThemes';
 ```
+
 In the SSH/SFTP settings section, after the existing `settings_cmd_hint_defer_remote` row (added in Phase 1), add:
+
 ```tsx
                     <Row label={t('settings_paste_warn_multiline')}><Toggle value={settings.pasteWarnMultiline} onChange={(v) => u('pasteWarnMultiline', v)} /></Row>
                     <Row label={t('settings_terminal_color_scheme')}><Sel value={settings.terminalColorScheme} options={TERMINAL_SCHEME_OPTIONS} onChange={(v) => u('terminalColorScheme', v)} /></Row>
 ```
+
 > If the `Sel` component expects display labels rather than raw values, pass `TERMINAL_SCHEME_OPTIONS` directly anyway — the stored value IS the scheme key and the raw names ('auto','campbell',…) are acceptable display text for Phase 2. Confirm by reading how the adjacent `Sel` rows (e.g. `sshHistoryCmdStorage`) pass options.
 
 - [ ] **Step 4: Add i18n keys**
 
 In `src/i18n/locales/gwshell.en.json`, add:
+
 ```json
   "settings_paste_warn_multiline": "Confirm before pasting multiple lines",
   "settings_terminal_color_scheme": "Terminal color scheme",
@@ -253,7 +393,9 @@ In `src/i18n/locales/gwshell.en.json`, add:
   "quickconnect_cancel": "Cancel",
   "quickconnect_invalid": "Enter a target like user@host:port",
 ```
+
 In `src/i18n/locales/gwshell.zh.json`, add the SAME keys:
+
 ```json
   "settings_paste_warn_multiline": "粘贴多行前确认",
   "settings_terminal_color_scheme": "终端配色方案",
@@ -287,44 +429,59 @@ git commit -m "feat(settings): paste-warn + terminal-color-scheme settings; Phas
 ## Task 3: Apply theme presets in TerminalView + live updates
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx` (remove local `getTerminalThemeColors`; use `resolveTerminalTheme` at `:459` and `:1461`)
 - Modify: `src/hooks/useSettingsEffects.ts` (add theme-scheme effect)
 
 - [ ] **Step 1: Replace `getTerminalThemeColors` usage in TerminalView**
 
 In `src/components/Terminal/TerminalView.tsx`, add an import near the other lib imports:
+
 ```ts
 import { resolveTerminalTheme } from '../../lib/terminalThemes';
 ```
+
 DELETE the local `const getTerminalThemeColors = (theme: ThemeMode) => { ... };` block (the ~55-line function near the top).
 
 At the terminal-creation site (was `theme: getTerminalThemeColors(useAppStore.getState().theme),`), change to:
+
 ```ts
           theme: resolveTerminalTheme(useSettingsStore.getState().settings.terminalColorScheme, useAppStore.getState().theme),
 ```
+
 At the app-theme-change site (was `inst.terminal.options.theme = getTerminalThemeColors(theme);`), change to:
+
 ```ts
-      inst.terminal.options.theme = resolveTerminalTheme(useSettingsStore.getState().settings.terminalColorScheme, theme);
+inst.terminal.options.theme = resolveTerminalTheme(
+  useSettingsStore.getState().settings.terminalColorScheme,
+  theme,
+);
 ```
+
 > Read the file first to confirm both call sites and the exact surrounding code. `useSettingsStore` and `useAppStore` are already imported in TerminalView. If `ThemeMode` import becomes unused after deleting `getTerminalThemeColors`, remove it from the import to keep tsc clean.
 
 - [ ] **Step 2: Add a live theme-scheme effect in `useSettingsEffects.ts`**
 
 In `src/hooks/useSettingsEffects.ts`, add the import:
+
 ```ts
 import { resolveTerminalTheme } from '../lib/terminalThemes';
 ```
+
 Inside `useSettingsEffects()`, after the existing font-options effect (the one depending on `terminalFont`/`terminalFontSize`/…), add:
+
 ```ts
-  useEffect(() => {
-    const theme = resolveTerminalTheme(settings.terminalColorScheme, settings.theme);
-    terminalInstances.forEach(({ terminal }) => {
-      terminal.options.theme = theme;
-      requestAnimationFrame(() => {
-        try { terminal.refresh(0, terminal.rows - 1); } catch {}
-      });
+useEffect(() => {
+  const theme = resolveTerminalTheme(settings.terminalColorScheme, settings.theme);
+  terminalInstances.forEach(({ terminal }) => {
+    terminal.options.theme = theme;
+    requestAnimationFrame(() => {
+      try {
+        terminal.refresh(0, terminal.rows - 1);
+      } catch {}
     });
-  }, [settings.terminalColorScheme, settings.theme]);
+  });
+}, [settings.terminalColorScheme, settings.theme]);
 ```
 
 - [ ] **Step 3: Verify type-check**
@@ -344,96 +501,114 @@ git commit -m "feat(theme): apply selectable color scheme to terminals, live-upd
 ## Task 4: Paste safety (multiline confirm overlay)
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx` (`doPaste`, new state, overlay JSX, key handler)
 - Modify: `src/styles/global.css`
 
 - [ ] **Step 1: Add the confirm state**
 
 In `src/components/Terminal/TerminalView.tsx`, near the other `useState` hooks (e.g. by `const [ghostText, setGhostText] = useState('')`), add:
+
 ```ts
-  const [pasteConfirm, setPasteConfirm] = useState<string | null>(null);
+const [pasteConfirm, setPasteConfirm] = useState<string | null>(null);
 ```
 
 - [ ] **Step 2: Intercept `doPaste`**
 
 Find `doPaste` (currently):
+
 ```ts
-        const doPaste = () => {
-          readClipboardText().then((text) => {
-            if (text) termRef.paste(text);
-          }).catch(() => {});
-        };
+const doPaste = () => {
+  readClipboardText()
+    .then((text) => {
+      if (text) termRef.paste(text);
+    })
+    .catch(() => {});
+};
 ```
+
 Replace with:
+
 ```ts
-        const doPaste = () => {
-          readClipboardText().then((text) => {
-            if (!text) return;
-            if (useSettingsStore.getState().settings.pasteWarnMultiline && text.includes('\n')) {
-              setPasteConfirm(text);
-            } else {
-              termRef.paste(text);
-            }
-          }).catch(() => {});
-        };
+const doPaste = () => {
+  readClipboardText()
+    .then((text) => {
+      if (!text) return;
+      if (useSettingsStore.getState().settings.pasteWarnMultiline && text.includes('\n')) {
+        setPasteConfirm(text);
+      } else {
+        termRef.paste(text);
+      }
+    })
+    .catch(() => {});
+};
 ```
 
 - [ ] **Step 3: Add Esc/Enter handling for the confirm overlay**
 
 Near the other component-level `useEffect`s (e.g. the one registering `ghostTextSetters`), add:
+
 ```ts
-  useEffect(() => {
-    if (pasteConfirm === null) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setPasteConfirm(null);
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        terminalInstances.get(tab.id)?.terminal.paste(pasteConfirm);
-        setPasteConfirm(null);
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [pasteConfirm, tab.id]);
+useEffect(() => {
+  if (pasteConfirm === null) return;
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setPasteConfirm(null);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      terminalInstances.get(tab.id)?.terminal.paste(pasteConfirm);
+      setPasteConfirm(null);
+    }
+  };
+  window.addEventListener('keydown', onKey, true);
+  return () => window.removeEventListener('keydown', onKey, true);
+}, [pasteConfirm, tab.id]);
 ```
 
 - [ ] **Step 4: Render the overlay**
 
 In the component's returned JSX (near the ghost-text / context-menu overlays, inside the same Fragment), add:
+
 ```tsx
-      {pasteConfirm !== null && isActive && (
-        <div className="paste-confirm-overlay" onMouseDown={() => setPasteConfirm(null)}>
-          <div className="paste-confirm-card" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="paste-confirm-title">{t('paste_confirm_title')}</div>
-            <div className="paste-confirm-lines">
-              {t('paste_confirm_lines', { count: pasteConfirm.split('\n').length })}
-            </div>
-            <pre className="paste-confirm-preview">
-              {pasteConfirm.split('\n').slice(0, 8).join('\n')}
-              {pasteConfirm.split('\n').length > 8 ? '\n…' : ''}
-            </pre>
-            <div className="paste-confirm-actions">
-              <button className="paste-confirm-btn" onClick={() => setPasteConfirm(null)}>
-                {t('paste_confirm_cancel')}
-              </button>
-              <button
-                className="paste-confirm-btn primary"
-                onClick={() => { terminalInstances.get(tab.id)?.terminal.paste(pasteConfirm); setPasteConfirm(null); }}
-              >
-                {t('paste_confirm_paste')}
-              </button>
-            </div>
-          </div>
+{
+  pasteConfirm !== null && isActive && (
+    <div className="paste-confirm-overlay" onMouseDown={() => setPasteConfirm(null)}>
+      <div className="paste-confirm-card" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="paste-confirm-title">{t('paste_confirm_title')}</div>
+        <div className="paste-confirm-lines">
+          {t('paste_confirm_lines', { count: pasteConfirm.split('\n').length })}
         </div>
-      )}
+        <pre className="paste-confirm-preview">
+          {pasteConfirm.split('\n').slice(0, 8).join('\n')}
+          {pasteConfirm.split('\n').length > 8 ? '\n…' : ''}
+        </pre>
+        <div className="paste-confirm-actions">
+          <button className="paste-confirm-btn" onClick={() => setPasteConfirm(null)}>
+            {t('paste_confirm_cancel')}
+          </button>
+          <button
+            className="paste-confirm-btn primary"
+            onClick={() => {
+              terminalInstances.get(tab.id)?.terminal.paste(pasteConfirm);
+              setPasteConfirm(null);
+            }}
+          >
+            {t('paste_confirm_paste')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 ```
+
 > `t` (react-i18next), `isActive`, `tab`, `terminalInstances` are all already in scope in this component. Confirm `t` is destructured (`const { t } = useTranslation()` exists in the component).
 
 - [ ] **Step 5: Add styles to `global.css`**
 
 Append to `src/styles/global.css`:
+
 ```css
 .paste-confirm-overlay {
   position: absolute;
@@ -456,8 +631,14 @@ Append to `src/styles/global.css`:
   border: 1px solid var(--border-color, #33333f);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
-.paste-confirm-title { font-weight: 600; font-size: 14px; }
-.paste-confirm-lines { font-size: 12px; color: var(--text-muted, #999); }
+.paste-confirm-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+.paste-confirm-lines {
+  font-size: 12px;
+  color: var(--text-muted, #999);
+}
 .paste-confirm-preview {
   margin: 0;
   overflow: auto;
@@ -470,7 +651,11 @@ Append to `src/styles/global.css`:
   font-size: 12px;
   white-space: pre;
 }
-.paste-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.paste-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .paste-confirm-btn {
   padding: 6px 14px;
   border-radius: 4px;
@@ -480,8 +665,14 @@ Append to `src/styles/global.css`:
   cursor: pointer;
   font-size: 13px;
 }
-.paste-confirm-btn:hover { background: var(--hover-bg, #2a2a33); }
-.paste-confirm-btn.primary { background: var(--accent, #3b78ff); border-color: var(--accent, #3b78ff); color: #fff; }
+.paste-confirm-btn:hover {
+  background: var(--hover-bg, #2a2a33);
+}
+.paste-confirm-btn.primary {
+  background: var(--accent, #3b78ff);
+  border-color: var(--accent, #3b78ff);
+  color: #fff;
+}
 ```
 
 - [ ] **Step 6: Verify type-check**
@@ -505,6 +696,7 @@ git commit -m "feat(paste): confirm before pasting multiline clipboard content"
 ## Task 5: Quick Connect parser
 
 **Files:**
+
 - Create: `src/lib/quickConnect.ts`
 
 - [ ] **Step 1: Create the file with EXACTLY:**
@@ -554,6 +746,7 @@ export function parseQuickConnect(input: string): QuickTarget | null {
 Run: `npx tsc --noEmit`
 Expected: zero errors.
 Confirm by reading the code:
+
 - `parseQuickConnect('root@1.2.3.4:2222')` → `{username:'root', host:'1.2.3.4', port:2222}`
 - `parseQuickConnect('example.com')` → `{host:'example.com', port:22}` (username undefined)
 - `parseQuickConnect('user@host')` → `{username:'user', host:'host', port:22}`
@@ -572,16 +765,20 @@ git commit -m "feat(quickconnect): parse user@host:port targets"
 ## Task 6: Quick Connect store wiring
 
 **Files:**
+
 - Modify: `src/stores/appStore.ts` (interface + impl: `showQuickConnect`, `setShowQuickConnect`, `addTemporarySession`)
 
 - [ ] **Step 1: Extend the store interface**
 
 In `src/stores/appStore.ts`, in the store's TypeScript interface (where `showNewSession: boolean; setShowNewSession: (show: boolean) => void;` is declared), add nearby:
+
 ```ts
   showQuickConnect: boolean;
   setShowQuickConnect: (show: boolean) => void;
 ```
+
 And where `addSession: (session: SessionConfig) => void;` is declared, add nearby:
+
 ```ts
   addTemporarySession: (session: SessionConfig) => void;
 ```
@@ -589,11 +786,14 @@ And where `addSession: (session: SessionConfig) => void;` is declared, add nearb
 - [ ] **Step 2: Implement them**
 
 In the store implementation, next to `showNewSession: false, setShowNewSession: (show) => set({ showNewSession: show }),` add:
+
 ```ts
   showQuickConnect: false,
   setShowQuickConnect: (show) => set({ showQuickConnect: show }),
 ```
+
 Next to the `addSession` implementation, add (in-memory only — NO `save_session` invoke, so it isn't persisted):
+
 ```ts
   addTemporarySession: (session) =>
     set((state) => ({ sessions: [...state.sessions, session] })),
@@ -616,6 +816,7 @@ git commit -m "feat(quickconnect): store flag + addTemporarySession (in-memory s
 ## Task 7: QuickConnect modal + nav + render wiring
 
 **Files:**
+
 - Create: `src/components/Modals/QuickConnectModal.tsx`
 - Modify: `src/components/Sidebar/IconNav.tsx`
 - Modify: `src/App.tsx`
@@ -664,20 +865,32 @@ export const QuickConnectModal: React.FC = () => {
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') { e.preventDefault(); connect(); }
-    else if (e.key === 'Escape') { e.preventDefault(); close(); }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      connect();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+    }
   };
 
   return (
     <div className="quick-connect-overlay" onMouseDown={close}>
-      <div className="quick-connect-card" onMouseDown={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
+      <div
+        className="quick-connect-card"
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
+      >
         <div className="quick-connect-title">{t('quickconnect_title')}</div>
         <input
           className="quick-connect-input"
           autoFocus
           placeholder={t('quickconnect_placeholder')}
           value={target}
-          onChange={(e) => { setTarget(e.target.value); setError(''); }}
+          onChange={(e) => {
+            setTarget(e.target.value);
+            setError('');
+          }}
         />
         <input
           className="quick-connect-input"
@@ -688,8 +901,12 @@ export const QuickConnectModal: React.FC = () => {
         />
         {error && <div className="quick-connect-error">{error}</div>}
         <div className="quick-connect-actions">
-          <button className="quick-connect-btn" onClick={close}>{t('quickconnect_cancel')}</button>
-          <button className="quick-connect-btn primary" onClick={connect}>{t('quickconnect_connect')}</button>
+          <button className="quick-connect-btn" onClick={close}>
+            {t('quickconnect_cancel')}
+          </button>
+          <button className="quick-connect-btn primary" onClick={connect}>
+            {t('quickconnect_connect')}
+          </button>
         </div>
       </div>
     </div>
@@ -700,12 +917,15 @@ export const QuickConnectModal: React.FC = () => {
 - [ ] **Step 2: Point the nav item at the modal (`IconNav.tsx`)**
 
 In `src/components/Sidebar/IconNav.tsx`, add `setShowQuickConnect` to the `useAppStore()` destructure. Then change the `quickconnect` case in `handleNavClick`:
+
 ```ts
       case 'quickconnect':
         setShowNewSession(true);
         break;
 ```
+
 to:
+
 ```ts
       case 'quickconnect':
         setShowQuickConnect(true);
@@ -715,17 +935,25 @@ to:
 - [ ] **Step 3: Render the modal in `App.tsx`**
 
 In `src/App.tsx`, add a lazy import near the other modal lazy imports:
+
 ```tsx
-const QuickConnectModal = lazy(() => import('./components/Modals/QuickConnectModal').then((m) => ({ default: m.QuickConnectModal })));
+const QuickConnectModal = lazy(() =>
+  import('./components/Modals/QuickConnectModal').then((m) => ({ default: m.QuickConnectModal })),
+);
 ```
+
 Add `showQuickConnect` to the `useAppStore()` destructure (alongside `showNewSession`, etc.). Then in the modal-render Suspense block (where `{showNewSession && <NewSessionModal />}` is), add:
+
 ```tsx
-          {showQuickConnect && <QuickConnectModal />}
+{
+  showQuickConnect && <QuickConnectModal />;
+}
 ```
 
 - [ ] **Step 4: Add styles to `global.css`**
 
 Append to `src/styles/global.css`:
+
 ```css
 .quick-connect-overlay {
   position: fixed;
@@ -748,7 +976,10 @@ Append to `src/styles/global.css`:
   border: 1px solid var(--border-color, #33333f);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
 }
-.quick-connect-title { font-weight: 600; font-size: 15px; }
+.quick-connect-title {
+  font-weight: 600;
+  font-size: 15px;
+}
 .quick-connect-input {
   padding: 8px 10px;
   border-radius: 4px;
@@ -757,8 +988,15 @@ Append to `src/styles/global.css`:
   color: inherit;
   font-size: 13px;
 }
-.quick-connect-error { color: #e06c75; font-size: 12px; }
-.quick-connect-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.quick-connect-error {
+  color: #e06c75;
+  font-size: 12px;
+}
+.quick-connect-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .quick-connect-btn {
   padding: 6px 14px;
   border-radius: 4px;
@@ -768,8 +1006,14 @@ Append to `src/styles/global.css`:
   cursor: pointer;
   font-size: 13px;
 }
-.quick-connect-btn:hover { background: var(--hover-bg, #2a2a33); }
-.quick-connect-btn.primary { background: var(--accent, #3b78ff); border-color: var(--accent, #3b78ff); color: #fff; }
+.quick-connect-btn:hover {
+  background: var(--hover-bg, #2a2a33);
+}
+.quick-connect-btn.primary {
+  background: var(--accent, #3b78ff);
+  border-color: var(--accent, #3b78ff);
+  color: #fff;
+}
 ```
 
 - [ ] **Step 5: Verify type-check**
@@ -795,15 +1039,18 @@ git commit -m "feat(quickconnect): lightweight modal + nav wiring + render"
 - [ ] **Step 1: Build + smoke (if runnable)**
 
 Run (retry if an environment classifier blocks; otherwise fall back to `npx tsc --noEmit`):
+
 ```bash
 npm run build
 npm run smoke:check
 ```
+
 Expected: both pass. Report blocked vs pass/fail honestly.
 
 - [ ] **Step 2: Manual checklist (spec §5)**
 
 `npm run tauri dev` and verify:
+
 1. Paste safety: multi-line paste (Ctrl-V / right-click / middle-click) → confirm; single-line/empty → direct; Esc/Cancel abort; toggle off → direct. Preview + line count correct.
 2. Quick Connect: `user@host:port`, `host`, `host:port`, `user@host` all parse; invalid → inline error; connects as ephemeral (not saved, gone after restart); tab close cleans the temp session; password→password auth, blank→agent.
 3. Theme presets: switching scheme recolors ALL open terminals live; Auto follows app light/dark; unknown value falls back to auto.

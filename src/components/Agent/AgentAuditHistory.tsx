@@ -7,6 +7,7 @@ import type { AgentAuditRecord } from '../../types/agent';
 
 function auditSummary(record: AgentAuditRecord): string {
   try {
+    // eslint-disable-next-line no-restricted-syntax
     const report = JSON.parse(record.report_json) as {
       evidence?: unknown[];
       actions?: unknown[];
@@ -28,7 +29,9 @@ function auditSummary(record: AgentAuditRecord): string {
 export const AgentAuditHistory: React.FC = () => {
   const { t } = useTranslation();
   const activeTab = useAppStore((s) => s.tabs.find((tab) => tab.id === s.activeTabId));
-  const auditPulse = useAgentStore((s) => `${s.activeSession?.status ?? 'none'}-${s.evidence.length}-${s.results.length}`);
+  const auditPulse = useAgentStore(
+    (s) => `${s.activeSession?.status ?? 'none'}-${s.evidence.length}-${s.results.length}`,
+  );
   const [records, setRecords] = useState<AgentAuditRecord[]>([]);
 
   useEffect(() => {

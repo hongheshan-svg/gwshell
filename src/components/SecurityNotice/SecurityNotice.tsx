@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { ShieldAlert, X } from 'lucide-react';
+import { useToast } from '../../hooks/useToast';
 
 /**
  * One-time warning shown when the OS keyring is unavailable, in which case the
@@ -14,7 +14,8 @@ const DISMISSED_KEY = 'gwshell.securityNoticeDismissed';
 
 export const SecurityNotice: React.FC = () => {
   const { t } = useTranslation();
-  const [show, setShow] = useState(false);
+  const toast = useToast();
+  const surfacedRef = useRef(false);
 
   useEffect(() => {
     // Don't show if previously dismissed
@@ -22,29 +23,22 @@ export const SecurityNotice: React.FC = () => {
     let cancelled = false;
     invoke<boolean>('secret_storage_available')
       .then((available) => {
-        if (!cancelled && available === false) setShow(true);
+        if (cancelled || available !== false) return;
+        if (surfacedRef.current) return;
+        surfacedRef.current = true;
+        // Mark dismissed so the warning doesn't re-fire on every check.
+        localStorage.setItem(DISMISSED_KEY, '1');
+        toast.warning({
+          title: t('toast.secretStorageWarningTitle'),
+          message: t('toast.secretStorageWarningBody'),
+        });
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!show) return null;
-
-  return (
-    <div className="update-toast security-notice" role="alert">
-      <ShieldAlert size={16} className="security-notice-icon" />
-      <div className="update-toast-text">
-        <strong>{t('secret_storage_warning_title')}</strong>
-        <span>{t('secret_storage_warning_body')}</span>
-      </div>
-      <button className="update-toast-btn" onClick={() => {
-        localStorage.setItem(DISMISSED_KEY, '1');
-        setShow(false);
-      }}>
-        <X size={12} />
-      </button>
-    </div>
-  );
+  return null;
 };

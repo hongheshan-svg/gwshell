@@ -32,14 +32,24 @@ export const ShortcutEditor: React.FC<ShortcutEditorProps> = ({ value, onChange 
   const onCaptureKey = (id: string, e: React.KeyboardEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.key === 'Escape') { setCapturing(null); setError(''); return; }
+    if (e.key === 'Escape') {
+      setCapturing(null);
+      setError('');
+      return;
+    }
     const step = eventToStep(e.nativeEvent);
     if (!step) return; // pure modifier — keep waiting
     const binding = stepToBinding(step);
-    if (!parseBinding(binding)) { setError(t('shortcut_conflict')); return; }
+    if (!parseBinding(binding)) {
+      setError(t('shortcut_conflict'));
+      return;
+    }
     // conflict check within the rebindable set
     const clash = KEY_ACTIONS.find((a) => a.id !== id && currentBinding(a.id) === binding);
-    if (clash) { setError(t('shortcut_conflict')); return; }
+    if (clash) {
+      setError(t('shortcut_conflict'));
+      return;
+    }
     setOverride(id, binding);
     setCapturing(null);
     setError('');
@@ -60,15 +70,40 @@ export const ShortcutEditor: React.FC<ShortcutEditorProps> = ({ value, onChange 
                   readOnly
                   value={t('shortcut_press_key')}
                   onKeyDown={(e) => onCaptureKey(a.id, e)}
-                  onBlur={() => { setCapturing(null); setError(''); }}
+                  onBlur={() => {
+                    setCapturing(null);
+                    setError('');
+                  }}
                 />
               ) : (
-                <button className="shortcut-chip" onClick={() => { setCapturing(a.id); setError(''); }}>
-                  {b ? b.split(' ').map((s, i) => <kbd key={i}>{s}</kbd>) : <span className="shortcut-unbound">—</span>}
+                <button
+                  className="shortcut-chip"
+                  onClick={() => {
+                    setCapturing(a.id);
+                    setError('');
+                  }}
+                >
+                  {b ? (
+                    b.split(' ').map((s, i) => <kbd key={i}>{s}</kbd>)
+                  ) : (
+                    <span className="shortcut-unbound">—</span>
+                  )}
                 </button>
               )}
-              <button className="shortcut-mini" onClick={() => setOverride(a.id, null)} title={t('shortcut_unbind')}>⊘</button>
-              <button className="shortcut-mini" onClick={() => resetOverride(a.id)} title={t('shortcut_reset')}>↺</button>
+              <button
+                className="shortcut-mini"
+                onClick={() => setOverride(a.id, null)}
+                title={t('shortcut_unbind')}
+              >
+                ⊘
+              </button>
+              <button
+                className="shortcut-mini"
+                onClick={() => resetOverride(a.id)}
+                title={t('shortcut_reset')}
+              >
+                ↺
+              </button>
             </div>
           </div>
         );

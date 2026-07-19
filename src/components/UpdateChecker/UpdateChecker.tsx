@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
-import { Download, RefreshCw, X } from 'lucide-react';
+import { useToast } from '../../hooks/useToast';
 
 type UpdateState = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error';
 
@@ -10,14 +10,21 @@ const DISMISSED_KEY = 'gwshell.updateDismissedVersion';
 
 export const UpdateChecker: React.FC = () => {
   const { t } = useTranslation();
+  const toast = useToast();
   const [state, setState] = useState<UpdateState>('idle');
   const [newVersion, setNewVersion] = useState('');
-  const [dismissed, setDismissed] = useState(false);
   const [progress, setProgress] = useState(0);
   // Hold the Update handle from the initial check so Download reuses it instead
   // of issuing a second check() — that second call could return null (manifest
   // flake / already-applied) and leave the toast stuck forever on "Downloading".
   const updateRef = useRef<Update | null>(null);
+  // Track whether the current version was already surfaced as a toast, so a
+  // re-render (state flip) doesn't push a duplicate.
+  const surfacedVersionRef = useRef<string | null>(null);
+  // Track whether the "ready"/"error" toasts have already fired this session —
+  // avoids duplicate toasts if state flips back and forth.
+  const surfacedReadyRef = useRef(false);
+  const surfacedErrorRef = useRef(false);
 
   const checkForUpdate = async () => {
     setState('checking');
@@ -37,7 +44,7 @@ export const UpdateChecker: React.FC = () => {
         setState('idle');
       }
     } catch {
-      setState('idle');
+      setState('error');
     }
   };
 
@@ -79,9 +86,12 @@ export const UpdateChecker: React.FC = () => {
     // Updates are non-critical; don't let them compete with early window interactions.
     const timer = window.setTimeout(() => {
       if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        idleCallbackId = window.requestIdleCallback(() => {
-          void checkForUpdate();
-        }, { timeout: 5000 });
+        idleCallbackId = window.requestIdleCallback(
+          () => {
+            void checkForUpdate();
+          },
+          { timeout: 5000 },
+        );
       } else {
         idleCallbackId = setTimeout(() => {
           void checkForUpdate();
@@ -101,60 +111,59 @@ export const UpdateChecker: React.FC = () => {
     };
   }, []);
 
-  if (dismissed || state === 'idle' || state === 'checking') return null;
+  // Surface update availability as a toast with a Download & Install action.
+  useEffect(() => {
+    if (state !== 'available') return;
+    if (surfacedVersionRef.current === newVersion) return;
+    surfacedVersionRef.current = newVersion;
+    toast.info({
+      title: t('toast.updateAvailable'),
+      message: t('toast.updateAvailableBody', { version: newVersion }),
+      action: {
+        label: t('toast.updateDownload'),
+        onClick: () => void downloadAndInstall(),
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, newVersion]);
 
-  return (
-    <div className="update-toast">
-      {state === 'available' && (
-        <>
-          <div className="update-toast-text">
-            <strong>{t('update_available')}</strong>
-            <span>{t('update_new_version', { version: newVersion })}</span>
-          </div>
-          <button className="update-toast-btn primary" onClick={downloadAndInstall}>
-            <Download size={12} />
-            {t('update_download')}
-          </button>
-          <button className="update-toast-btn" onClick={() => {
-            localStorage.setItem(DISMISSED_KEY, newVersion);
-            setDismissed(true);
-          }}>
-            <X size={12} />
-          </button>
-        </>
-      )}
-      {state === 'downloading' && (
-        <>
-          <div className="update-toast-text">
-            <strong>{t('update_downloading')}</strong>
-            <span>{progress}%</span>
-          </div>
-          <div className="update-progress">
-            <div className="update-progress-bar" style={{ width: `${progress}%` }} />
-          </div>
-        </>
-      )}
-      {state === 'ready' && (
-        <>
-          <div className="update-toast-text">
-            <strong>{t('update_restart')}</strong>
-          </div>
-          <button className="update-toast-btn primary" onClick={() => void relaunch()}>
-            <RefreshCw size={12} />
-            {t('update_restart_now')}
-          </button>
-        </>
-      )}
-      {state === 'error' && (
-        <>
-          <div className="update-toast-text">
-            <span>{t('update_error')}</span>
-          </div>
-          <button className="update-toast-btn" onClick={() => setDismissed(true)}>
-            <X size={12} />
-          </button>
-        </>
-      )}
-    </div>
-  );
+  // Surface "ready to restart" as a toast with a Restart action.
+  useEffect(() => {
+    if (state !== 'ready') return;
+    if (surfacedReadyRef.current) return;
+    surfacedReadyRef.current = true;
+    toast.success({
+      title: t('toast.updateRestart'),
+      action: {
+        label: t('toast.updateRestartNow'),
+        onClick: () => void relaunch(),
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+
+  // Surface download errors as a sticky error toast (user must dismiss).
+  useEffect(() => {
+    if (state !== 'error') return;
+    if (surfacedErrorRef.current) return;
+    surfacedErrorRef.current = true;
+    toast.error({ title: t('toast.updateError') });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+
+  // Reset ready/error surfacing flags when starting a new check cycle,
+  // so a retry after error (or re-download after ready) can re-surface the toast.
+  useEffect(() => {
+    if (state === 'idle' || state === 'checking') {
+      surfacedReadyRef.current = false;
+      surfacedErrorRef.current = false;
+    }
+  }, [state]);
+
+  // Progress is captured for potential future status-bar display; the toast
+  // system doesn't support in-place updates so we don't spam per-tick toasts.
+  useEffect(() => {
+    // no-op: progress kept in state for future use
+  }, [progress]);
+  return null;
 };

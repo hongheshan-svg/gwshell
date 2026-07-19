@@ -171,6 +171,9 @@ where
     }))
 }
 
+// AI streaming setup genuinely needs 8 params (client, url, model, messages,
+// tools, key, signal, callback); splitting would harm readability.
+#[allow(clippy::too_many_arguments)]
 async fn stream_openai_chat_completion_url<F, S>(
     client: &reqwest::Client,
     url: &str,
@@ -191,7 +194,7 @@ where
         "stream": true,
         "messages": [
             { "role": "system", "content": system_prompt },
-            { "role": "user", "content": truncate_middle(&user_prompt, effective_max_input_chars(&settings)) }
+            { "role": "user", "content": truncate_middle(user_prompt, effective_max_input_chars(settings)) }
         ]
     });
 

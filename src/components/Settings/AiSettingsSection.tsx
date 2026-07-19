@@ -27,7 +27,8 @@ const defaults: AiProviderSettings = {
   request_timeout_secs: 45,
 };
 
-const emitAiSettingsChanged = () => window.dispatchEvent(new CustomEvent('gwshell-ai-settings-changed'));
+const emitAiSettingsChanged = () =>
+  window.dispatchEvent(new CustomEvent('gwshell-ai-settings-changed'));
 
 export const AiSettingsSection: React.FC = () => {
   const { t } = useTranslation();
@@ -38,7 +39,9 @@ export const AiSettingsSection: React.FC = () => {
   const savePolicy = useAgentPolicyStore((s) => s.save);
   const [apiKey, setApiKey] = useState('');
   const [aiMessage, setAiMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-  const [policyMessage, setPolicyMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [policyMessage, setPolicyMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(
+    null,
+  );
   const [busy, setBusy] = useState(false);
   const [activeModelTab, setActiveModelTab] = useState<ModelTab>('china');
 
@@ -52,32 +55,45 @@ export const AiSettingsSection: React.FC = () => {
   const selectedPreset = useMemo(() => findAiModelPreset(settings), [settings]);
   const usable =
     isAiProviderUsable(settings) ||
-    (settings.enabled && Boolean(settings.base_url.trim()) && Boolean(settings.model.trim()) && Boolean(apiKey.trim()));
+    (settings.enabled &&
+      Boolean(settings.base_url.trim()) &&
+      Boolean(settings.model.trim()) &&
+      Boolean(apiKey.trim()));
   const status = useMemo(() => {
-    if (!settings.enabled) return { kind: 'off' as const, label: t('agent_ai_status_disabled') };
-    if (!settings.model.trim() || !settings.base_url.trim()) return { kind: 'warn' as const, label: t('agent_ai_status_incomplete') };
+    if (!settings.enabled) return { kind: 'off' as const, label: t('agent_ai_status_disabled') }; // eslint-disable-line no-restricted-syntax -- literal type narrowing for discriminated union
+    if (!settings.model.trim() || !settings.base_url.trim())
+      return { kind: 'warn' as const, label: t('agent_ai_status_incomplete') }; // eslint-disable-line no-restricted-syntax -- literal type narrowing for discriminated union
     if (settings.provider !== 'ollama' && !settings.api_key_configured && !apiKey.trim()) {
-      return { kind: 'warn' as const, label: t('agent_ai_status_key_missing') };
+      return { kind: 'warn' as const, label: t('agent_ai_status_key_missing') }; // eslint-disable-line no-restricted-syntax -- literal type narrowing for discriminated union
     }
-    return { kind: 'ok' as const, label: t('agent_ai_status_ready') };
+    return { kind: 'ok' as const, label: t('agent_ai_status_ready') }; // eslint-disable-line no-restricted-syntax -- literal type narrowing for discriminated union
   }, [apiKey, settings, t]);
-  const keyPlaceholder = settings.provider === 'ollama'
-    ? ''
-    : (selectedPreset?.apiKeyHint || (settings.provider === 'anthropic_compatible' ? 'sk-ant-...' : 'sk-...'));
+  const keyPlaceholder =
+    settings.provider === 'ollama'
+      ? ''
+      : // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+        selectedPreset?.apiKeyHint ||
+        (settings.provider === 'anthropic_compatible' ? 'sk-ant-...' : 'sk-...');
 
   const onSettingsChange = (partial: Partial<AiProviderSettings>) => {
     setSettings((s) => ({ ...s, ...partial }));
     setAiMessage(null);
   };
-  const onPolicyChange = (partial: Partial<AgentPolicySettings>) => setPolicy({ ...policy, ...partial });
+  const onPolicyChange = (partial: Partial<AgentPolicySettings>) =>
+    setPolicy({ ...policy, ...partial });
 
   const normalizedSettings = (): AiProviderSettings => ({
     ...settings,
     base_url: settings.base_url.trim(),
     model: settings.model.trim(),
-    request_timeout_secs: Math.max(1, settings.request_timeout_secs || defaults.request_timeout_secs),
+    request_timeout_secs: Math.max(
+      1,
+      settings.request_timeout_secs || defaults.request_timeout_secs,
+    ),
     max_input_chars: Math.max(2000, settings.max_input_chars || defaults.max_input_chars),
-    temperature: Number.isFinite(settings.temperature) ? settings.temperature : defaults.temperature,
+    temperature: Number.isFinite(settings.temperature)
+      ? settings.temperature
+      : defaults.temperature,
   });
 
   const reloadSettings = async () => {
@@ -155,7 +171,13 @@ export const AiSettingsSection: React.FC = () => {
   const applyModelPreset = (presetId: string) => {
     const preset = aiModelPresets.find((item) => item.id === presetId);
     if (!preset) return;
-    setSettings((s) => ({ ...s, enabled: true, provider: preset.provider, base_url: preset.base_url, model: preset.model }));
+    setSettings((s) => ({
+      ...s,
+      enabled: true,
+      provider: preset.provider,
+      base_url: preset.base_url,
+      model: preset.model,
+    }));
     setAiMessage(null);
   };
 
@@ -186,16 +208,24 @@ export const AiSettingsSection: React.FC = () => {
           onSettingsChange={onSettingsChange}
           onApiKeyChange={setApiKey}
           onSelectProvider={selectCompatibleProvider}
-          onClearKey={clearKey}
-          onTest={testProvider}
-          onSave={save}
+          onClearKey={() => {
+            void clearKey();
+          }}
+          onTest={() => {
+            void testProvider();
+          }}
+          onSave={() => {
+            void save();
+          }}
         />
       </div>
       <AgentPolicySection
         policy={policy}
         busy={busy}
         onChange={onPolicyChange}
-        onSave={savePolicySettings}
+        onSave={() => {
+          void savePolicySettings();
+        }}
         message={policyMessage}
       />
     </>

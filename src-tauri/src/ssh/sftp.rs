@@ -9,6 +9,30 @@ use std::path::{Path, PathBuf};
 /// the caller's responsibility.
 pub type ProgressFn = Box<dyn FnMut(&str, usize, usize, u64, u64) + Send>;
 
+/// How to treat a directory-entry name received from the remote server when
+/// building local paths. A hostile SFTP server can return names containing
+/// path separators (or NUL) that would let `Path::join` escape the chosen
+/// download root.
+#[derive(Debug, PartialEq)]
+enum EntryName {
+    /// Normal readdir noise ("." / ".." / empty) — ignore the entry.
+    Skip,
+    /// Would escape the download root — abort the whole transfer.
+    Unsafe,
+    /// Safe to join onto a local path.
+    Ok,
+}
+
+fn classify_entry_name(name: &str) -> EntryName {
+    if name.is_empty() || name == "." || name == ".." {
+        EntryName::Skip
+    } else if name.contains('/') || name.contains('\\') || name.contains('\0') {
+        EntryName::Unsafe
+    } else {
+        EntryName::Ok
+    }
+}
+
 /// A single remote directory entry, in the exact shape the SFTP panel expects.
 #[derive(Debug, Serialize, Clone)]
 pub struct SftpEntry {
@@ -298,6 +322,16 @@ pub async fn download_dir(
             .map_err(|e| format!("SFTP readdir {} failed: {}", rdir, e))?;
         for entry in entries {
             let name = entry.file_name();
+            match classify_entry_name(&name) {
+                EntryName::Skip => continue,
+                EntryName::Unsafe => {
+                    return Err(format!(
+                        "SFTP server returned an unsafe entry name {:?} in {} — aborting download",
+                        name, rdir
+                    ));
+                }
+                EntryName::Ok => {}
+            }
             let rpath = format!("{}/{}", rdir, name);
             if entry.metadata().is_dir() {
                 stack.push((rpath, ldir.join(&name)));
@@ -309,7 +343,7 @@ pub async fn download_dir(
 
     let total = files.len();
     for (i, (rpath, lpath)) in files.iter().enumerate() {
-        download_one(&sftp, rpath, lpath, i + 1, total, &mut progress).await?;
+        download_one(sftp, rpath, lpath, i + 1, total, &mut progress).await?;
     }
     Ok(total)
 }
@@ -371,7 +405,7 @@ pub async fn upload_dir(
 
     let total = files.len();
     for (i, (lpath, rpath)) in files.iter().enumerate() {
-        upload_one(&sftp, rpath, lpath, i + 1, total, &mut progress).await?;
+        upload_one(sftp, rpath, lpath, i + 1, total, &mut progress).await?;
     }
     Ok(total)
 }
@@ -396,4 +430,31 @@ pub async fn create_file(sftp: &SftpSession, path: &str) -> Result<(), String> {
         .await
         .map_err(|e| format!("SFTP create file failed: {}", e))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn entry_names_with_separators_are_unsafe() {
+        // The path-traversal vectors a hostile server can put in readdir.
+        for name in ["../evil", "..\\evil", "a/b", "a\\b", "x\0y", "/etc/passwd"] {
+            assert_eq!(classify_entry_name(name), EntryName::Unsafe, "{:?}", name);
+        }
+    }
+
+    #[test]
+    fn dot_entries_are_skipped_not_fatal() {
+        for name in [".", "..", ""] {
+            assert_eq!(classify_entry_name(name), EntryName::Skip, "{:?}", name);
+        }
+    }
+
+    #[test]
+    fn ordinary_names_are_ok() {
+        for name in ["file.txt", "..config", "a.b", "資料", "with space"] {
+            assert_eq!(classify_entry_name(name), EntryName::Ok, "{:?}", name);
+        }
+    }
 }

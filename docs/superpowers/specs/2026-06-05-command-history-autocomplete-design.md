@@ -45,21 +45,21 @@ Two public functions consumed by `lib.rs`:
 
 ### Tauri commands registered in `lib.rs`
 
-| Command | Signature |
-|---|---|
-| `get_command_history` | `(limit: u32) -> Result<Vec<String>, String>` |
-| `save_command_history` | `(command: String) -> Result<(), String>` |
+| Command                | Signature                                     |
+| ---------------------- | --------------------------------------------- |
+| `get_command_history`  | `(limit: u32) -> Result<Vec<String>, String>` |
+| `save_command_history` | `(command: String) -> Result<(), String>`     |
 
 ---
 
 ## Frontend History Module: `src/lib/commandHistory.ts`
 
 ```typescript
-let history: string[] = [];  // oldest→newest in memory
+let history: string[] = []; // oldest→newest in memory
 
-export async function init(limit: number): Promise<void>
-export function record(command: string): void        // fire-and-forget invoke
-export function getSuggestion(prefix: string): string // '' if no match
+export async function init(limit: number): Promise<void>;
+export function record(command: string): void; // fire-and-forget invoke
+export function getSuggestion(prefix: string): string; // '' if no match
 ```
 
 - `init` loads from backend (newest-first from DB → reverse to oldest-first in array).
@@ -73,9 +73,9 @@ export function getSuggestion(prefix: string): string // '' if no match
 ### Module-level maps (alongside existing `tabListenerCleanups` etc.)
 
 ```typescript
-const inputBuffers      = new Map<string, string>();            // tabId → current line buffer
-const ghostTextState    = new Map<string, string>();            // tabId → current ghost suffix
-const ghostTextSetters  = new Map<string, (g: string) => void>(); // tabId → React setState
+const inputBuffers = new Map<string, string>(); // tabId → current line buffer
+const ghostTextState = new Map<string, string>(); // tabId → current ghost suffix
+const ghostTextSetters = new Map<string, (g: string) => void>(); // tabId → React setState
 const ghostAcceptCallbacks = new Map<string, (s: string) => void>(); // tabId → send-to-backend
 ```
 
@@ -83,14 +83,14 @@ const ghostAcceptCallbacks = new Map<string, (s: string) => void>(); // tabId �
 
 Added at the top of the existing `onData` handler, before `writeQueue += data`:
 
-| Received `data` | Action |
-|---|---|
-| `\r` or `\n` | If buffer non-empty, call `record(buf.trim())`; clear buffer + ghost text |
-| `\x7f` (Backspace) | Remove last char from buffer |
-| `\x15` (Ctrl+U) | Clear buffer and ghost text |
-| `\x1b…` (ESC sequences, arrow keys) | Clear ghost text only; do not modify buffer |
-| Printable ASCII (`≥ 0x20`, single char) | Append to buffer; recompute ghost text via `getSuggestion(buf)` |
-| Other control characters | Pass through unchanged |
+| Received `data`                         | Action                                                                    |
+| --------------------------------------- | ------------------------------------------------------------------------- |
+| `\r` or `\n`                            | If buffer non-empty, call `record(buf.trim())`; clear buffer + ghost text |
+| `\x7f` (Backspace)                      | Remove last char from buffer                                              |
+| `\x15` (Ctrl+U)                         | Clear buffer and ghost text                                               |
+| `\x1b…` (ESC sequences, arrow keys)     | Clear ghost text only; do not modify buffer                               |
+| Printable ASCII (`≥ 0x20`, single char) | Append to buffer; recompute ghost text via `getSuggestion(buf)`           |
+| Other control characters                | Pass through unchanged                                                    |
 
 After every buffer mutation, update `ghostTextState` and call the registered setter.
 
@@ -122,16 +122,18 @@ if Tab or ArrowRight pressed AND ghostTextState.get(tab.id) is non-empty:
 A `position: absolute` div rendered as a sibling to the xterm canvas, inside the existing `position: relative` terminal container:
 
 ```tsx
-{ghostText && isActive && settings.terminalCmdHint && (
-  <div
-    className="terminal-ghost-text"
-    style={{
-      left: `calc(${cursorX} * var(--cell-w))`,
-      top:  `calc(${cursorY} * var(--cell-h))`,
-      pointerEvents: 'none',
-    }}
-  />
-)}
+{
+  ghostText && isActive && settings.terminalCmdHint && (
+    <div
+      className="terminal-ghost-text"
+      style={{
+        left: `calc(${cursorX} * var(--cell-w))`,
+        top: `calc(${cursorY} * var(--cell-h))`,
+        pointerEvents: 'none',
+      }}
+    />
+  );
+}
 ```
 
 `cursorX` / `cursorY` are stored as React state (`useState<{x:number,y:number}>`) and updated together with `ghostText` whenever the ghost text setter fires — reading `terminal.buffer.active.cursorX/Y` at that moment ensures the position is current.
@@ -139,7 +141,7 @@ A `position: absolute` div rendered as a sibling to the xterm canvas, inside the
 `--cell-w` and `--cell-h` CSS variables are set on the container element inside the ResizeObserver callback:
 
 ```typescript
-const cellW = container.clientWidth  / terminal.cols;
+const cellW = container.clientWidth / terminal.cols;
 const cellH = container.clientHeight / terminal.rows;
 container.style.setProperty('--cell-w', `${cellW}px`);
 container.style.setProperty('--cell-h', `${cellH}px`);
@@ -155,11 +157,11 @@ Font family and size mirror the terminal's settings so the overlay aligns with t
 
 All three settings already exist in the UI; this implementation makes them functional:
 
-| Setting | Effect |
-|---|---|
-| `sshHistoryCmd` | Master toggle; `false` skips all interception and ghost text |
-| `sshHistoryCmdLoadCount` | Passed as `limit` to `commandHistory.init()` (default `100`) |
-| `terminalCmdHint` | Controls ghost text rendering; history still records when `false` |
+| Setting                  | Effect                                                            |
+| ------------------------ | ----------------------------------------------------------------- |
+| `sshHistoryCmd`          | Master toggle; `false` skips all interception and ghost text      |
+| `sshHistoryCmdLoadCount` | Passed as `limit` to `commandHistory.init()` (default `100`)      |
+| `terminalCmdHint`        | Controls ghost text rendering; history still records when `false` |
 
 ---
 
@@ -187,12 +189,12 @@ This reloads the in-memory array whenever the user changes the count or re-enabl
 
 ## Files Changed
 
-| File | Type |
-|---|---|
-| `src-tauri/src/history.rs` | New |
-| `src-tauri/src/database.rs` | Modified — add table + index in `init_tables` |
-| `src-tauri/src/lib.rs` | Modified — `mod history`, two Tauri commands (receive `state: State<AppState>`, call `state.db`) |
-| `src/lib/commandHistory.ts` | New |
-| `src/components/Terminal/TerminalView.tsx` | Modified — interception logic, ghost overlay, cleanup |
-| `src/App.tsx` | Modified — startup `init()` call |
-| `src/stores/settingsStore.ts` | Modified — `save()` triggers `init()` |
+| File                                       | Type                                                                                             |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `src-tauri/src/history.rs`                 | New                                                                                              |
+| `src-tauri/src/database.rs`                | Modified — add table + index in `init_tables`                                                    |
+| `src-tauri/src/lib.rs`                     | Modified — `mod history`, two Tauri commands (receive `state: State<AppState>`, call `state.db`) |
+| `src/lib/commandHistory.ts`                | New                                                                                              |
+| `src/components/Terminal/TerminalView.tsx` | Modified — interception logic, ghost overlay, cleanup                                            |
+| `src/App.tsx`                              | Modified — startup `init()` call                                                                 |
+| `src/stores/settingsStore.ts`              | Modified — `save()` triggers `init()`                                                            |

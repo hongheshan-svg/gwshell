@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { Snippet } from '../types';
+import { useToastStore } from './toastStore';
+import i18n from '../i18n';
 
 interface SnippetStore {
   snippets: Snippet[];
@@ -21,7 +23,7 @@ export const useSnippetStore = create<SnippetStore>((set, get) => ({
       const snippets = rows
         .map((r) => {
           try {
-            return JSON.parse(r) as Snippet;
+            return JSON.parse(r) as Snippet; // eslint-disable-line no-restricted-syntax -- JSON.parse returns unknown; narrowing via Snippet
           } catch {
             return null;
           }
@@ -50,6 +52,11 @@ export const useSnippetStore = create<SnippetStore>((set, get) => ({
       // Roll back the optimistic add so the UI matches the backend.
       set((state) => ({ snippets: state.snippets.filter((s) => s.id !== snippet.id) }));
       console.error('Failed to save snippet, rolled back:', err);
+      useToastStore.getState().pushToast({
+        kind: 'error',
+        title: i18n.t('toast.snippetSaveFailed'),
+        message: String(err),
+      });
     }
   },
 
@@ -62,9 +69,16 @@ export const useSnippetStore = create<SnippetStore>((set, get) => ({
       await invoke('save_snippet', { id: snippet.id, data: JSON.stringify(snippet) });
     } catch (err) {
       if (oldSnippet) {
-        set((state) => ({ snippets: state.snippets.map((s) => (s.id === snippet.id ? oldSnippet : s)) }));
+        set((state) => ({
+          snippets: state.snippets.map((s) => (s.id === snippet.id ? oldSnippet : s)),
+        }));
       }
       console.error('Failed to update snippet, rolled back:', err);
+      useToastStore.getState().pushToast({
+        kind: 'error',
+        title: i18n.t('toast.snippetSaveFailed'),
+        message: String(err),
+      });
     }
   },
 
@@ -80,6 +94,11 @@ export const useSnippetStore = create<SnippetStore>((set, get) => ({
         set((state) => ({ snippets: [...state.snippets, removed] }));
       }
       console.error('Failed to delete snippet, rolled back:', err);
+      useToastStore.getState().pushToast({
+        kind: 'error',
+        title: i18n.t('toast.snippetDeleteFailed'),
+        message: String(err),
+      });
     }
   },
 }));

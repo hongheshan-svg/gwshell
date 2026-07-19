@@ -23,12 +23,12 @@ Phase A 已在真机（SSH bash/zsh）跑通，提供了 Phase B 的全部数据
 
 ## 2. 已锁定方向（来自 brainstorm 决策）
 
-| 决策点 | 选定 |
-|---|---|
-| **卡片力度** | **A · 完整框卡（Warp 风）**：每个 block 框成圆角面板，命令为带底色的头条，退出码角标，状态左边线 |
-| **"可折叠"取舍** | **B · Block 聚焦面板**：xterm 固定高度缓冲区**无法真折叠/隐藏输出行**（需 Warp 式自研渲染，不做）。改为点卡片 → 该命令完整输出在右侧浮层单独展开 |
-| **设置/门控** | **不新增设置**：`cmdHintShellIntegration` 开启时，block 表现即从"3px 条"换成"整卡"。状态色移到卡片左边线 + 头部角标。避免 [[dual-appsettings-sync]] 双写 |
-| **可选件** | 全要：① 粘性命令头 ② Overview 刻度尺 ③ 卡片悬停工具条 ④ 修复 block 导航快捷键 |
+| 决策点           | 选定                                                                                                                                                     |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **卡片力度**     | **A · 完整框卡（Warp 风）**：每个 block 框成圆角面板，命令为带底色的头条，退出码角标，状态左边线                                                         |
+| **"可折叠"取舍** | **B · Block 聚焦面板**：xterm 固定高度缓冲区**无法真折叠/隐藏输出行**（需 Warp 式自研渲染，不做）。改为点卡片 → 该命令完整输出在右侧浮层单独展开         |
+| **设置/门控**    | **不新增设置**：`cmdHintShellIntegration` 开启时，block 表现即从"3px 条"换成"整卡"。状态色移到卡片左边线 + 头部角标。避免 [[dual-appsettings-sync]] 双写 |
+| **可选件**       | 全要：① 粘性命令头 ② Overview 刻度尺 ③ 卡片悬停工具条 ④ 修复 block 导航快捷键                                                                            |
 
 ---
 
@@ -36,13 +36,13 @@ Phase A 已在真机（SSH bash/zsh）跑通，提供了 Phase B 的全部数据
 
 核心难点：在 xterm 上画**可变高度**卡片，且不写自研渲染器。各取所长：
 
-| 元素 | 渲染机制 | 理由 |
-|---|---|---|
-| **已完成 block 的卡框**（左边线 + 头部带 + 退出码角标 + 悬停工具条） | **xterm decoration**（全宽，`marker=promptMarker`，`height=rowSpan`，`layer:'bottom'`，子 DOM 头部） | 跨度已知、高度稳定，**只创建一次**；滚动定位 / alt-buffer 隐藏 / scrollback 裁剪全由 xterm 负责（Phase A 已验证这条路稳） |
-| **唯一"运行中"block 的卡框** | **React overlay 单 div** | decoration 高度创建后不可改；运行中 block 持续长高，用 overlay 每帧重算像素矩形 → 平滑增长、零 decoration churn。命令结束、跨度确定后转交给 decoration |
-| **粘性命令头** | **React overlay**（视口顶部固定） | 不随 marker 逐行锚定，按 `onScroll` 算"顶行所属 block" |
-| **Overview 刻度尺** | **React overlay**（右边缘细轨） | 自绘比原生 `overviewRulerOptions` 更可控（支持点击跳转到具体 block） |
-| **聚焦面板** | **React 组件**（右侧浮层） | 纯 React，复用 `readOutput()` |
+| 元素                                                                 | 渲染机制                                                                                             | 理由                                                                                                                                                   |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **已完成 block 的卡框**（左边线 + 头部带 + 退出码角标 + 悬停工具条） | **xterm decoration**（全宽，`marker=promptMarker`，`height=rowSpan`，`layer:'bottom'`，子 DOM 头部） | 跨度已知、高度稳定，**只创建一次**；滚动定位 / alt-buffer 隐藏 / scrollback 裁剪全由 xterm 负责（Phase A 已验证这条路稳）                              |
+| **唯一"运行中"block 的卡框**                                         | **React overlay 单 div**                                                                             | decoration 高度创建后不可改；运行中 block 持续长高，用 overlay 每帧重算像素矩形 → 平滑增长、零 decoration churn。命令结束、跨度确定后转交给 decoration |
+| **粘性命令头**                                                       | **React overlay**（视口顶部固定）                                                                    | 不随 marker 逐行锚定，按 `onScroll` 算"顶行所属 block"                                                                                                 |
+| **Overview 刻度尺**                                                  | **React overlay**（右边缘细轨）                                                                      | 自绘比原生 `overviewRulerOptions` 更可控（支持点击跳转到具体 block）                                                                                   |
+| **聚焦面板**                                                         | **React 组件**（右侧浮层）                                                                           | 纯 React，复用 `readOutput()`                                                                                                                          |
 
 **关键不变量**：完成卡（decoration）与运行卡（overlay）**共用同一套 CSS class**（`.gw-card` 系列），外观完全一致；运行→完成的交接采用"先建 decoration、下一 tick 再撤 overlay div"，避免 1 帧跳变。
 
@@ -121,36 +121,36 @@ Phase A 已在真机（SSH bash/zsh）跑通，提供了 Phase B 的全部数据
 
 ## 5. 影响文件
 
-| 文件 | 改动 |
-|---|---|
-| `src/components/Terminal/blocks.ts` | 扩展：`finishedAt`/`durationMs`、`blockRowRange`/`rowSpan`/`runningBlock` helper；回收 endMarker 等 |
-| `src/components/Terminal/blockCards.ts` | **新**：完成卡 decoration 管理 + 头部子 DOM + 悬停工具条动作 |
-| `src/components/Terminal/BlockLiveFrame.tsx` | **新**：运行中卡 React overlay |
-| `src/components/Terminal/BlockStickyHeader.tsx` | **新**：粘性命令头 |
-| `src/components/Terminal/BlockOverviewRuler.tsx` | **新**：右侧刻度尺 |
-| `src/components/Terminal/BlockFocusPanel.tsx` | **新**：聚焦面板 |
-| `src/components/Terminal/TerminalView.tsx` | OSC 133 handler 改调 `syncCards`；挂载 overlay 组件；移除 Phase A 3px 条 + 点击菜单 |
-| `src/components/Terminal/blockNav.ts` | 导航修复；跳转高亮 |
-| `src/keymap/actions.ts` | `block.focus`；必要时改 `block.prev/next` 键位 |
-| `src/stores/appStore.ts` | 聚焦态 `focusedBlock`（含开关 action） |
-| `src/App.tsx` | 根级挂载 `BlockFocusPanel` |
-| `src/styles/global.css` | `.gw-card` 系列；移除 `.gw-block-deco`/`.gw-block-menu` |
-| `src/i18n/locales/gwshell.{en,zh}.json` | 复制命令/复制输出/重跑/聚焦/退出码/用时 文案 |
+| 文件                                             | 改动                                                                                                |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `src/components/Terminal/blocks.ts`              | 扩展：`finishedAt`/`durationMs`、`blockRowRange`/`rowSpan`/`runningBlock` helper；回收 endMarker 等 |
+| `src/components/Terminal/blockCards.ts`          | **新**：完成卡 decoration 管理 + 头部子 DOM + 悬停工具条动作                                        |
+| `src/components/Terminal/BlockLiveFrame.tsx`     | **新**：运行中卡 React overlay                                                                      |
+| `src/components/Terminal/BlockStickyHeader.tsx`  | **新**：粘性命令头                                                                                  |
+| `src/components/Terminal/BlockOverviewRuler.tsx` | **新**：右侧刻度尺                                                                                  |
+| `src/components/Terminal/BlockFocusPanel.tsx`    | **新**：聚焦面板                                                                                    |
+| `src/components/Terminal/TerminalView.tsx`       | OSC 133 handler 改调 `syncCards`；挂载 overlay 组件；移除 Phase A 3px 条 + 点击菜单                 |
+| `src/components/Terminal/blockNav.ts`            | 导航修复；跳转高亮                                                                                  |
+| `src/keymap/actions.ts`                          | `block.focus`；必要时改 `block.prev/next` 键位                                                      |
+| `src/stores/appStore.ts`                         | 聚焦态 `focusedBlock`（含开关 action）                                                              |
+| `src/App.tsx`                                    | 根级挂载 `BlockFocusPanel`                                                                          |
+| `src/styles/global.css`                          | `.gw-card` 系列；移除 `.gw-block-deco`/`.gw-block-menu`                                             |
+| `src/i18n/locales/gwshell.{en,zh}.json`          | 复制命令/复制输出/重跑/聚焦/退出码/用时 文案                                                        |
 
 ---
 
 ## 6. 性能与风险
 
-| 风险 | 缓解 |
-|---|---|
-| **运行中 block 几何同步**（最大风险） | 仅 1 个运行卡走 overlay，跟 `onRender` 每帧重算；完成即转 decoration。cellH 优先渲染服务尺寸、兜底 DOM 测量 |
-| 完成卡 reflow/resize 后行号变动 | `onResize` 时整体 dispose+按新 `rowSpan` 重建（低频，可接受） |
-| 运行→完成交接闪跳 | 先建 decoration、下一 tick 再撤 overlay div；两者共用 class |
-| alt-buffer（vim/htop/less）误画卡 | 所有 overlay + decoration 在 `buffer.active.type==='alternate'` 时隐藏 |
-| decoration/overlay 数量随历史增长 | 完成卡随 `MAX_BLOCKS` 回收；overlay 只渲染视口内 + 1 运行卡；刻度尺为单一 SVG/DOM 轨 |
-| 私有 API（`_core._renderService`）随 xterm 升级失效 | 包一层 try/catch + DOM 测量兜底；集中在一个 helper 便于后续替换 |
-| 卡片底色遮挡选区/链接 | `layer:'bottom'` 渲染在选区之下；底色用低不透明度令牌 |
-| 与 Phase A 历史/补全/导航冲突 | 仅替换"表现层"（3px 条→卡 + 菜单→工具条）；OSC 133 解析、命令历史、ghost 补全路径不动 |
+| 风险                                                | 缓解                                                                                                        |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **运行中 block 几何同步**（最大风险）               | 仅 1 个运行卡走 overlay，跟 `onRender` 每帧重算；完成即转 decoration。cellH 优先渲染服务尺寸、兜底 DOM 测量 |
+| 完成卡 reflow/resize 后行号变动                     | `onResize` 时整体 dispose+按新 `rowSpan` 重建（低频，可接受）                                               |
+| 运行→完成交接闪跳                                   | 先建 decoration、下一 tick 再撤 overlay div；两者共用 class                                                 |
+| alt-buffer（vim/htop/less）误画卡                   | 所有 overlay + decoration 在 `buffer.active.type==='alternate'` 时隐藏                                      |
+| decoration/overlay 数量随历史增长                   | 完成卡随 `MAX_BLOCKS` 回收；overlay 只渲染视口内 + 1 运行卡；刻度尺为单一 SVG/DOM 轨                        |
+| 私有 API（`_core._renderService`）随 xterm 升级失效 | 包一层 try/catch + DOM 测量兜底；集中在一个 helper 便于后续替换                                             |
+| 卡片底色遮挡选区/链接                               | `layer:'bottom'` 渲染在选区之下；底色用低不透明度令牌                                                       |
+| 与 Phase A 历史/补全/导航冲突                       | 仅替换"表现层"（3px 条→卡 + 菜单→工具条）；OSC 133 解析、命令历史、ghost 补全路径不动                       |
 
 ---
 

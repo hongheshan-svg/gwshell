@@ -33,16 +33,16 @@ Collapse the left navigation from **three stacked layers** (icon rail + asset su
 
 ## Control mapping (every current control gets a home or is removed)
 
-| Current (icon rail) | New home |
-|---|---|
-| 快速连接 `quickconnect` | entry in the **`+` create menu** (top) |
-| 会话 `sessions` (toggled sidebar) | **collapse** control in footer |
-| 资产列表 `assetlist` | sidebar **title** click → `setActiveTab('asset-list')` |
-| 文件 `files` (SFTP) | footer **文件** button (contextual to active SSH tab) |
-| Docker / 本地终端 | already in the **`+` menu** — removed from rail |
-| 片段 `snippets` | footer **片段** toggle (swaps sidebar body) |
-| 主题 / 菜单 / 折叠 | sidebar **footer** |
-| 密钥 `keys` / 网络服务 `services` | **removed** (were Settings stubs) |
+| Current (icon rail)               | New home                                               |
+| --------------------------------- | ------------------------------------------------------ |
+| 快速连接 `quickconnect`           | entry in the **`+` create menu** (top)                 |
+| 会话 `sessions` (toggled sidebar) | **collapse** control in footer                         |
+| 资产列表 `assetlist`              | sidebar **title** click → `setActiveTab('asset-list')` |
+| 文件 `files` (SFTP)               | footer **文件** button (contextual to active SSH tab)  |
+| Docker / 本地终端                 | already in the **`+` menu** — removed from rail        |
+| 片段 `snippets`                   | footer **片段** toggle (swaps sidebar body)            |
+| 主题 / 菜单 / 折叠                | sidebar **footer**                                     |
+| 密钥 `keys` / 网络服务 `services` | **removed** (were Settings stubs)                      |
 
 **Also removed:** the 4 dead sub-panel header icons (`Settings`/`FolderPlus`/`Copy`/`Link`). Header becomes `title + [+] + [🔍]`.
 

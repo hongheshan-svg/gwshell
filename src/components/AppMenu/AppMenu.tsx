@@ -3,12 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { exit } from '@tauri-apps/plugin-process';
 import { useTranslation } from 'react-i18next';
-import {
-  Globe,
-  Settings,
-  Search,
-  LogOut,
-} from 'lucide-react';
+import { Globe, Settings, Search, LogOut } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { useEscapeClose } from '../../lib/useEscapeClose';
 import { isTauriRuntime } from '../../lib/platform';
@@ -16,12 +11,14 @@ import { isTauriRuntime } from '../../lib/platform';
 const getAppWindow = () => (isTauriRuntime() ? getCurrentWindow() : null);
 
 export const AppMenu: React.FC = () => {
-  const { showAppMenu, setShowAppMenu, setShowSettings, setShowCommandPalette, locale, setLocale } = useAppStore();
+  const { showAppMenu, setShowAppMenu, setShowSettings, setShowCommandPalette, locale, setLocale } =
+    useAppStore();
   const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
+      // eslint-disable-next-line no-restricted-syntax
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setShowAppMenu(false);
       }
@@ -44,7 +41,9 @@ export const AppMenu: React.FC = () => {
       setTimeout(() => {
         const appWindow = getAppWindow();
         appWindow?.destroy().catch(() => {
-          getAppWindow()?.close().catch(() => {});
+          getAppWindow()
+            ?.close()
+            .catch(() => {});
         });
       }, 800);
     }
@@ -58,11 +57,23 @@ export const AppMenu: React.FC = () => {
           <span>{t('menu_language')}</span>
           <span className="app-menu-shortcut">{locale === 'zh' ? 'EN' : '中文'}</span>
         </div>
-        <div className="app-menu-item" onClick={() => { setShowAppMenu(false); setShowSettings(true); }}>
+        <div
+          className="app-menu-item"
+          onClick={() => {
+            setShowAppMenu(false);
+            setShowSettings(true);
+          }}
+        >
           <Settings size={14} />
           <span>{t('menu_settings')}</span>
         </div>
-        <div className="app-menu-item" onClick={() => { setShowAppMenu(false); setShowCommandPalette(true); }}>
+        <div
+          className="app-menu-item"
+          onClick={() => {
+            setShowAppMenu(false);
+            setShowCommandPalette(true);
+          }}
+        >
           <Search size={14} />
           <span>{t('menu_quick_search')}</span>
           <span className="app-menu-shortcut">Ctrl+Shift+F</span>

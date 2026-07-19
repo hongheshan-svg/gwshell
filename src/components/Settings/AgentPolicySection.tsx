@@ -15,11 +15,19 @@ interface Props {
   message: { kind: 'ok' | 'err'; text: string } | null;
 }
 
-export const AgentPolicySection: React.FC<Props> = ({ policy, busy, onChange, onSave, message }) => {
+export const AgentPolicySection: React.FC<Props> = ({
+  policy,
+  busy,
+  onChange,
+  onSave,
+  message,
+}) => {
   const { t } = useTranslation();
   return (
     <>
-      <div className="settings-section-title" style={{ marginTop: 12 }}>{t('agent_policy_title')}</div>
+      <div className="settings-section-title" style={{ marginTop: 12 }}>
+        {t('agent_policy_title')}
+      </div>
       <div className="policy-card-grid">
         <PolicyAutoAnalysis policy={policy} busy={busy} onChange={onChange} />
         <PolicyAutoExecution policy={policy} busy={busy} onChange={onChange} />

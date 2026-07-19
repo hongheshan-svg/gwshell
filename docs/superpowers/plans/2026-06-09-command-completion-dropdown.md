@@ -28,6 +28,7 @@
 ## Task 1: Built-in command dictionary
 
 **Files:**
+
 - Create: `src/lib/commandDictionary.ts`
 - Create (start): `scripts/test-completion.mjs`
 
@@ -69,12 +70,16 @@ const dict = loadTs('src/lib/commandDictionary.ts');
 const lMatches = dict.lookupCommands('ls', 'en').map((x) => x.cmd);
 assert.ok(
   lMatches.includes('lsof') && lMatches.includes('lscpu') && lMatches.includes('lsblk'),
-  'ls* commands are present for prefix "ls"'
+  'ls* commands are present for prefix "ls"',
 );
 assert.ok(!lMatches.includes('ls'), 'exact-length match is excluded (no empty suffix)');
 
 assert.equal(dict.lookupCommands('lsof', 'zh')[0]?.desc, '列出打开的文件', 'zh locale description');
-assert.equal(dict.lookupCommands('lsof', 'en')[0]?.desc, 'List open files', 'en locale description');
+assert.equal(
+  dict.lookupCommands('lsof', 'en')[0]?.desc,
+  'List open files',
+  'en locale description',
+);
 
 assert.deepEqual(dict.lookupCommands('', 'en'), [], 'empty prefix yields nothing');
 assert.deepEqual(dict.lookupCommands('ls -', 'en'), [], 'prefix with whitespace yields nothing');
@@ -106,7 +111,11 @@ export interface CommandDef {
 // are kept short so they fit one row next to the command name.
 export const COMMAND_DEFS: CommandDef[] = [
   { cmd: 'ls', en: 'List directory contents', zh: '列出目录内容' },
-  { cmd: 'll', en: "Long-format listing (alias of 'ls -l')", zh: 'ls -l 的别名，长格式列出目录内容' },
+  {
+    cmd: 'll',
+    en: "Long-format listing (alias of 'ls -l')",
+    zh: 'ls -l 的别名，长格式列出目录内容',
+  },
   { cmd: 'la', en: "List all incl. hidden (alias of 'ls -A')", zh: 'ls -A 的别名，列出包含隐藏项' },
   { cmd: 'cd', en: 'Change the working directory', zh: '切换工作目录' },
   { cmd: 'pwd', en: 'Print working directory', zh: '显示当前目录' },
@@ -265,6 +274,7 @@ git commit -m "feat(completion): add built-in bilingual command dictionary"
 ## Task 2: Candidate merge (`buildCompletions`)
 
 **Files:**
+
 - Create: `src/lib/completion.ts`
 - Modify: `scripts/test-completion.mjs` (append)
 
@@ -287,20 +297,22 @@ function loadCompletion(dictMatches, historyMatches) {
 
 {
   const c = loadCompletion(
-    [{ cmd: 'ls', desc: 'List' }, { cmd: 'ln', desc: 'Link' }],
+    [
+      { cmd: 'ls', desc: 'List' },
+      { cmd: 'ln', desc: 'Link' },
+    ],
     ['ls -al', 'less notes.txt'],
   );
   const r = c.buildCompletions('l', {}, 'en', 8);
   assert.equal(r[0].kind, 'history', 'history items rank first');
   assert.equal(r[0].text, 'ls -al');
   assert.equal(r[1].text, 'less notes.txt');
-  assert.ok(r.some((x) => x.kind === 'command' && x.text === 'ls'), 'dictionary appended');
-  assert.ok(r.some((x) => x.kind === 'command' && x.text === 'ln'));
-  assert.equal(
-    r.find((x) => x.text === 'ls').desc,
-    'List',
-    'command item carries description',
+  assert.ok(
+    r.some((x) => x.kind === 'command' && x.text === 'ls'),
+    'dictionary appended',
   );
+  assert.ok(r.some((x) => x.kind === 'command' && x.text === 'ln'));
+  assert.equal(r.find((x) => x.text === 'ls').desc, 'List', 'command item carries description');
 }
 
 {
@@ -313,7 +325,13 @@ function loadCompletion(dictMatches, historyMatches) {
 
 {
   // cap respected
-  const c = loadCompletion([{ cmd: 'ls', desc: 'd' }, { cmd: 'ln', desc: 'd' }], ['less x']);
+  const c = loadCompletion(
+    [
+      { cmd: 'ls', desc: 'd' },
+      { cmd: 'ln', desc: 'd' },
+    ],
+    ['less x'],
+  );
   assert.equal(c.buildCompletions('l', {}, 'en', 1).length, 1, 'max cap honored');
 }
 
@@ -324,7 +342,10 @@ function loadCompletion(dictMatches, historyMatches) {
     './commandHistory': { getSuggestions: () => ['git status'] },
   });
   const r = c.buildCompletions('git ', {}, 'en', 8);
-  assert.ok(r.every((x) => x.kind === 'history'), 'no dictionary once past command name');
+  assert.ok(
+    r.every((x) => x.kind === 'history'),
+    'no dictionary once past command name',
+  );
 }
 
 {
@@ -410,6 +431,7 @@ git commit -m "feat(completion): merge history and dictionary candidates"
 ## Task 3: Dropdown component + styles
 
 **Files:**
+
 - Create: `src/components/Terminal/CompletionDropdown.tsx`
 - Modify: `src/styles/global.css`
 
@@ -425,8 +447,8 @@ import type { Completion } from '../../lib/completion';
 interface CompletionDropdownProps {
   items: Completion[];
   selectedIndex: number;
-  x: number;          // cursor cell column
-  y: number;          // cursor cell row
+  x: number; // cursor cell column
+  y: number; // cursor cell row
   placeAbove: boolean; // render above the cursor instead of below
   fontFamily: string;
   fontSize: number;
@@ -443,7 +465,11 @@ export const CompletionDropdown: React.FC<CompletionDropdownProps> = ({
 }) => {
   if (items.length === 0) return null;
   const style: React.CSSProperties = placeAbove
-    ? { left: `calc(${x} * var(--cell-w))`, top: `calc(${y} * var(--cell-h))`, transform: 'translateY(-100%)' }
+    ? {
+        left: `calc(${x} * var(--cell-w))`,
+        top: `calc(${y} * var(--cell-h))`,
+        transform: 'translateY(-100%)',
+      }
     : { left: `calc(${x} * var(--cell-w))`, top: `calc(${y + 1} * var(--cell-h))` };
 
   return (
@@ -543,6 +569,7 @@ git commit -m "feat(completion): add dropdown component and styles"
 This task repurposes the per-tab ghost maps/state/setter into completion equivalents and computes candidates in `onData`. The key handler is updated in Task 5.
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
 - [ ] **Step 1: Add imports**
@@ -562,27 +589,34 @@ import i18n from '../../i18n';
 Find (around lines 165-176):
 
 ```ts
-const ghostTextState       = new Map<string, string>();
-const ghostTextSetters     = new Map<string, (text: string, x: number, y: number) => void>();
+const ghostTextState = new Map<string, string>();
+const ghostTextSetters = new Map<string, (text: string, x: number, y: number) => void>();
 const ghostAcceptCallbacks = new Map<string, (suffix: string) => void>();
 ```
+
 and
+
 ```ts
-const tabCandidates     = new Map<string, string[]>();
-const candidateIndex    = new Map<string, number>();
+const tabCandidates = new Map<string, string[]>();
+const candidateIndex = new Map<string, number>();
 ```
 
 Replace them with:
 
 ```ts
-const completionSetters    = new Map<string, (items: Completion[], index: number, x: number, y: number, above: boolean) => void>();
-const completionAccept     = new Map<string, (suffix: string) => void>();
+const completionSetters = new Map<
+  string,
+  (items: Completion[], index: number, x: number, y: number, above: boolean) => void
+>();
+const completionAccept = new Map<string, (suffix: string) => void>();
 ```
+
 and
+
 ```ts
-const tabCompletions    = new Map<string, Completion[]>();
-const completionIndex   = new Map<string, number>();
-const completionNav     = new Map<string, boolean>(); // user moved selection with ↑/↓
+const tabCompletions = new Map<string, Completion[]>();
+const completionIndex = new Map<string, number>();
+const completionNav = new Map<string, boolean>(); // user moved selection with ↑/↓
 ```
 
 - [ ] **Step 3: Update cleanup deletions**
@@ -590,27 +624,31 @@ const completionNav     = new Map<string, boolean>(); // user moved selection wi
 In `cleanupTabListeners` / the per-tab cleanup (around lines 248-256), replace the deletions of the old names:
 
 ```ts
-  ghostTextState.delete(tabId);
-  ghostTextSetters.delete(tabId);
-  ghostAcceptCallbacks.delete(tabId);
+ghostTextState.delete(tabId);
+ghostTextSetters.delete(tabId);
+ghostAcceptCallbacks.delete(tabId);
 ```
+
 and
+
 ```ts
-  tabCandidates.delete(tabId);
-  candidateIndex.delete(tabId);
+tabCandidates.delete(tabId);
+candidateIndex.delete(tabId);
 ```
 
 with:
 
 ```ts
-  completionSetters.delete(tabId);
-  completionAccept.delete(tabId);
+completionSetters.delete(tabId);
+completionAccept.delete(tabId);
 ```
+
 and
+
 ```ts
-  tabCompletions.delete(tabId);
-  completionIndex.delete(tabId);
-  completionNav.delete(tabId);
+tabCompletions.delete(tabId);
+completionIndex.delete(tabId);
+completionNav.delete(tabId);
 ```
 
 - [ ] **Step 4: Replace the component state and setter registration**
@@ -618,45 +656,45 @@ and
 Replace the setter-registration effect (around lines 366-374):
 
 ```ts
-  useEffect(() => {
-    ghostTextSetters.set(tab.id, (text, x, y) => {
-      setGhostText(text);
-      setGhostCursor({ x, y });
-    });
-    return () => {
-      ghostTextSetters.delete(tab.id);
-    };
-  }, [tab.id]);
+useEffect(() => {
+  ghostTextSetters.set(tab.id, (text, x, y) => {
+    setGhostText(text);
+    setGhostCursor({ x, y });
+  });
+  return () => {
+    ghostTextSetters.delete(tab.id);
+  };
+}, [tab.id]);
 ```
 
 with:
 
 ```ts
-  useEffect(() => {
-    completionSetters.set(tab.id, (items, index, x, y, above) => {
-      setCompletionItems(items);
-      setCompletionIndex(index);
-      setCompletionPos({ x, y, above });
-    });
-    return () => {
-      completionSetters.delete(tab.id);
-    };
-  }, [tab.id]);
+useEffect(() => {
+  completionSetters.set(tab.id, (items, index, x, y, above) => {
+    setCompletionItems(items);
+    setCompletionIndex(index);
+    setCompletionPos({ x, y, above });
+  });
+  return () => {
+    completionSetters.delete(tab.id);
+  };
+}, [tab.id]);
 ```
 
 Replace the state declarations (around lines 378-379):
 
 ```ts
-  const [ghostText, setGhostText] = useState('');
-  const [ghostCursor, setGhostCursor] = useState({ x: 0, y: 0 });
+const [ghostText, setGhostText] = useState('');
+const [ghostCursor, setGhostCursor] = useState({ x: 0, y: 0 });
 ```
 
 with:
 
 ```ts
-  const [completionItems, setCompletionItems] = useState<Completion[]>([]);
-  const [completionIndex, setCompletionIndex] = useState(0);
-  const [completionPos, setCompletionPos] = useState({ x: 0, y: 0, above: false });
+const [completionItems, setCompletionItems] = useState<Completion[]>([]);
+const [completionIndex, setCompletionIndex] = useState(0);
+const [completionPos, setCompletionPos] = useState({ x: 0, y: 0, above: false });
 ```
 
 - [ ] **Step 5: Rewrite `showGhost`/`clearGhost` in the `onData` handler**
@@ -664,61 +702,61 @@ with:
 In the `onData` handler (around lines 1083-1106), replace the `showGhost`/`clearGhost` definitions:
 
 ```ts
-            let buf = inputBuffers.get(tab.id) ?? '';
-            const setter = ghostTextSetters.get(tab.id);
-            const inst = terminalInstances.get(tab.id);
-            const cursorX = inst?.terminal.buffer.active.cursorX ?? 0;
-            const cursorY = inst?.terminal.buffer.active.cursorY ?? 0;
+let buf = inputBuffers.get(tab.id) ?? '';
+const setter = ghostTextSetters.get(tab.id);
+const inst = terminalInstances.get(tab.id);
+const cursorX = inst?.terminal.buffer.active.cursorX ?? 0;
+const cursorY = inst?.terminal.buffer.active.cursorY ?? 0;
 
-            const showGhost = () => {
-              if (st.cmdHintDeferToRemote && tabHasOsc133.get(tab.id)) {
-                clearGhost();
-                return;
-              }
-              const cands = commandHistory.getSuggestions(buf, { scope, cwd, sessionType });
-              tabCandidates.set(tab.id, cands);
-              candidateIndex.set(tab.id, 0);
-              const suffix = cands[0] ? cands[0].slice(buf.length) : '';
-              ghostTextState.set(tab.id, suffix);
-              setter?.(suffix, cursorX, cursorY);
-            };
-            const clearGhost = () => {
-              tabCandidates.set(tab.id, []);
-              candidateIndex.set(tab.id, 0);
-              ghostTextState.set(tab.id, '');
-              setter?.('', 0, 0);
-            };
+const showGhost = () => {
+  if (st.cmdHintDeferToRemote && tabHasOsc133.get(tab.id)) {
+    clearGhost();
+    return;
+  }
+  const cands = commandHistory.getSuggestions(buf, { scope, cwd, sessionType });
+  tabCandidates.set(tab.id, cands);
+  candidateIndex.set(tab.id, 0);
+  const suffix = cands[0] ? cands[0].slice(buf.length) : '';
+  ghostTextState.set(tab.id, suffix);
+  setter?.(suffix, cursorX, cursorY);
+};
+const clearGhost = () => {
+  tabCandidates.set(tab.id, []);
+  candidateIndex.set(tab.id, 0);
+  ghostTextState.set(tab.id, '');
+  setter?.('', 0, 0);
+};
 ```
 
 with:
 
 ```ts
-            let buf = inputBuffers.get(tab.id) ?? '';
-            const setter = completionSetters.get(tab.id);
-            const inst = terminalInstances.get(tab.id);
-            const cursorX = inst?.terminal.buffer.active.cursorX ?? 0;
-            const cursorY = inst?.terminal.buffer.active.cursorY ?? 0;
-            const rows = inst?.terminal.rows ?? 24;
-            const locale = i18n.language?.startsWith('zh') ? 'zh' : 'en';
+let buf = inputBuffers.get(tab.id) ?? '';
+const setter = completionSetters.get(tab.id);
+const inst = terminalInstances.get(tab.id);
+const cursorX = inst?.terminal.buffer.active.cursorX ?? 0;
+const cursorY = inst?.terminal.buffer.active.cursorY ?? 0;
+const rows = inst?.terminal.rows ?? 24;
+const locale = i18n.language?.startsWith('zh') ? 'zh' : 'en';
 
-            const showGhost = () => {
-              if (st.cmdHintDeferToRemote && tabHasOsc133.get(tab.id)) {
-                clearGhost();
-                return;
-              }
-              const items = buildCompletions(buf, { scope, cwd, sessionType }, locale);
-              tabCompletions.set(tab.id, items);
-              completionIndex.set(tab.id, 0);
-              completionNav.set(tab.id, false);
-              const above = cursorY > rows - Math.min(items.length, 8) - 1;
-              setter?.(items, 0, cursorX, cursorY, above);
-            };
-            const clearGhost = () => {
-              tabCompletions.set(tab.id, []);
-              completionIndex.set(tab.id, 0);
-              completionNav.set(tab.id, false);
-              setter?.([], 0, 0, 0, false);
-            };
+const showGhost = () => {
+  if (st.cmdHintDeferToRemote && tabHasOsc133.get(tab.id)) {
+    clearGhost();
+    return;
+  }
+  const items = buildCompletions(buf, { scope, cwd, sessionType }, locale);
+  tabCompletions.set(tab.id, items);
+  completionIndex.set(tab.id, 0);
+  completionNav.set(tab.id, false);
+  const above = cursorY > rows - Math.min(items.length, 8) - 1;
+  setter?.(items, 0, cursorX, cursorY, above);
+};
+const clearGhost = () => {
+  tabCompletions.set(tab.id, []);
+  completionIndex.set(tab.id, 0);
+  completionNav.set(tab.id, false);
+  setter?.([], 0, 0, 0, false);
+};
 ```
 
 - [ ] **Step 6: Update the accept-callback registration**
@@ -740,17 +778,17 @@ with:
 Inside that callback body, replace the two ghost-clearing lines:
 
 ```ts
-          ghostTextState.set(tab.id, '');
-          ghostTextSetters.get(tab.id)?.('', 0, 0);
+ghostTextState.set(tab.id, '');
+ghostTextSetters.get(tab.id)?.('', 0, 0);
 ```
 
 with:
 
 ```ts
-          tabCompletions.set(tab.id, []);
-          completionIndex.set(tab.id, 0);
-          completionNav.set(tab.id, false);
-          completionSetters.get(tab.id)?.([], 0, 0, 0, false);
+tabCompletions.set(tab.id, []);
+completionIndex.set(tab.id, 0);
+completionNav.set(tab.id, false);
+completionSetters.get(tab.id)?.([], 0, 0, 0, false);
 ```
 
 - [ ] **Step 7: Update the OSC-133 prompt reset (clear on new prompt)**
@@ -758,19 +796,19 @@ with:
 Find (around lines 1009-1012):
 
 ```ts
-          tabCandidates.set(tab.id, []);
-          candidateIndex.set(tab.id, 0);
-          ghostTextState.set(tab.id, '');
-          ghostTextSetters.get(tab.id)?.('', 0, 0);
+tabCandidates.set(tab.id, []);
+candidateIndex.set(tab.id, 0);
+ghostTextState.set(tab.id, '');
+ghostTextSetters.get(tab.id)?.('', 0, 0);
 ```
 
 Replace with:
 
 ```ts
-          tabCompletions.set(tab.id, []);
-          completionIndex.set(tab.id, 0);
-          completionNav.set(tab.id, false);
-          completionSetters.get(tab.id)?.([], 0, 0, 0, false);
+tabCompletions.set(tab.id, []);
+completionIndex.set(tab.id, 0);
+completionNav.set(tab.id, false);
+completionSetters.get(tab.id)?.([], 0, 0, 0, false);
 ```
 
 - [ ] **Step 8: Replace the render block**
@@ -778,35 +816,39 @@ Replace with:
 Replace the ghost-text JSX (around lines 1731-1743):
 
 ```tsx
-      {ghostText && isActive && terminalCmdHint && isInteractiveTerminal(tab.type) && (
-        <div
-          className="terminal-ghost-text"
-          style={{
-            left: `calc(${ghostCursor.x} * var(--cell-w))`,
-            top: `calc(${ghostCursor.y} * var(--cell-h))`,
-            fontFamily: terminalFont,
-            fontSize: terminalFontSize,
-          }}
-        >
-          {ghostText}
-        </div>
-      )}
+{
+  ghostText && isActive && terminalCmdHint && isInteractiveTerminal(tab.type) && (
+    <div
+      className="terminal-ghost-text"
+      style={{
+        left: `calc(${ghostCursor.x} * var(--cell-w))`,
+        top: `calc(${ghostCursor.y} * var(--cell-h))`,
+        fontFamily: terminalFont,
+        fontSize: terminalFontSize,
+      }}
+    >
+      {ghostText}
+    </div>
+  );
+}
 ```
 
 with:
 
 ```tsx
-      {completionItems.length > 0 && isActive && terminalCmdHint && isInteractiveTerminal(tab.type) && (
-        <CompletionDropdown
-          items={completionItems}
-          selectedIndex={completionIndex}
-          x={completionPos.x}
-          y={completionPos.y}
-          placeAbove={completionPos.above}
-          fontFamily={terminalFont}
-          fontSize={terminalFontSize}
-        />
-      )}
+{
+  completionItems.length > 0 && isActive && terminalCmdHint && isInteractiveTerminal(tab.type) && (
+    <CompletionDropdown
+      items={completionItems}
+      selectedIndex={completionIndex}
+      x={completionPos.x}
+      y={completionPos.y}
+      placeAbove={completionPos.above}
+      fontFamily={terminalFont}
+      fontSize={terminalFontSize}
+    />
+  );
+}
 ```
 
 (Note: the inner `style` object in the original may contain additional lines; replace the whole `{ghostText && ...}` expression including all of its `style` properties.)
@@ -828,6 +870,7 @@ git commit -m "feat(completion): drive dropdown state from input handler"
 ## Task 5: Key handling (navigate / accept / smart Enter)
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
 - [ ] **Step 1: Rewrite the completion block in `attachCustomKeyEventHandler`**
@@ -835,105 +878,101 @@ git commit -m "feat(completion): drive dropdown state from input handler"
 Replace the ghost-text key block (around lines 688-720), which currently is:
 
 ```ts
-          // Ghost text: accept (Tab / →) or cycle candidates (↓ Ctrl-N / ↑ Ctrl-P).
-          if (isInteractiveTerminal(tab.type)) {
-            const ghost = ghostTextState.get(tab.id) ?? '';
-            const cands = tabCandidates.get(tab.id) ?? [];
-            const plainArrow = !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
+// Ghost text: accept (Tab / →) or cycle candidates (↓ Ctrl-N / ↑ Ctrl-P).
+if (isInteractiveTerminal(tab.type)) {
+  const ghost = ghostTextState.get(tab.id) ?? '';
+  const cands = tabCandidates.get(tab.id) ?? [];
+  const plainArrow = !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
 
-            if (ghost && (e.key === 'Tab' || (e.key === 'ArrowRight' && plainArrow))) {
-              e.preventDefault();
-              ghostAcceptCallbacks.get(tab.id)?.(ghost);
-              return false;
-            }
+  if (ghost && (e.key === 'Tab' || (e.key === 'ArrowRight' && plainArrow))) {
+    e.preventDefault();
+    ghostAcceptCallbacks.get(tab.id)?.(ghost);
+    return false;
+  }
 
-            const cycleNext =
-              (e.key === 'ArrowDown' && plainArrow) || (e.key === 'n' && e.ctrlKey);
-            const cyclePrev =
-              (e.key === 'ArrowUp' && plainArrow) || (e.key === 'p' && e.ctrlKey);
-            if (ghost && (cycleNext || cyclePrev) && cands.length > 1) {
-              e.preventDefault();
-              const buf = inputBuffers.get(tab.id) ?? '';
-              let idx = candidateIndex.get(tab.id) ?? 0;
-              idx = cycleNext
-                ? (idx + 1) % cands.length
-                : (idx - 1 + cands.length) % cands.length;
-              candidateIndex.set(tab.id, idx);
-              const suffix = cands[idx].slice(buf.length);
-              ghostTextState.set(tab.id, suffix);
-              const inst = terminalInstances.get(tab.id);
-              const cx = inst?.terminal.buffer.active.cursorX ?? 0;
-              const cy = inst?.terminal.buffer.active.cursorY ?? 0;
-              ghostTextSetters.get(tab.id)?.(suffix, cx, cy);
-              return false;
-            }
-          }
+  const cycleNext = (e.key === 'ArrowDown' && plainArrow) || (e.key === 'n' && e.ctrlKey);
+  const cyclePrev = (e.key === 'ArrowUp' && plainArrow) || (e.key === 'p' && e.ctrlKey);
+  if (ghost && (cycleNext || cyclePrev) && cands.length > 1) {
+    e.preventDefault();
+    const buf = inputBuffers.get(tab.id) ?? '';
+    let idx = candidateIndex.get(tab.id) ?? 0;
+    idx = cycleNext ? (idx + 1) % cands.length : (idx - 1 + cands.length) % cands.length;
+    candidateIndex.set(tab.id, idx);
+    const suffix = cands[idx].slice(buf.length);
+    ghostTextState.set(tab.id, suffix);
+    const inst = terminalInstances.get(tab.id);
+    const cx = inst?.terminal.buffer.active.cursorX ?? 0;
+    const cy = inst?.terminal.buffer.active.cursorY ?? 0;
+    ghostTextSetters.get(tab.id)?.(suffix, cx, cy);
+    return false;
+  }
+}
 ```
 
 with:
 
 ```ts
-          // Completion dropdown: navigate (↑/↓/Ctrl-N/Ctrl-P), accept (Tab/→),
-          // dismiss (Esc), smart Enter (accept only if the user navigated).
-          if (isInteractiveTerminal(tab.type)) {
-            const items = tabCompletions.get(tab.id) ?? [];
-            const plainArrow = !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
+// Completion dropdown: navigate (↑/↓/Ctrl-N/Ctrl-P), accept (Tab/→),
+// dismiss (Esc), smart Enter (accept only if the user navigated).
+if (isInteractiveTerminal(tab.type)) {
+  const items = tabCompletions.get(tab.id) ?? [];
+  const plainArrow = !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
 
-            if (items.length > 0) {
-              const idx = completionIndex.get(tab.id) ?? 0;
-              const buf = inputBuffers.get(tab.id) ?? '';
+  if (items.length > 0) {
+    const idx = completionIndex.get(tab.id) ?? 0;
+    const buf = inputBuffers.get(tab.id) ?? '';
 
-              const accept = (i: number) => {
-                e.preventDefault();
-                completionAccept.get(tab.id)?.(items[i].text.slice(buf.length));
-              };
+    const accept = (i: number) => {
+      e.preventDefault();
+      completionAccept.get(tab.id)?.(items[i].text.slice(buf.length));
+    };
 
-              const repaint = (i: number) => {
-                const inst = terminalInstances.get(tab.id);
-                const cx = inst?.terminal.buffer.active.cursorX ?? 0;
-                const cy = inst?.terminal.buffer.active.cursorY ?? 0;
-                const rows = inst?.terminal.rows ?? 24;
-                const above = cy > rows - Math.min(items.length, 8) - 1;
-                completionSetters.get(tab.id)?.(items, i, cx, cy, above);
-              };
+    const repaint = (i: number) => {
+      const inst = terminalInstances.get(tab.id);
+      const cx = inst?.terminal.buffer.active.cursorX ?? 0;
+      const cy = inst?.terminal.buffer.active.cursorY ?? 0;
+      const rows = inst?.terminal.rows ?? 24;
+      const above = cy > rows - Math.min(items.length, 8) - 1;
+      completionSetters.get(tab.id)?.(items, i, cx, cy, above);
+    };
 
-              // Accept with Tab / →
-              if (e.key === 'Tab' || (e.key === 'ArrowRight' && plainArrow)) {
-                accept(idx);
-                return false;
-              }
+    // Accept with Tab / →
+    if (e.key === 'Tab' || (e.key === 'ArrowRight' && plainArrow)) {
+      accept(idx);
+      return false;
+    }
 
-              // Dismiss with Esc
-              if (e.key === 'Escape') {
-                e.preventDefault();
-                tabCompletions.set(tab.id, []);
-                completionIndex.set(tab.id, 0);
-                completionNav.set(tab.id, false);
-                completionSetters.get(tab.id)?.([], 0, 0, 0, false);
-                return false;
-              }
+    // Dismiss with Esc
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      tabCompletions.set(tab.id, []);
+      completionIndex.set(tab.id, 0);
+      completionNav.set(tab.id, false);
+      completionSetters.get(tab.id)?.([], 0, 0, 0, false);
+      return false;
+    }
 
-              // Navigate with ↑/↓ (or Ctrl-N/Ctrl-P)
-              const next = (e.key === 'ArrowDown' && plainArrow) || (e.key === 'n' && e.ctrlKey);
-              const prev = (e.key === 'ArrowUp' && plainArrow) || (e.key === 'p' && e.ctrlKey);
-              if (next || prev) {
-                e.preventDefault();
-                const n = items.length;
-                const ni = next ? (idx + 1) % n : (idx - 1 + n) % n;
-                completionIndex.set(tab.id, ni);
-                completionNav.set(tab.id, true);
-                repaint(ni);
-                return false;
-              }
+    // Navigate with ↑/↓ (or Ctrl-N/Ctrl-P)
+    const next = (e.key === 'ArrowDown' && plainArrow) || (e.key === 'n' && e.ctrlKey);
+    const prev = (e.key === 'ArrowUp' && plainArrow) || (e.key === 'p' && e.ctrlKey);
+    if (next || prev) {
+      e.preventDefault();
+      const n = items.length;
+      const ni = next ? (idx + 1) % n : (idx - 1 + n) % n;
+      completionIndex.set(tab.id, ni);
+      completionNav.set(tab.id, true);
+      repaint(ni);
+      return false;
+    }
 
-              // Smart Enter: accept the highlighted item only if the user has
-              // actively navigated; otherwise fall through so the shell runs it.
-              if (e.key === 'Enter' && completionNav.get(tab.id)) {
-                accept(idx);
-                return false;
-              }
-            }
-          }
+    // Smart Enter: accept the highlighted item only if the user has
+    // actively navigated; otherwise fall through so the shell runs it.
+    if (e.key === 'Enter' && completionNav.get(tab.id)) {
+      accept(idx);
+      return false;
+    }
+  }
+}
 ```
 
 - [ ] **Step 2: Type-check**
@@ -963,6 +1002,7 @@ git commit -m "feat(completion): dropdown navigation, accept, and smart Enter"
 ## Task 6: Manual verification & cleanup
 
 **Files:**
+
 - Modify (if any dead references remain): `src/components/Terminal/TerminalView.tsx`, `src/styles/global.css`
 
 - [ ] **Step 1: Grep for dead ghost symbols**
@@ -1002,4 +1042,7 @@ git commit -m "chore(completion): remove dead ghost-text code"
 - **Spec coverage:** dictionary (Task 1), bilingual descriptions (Task 1 `lookupCommands` locale), history+dictionary merge with dedupe/cap and whitespace rule (Task 2), dropdown component with icons/theme/position/flip (Task 3 + Task 4 `above`), trigger gating reused (Task 4 keeps `terminalCmdHint`/`cmdHintDeferToRemote` and the `captureOn` gate), smart-Enter keybindings (Task 5), ghost removal (Task 6). All spec sections map to a task.
 - **Placeholders:** none — every code step contains full content; the dictionary is a concrete list, not "add more".
 - **Type consistency:** `Completion`/`CompletionKind` defined in Task 2 and consumed identically in Tasks 3-5; setter signature `(items, index, x, y, above)` is consistent across registration (Task 4 Step 4), `showGhost`/`clearGhost` (Step 5), accept/reset (Steps 6-7), and key handler (Task 5). `buildCompletions(line, ctx, locale, max)` and `lookupCommands(prefix, locale)` signatures match call sites.
+
+```
+
 ```

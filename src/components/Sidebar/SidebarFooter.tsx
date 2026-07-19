@@ -10,7 +10,15 @@ import { useAppStore } from '../../stores/appStore';
  */
 export const SidebarFooter: React.FC = () => {
   const { t } = useTranslation();
-  const { theme, toggleTheme, toggleSidebar, activeNavItem, setActiveNavItem, showAppMenu, setShowAppMenu } = useAppStore();
+  const {
+    theme,
+    toggleTheme,
+    toggleSidebar,
+    activeNavItem,
+    setActiveNavItem,
+    showAppMenu,
+    setShowAppMenu,
+  } = useAppStore();
   const snippetsActive = activeNavItem === 'snippets';
 
   return (

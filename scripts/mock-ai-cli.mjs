@@ -19,20 +19,18 @@ const EXIT_ALT = '\x1b[?1049l';
 const CLEAR = '\x1b[2J\x1b[H';
 
 const prompts = {
-  '3opt':
-`Do you want to make this edit to file.py?
+  '3opt': `Do you want to make this edit to file.py?
 
 ❯ 1. Yes
   2. Yes, and don't ask again this session
   3. No, and tell Claude what to do differently
 `,
-  '2opt':
-`Do you want to proceed?
+  '2opt': `Do you want to proceed?
 
 ❯ 1. Yes
   2. No
 `,
-  'yn': `Apply these changes? [y/N] `,
+  yn: `Apply these changes? [y/N] `,
 };
 
 let counter = 0;
@@ -63,7 +61,9 @@ process.stdin.on('data', (chunk) => {
 });
 
 const cleanup = () => {
-  try { process.stdout.write(EXIT_ALT); } catch {}
+  try {
+    process.stdout.write(EXIT_ALT);
+  } catch {}
   process.exit(0);
 };
 process.on('SIGINT', cleanup);

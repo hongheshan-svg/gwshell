@@ -1,6 +1,7 @@
 export type AgentAutonomyLevel = 'observe' | 'recommend' | 'confirmed_act' | 'policy_auto_maintain';
 export type AgentRisk = 'read_only' | 'low' | 'medium' | 'high' | 'blocked';
-export type AgentToolName = 'run_command' | 'stream_log' | 'read_file' | 'docker_logs' | 'restart_service';
+export type AgentToolName =
+  'run_command' | 'stream_log' | 'read_file' | 'docker_logs' | 'restart_service';
 export type AgentSessionStatus = 'running' | 'completed' | 'cancelled' | 'failed';
 
 export interface AiProviderSettings {

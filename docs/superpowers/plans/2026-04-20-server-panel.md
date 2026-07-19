@@ -17,6 +17,7 @@ Note: This project has no automated frontend tests. Frontend TDD steps are repla
 ## File Structure
 
 ### New files
+
 - `src-tauri/src/metrics.rs` — `MetricsManager`, snapshot types, parsers, polling loop.
 - `src/types/serverMetrics.ts` — shared TS types (`MetricsSnapshot`, `HostInfo`, `CpuStats`, etc.).
 - `src/components/ServerPanel/index.ts`
@@ -31,6 +32,7 @@ Note: This project has no automated frontend tests. Frontend TDD steps are repla
 - `src/components/ServerPanel/ServerPanel.css` — scoped styles (follows existing pattern of per-component CSS, e.g. `SftpPanel.css`).
 
 ### Modified files
+
 - `src-tauri/src/lib.rs` — add `mod metrics;`, add `MetricsManager` to `AppState`, add 3 new commands, register in `invoke_handler!`.
 - `src-tauri/src/ssh.rs` — no logic change. Confirm `ssh_exec` is `pub` (it already is).
 - `src/stores/appStore.ts` — add `serverPanelOpen: boolean` + `toggleServerPanel`.
@@ -45,6 +47,7 @@ Note: This project has no automated frontend tests. Frontend TDD steps are repla
 ## Task 1: Shared TypeScript types
 
 **Files:**
+
 - Create: `src/types/serverMetrics.ts`
 
 - [ ] **Step 1: Create the types file**
@@ -57,21 +60,21 @@ Write the whole file:
 
 export interface HostInfo {
   hostname: string;
-  host_ip: string;        // filled in client-side from the session config (backend returns "")
-  user: string;           // from `whoami`
+  host_ip: string; // filled in client-side from the session config (backend returns "")
+  user: string; // from `whoami`
   uptime_seconds: number;
-  kernel: string;         // `uname -sr` output
-  os_pretty: string;      // PRETTY_NAME from /etc/os-release
-  cpu_model: string;      // first "model name" from /proc/cpuinfo
-  cpu_cores: number;      // `nproc`
+  kernel: string; // `uname -sr` output
+  os_pretty: string; // PRETTY_NAME from /etc/os-release
+  cpu_model: string; // first "model name" from /proc/cpuinfo
+  cpu_cores: number; // `nproc`
 }
 
 export interface CpuStats {
-  total_percent: number;       // 0-100
+  total_percent: number; // 0-100
   user_percent: number;
   system_percent: number;
   iowait_percent: number;
-  per_core: number[];          // 0-100 each, length = cpu_cores
+  per_core: number[]; // 0-100 each, length = cpu_cores
   loadavg_1m: number;
   loadavg_5m: number;
   loadavg_15m: number;
@@ -85,9 +88,9 @@ export interface MemStats {
 }
 
 export interface NetStats {
-  total_rx_bytes: number;     // cumulative since boot
+  total_rx_bytes: number; // cumulative since boot
   total_tx_bytes: number;
-  rx_bytes_per_sec: number;   // delta-derived
+  rx_bytes_per_sec: number; // delta-derived
   tx_bytes_per_sec: number;
 }
 
@@ -112,13 +115,13 @@ export interface MetricsSnapshot {
   net: NetStats | null;
   procs: ProcInfo[] | null;
   nics: NicInfo[] | null;
-  collected_at: number;   // unix ms
+  collected_at: number; // unix ms
 }
 
 export type MetricsErrorReason =
-  | 'unsupported'       // remote is not Linux
-  | 'disconnected'      // SSH channel can't be opened (session dropped)
-  | 'timeout';          // >=3 consecutive tick timeouts
+  | 'unsupported' // remote is not Linux
+  | 'disconnected' // SSH channel can't be opened (session dropped)
+  | 'timeout'; // >=3 consecutive tick timeouts
 
 export interface MetricsErrorPayload {
   reason: MetricsErrorReason;
@@ -140,6 +143,7 @@ git commit -m "feat(server-panel): add shared server metrics types"
 The polling loop is side-effectful; the parsers are pure. Write unit tests first against real-sample `/proc` fixtures.
 
 **Files:**
+
 - Create: `src-tauri/src/metrics.rs`
 
 - [ ] **Step 1: Stub the module with types only**
@@ -588,6 +592,7 @@ git commit -m "feat(server-panel): add metrics snapshot types and /proc parsers"
 ## Task 3: Backend MetricsManager + polling loop
 
 **Files:**
+
 - Modify: `src-tauri/src/metrics.rs` (append the manager + polling logic)
 
 - [ ] **Step 1: Append the `MetricsManager` and polling loop to `metrics.rs`**
@@ -1040,6 +1045,7 @@ git commit -m "feat(server-panel): add MetricsManager polling loop and snapshot 
 ## Task 4: Tauri commands + `AppState` wiring
 
 **Files:**
+
 - Modify: `src-tauri/src/lib.rs`
 
 - [ ] **Step 1: Add `MetricsManager` to `AppState`**
@@ -1193,6 +1199,7 @@ git commit -m "feat(server-panel): wire MetricsManager + 3 Tauri commands"
 ## Task 5: `appStore` state + i18n keys
 
 **Files:**
+
 - Modify: `src/stores/appStore.ts`
 - Modify: `src/i18n/locales/gwshell.zh.json`
 - Modify: `src/i18n/locales/gwshell.en.json`
@@ -1376,6 +1383,7 @@ git commit -m "feat(server-panel): add appStore flag and i18n strings"
 ## Task 6: Shared `Sparkline` SVG component
 
 **Files:**
+
 - Create: `src/components/ServerPanel/Sparkline.tsx`
 
 - [ ] **Step 1: Write the component**
@@ -1387,24 +1395,19 @@ import React, { useMemo } from 'react';
 
 export interface SparkSeries {
   label: string;
-  color: string;          // CSS color (hex, var(), etc.)
-  data: number[];         // any range; each series is normalized independently
+  color: string; // CSS color (hex, var(), etc.)
+  data: number[]; // any range; each series is normalized independently
 }
 
 interface Props {
   series: SparkSeries[];
-  width?: number;         // px
-  height?: number;        // px
+  width?: number; // px
+  height?: number; // px
   className?: string;
 }
 
 /** Pure SVG multi-series sparkline. Each series self-normalizes to [0..1]. */
-export const Sparkline: React.FC<Props> = ({
-  series,
-  width = 320,
-  height = 80,
-  className,
-}) => {
+export const Sparkline: React.FC<Props> = ({ series, width = 320, height = 80, className }) => {
   const paths = useMemo(() => {
     return series.map((s) => {
       const data = s.data;
@@ -1460,6 +1463,7 @@ git commit -m "feat(server-panel): add shared Sparkline SVG component"
 ## Task 7: `HostCard` + `NicList` (static/simple cards)
 
 **Files:**
+
 - Create: `src/components/ServerPanel/HostCard.tsx`
 - Create: `src/components/ServerPanel/NicList.tsx`
 
@@ -1472,7 +1476,7 @@ import type { HostInfo } from '../../types/serverMetrics';
 
 interface Props {
   host: HostInfo | null;
-  hostIp: string;   // from session config, since the backend can't introspect it
+  hostIp: string; // from session config, since the backend can't introspect it
 }
 
 function formatUptime(seconds: number): string {
@@ -1499,13 +1503,13 @@ export const HostCard: React.FC<Props> = ({ host, hostIp }) => {
         </div>
         <div className="sp-kv">
           <span className="sp-kv__k">{t('serverPanel_host_uptime')}</span>
-          <span className="sp-kv__v">
-            {host ? formatUptime(host.uptime_seconds) : placeholder}
-          </span>
+          <span className="sp-kv__v">{host ? formatUptime(host.uptime_seconds) : placeholder}</span>
         </div>
         <div className="sp-kv">
           <span className="sp-kv__k">{t('serverPanel_host_host')}</span>
-          <span className="sp-kv__v" title={hostIp}>{hostIp || placeholder}</span>
+          <span className="sp-kv__v" title={hostIp}>
+            {hostIp || placeholder}
+          </span>
         </div>
         <div className="sp-kv">
           <span className="sp-kv__k">{t('serverPanel_host_system')}</span>
@@ -1535,7 +1539,7 @@ export const NicList: React.FC<Props> = ({ nics }) => {
   return (
     <div className="sp-card sp-card--nics">
       <div className="sp-card__title">{t('serverPanel_nic_title')}</div>
-      {(!nics || nics.length === 0) ? (
+      {!nics || nics.length === 0 ? (
         <div className="sp-empty">—</div>
       ) : (
         <table className="sp-table">
@@ -1575,6 +1579,7 @@ git commit -m "feat(server-panel): add HostCard and NicList"
 ## Task 8: `CpuCard` with per-core bars
 
 **Files:**
+
 - Create: `src/components/ServerPanel/CpuCard.tsx`
 
 - [ ] **Step 1: Write the component**
@@ -1662,6 +1667,7 @@ git commit -m "feat(server-panel): add CpuCard with per-core bars"
 ## Task 9: `MemCard`
 
 **Files:**
+
 - Create: `src/components/ServerPanel/MemCard.tsx`
 
 - [ ] **Step 1: Write the component**
@@ -1725,7 +1731,10 @@ export const MemCard: React.FC<Props> = ({ mem }) => {
           <span>{swap.label}</span>
         </div>
         <div className="sp-membar__track">
-          <div className="sp-membar__fill sp-membar__fill--swap" style={{ width: `${swap.pct}%` }} />
+          <div
+            className="sp-membar__fill sp-membar__fill--swap"
+            style={{ width: `${swap.pct}%` }}
+          />
         </div>
       </div>
     </div>
@@ -1746,6 +1755,7 @@ git commit -m "feat(server-panel): add MemCard with RAM and swap bars"
 ## Task 10: `NetCard` with multi-series sparkline
 
 **Files:**
+
 - Create: `src/components/ServerPanel/NetCard.tsx`
 
 - [ ] **Step 1: Write the component**
@@ -1837,6 +1847,7 @@ git commit -m "feat(server-panel): add NetCard with multi-series sparkline"
 ## Task 11: `ProcessList` with remote kill
 
 **Files:**
+
 - Create: `src/components/ServerPanel/ProcessList.tsx`
 
 - [ ] **Step 1: Write the component**
@@ -1894,7 +1905,7 @@ export const ProcessList: React.FC<Props> = ({ sessionId, procs }) => {
   return (
     <div className="sp-card sp-card--procs">
       <div className="sp-card__title">{t('serverPanel_proc_title')}</div>
-      {(!procs || procs.length === 0) ? (
+      {!procs || procs.length === 0 ? (
         <div className="sp-empty">—</div>
       ) : (
         <table className="sp-table sp-table--procs">
@@ -1951,6 +1962,7 @@ git commit -m "feat(server-panel): add ProcessList with remote kill"
 ## Task 12: `ServerPanel` drawer container + CSS
 
 **Files:**
+
 - Create: `src/components/ServerPanel/ServerPanel.tsx`
 - Create: `src/components/ServerPanel/ServerPanel.css`
 - Create: `src/components/ServerPanel/index.ts`
@@ -1966,10 +1978,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
-import type {
-  MetricsSnapshot,
-  MetricsErrorPayload,
-} from '../../types/serverMetrics';
+import type { MetricsSnapshot, MetricsErrorPayload } from '../../types/serverMetrics';
 import { HostCard } from './HostCard';
 import { CpuCard } from './CpuCard';
 import { MemCard } from './MemCard';
@@ -1996,7 +2005,9 @@ export const ServerPanel: React.FC = () => {
   const activeSession = sessions.find((s) => s.id === activeTab?.sessionId);
   const isSsh = activeTab?.type === 'ssh';
   const sessionId = isSsh ? activeTab!.sessionId : null;
-  const hostIp = activeSession ? `${activeSession.host ?? ''}${activeSession.port ? `:${activeSession.port}` : ''}` : '';
+  const hostIp = activeSession
+    ? `${activeSession.host ?? ''}${activeSession.port ? `:${activeSession.port}` : ''}`
+    : '';
 
   const [snapshot, setSnapshot] = useState<MetricsSnapshot | null>(null);
   const [status, setStatus] = useState<Status>('loading');
@@ -2038,26 +2049,23 @@ export const ServerPanel: React.FC = () => {
         return;
       }
 
-      dataUnlisten = await listen<MetricsSnapshot>(
-        `server-metrics-${sessionId}`,
-        (evt) => {
-          const snap = evt.payload;
-          setSnapshot(snap);
-          setStatus('ok');
-          if (snap.cpu) {
-            cpuHistoryRef.current = pushHistory(cpuHistoryRef.current, snap.cpu.total_percent);
-          }
-          if (snap.mem && snap.mem.mem_total_bytes > 0) {
-            const pct = (snap.mem.mem_used_bytes / snap.mem.mem_total_bytes) * 100;
-            memHistoryRef.current = pushHistory(memHistoryRef.current, pct);
-          }
-          if (snap.net) {
-            rxHistoryRef.current = pushHistory(rxHistoryRef.current, snap.net.rx_bytes_per_sec);
-            txHistoryRef.current = pushHistory(txHistoryRef.current, snap.net.tx_bytes_per_sec);
-          }
-          forceRender((n) => n + 1);
+      dataUnlisten = await listen<MetricsSnapshot>(`server-metrics-${sessionId}`, (evt) => {
+        const snap = evt.payload;
+        setSnapshot(snap);
+        setStatus('ok');
+        if (snap.cpu) {
+          cpuHistoryRef.current = pushHistory(cpuHistoryRef.current, snap.cpu.total_percent);
         }
-      );
+        if (snap.mem && snap.mem.mem_total_bytes > 0) {
+          const pct = (snap.mem.mem_used_bytes / snap.mem.mem_total_bytes) * 100;
+          memHistoryRef.current = pushHistory(memHistoryRef.current, pct);
+        }
+        if (snap.net) {
+          rxHistoryRef.current = pushHistory(rxHistoryRef.current, snap.net.rx_bytes_per_sec);
+          txHistoryRef.current = pushHistory(txHistoryRef.current, snap.net.tx_bytes_per_sec);
+        }
+        forceRender((n) => n + 1);
+      });
 
       errUnlisten = await listen<MetricsErrorPayload>(
         `server-metrics-error-${sessionId}`,
@@ -2067,7 +2075,7 @@ export const ServerPanel: React.FC = () => {
           if (p.reason === 'unsupported') setErrorBanner(t('serverPanel_status_unsupported'));
           else if (p.reason === 'timeout') setErrorBanner(t('serverPanel_status_timeout'));
           else setErrorBanner(t('serverPanel_status_disconnected'));
-        }
+        },
       );
     })();
 
@@ -2087,7 +2095,11 @@ export const ServerPanel: React.FC = () => {
     <div className="sp-drawer" role="dialog" aria-label={t('serverPanel_title')}>
       <div className="sp-header">
         <div className="sp-header__title">{t('serverPanel_title')}</div>
-        <button className="sp-header__close" onClick={toggleServerPanel} title={t('serverPanel_close')}>
+        <button
+          className="sp-header__close"
+          onClick={toggleServerPanel}
+          title={t('serverPanel_close')}
+        >
           <X size={16} />
         </button>
       </div>
@@ -2098,9 +2110,7 @@ export const ServerPanel: React.FC = () => {
       {status === 'loading' && (
         <div className="sp-banner sp-banner--info">{t('serverPanel_status_loading')}</div>
       )}
-      {errorBanner && (
-        <div className="sp-banner sp-banner--error">{errorBanner}</div>
-      )}
+      {errorBanner && <div className="sp-banner sp-banner--error">{errorBanner}</div>}
 
       <div className={`sp-body ${greyed ? 'sp-body--greyed' : ''}`}>
         {status !== 'no-ssh' && (
@@ -2132,7 +2142,7 @@ Create `src/components/ServerPanel/ServerPanel.css`:
 ```css
 .sp-drawer {
   position: fixed;
-  top: 32px;                    /* below titlebar */
+  top: 32px; /* below titlebar */
   right: 0;
   bottom: 0;
   width: 380px;
@@ -2147,8 +2157,12 @@ Create `src/components/ServerPanel/ServerPanel.css`:
   overflow: hidden;
 }
 @keyframes sp-slide-in {
-  from { transform: translateX(100%); }
-  to   { transform: translateX(0); }
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
 .sp-header {
@@ -2169,15 +2183,21 @@ Create `src/components/ServerPanel/ServerPanel.css`:
   border-radius: 4px;
 }
 .sp-header__close:hover {
-  background: var(--bg-hover, rgba(255,255,255,0.08));
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
 }
 
 .sp-banner {
   padding: 6px 14px;
   font-size: 12px;
 }
-.sp-banner--info { background: rgba(59, 130, 246, 0.12); color: #93c5fd; }
-.sp-banner--error { background: rgba(239, 68, 68, 0.12); color: #fca5a5; }
+.sp-banner--info {
+  background: rgba(59, 130, 246, 0.12);
+  color: #93c5fd;
+}
+.sp-banner--error {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}
 
 .sp-body {
   flex: 1;
@@ -2187,7 +2207,9 @@ Create `src/components/ServerPanel/ServerPanel.css`:
   flex-direction: column;
   gap: 10px;
 }
-.sp-body--greyed { opacity: 0.55; }
+.sp-body--greyed {
+  opacity: 0.55;
+}
 
 .sp-card {
   background: var(--bg-primary, #161616);
@@ -2200,7 +2222,10 @@ Create `src/components/ServerPanel/ServerPanel.css`:
   color: var(--text-secondary, #a3a3a3);
   margin-bottom: 8px;
 }
-.sp-empty { font-size: 12px; color: var(--text-secondary, #a3a3a3); }
+.sp-empty {
+  font-size: 12px;
+  color: var(--text-secondary, #a3a3a3);
+}
 
 .sp-grid-2 {
   display: grid;
@@ -2212,16 +2237,48 @@ Create `src/components/ServerPanel/ServerPanel.css`:
   grid-template-columns: repeat(4, 1fr);
   gap: 6px 10px;
 }
-.sp-kv { display: flex; flex-direction: column; font-size: 12px; }
-.sp-kv__k { color: var(--text-secondary, #a3a3a3); }
-.sp-kv__v { color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-kv {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+}
+.sp-kv__k {
+  color: var(--text-secondary, #a3a3a3);
+}
+.sp-kv__v {
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-.sp-stat { display: flex; flex-direction: column; align-items: flex-start; }
-.sp-stat__label { font-size: 11px; color: var(--text-secondary); }
-.sp-stat__value { font-size: 14px; font-weight: 600; }
+.sp-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.sp-stat__label {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.sp-stat__value {
+  font-size: 14px;
+  font-weight: 600;
+}
 
-.sp-corelist { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
-.sp-corerow { display: grid; grid-template-columns: 40px 1fr 48px; gap: 6px; align-items: center; font-size: 11px; }
+.sp-corelist {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+.sp-corerow {
+  display: grid;
+  grid-template-columns: 40px 1fr 48px;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+}
 .sp-corerow__bar {
   display: block;
   height: 8px;
@@ -2234,26 +2291,88 @@ Create `src/components/ServerPanel/ServerPanel.css`:
   height: 100%;
   background: linear-gradient(90deg, #22c55e, #3b82f6);
 }
-.sp-corerow__pct { text-align: right; color: var(--text-secondary); }
+.sp-corerow__pct {
+  text-align: right;
+  color: var(--text-secondary);
+}
 
-.sp-loadavg { margin-top: 8px; font-size: 11px; color: var(--text-secondary); display: flex; gap: 10px; }
+.sp-loadavg {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  gap: 10px;
+}
 
-.sp-membar { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
-.sp-membar__head { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); }
-.sp-membar__track { height: 10px; background: var(--bg-secondary); border-radius: 5px; overflow: hidden; }
-.sp-membar__fill { height: 100%; }
-.sp-membar__fill--ram { background: linear-gradient(90deg, #3b82f6, #22c55e); }
-.sp-membar__fill--swap { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+.sp-membar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.sp-membar__head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.sp-membar__track {
+  height: 10px;
+  background: var(--bg-secondary);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.sp-membar__fill {
+  height: 100%;
+}
+.sp-membar__fill--ram {
+  background: linear-gradient(90deg, #3b82f6, #22c55e);
+}
+.sp-membar__fill--swap {
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+}
 
-.sp-legend { display: flex; gap: 10px; font-size: 11px; color: var(--text-secondary); margin: 8px 0 2px; }
-.sp-legend__item { display: inline-flex; align-items: center; gap: 4px; }
-.sp-legend__dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
-.sp-sparkline { width: 100%; height: 80px; }
+.sp-legend {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 8px 0 2px;
+}
+.sp-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sp-legend__dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.sp-sparkline {
+  width: 100%;
+  height: 80px;
+}
 
-.sp-table { width: 100%; font-size: 11px; border-collapse: collapse; }
-.sp-table th, .sp-table td { text-align: left; padding: 3px 6px; }
-.sp-table thead th { color: var(--text-secondary); font-weight: 500; border-bottom: 1px solid var(--border-color); }
-.sp-table tbody tr:hover { background: var(--bg-hover, rgba(255,255,255,0.04)); }
+.sp-table {
+  width: 100%;
+  font-size: 11px;
+  border-collapse: collapse;
+}
+.sp-table th,
+.sp-table td {
+  text-align: left;
+  padding: 3px 6px;
+}
+.sp-table thead th {
+  color: var(--text-secondary);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border-color);
+}
+.sp-table tbody tr:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+}
 
 .sp-kill-btn {
   background: transparent;
@@ -2268,10 +2387,26 @@ Create `src/components/ServerPanel/ServerPanel.css`:
   cursor: pointer;
   padding: 0;
 }
-.sp-kill-btn:disabled { opacity: 0.4; cursor: default; }
-.sp-kill-btn:hover:not(:disabled) { background: rgba(239, 68, 68, 0.12); }
-.sp-kill-btn--armed { background: rgba(239, 68, 68, 0.25); border-color: #ef4444; animation: sp-pulse 0.8s ease-in-out infinite alternate; }
-@keyframes sp-pulse { from { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); } to { box-shadow: 0 0 0 4px rgba(239,68,68,0); } }
+.sp-kill-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.sp-kill-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.12);
+}
+.sp-kill-btn--armed {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+  animation: sp-pulse 0.8s ease-in-out infinite alternate;
+}
+@keyframes sp-pulse {
+  from {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5);
+  }
+  to {
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
+  }
+}
 ```
 
 - [ ] **Step 3: Write the index**
@@ -2295,6 +2430,7 @@ git commit -m "feat(server-panel): add ServerPanel drawer container"
 ## Task 13: TitleBar button + App.tsx mount
 
 **Files:**
+
 - Modify: `src/components/TitleBar/TitleBar.tsx`
 - Modify: `src/App.tsx`
 
@@ -2332,20 +2468,37 @@ export const TitleBar: React.FC = () => {
       <div className="titlebar-controls">
         <button
           className={`titlebar-btn${serverPanelOpen ? ' titlebar-btn--active' : ''}`}
-          onClick={() => { if (sshActive) toggleServerPanel(); }}
+          onClick={() => {
+            if (sshActive) toggleServerPanel();
+          }}
           disabled={!sshActive}
           title={sshActive ? t('serverPanel_toggle_title') : t('serverPanel_ssh_only')}
           data-gw-action="toggle_server_panel"
         >
           <Activity size={14} />
         </button>
-        <button className="titlebar-btn" onClick={handleMinimize} data-gw-action="minimize" title={t('titlebar_minimize')}>
+        <button
+          className="titlebar-btn"
+          onClick={handleMinimize}
+          data-gw-action="minimize"
+          title={t('titlebar_minimize')}
+        >
           <Minus size={14} />
         </button>
-        <button className="titlebar-btn" onClick={handleMaximize} data-gw-action="toggle_maximize" title={t('titlebar_maximize')}>
+        <button
+          className="titlebar-btn"
+          onClick={handleMaximize}
+          data-gw-action="toggle_maximize"
+          title={t('titlebar_maximize')}
+        >
           <Square size={10} />
         </button>
-        <button className="titlebar-btn titlebar-close" onClick={handleClose} data-gw-action="hide" title={t('titlebar_close')}>
+        <button
+          className="titlebar-btn titlebar-close"
+          onClick={handleClose}
+          data-gw-action="hide"
+          title={t('titlebar_close')}
+        >
           <X size={14} />
         </button>
       </div>
@@ -2359,23 +2512,25 @@ export const TitleBar: React.FC = () => {
 Edit `src/App.tsx`. Near the other lazy imports (around line 31), add:
 
 ```tsx
-const ServerPanel = lazy(() => import('./components/ServerPanel').then((m) => ({ default: m.ServerPanel })));
+const ServerPanel = lazy(() =>
+  import('./components/ServerPanel').then((m) => ({ default: m.ServerPanel })),
+);
 ```
 
 Then near the bottom, inside the `<Suspense fallback={null}>` block where `AutoModeLogPanel` is rendered, add `<ServerPanel />`:
 
 ```tsx
-        <Suspense fallback={null}>
-          {showNewSession && <NewSessionModal />}
-          {showDockerModal && <DockerModal />}
-          {showLocalTerminalModal && <LocalTerminalModal />}
-          {showSerialModal && <SerialPortModal />}
-          {showSettings && <SettingsModal />}
-          {showAppMenu && <AppMenu />}
-          <UpdateChecker />
-          <AutoModeLogPanel />
-          <ServerPanel />
-        </Suspense>
+<Suspense fallback={null}>
+  {showNewSession && <NewSessionModal />}
+  {showDockerModal && <DockerModal />}
+  {showLocalTerminalModal && <LocalTerminalModal />}
+  {showSerialModal && <SerialPortModal />}
+  {showSettings && <SettingsModal />}
+  {showAppMenu && <AppMenu />}
+  <UpdateChecker />
+  <AutoModeLogPanel />
+  <ServerPanel />
+</Suspense>
 ```
 
 (`ServerPanel` itself renders `null` when `serverPanelOpen` is false, so it's safe to keep mounted.)
@@ -2389,7 +2544,10 @@ If `titlebar-btn--active` isn't already styled, add to `src/styles/global.css` (
   background: var(--accent-subtle, rgba(59, 130, 246, 0.15));
   color: var(--accent, #60a5fa);
 }
-.titlebar-btn:disabled { opacity: 0.4; cursor: default; }
+.titlebar-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 ```
 
 - [ ] **Step 4: Type-check, smoke-check, commit**
@@ -2411,6 +2569,7 @@ git commit -m "feat(server-panel): add TitleBar toggle and mount drawer in App"
 ## Task 14: Smoke-check assertions + manual verification
 
 **Files:**
+
 - Modify: `scripts/stability-smoke.mjs`
 
 - [ ] **Step 1: Extend smoke-check with three new assertions**

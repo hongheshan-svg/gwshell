@@ -26,6 +26,7 @@
 ## Task 1: Backend Manual AI Chat
 
 **Files:**
+
 - Modify: `src-tauri/src/agent/types.rs`
 - Modify: `src-tauri/src/agent/prompt.rs`
 - Modify: `src-tauri/src/lib.rs`
@@ -41,6 +42,7 @@
 ## Task 2: Terminal Context Registry
 
 **Files:**
+
 - Create: `src/lib/terminalContext.ts`
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
@@ -53,6 +55,7 @@
 ## Task 3: Terminal AI Dock UI
 
 **Files:**
+
 - Create: `src/components/Terminal/TerminalAiDock.tsx`
 - Modify: `src/components/Terminal/TerminalContainer.tsx`
 - Modify: `src/types/agent.ts`
@@ -69,6 +72,7 @@
 ## Task 4: Verification
 
 **Files:**
+
 - All modified files.
 
 - [ ] Run `cargo fmt`.

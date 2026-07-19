@@ -1,0 +1,91 @@
+name: Security audit
+
+# Runs cargo audit + npm audit on every PR (strict — fails on warnings) and
+# weekly on schedule (warning-only — opens an issue but doesn't fail).
+on:
+  pull_request:
+  schedule:
+    - cron: '0 3 * * 1' # Mondays 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      # On PRs: fail hard on any advisory NOT in the ignore list (below).
+      # On schedule: warn but don't fail (weekly run is informational).
+      #
+      # The ignore list suppresses advisories on TRANSITIVE deps that GWShell
+      # cannot fix without forking upstream (Tauri's GTK3/quick-xml/quinn-proto
+      # transitive deps). Each ignored ID has a rationale + re-triage date in
+      # `src-tauri/audit.toml`. Review quarterly; remove entries when upstream
+      # fixes land.
+      - name: Cargo audit (strict on PR, warning-only on schedule)
+        working-directory: src-tauri
+        run: |
+          IGNORES=(
+            --ignore RUSTSEC-2026-0195   # quick-xml DoS (transitive via tauri)
+            --ignore RUSTSEC-2026-0194   # quick-xml DoS (transitive via tauri)
+            --ignore RUSTSEC-2026-0185   # quinn-proto DoS (transitive via reqwest/h3)
+            --ignore RUSTSEC-2026-0190   # glib unsound (GTK3 transitive)
+            --ignore RUSTSEC-2026-0097   # rand unsound (transitive)
+            --ignore RUSTSEC-2025-0098   # anyhow unsound (transitive)
+            --ignore RUSTSEC-2025-0100   # unsound transitive
+            --ignore RUSTSEC-2025-0080   # unsound transitive
+            --ignore RUSTSEC-2024-0429   # rand unsound (transitive)
+            --ignore RUSTSEC-2024-0411   # gdkwayland-sys unmaintained (GTK3 via webkit2gtk)
+            --ignore RUSTSEC-2024-0412   # gdk unmaintained (GTK3)
+            --ignore RUSTSEC-2024-0413   # atk unmaintained (GTK3)
+            --ignore RUSTSEC-2024-0414   # gdkx11-sys unmaintained (GTK3)
+            --ignore RUSTSEC-2024-0415   # gtk unmaintained (GTK3)
+            --ignore RUSTSEC-2024-0416   # atk-sys unmaintained (GTK3)
+            --ignore RUSTSEC-2024-0417   # gdkx11 unmaintained (GTK3)
+            --ignore RUSTSEC-2024-0418   # gdk-sys unmaintained (GTK3)
+            --ignore RUSTSEC-2024-0419   # gtk3-macros unmaintained (GTK3)
+            --ignore RUSTSEC-2024-0420   # gtk-sys unmaintained (GTK3)
+            --ignore RUSTSEC-2025-0057   # fxhash unmaintained (transitive)
+            --ignore RUSTSEC-2024-0370   # proc-macro-error unmaintained (transitive)
+            --ignore RUSTSEC-2017-0008   # serial crate unmaintained (transitive; we use serialport)
+            --ignore RUSTSEC-2025-0081   # unic-char-property unmaintained (transitive)
+            --ignore RUSTSEC-2025-0075   # unic-char-range unmaintained (transitive)
+          )
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Deny unmaintained + unsound (ignoring transitive GTK3/Tauri deps
+            # we can't fix). Yanked crates are NOT denied on PRs because some
+            # have no advisory ID (can't be --ignore'd); they surface as
+            # warnings instead and are tracked via the weekly run.
+            cargo audit --deny unmaintained --deny unsound "${IGNORES[@]}"
+          else
+            cargo audit "${IGNORES[@]}" || true
+          fi
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # npm audit for production deps only, high+ severity. Strict on PRs
+      # (fails the check, mirroring the cargo-audit policy above); warning-only
+      # on the weekly schedule so drift is surfaced without blocking.
+      - name: npm audit (high+ only)
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            npm audit --omit=dev --audit-level=high
+          else
+            npm audit --omit=dev --audit-level=high || true
+          fi

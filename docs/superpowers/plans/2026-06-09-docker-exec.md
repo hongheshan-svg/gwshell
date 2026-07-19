@@ -45,6 +45,7 @@
 ## Task 1: `parse_docker_ps` + `DockerContainer` (pure, TDD)
 
 **Files:**
+
 - Create: `src-tauri/src/docker.rs`
 - Modify: `src-tauri/src/lib.rs` (add `mod docker;`)
 
@@ -135,6 +136,7 @@ git commit -m "feat(docker): container model and docker ps parser with tests"
 ## Task 2: Local exec spawn — refactor `pty.rs`, add `create_docker_exec`
 
 **Files:**
+
 - Modify: `src-tauri/src/pty.rs`
 
 Goal: spawn `docker exec -it <id> sh -c 'exec bash 2>/dev/null || exec sh'` in a PTY, reusing `create_shell`'s reader/writer/resize/handle machinery.
@@ -208,6 +210,7 @@ git commit -m "feat(docker): local PTY docker-exec spawn (shared spawn helper)"
 ## Task 3: SSH interactive exec — `connect_and_exec_interactive`
 
 **Files:**
+
 - Modify: `src-tauri/src/ssh/session.rs` (add a sibling fn) and `src-tauri/src/ssh/mod.rs` (expose a method)
 
 Goal: establish an SSH connection from `ConnectParams` and run an interactive `exec` command (instead of a login shell), registered under a given session_id so `write_to_ssh`/`resize_ssh`/`close_ssh`/`ssh-data`/`ssh-exit` all work.
@@ -221,7 +224,9 @@ Add a near-duplicate `pub async fn spawn_exec(...)` with the SAME signature as `
 ```rust
 channel.request_shell(true).await.map_err(|e| format!("Shell request failed: {}", e))?;
 ```
+
 with:
+
 ```rust
 channel.exec(true, command.as_bytes()).await.map_err(|e| format!("Exec request failed: {}", e))?;
 ```
@@ -267,6 +272,7 @@ git commit -m "feat(docker): SSH interactive exec channel (spawn_exec)"
 ## Task 4: `docker.rs` commands + `ConnectParams` from session; register
 
 **Files:**
+
 - Modify: `src-tauri/src/docker.rs`
 - Modify: `src-tauri/src/lib.rs`
 
@@ -398,6 +404,7 @@ fn valid_container_id(id: &str) -> bool {
         && id.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
 }
 ```
+
 Call it at the top of `docker_exec` (return `Err("Invalid container id")` if false) — defense for the SSH string-interpolation path.
 
 - [ ] **Step 5: Register the commands in `lib.rs`**
@@ -426,6 +433,7 @@ git commit -m "feat(docker): list/exec commands over Local and SSH transports"
 ## Task 5: Frontend — appStore picker state + `DockerContainerPicker`
 
 **Files:**
+
 - Modify: `src/stores/appStore.ts`
 - Create: `src/components/Terminal/DockerContainerPicker.tsx`
 - Modify: `src/App.tsx`
@@ -439,14 +447,23 @@ Mirror the `showDockerModal` pattern (appStore.ts:68-69, 267-269). Add to the in
 dockerPicker: { tabId: string; containers: DockerContainer[] } | null;
 setDockerPicker: (p: { tabId: string; containers: DockerContainer[] } | null) => void;
 ```
+
 and to the initializer:
+
 ```ts
 dockerPicker: null,
 setDockerPicker: (p) => set({ dockerPicker: p }),
 ```
+
 Add the type near the top of `appStore.ts` (or import from a shared location):
+
 ```ts
-export interface DockerContainer { id: string; name: string; image: string; status: string; }
+export interface DockerContainer {
+  id: string;
+  name: string;
+  image: string;
+  status: string;
+}
 ```
 
 - [ ] **Step 2: Create `DockerContainerPicker.tsx`**
@@ -469,19 +486,35 @@ export const DockerContainerPicker: React.FC<Props> = ({ containers, onPick, onC
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
-      else if (e.key === 'ArrowDown') { e.preventDefault(); setSel((i) => Math.min(i + 1, containers.length - 1)); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); setSel((i) => Math.max(i - 1, 0)); }
-      else if (e.key === 'Enter') { e.preventDefault(); if (containers[sel]) onPick(containers[sel].id); }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCancel();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSel((i) => Math.min(i + 1, containers.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSel((i) => Math.max(i - 1, 0));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (containers[sel]) onPick(containers[sel].id);
+      }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [containers, sel, onPick, onCancel]);
 
   return (
-    <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+    <div
+      className="modal-overlay"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+    >
       <div className="ssh-modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
-        <div className="ssh-modal-header"><h2>{t('docker_pick_container')}</h2></div>
+        <div className="ssh-modal-header">
+          <h2>{t('docker_pick_container')}</h2>
+        </div>
         <div className="ssh-modal-body">
           {containers.map((c, i) => (
             <div
@@ -510,14 +543,27 @@ Add minimal CSS to `src/styles/global.css` for `.docker-pick-row` (flex, gap, pa
 Add to the lazy modal imports + the modal render block (App.tsx:227-241). Render it when `dockerPicker` is set:
 
 ```tsx
-{dockerPicker && (
-  <DockerContainerPicker
-    containers={dockerPicker.containers}
-    onPick={(id) => { window.dispatchEvent(new CustomEvent('gwshell:docker-pick', { detail: { tabId: dockerPicker.tabId, id } })); setDockerPicker(null); }}
-    onCancel={() => { window.dispatchEvent(new CustomEvent('gwshell:docker-cancel', { detail: { tabId: dockerPicker.tabId } })); setDockerPicker(null); }}
-  />
-)}
+{
+  dockerPicker && (
+    <DockerContainerPicker
+      containers={dockerPicker.containers}
+      onPick={(id) => {
+        window.dispatchEvent(
+          new CustomEvent('gwshell:docker-pick', { detail: { tabId: dockerPicker.tabId, id } }),
+        );
+        setDockerPicker(null);
+      }}
+      onCancel={() => {
+        window.dispatchEvent(
+          new CustomEvent('gwshell:docker-cancel', { detail: { tabId: dockerPicker.tabId } }),
+        );
+        setDockerPicker(null);
+      }}
+    />
+  );
+}
 ```
+
 Pull `dockerPicker` and `setDockerPicker` from `useAppStore()` at the top of `App` (add to the destructure at App.tsx:47-54). Import `DockerContainerPicker` (eager import is fine; it is small).
 
 Rationale for the CustomEvent: `TerminalView`'s connect flow (Task 6) awaits the user's pick; a window CustomEvent bridges the App-root picker back to the awaiting connect code without threading callbacks through the store. (Task 6 wires the listeners.)
@@ -541,6 +587,7 @@ git commit -m "feat(docker): container picker UI and store state"
 ## Task 6: Frontend — `docker` connect branch in `TerminalView`
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx`
 
 - [ ] **Step 1: Event routing for docker**
@@ -631,11 +678,17 @@ After the `serial` branch and before `connectionReady` finalization (mirror the 
 At the cleanup close-command selection (TerminalView.tsx:1702-1703), make docker pick the right close command:
 
 ```ts
-const isSshDocker = tab.type === "docker"
-  && (sessionsRef.current.find((s) => s.id === tab.sessionId)?.docker_connect_method ?? '').toLowerCase() === 'ssh';
-const closeCmd = (tab.type === "ssh" || isSshDocker) ? "close_ssh"
-  : tab.type === "serial" ? "close_serial"
-  : "close_pty";
+const isSshDocker =
+  tab.type === 'docker' &&
+  (
+    sessionsRef.current.find((s) => s.id === tab.sessionId)?.docker_connect_method ?? ''
+  ).toLowerCase() === 'ssh';
+const closeCmd =
+  tab.type === 'ssh' || isSshDocker
+    ? 'close_ssh'
+    : tab.type === 'serial'
+      ? 'close_serial'
+      : 'close_pty';
 ```
 
 - [ ] **Step 4: Verify**
@@ -655,6 +708,7 @@ git commit -m "feat(docker): TerminalView docker connect branch (list, pick, exe
 ## Task 7: DockerModal polish + final verification
 
 **Files:**
+
 - Modify: `src/components/Modals/DockerModal.tsx`
 
 - [ ] **Step 1: Remove the "开发中" badge**
@@ -669,6 +723,7 @@ Expected: all pass.
 - [ ] **Step 3: Manual verification (requires Docker)**
 
 Run `npm run tauri dev`. Then:
+
 1. **Local**: ensure Docker Desktop is running with ≥1 container (`docker run -d --name demo nginx`). Create a Docker session with connect method = Local. Open it → picker lists `demo` → pick → you get a shell inside the container (`bash` or `sh`). Type `ls`, `hostname` — confirm it's the container.
 2. **sh-only image**: `docker run -d --name alp alpine sleep 1000` → pick `alp` → confirm it falls back to `sh` (no bash) without error.
 3. **SSH**: with a remote host that has Docker and an SSH session saved, create a Docker session with method = SSH and that SSH session selected as the tunnel. Open → lists remote containers → pick → shell inside remote container. Resize the window — confirm the container shell reflows.

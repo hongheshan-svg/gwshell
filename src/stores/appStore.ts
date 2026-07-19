@@ -1,16 +1,23 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import type { TFunction } from 'i18next';
 import type { SessionConfig, TabInfo, ThemeMode, MainView } from '../types';
-import i18n, { detectLocale, type Locale, type TranslationKeys } from '../i18n';
+import i18n, { detectLocale, type Locale } from '../i18n';
+import { useToastStore } from './toastStore';
 import { buildSplitPanes, clearSlot, fillFirstEmpty } from '../lib/splitLayout';
 
-export interface DockerContainer { id: string; name: string; image: string; status: string; }
+export interface DockerContainer {
+  id: string;
+  name: string;
+  image: string;
+  status: string;
+}
 
 interface AppStore {
   // Locale
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  t: (key: TranslationKeys, params?: Record<string, string | number>) => string;
+  t: TFunction<'gwshell', undefined>;
 
   // Theme
   theme: ThemeMode;
@@ -115,7 +122,7 @@ const initialLocale = detectLocale();
 // This eliminates the IPC round-trip that causes the empty-then-populated flash.
 function popInjectedSessions(): SessionConfig[] {
   if (typeof window === 'undefined') return [];
-  const win = window as unknown as Record<string, unknown>;
+  const win = window as unknown as Record<string, unknown>; // eslint-disable-line no-restricted-syntax -- window prop access needs index signature; no narrower type available
   const data = win.__GWSHELL_SESSIONS__;
   if (Array.isArray(data)) {
     delete win.__GWSHELL_SESSIONS__;
@@ -124,11 +131,13 @@ function popInjectedSessions(): SessionConfig[] {
     // save_session / connect logic. Drop bad entries and warn.
     const valid = data.filter((e): e is SessionConfig => {
       if (!e || typeof e !== 'object') return false;
-      const o = e as Record<string, unknown>;
+      const o = e as Record<string, unknown>; // eslint-disable-line no-restricted-syntax -- narrowed unknown object access needs index signature
       return typeof o.id === 'string' && typeof o.session_type === 'string';
     });
     if (valid.length !== data.length) {
-      console.warn(`popInjectedSessions: dropped ${data.length - valid.length} malformed entr(ies)`);
+      console.warn(
+        `popInjectedSessions: dropped ${data.length - valid.length} malformed entr(ies)`,
+      );
     }
     return valid;
   }
@@ -154,19 +163,17 @@ export const useAppStore = create<AppStore>((set, get) => ({
     void i18n.changeLanguage(locale);
     set({
       locale,
-      t: i18n.getFixedT(locale, 'gwshell') as (key: TranslationKeys, params?: Record<string, string | number>) => string,
+      t: i18n.getFixedT(locale, 'gwshell'),
     });
   },
-  t: i18n.getFixedT(initialLocale, 'gwshell') as (key: TranslationKeys, params?: Record<string, string | number>) => string,
+  t: i18n.getFixedT(initialLocale, 'gwshell'),
 
   theme: 'dark',
   setTheme: (theme) => set({ theme }),
-  toggleTheme: () =>
-    set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
+  toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
 
   sidebarCollapsed: false,
-  toggleSidebar: () =>
-    set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   activeNavItem: 'sessions',
   setActiveNavItem: (item) => set({ activeNavItem: item }),
 
@@ -185,10 +192,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
     // Persist to backend; surface failures instead of silently dropping them.
     invoke('save_session', { config: session }).catch((err) => {
       console.error('Failed to save session, the UI may be out of sync:', err);
+      useToastStore.getState().pushToast({
+        kind: 'error',
+        title: i18n.t('toast.sessionSaveFailed'),
+        message: String(err),
+      });
     });
   },
-  addTemporarySession: (session) =>
-    set((state) => ({ sessions: [...state.sessions, session] })),
+  addTemporarySession: (session) => set((state) => ({ sessions: [...state.sessions, session] })),
   removeSession: (id) => {
     // Capture the removed session so it can be restored if the backend delete
     // fails (otherwise the UI shows it gone but it reappears after restart).
@@ -202,13 +213,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
         set((state) => ({ sessions: [...state.sessions, removed] }));
       }
       console.error('Failed to delete session, rolled back:', err);
+      useToastStore.getState().pushToast({
+        kind: 'error',
+        title: i18n.t('toast.sessionDeleteFailed'),
+        message: String(err),
+      });
     });
   },
   updateSessionLatency: (id, latency) => {
     set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === id ? { ...s, latency } : s
-      ),
+      sessions: state.sessions.map((s) => (s.id === id ? { ...s, latency } : s)),
     }));
   },
   batchUpdateLatency: (updates) => {
@@ -231,14 +245,23 @@ export const useAppStore = create<AppStore>((set, get) => ({
   mainView: 'asset-list',
   setMainView: (view) => set({ mainView: view }),
 
-  tabs: [{ id: 'asset-list', sessionId: '', title: i18n.getFixedT(initialLocale, 'gwshell')('tab_list'), type: 'asset-list', connected: false }],
+  tabs: [
+    {
+      id: 'asset-list',
+      sessionId: '',
+      title: i18n.getFixedT(initialLocale, 'gwshell')('tab_list'),
+      type: 'asset-list',
+      connected: false,
+    },
+  ],
   activeTabId: 'asset-list',
   addTab: (tab) =>
     set((state) => ({
       tabs: [...state.tabs, tab],
       activeTabId: tab.id,
       mainView: tab.type === 'asset-list' ? 'asset-list' : 'terminal',
-      splitPanes: state.splitCount > 1 ? fillFirstEmpty(state.splitPanes, tab.id) : state.splitPanes,
+      splitPanes:
+        state.splitCount > 1 ? fillFirstEmpty(state.splitPanes, tab.id) : state.splitPanes,
     })),
   // Move the tab `fromId` to the position currently held by `toId` (drag &
   // drop reorder). The asset-list home tab is pinned and never moves.
@@ -281,7 +304,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           tabs: newTabs,
           sessions: newSessions,
           activeTabId: 'asset-list',
-          mainView: 'asset-list' as MainView,
+          mainView: 'asset-list' as MainView, // eslint-disable-line no-restricted-syntax -- literal narrowing for MainView union
           splitCount: 1,
           splitPanes: [],
         };
@@ -306,7 +329,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         tabs: newTabs,
         sessions: newSessions,
         activeTabId: newActiveId,
-        mainView: newMainView as MainView,
+        mainView: newMainView,
         splitCount: collapsedCount,
         splitPanes: collapsedPanes,
       };
@@ -315,9 +338,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ activeTabId: id, mainView: id === 'asset-list' ? 'asset-list' : 'terminal' }),
   updateTabConnected: (id, connected) =>
     set((state) => ({
-      tabs: state.tabs.map((tab) =>
-        tab.id === id ? { ...tab, connected } : tab
-      ),
+      tabs: state.tabs.map((tab) => (tab.id === id ? { ...tab, connected } : tab)),
     })),
 
   splitCount: 1,
@@ -382,7 +403,7 @@ i18n.on('languageChanged', (lng) => {
     if (cur.locale !== lng) {
       useAppStore.setState({
         locale: lng,
-        t: i18n.getFixedT(lng, 'gwshell') as typeof cur.t,
+        t: i18n.getFixedT(lng, 'gwshell'),
       });
     }
   }

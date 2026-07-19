@@ -115,6 +115,7 @@ Light theme shadows use lower opacity (0.1 / 0.15).
 ## Component-by-Component Changes
 
 ### TitleBar
+
 - Height stays 32px
 - Background: `--bg-secondary`, no gradient
 - Title text: monospace, `font-weight: 500` (not 600)
@@ -122,6 +123,7 @@ Light theme shadows use lower opacity (0.1 / 0.15).
 - Close button hover: `--danger` background
 
 ### Icon Navbar (Left Sidebar)
+
 - Width stays 48px
 - Nav button: square shape (`border-radius: 1px`)
 - Active indicator: replace the rounded left-bar with a flat 2px-wide `border-left` directly on the button (no `::before` pseudo-element)
@@ -129,6 +131,7 @@ Light theme shadows use lower opacity (0.1 / 0.15).
 - Logo icon top: simpler, no special margin
 
 ### Session Panel
+
 - Header padding tightened: `4px 8px`
 - Search input: `border-radius: 1px`, no focus glow — just `border-color` change on focus
 - Session items: remove `linear-gradient` from active state, use flat `--bg-active` + `border-left: 2px solid --accent-primary`
@@ -136,6 +139,7 @@ Light theme shadows use lower opacity (0.1 / 0.15).
 - Collapse toggle: same width (16px), square
 
 ### TabBar
+
 - Height: reduce from 38px to 32px
 - Tab items: no border-radius, no gradient on active
 - Active tab: flat `--bg-active` background + 2px bottom border in `--accent-primary` (remove `::after` with absolute positioning — use direct `border-bottom` instead)
@@ -144,17 +148,20 @@ Light theme shadows use lower opacity (0.1 / 0.15).
 - Connection dot: keep as-is (small circle indicators are universal)
 
 ### Terminal Container
+
 - Remove `radial-gradient` background overlay — use flat `--bg-primary`
 - Split pane focused border: solid 1px `--accent-primary`, no `box-shadow`
 - Split pane header: flat `--bg-secondary`, no gradient
 
 ### StatusBar
+
 - Height stays 26px
 - Status items: `border-radius: 1px`
 - Split picker menu: square corners (`border-radius: 2px`)
 - Connection dots: keep circular (standard convention)
 
 ### Modals
+
 - `border-radius: 2px` (not 8px)
 - Remove `backdrop-filter: blur(4px)` from overlay — use solid `rgba(0,0,0,0.65)`
 - Modal header: tighter padding `12px 16px`
@@ -164,32 +171,38 @@ Light theme shadows use lower opacity (0.1 / 0.15).
 - Primary button: use `--accent-primary`, keep solid
 
 ### Context Menus / Dropdowns
+
 - `border-radius: 2px`
 - Menu items: `border-radius: 1px`
 - Keep current hover coloring pattern
 
 ### SFTP Panel
+
 - Folder icon: remove `drop-shadow` filter
 - File items: same styling approach, tighter padding
 - Path display: `border-radius: 1px`
 - Chmod dialog: `border-radius: 2px`
 
 ### SFTP Editor
+
 - Dialog: `border-radius: 2px`
 - Editor header background: flat `--bg-tertiary`, no gradient implied
 - Save button: stays accent-colored
 
 ### Asset Table
+
 - Search box: `border-radius: 1px`, no focus glow
 - Table rows selected: flat background, `box-shadow: inset 2px 0 0` stays (it's a good left-indicator)
 - Toolbar buttons: square
 
 ### Scrollbar
+
 - Track: transparent
 - Thumb: `border-radius: 1px` (nearly square), color `--border-light`
 - Width: keep 6px
 
 ### Quick Action Cards (Terminal Placeholder)
+
 - Remove `transform: translateY(-1px)` on hover
 - Square corners
 - No `box-shadow` on hover — use border-color change only
@@ -198,6 +211,7 @@ Light theme shadows use lower opacity (0.1 / 0.15).
 ## Animation Changes
 
 All `transition` values:
+
 - Duration: `0.1s` (from various 0.12s-0.25s)
 - Timing: `linear` (from `ease`)
 - No `transform` animations (no translateY, no scale on hover for color dots)
@@ -219,6 +233,7 @@ Exception: sidebar collapse (`width` transition) keeps `0.15s` for smoothness.
 All changes are in `src/styles/global.css` — the single CSS file that contains all styling. No component TSX files need changes since all visual properties are controlled through CSS classes and CSS variables.
 
 **Order of work:**
+
 1. CSS variables (`:root` and `[data-theme='light']`) — establishes the new palette and geometry tokens
 2. Global resets (scrollbar, font) — applies monospace globally
 3. Layout sections top-to-bottom: TitleBar → Navbar → Sidebar → TabBar → Terminal → StatusBar

@@ -11,7 +11,7 @@ export const NicList: React.FC<Props> = ({ nics }) => {
   return (
     <div className="sp-card sp-card--nics">
       <div className="sp-card__title">{t('serverPanel_nic_title')}</div>
-      {(!nics || nics.length === 0) ? (
+      {!nics || nics.length === 0 ? (
         <div className="sp-empty">—</div>
       ) : (
         <table className="sp-table">

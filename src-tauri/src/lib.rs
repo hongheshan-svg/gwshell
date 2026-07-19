@@ -1,6 +1,6 @@
 mod agent;
 mod crypto;
-mod database;
+pub mod database;
 mod docker;
 mod history;
 mod metrics;
@@ -264,6 +264,7 @@ fn quit_app(app_handle: tauri::AppHandle, state: State<'_, Arc<AppState>>) {
 // ---- PTY Commands ----
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // Tauri command — args map to frontend IPC params
 async fn create_local_shell(
     session_id: String,
     rows: u16,
@@ -414,11 +415,15 @@ async fn ssh_connect_saved(
 }
 
 #[tauri::command]
-async fn ssh_trust_host(host: String, port: u16, fingerprint: String, key_type: String) {
-    let _ = tokio::task::spawn_blocking(move || {
-        ssh::trust_host(&host, port, &fingerprint, &key_type);
-    })
-    .await;
+async fn ssh_trust_host(
+    host: String,
+    port: u16,
+    fingerprint: String,
+    key_type: String,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || ssh::trust_host(&host, port, &fingerprint, &key_type))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -820,6 +825,7 @@ async fn ping_host(host: String, port: u16, timeout_secs: Option<u64>) -> Result
 // ---- Serial Commands ----
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // Tauri command — args map to frontend IPC params
 async fn serial_open(
     session_id: String,
     port_name: String,
@@ -827,6 +833,7 @@ async fn serial_open(
     data_bits: String,
     stop_bits: String,
     parity: String,
+    flow_control: Option<String>,
     serial_encoding: Option<String>,
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
@@ -840,6 +847,7 @@ async fn serial_open(
             &data_bits,
             &stop_bits,
             &parity,
+            flow_control.as_deref().unwrap_or("none"),
             serial_encoding.as_deref(),
             app_handle,
         )
@@ -1640,6 +1648,8 @@ fn spawn_agent_continuation(
     });
 }
 
+// 8 params: all distinct agent log-stream setup values.
+#[allow(clippy::too_many_arguments)]
 fn spawn_agent_log_stream(
     state: Arc<AppState>,
     app_handle: AppHandle,
@@ -1684,7 +1694,7 @@ fn spawn_agent_log_stream(
             .await;
 
         state.agent_log_streams.lock().remove(&stream_id);
-    match result {
+        match result {
             Ok(()) => emit_agent_delta(&app_handle, &info.id, "Live log stream stopped.\n"),
             Err(error) => emit_agent_error(&app_handle, &info.id, error),
         }

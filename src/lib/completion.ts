@@ -32,16 +32,16 @@ export function buildCompletions(
   // Reserve roughly half the slots for dictionary commands so standard commands
   // (docker, df, du, …) aren't entirely squeezed out when history already fills
   // the list. Dictionary is only consulted while typing the command name.
-  const dictBudget = /\s/.test(line) ? 0 : Math.max(2, Math.floor(max / 2));
+  const dictBudget = /\s/.test(line) ? 0 : Math.min(Math.max(2, Math.floor(max / 2)), max);
   const historyBudget = max - dictBudget;
 
   let histCount = 0;
   for (const cmd of getSuggestions(line, ctx)) {
+    if (histCount >= historyBudget) break;
     if (seen.has(cmd)) continue;
     seen.add(cmd);
     out.push({ text: cmd, kind: 'history' });
     histCount += 1;
-    if (histCount >= historyBudget) break;
   }
 
   if (dictBudget > 0) {

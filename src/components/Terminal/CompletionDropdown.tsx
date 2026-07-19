@@ -5,8 +5,8 @@ import type { Completion } from '../../lib/completion';
 interface CompletionDropdownProps {
   items: Completion[];
   selectedIndex: number;
-  x: number;          // cursor cell column
-  y: number;          // cursor cell row
+  x: number; // cursor cell column
+  y: number; // cursor cell row
   placeAbove: boolean; // render above the cursor instead of below
   fontFamily: string;
   fontSize: number;
@@ -23,7 +23,11 @@ export const CompletionDropdown: React.FC<CompletionDropdownProps> = ({
 }) => {
   if (items.length === 0) return null;
   const style: React.CSSProperties = placeAbove
-    ? { left: `calc(${x} * var(--cell-w))`, top: `calc(${y} * var(--cell-h))`, transform: 'translateY(-100%)' }
+    ? {
+        left: `calc(${x} * var(--cell-w))`,
+        top: `calc(${y} * var(--cell-h))`,
+        transform: 'translateY(-100%)',
+      }
     : { left: `calc(${x} * var(--cell-w))`, top: `calc(${y + 1} * var(--cell-h))` };
 
   return (

@@ -1,13 +1,24 @@
 import type { SessionConfig } from '../types';
 
 // Curated, non-secret fields a group can supply as defaults.
+// eslint-disable-next-line no-restricted-syntax
 export const INHERITABLE_FIELDS = [
-  'username', 'port', 'auth_method', 'private_key_path',
-  'jump_host', 'jump_port', 'jump_username', 'jump_private_key_path',
-  'proxy_type', 'proxy_host', 'proxy_port', 'proxy_username', 'env_vars',
+  'username',
+  'port',
+  'auth_method',
+  'private_key_path',
+  'jump_host',
+  'jump_port',
+  'jump_username',
+  'jump_private_key_path',
+  'proxy_type',
+  'proxy_host',
+  'proxy_port',
+  'proxy_username',
+  'env_vars',
 ] as const;
 
-export type GroupDefaults = Partial<Pick<SessionConfig, typeof INHERITABLE_FIELDS[number]>>;
+export type GroupDefaults = Partial<Pick<SessionConfig, (typeof INHERITABLE_FIELDS)[number]>>;
 export type GroupDefaultsMap = Record<string, GroupDefaults>;
 
 const KEY = 'gwshell.groupDefaults';
@@ -16,13 +27,19 @@ export function loadGroupDefaults(): GroupDefaultsMap {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? (parsed as GroupDefaultsMap) : {};
-  } catch { return {}; }
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as GroupDefaultsMap) : {}; // eslint-disable-line no-restricted-syntax -- JSON.parse returns unknown; narrowing via GroupDefaultsMap
+  } catch {
+    return {};
+  }
 }
 
 export function saveGroupDefaults(map: GroupDefaultsMap): void {
-  try { localStorage.setItem(KEY, JSON.stringify(map)); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(KEY, JSON.stringify(map));
+  } catch {
+    /* ignore */
+  }
 }
 
 function isUnset(v: unknown): boolean {
@@ -38,7 +55,7 @@ export function applyGroupDefaults(session: SessionConfig, all: GroupDefaultsMap
   const out: SessionConfig = { ...session };
   for (const f of INHERITABLE_FIELDS) {
     if (isUnset(out[f]) && !isUnset(defs[f])) {
-      (out as unknown as Record<string, unknown>)[f] = defs[f];
+      (out as unknown as Record<string, unknown>)[f] = defs[f]; // eslint-disable-line no-restricted-syntax -- dynamic field assignment on SessionConfig; index signature required
     }
   }
   return out;

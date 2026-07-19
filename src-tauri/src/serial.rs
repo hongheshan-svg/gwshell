@@ -60,6 +60,9 @@ impl SerialManager {
         }
     }
 
+    // Serial open takes 10 params (port config + session/app handle); all are
+    // distinct serial-port settings that map to Tauri command args.
+    #[allow(clippy::too_many_arguments)]
     pub fn open(
         &self,
         session_id: &str,
@@ -68,6 +71,7 @@ impl SerialManager {
         data_bits: &str,
         stop_bits: &str,
         parity: &str,
+        flow_control: &str,
         encoding: Option<&str>,
         app_handle: AppHandle,
     ) -> Result<(), String> {
@@ -93,12 +97,19 @@ impl SerialManager {
             p if p.contains("Even") => Parity::Even,
             _ => Parity::None,
         };
+        // Map flow-control string to enum. Accept the common aliases
+        // case-insensitively; unrecognized values default to None.
+        let fc = match flow_control.to_lowercase().as_str() {
+            "hardware" | "rts/cts" => FlowControl::Hardware,
+            "software" | "xon/xoff" | "xonxoff" => FlowControl::Software,
+            _ => FlowControl::None, // "none" or unrecognized
+        };
 
         let port = serialport::new(port_name, baud_rate)
             .data_bits(db)
             .stop_bits(sb)
             .parity(par)
-            .flow_control(FlowControl::None)
+            .flow_control(fc)
             // Read timeout doubles as the stop-flag poll interval. 150ms keeps
             // shutdown prompt while cutting idle wakeups from ~100/s to ~7/s;
             // reads still return the instant bytes arrive, so RX latency is
@@ -256,10 +267,10 @@ impl SerialManager {
         };
 
         handle.input.lock().push(data)?;
-        if !handle.wake_pending.swap(true, Ordering::AcqRel) {
-            if handle.tx.try_send(SerialCmd::WakeInput).is_err() {
-                handle.wake_pending.store(false, Ordering::Release);
-            }
+        if !handle.wake_pending.swap(true, Ordering::AcqRel)
+            && handle.tx.try_send(SerialCmd::WakeInput).is_err()
+        {
+            handle.wake_pending.store(false, Ordering::Release);
         }
         Ok(())
     }

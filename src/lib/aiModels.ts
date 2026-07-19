@@ -24,7 +24,10 @@ export const aiModelGroupLabels: Record<AiModelGroup, TranslationKeys> = {
   local: 'agent_ai_group_local',
 };
 
-export const providerDefaults: Record<AiProvider, Pick<AiProviderSettings, 'base_url' | 'model'>> = {
+export const providerDefaults: Record<
+  AiProvider,
+  Pick<AiProviderSettings, 'base_url' | 'model'>
+> = {
   openai_compatible: { base_url: 'https://api.openai.com/v1', model: 'gpt-5.5' },
   anthropic_compatible: { base_url: 'https://api.anthropic.com/v1', model: 'claude-fable-5' },
   ollama: { base_url: 'http://localhost:11434/v1', model: 'gpt-oss:20b' },
@@ -219,7 +222,9 @@ export const compatibleProviderLabels: Record<AiProvider, string> = {
   ollama: 'Ollama',
 };
 
-export const findAiModelPreset = (settings: Pick<AiProviderSettings, 'provider' | 'base_url' | 'model'>) =>
+export const findAiModelPreset = (
+  settings: Pick<AiProviderSettings, 'provider' | 'base_url' | 'model'>,
+) =>
   aiModelPresets.find(
     (preset) =>
       preset.provider === settings.provider &&
@@ -227,8 +232,13 @@ export const findAiModelPreset = (settings: Pick<AiProviderSettings, 'provider' 
       preset.base_url.replace(/\/$/, '') === settings.base_url.replace(/\/$/, ''),
   );
 
-export const getAiModelDisplayName = (settings: Pick<AiProviderSettings, 'provider' | 'base_url' | 'model'>) =>
-  findAiModelPreset(settings)?.title || settings.model || compatibleProviderLabels[settings.provider];
+export const getAiModelDisplayName = (
+  settings: Pick<AiProviderSettings, 'provider' | 'base_url' | 'model'>,
+) =>
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+  findAiModelPreset(settings)?.title ||
+  settings.model ||
+  compatibleProviderLabels[settings.provider];
 
 export const isAiProviderUsable = (settings: AiProviderSettings | null | undefined) => {
   if (!settings?.enabled) return false;

@@ -57,8 +57,7 @@ const SECRET_ENV_RE =
   /(?:^|\s)[A-Za-z_][A-Za-z0-9_]*(?:PASS(?:WORD|WD)?|SECRET|TOKEN|APIKEY|API_KEY|ACCESS_KEY|PRIVATE_KEY|CREDENTIALS?)[A-Za-z0-9_]*\s*=\s*\S+/i;
 // Known secret-bearing env vars whose names don't contain a generic keyword
 // (e.g. MYSQL_PWD — "PWD" alone is excluded to avoid matching $PWD/$OLDPWD).
-const SECRET_KNOWN_ENV_RE =
-  /(?:^|\s)(?:MYSQL_PWD|MARIADB_PWD|PGPASSWORD|REDISCLI_AUTH)\s*=\s*\S+/i;
+const SECRET_KNOWN_ENV_RE = /(?:^|\s)(?:MYSQL_PWD|MARIADB_PWD|PGPASSWORD|REDISCLI_AUTH)\s*=\s*\S+/i;
 // user:password@host (URLs, git remotes, curl). Excludes scp's user@host:path
 // (no colon before '@') and SSH git URLs (colon comes after '@').
 const SECRET_URLCRED_RE = /\b[\w.+-]+:[^\s:@/]{2,}@[\w.-]+/;
@@ -111,9 +110,7 @@ export function record(command: string, ctx: SuggestCtx = {}): void {
   // context bumps count + last_used and moves it to the end (most-recent),
   // instead of appending a duplicate that bloats the list and the suggestion
   // scan. This keeps entries bounded by distinct (command, scope, cwd) tuples.
-  const idx = entries.findIndex(
-    (e) => e.command === command && e.scope === scope && e.cwd === cwd,
-  );
+  const idx = entries.findIndex((e) => e.command === command && e.scope === scope && e.cwd === cwd);
   if (idx >= 0) {
     const existing = entries[idx];
     existing.count += 1;
@@ -139,7 +136,10 @@ export function record(command: string, ctx: SuggestCtx = {}): void {
     let minIdx = 0;
     let minVal = entries[0].last_used;
     for (let i = 1; i < entries.length; i++) {
-      if (entries[i].last_used < minVal) { minVal = entries[i].last_used; minIdx = i; }
+      if (entries[i].last_used < minVal) {
+        minVal = entries[i].last_used;
+        minIdx = i;
+      }
     }
     entries.splice(minIdx, 1);
   }
@@ -178,4 +178,3 @@ export function getSuggestions(prefix: string, ctx: SuggestCtx = {}): string[] {
     .slice(0, 8)
     .map(([cmd]) => cmd);
 }
-

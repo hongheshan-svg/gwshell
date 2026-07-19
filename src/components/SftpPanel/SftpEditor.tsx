@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { X, Save, RotateCcw } from 'lucide-react';
+import { useConfirm } from '../../hooks/useConfirm';
 
 interface SftpEditorProps {
   sessionId: string;
@@ -10,14 +11,29 @@ interface SftpEditorProps {
   onClose: () => void;
 }
 
-export const SftpEditor: React.FC<SftpEditorProps> = ({ sessionId, remotePath, fileName, onClose }) => {
+export const SftpEditor: React.FC<SftpEditorProps> = ({
+  sessionId,
+  remotePath,
+  fileName,
+  onClose,
+}) => {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Guard against showing a confirm dialog after the editor has unmounted
+  // (e.g. user navigates away while the discard-check is pending).
+  const isUnmountedRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      isUnmountedRef.current = true;
+    };
+  }, []);
 
   const isModified = content !== originalContent;
 
@@ -35,7 +51,7 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({ sessionId, remotePath, f
         setLoading(false);
       }
     };
-    loadFile();
+    void loadFile();
   }, [sessionId, remotePath]);
 
   const handleSave = useCallback(async () => {
@@ -57,16 +73,26 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({ sessionId, remotePath, f
 
   // Guard close so unsaved edits aren't silently lost via the X button.
   const handleClose = () => {
-    if (isModified && !window.confirm(t('sftp_editor_discard_confirm'))) {
-      return;
-    }
-    onClose();
+    void (async () => {
+      if (isModified) {
+        if (isUnmountedRef.current) return;
+        const ok = await confirm({
+          title: t('sftp_editor_discard_confirm'),
+          message: t('sftp_editor_discard_confirm'),
+          danger: true,
+          confirmLabel: t('common.confirm'),
+          cancelLabel: t('common.cancel'),
+        });
+        if (!ok) return;
+      }
+      onClose();
+    })();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
-      if (isModified) handleSave();
+      if (isModified) void handleSave();
     }
     // Tab key inserts spaces
     if (e.key === 'Tab') {
@@ -87,7 +113,12 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({ sessionId, remotePath, f
   const lineCount = content.split('\n').length;
 
   return (
-    <div className="sftp-editor-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
+    <div
+      className="sftp-editor-overlay"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
       <div className="sftp-editor-dialog">
         {/* Header */}
         <div className="sftp-editor-header">
@@ -106,18 +137,16 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({ sessionId, remotePath, f
             </button>
             <button
               className="sftp-editor-btn sftp-editor-btn-save"
-              onClick={handleSave}
+              onClick={() => {
+                void handleSave();
+              }}
               disabled={!isModified || saving}
               title={`${t('sftp_editor_save')} (Ctrl+S)`}
             >
               <Save size={14} />
               <span>{saving ? t('sftp_editor_saving') : t('sftp_editor_save')}</span>
             </button>
-            <button
-              className="sftp-editor-btn"
-              onClick={handleClose}
-              title={t('sftp_close')}
-            >
+            <button className="sftp-editor-btn" onClick={handleClose} title={t('sftp_close')}>
               <X size={14} />
             </button>
           </div>
@@ -144,7 +173,9 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({ sessionId, remotePath, f
             <div className="sftp-editor-content">
               <div className="sftp-editor-gutter">
                 {Array.from({ length: lineCount }, (_, i) => (
-                  <div key={i + 1} className="sftp-editor-line-num">{i + 1}</div>
+                  <div key={i + 1} className="sftp-editor-line-num">
+                    {i + 1}
+                  </div>
                 ))}
               </div>
               <textarea

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../stores/appStore';
+import { useConfirm } from './useConfirm';
 import type { SessionConfig } from '../types';
 
 // A session reached through a jump host or proxy is NOT directly TCP-reachable
@@ -14,6 +15,7 @@ export function needsRelay(s: SessionConfig): boolean {
 
 export function useAssetData() {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   // Fine-grained selectors: subscribe to each field individually so a latency
   // update (which replaces `sessions`) doesn't re-render just because an
   // unrelated action reference was re-read. Action setters are stable.
@@ -41,8 +43,9 @@ export function useAssetData() {
     ? realSessions.filter(
         (s) =>
           s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (s.host && s.host.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          (s.username && s.username.toLowerCase().includes(searchQuery.toLowerCase()))
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+          s.host?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          s.username?.toLowerCase().includes(searchQuery.toLowerCase()),
       )
     : realSessions;
 
@@ -62,10 +65,15 @@ export function useAssetData() {
     });
   };
 
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = async () => {
     if (selectedSessionIds.length === 0) return;
     // Confirm before irreversible bulk deletion (matches the per-item guard).
-    if (!window.confirm(t('common_delete_confirm_multi', { count: selectedSessionIds.length }))) {
+    const ok = await confirm({
+      title: t('common_delete_confirm_title'),
+      message: t('common_delete_confirm_multi', { count: selectedSessionIds.length }),
+      danger: true,
+    });
+    if (!ok) {
       return;
     }
     selectedSessionIds.forEach((id) => removeSession(id));
@@ -97,9 +105,10 @@ export function useAssetData() {
   const lastInteractionRef = useRef(Date.now());
   const pingLoopRunningRef = useRef(false);
 
-  const sleep = (ms: number) => new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
+  const sleep = (ms: number) =>
+    new Promise<void>((resolve) => {
+      window.setTimeout(resolve, ms);
+    });
 
   const scheduleIdle = (callback: () => void) => {
     if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
@@ -113,7 +122,11 @@ export function useAssetData() {
 
   const cancelIdle = () => {
     if (idleCallbackRef.current == null) return;
-    if (!idleUsesTimeoutRef.current && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+    if (
+      !idleUsesTimeoutRef.current &&
+      typeof window !== 'undefined' &&
+      'cancelIdleCallback' in window
+    ) {
       window.cancelIdleCallback(idleCallbackRef.current);
     } else {
       clearTimeout(idleCallbackRef.current);
@@ -139,8 +152,8 @@ export function useAssetData() {
     };
   }, []);
 
-  const doPingRef = useRef(() => {});
-  doPingRef.current = async () => {
+  const doPingRef = useRef<() => void>(() => {});
+  const runPing = async () => {
     if (pingLoopRunningRef.current || !mountedRef.current) return;
     const targets = sessionsRef.current.filter((s) => s.host && !needsRelay(s));
     if (targets.length === 0) return;
@@ -166,7 +179,7 @@ export function useAssetData() {
         try {
           const latency = await invoke<number>('ping_host', {
             host: session.host!,
-            port: session.port || 22,
+            port: session.port ?? 22,
             timeoutSecs: session.connection_timeout,
           });
           updates.set(session.id, latency);
@@ -184,6 +197,9 @@ export function useAssetData() {
     } finally {
       pingLoopRunningRef.current = false;
     }
+  };
+  doPingRef.current = () => {
+    void runPing();
   };
 
   useEffect(() => {

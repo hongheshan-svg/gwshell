@@ -66,6 +66,7 @@ pub struct SessionConfig {
     pub serial_stop_bits: Option<String>,
     pub serial_parity: Option<String>,
     pub serial_encoding: Option<String>,
+    pub serial_flow_control: Option<String>, // "none" | "software" | "hardware"
     pub serial_init_commands: Option<String>,
     // Local shell
     pub working_dir: Option<String>,
@@ -151,6 +152,7 @@ impl Default for SessionConfig {
             serial_stop_bits: None,
             serial_parity: None,
             serial_encoding: None,
+            serial_flow_control: None,
             serial_init_commands: None,
             working_dir: None,
             shell_name: None,

@@ -10,7 +10,7 @@ The current interactive-SSH backend uses one OS thread per session that owns a l
 
 This was confirmed at runtime via diagnostics (`GWSHELL_SSH_DEBUG=1`): healthy operation, then a burst, then unbroken `read/loop Err kind=Other msg="transport read"` plus `SSH write failed: Failure while draining incoming flow`, while the owner thread keeps looping (≈19 iters/s) and never emits `ssh-exit`.
 
-The `ssh2`/libssh2 documentation states the root constraint directly: *"async operations must not be interwoven — calling function B while function A's future is sleeping will corrupt the internal buffers libssh2 uses for the session."* This is an architectural property of the library, not a tunable bug. Three prior fixes in this area have failed.
+The `ssh2`/libssh2 documentation states the root constraint directly: _"async operations must not be interwoven — calling function B while function A's future is sleeping will corrupt the internal buffers libssh2 uses for the session."_ This is an architectural property of the library, not a tunable bug. Three prior fixes in this area have failed.
 
 ## Decision
 
@@ -30,6 +30,7 @@ russh (Apache-2.0), russh-sftp (Apache-2.0), Tabby (MIT), gwshell (MIT) — all 
 One `russh::client::Handle` per SSH connection, driven by the existing Tokio runtime (Tauri runs `tokio` with `features=["full"]`; no new runtime). russh multiplexes channels over one connection, so a single connection carries the shell channel plus on-demand SFTP/exec channels.
 
 Per session:
+
 - **Shell channel:** `channel_open_session` → `request_pty("xterm-256color", cols, rows, 0, 0, &[])` → `request_shell(true)`. A `select!` loop:
   - `ChannelMsg::Data` / `ChannelMsg::ExtendedData` → forward bytes to the existing `ssh-data-{session_id}` event (keep the streaming UTF-8 decoder + ~16 ms batching from the current code).
   - `ChannelMsg::Eof` / `ChannelMsg::Close` → emit `ssh-exit-{session_id}`.
@@ -45,18 +46,18 @@ Per session:
 
 ## Feature mapping
 
-| Feature | russh mechanism | Source pattern |
-|---|---|---|
-| Transport (direct / SOCKS5 / HTTP / jump) | Build the stream, then `client::connect_stream(cfg, stream, handler)` — one path for all | Tabby `ssh.ts` |
-| Jump host (ProxyJump) | On jump session: `channel_open_direct_tcpip(target, port, "127.0.0.1", 0)` → `.into_stream()` → `connect_stream` over it; chainable for N hops | russh |
-| SOCKS5 / HTTP proxy | Reuse `socks` crate / manual HTTP CONNECT → proxied `TcpStream` → `connect_stream` | existing code |
-| Auth: none → publickey → agent → password → keyboard-interactive | Ordered fallback loop driven by `AuthResult` remaining-methods; `authenticate_none/publickey/password/keyboard_interactive_*`; handle k-i zero-prompt case and password auto-fill; agent via `russh::keys` (OpenSSH pipe/Pageant on Windows, `$SSH_AUTH_SOCK`/configured path on Unix) | Tabby `_handleAuth()` |
-| Host key / known_hosts | `Handler::check_server_key` → SHA-256 fingerprint compared against existing `known_hosts.json`; on unknown/mismatch fail connect with the **existing `FINGERPRINT_UNKNOWN:<fp>:<type>` / `FINGERPRINT_MISMATCH:<fp>:<type>` error strings** the frontend parses; `ssh_trust_host` + retry flow preserved | gwshell store + Tabby UX |
-| Shell / input / resize | as in Core architecture | russh example |
-| SFTP | `request_subsystem(true, "sftp")` on a second channel → `russh_sftp::client::SftpSession::new(channel.into_stream())`; map all current ops (readdir/stat/realpath/mkdir/rmdir/unlink/rename/open/read/write/chmod/create) | russh sftp example |
-| exec / metrics | `channel_open_session` + `exec` on the same connection | russh |
-| Local port forward (tunnel) | local TCP listener → per accept, `channel_open_direct_tcpip` → bridge socket↔channel stream | Tabby `forwards.ts` |
-| Keepalive / idle disconnect | `Config.keepalive_interval` + `keepalive_max` + `inactivity_timeout` | replaces manual blocking keepalive |
+| Feature                                                          | russh mechanism                                                                                                                                                                                                                                                                                          | Source pattern                     |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| Transport (direct / SOCKS5 / HTTP / jump)                        | Build the stream, then `client::connect_stream(cfg, stream, handler)` — one path for all                                                                                                                                                                                                                 | Tabby `ssh.ts`                     |
+| Jump host (ProxyJump)                                            | On jump session: `channel_open_direct_tcpip(target, port, "127.0.0.1", 0)` → `.into_stream()` → `connect_stream` over it; chainable for N hops                                                                                                                                                           | russh                              |
+| SOCKS5 / HTTP proxy                                              | Reuse `socks` crate / manual HTTP CONNECT → proxied `TcpStream` → `connect_stream`                                                                                                                                                                                                                       | existing code                      |
+| Auth: none → publickey → agent → password → keyboard-interactive | Ordered fallback loop driven by `AuthResult` remaining-methods; `authenticate_none/publickey/password/keyboard_interactive_*`; handle k-i zero-prompt case and password auto-fill; agent via `russh::keys` (OpenSSH pipe/Pageant on Windows, `$SSH_AUTH_SOCK`/configured path on Unix)                   | Tabby `_handleAuth()`              |
+| Host key / known_hosts                                           | `Handler::check_server_key` → SHA-256 fingerprint compared against existing `known_hosts.json`; on unknown/mismatch fail connect with the **existing `FINGERPRINT_UNKNOWN:<fp>:<type>` / `FINGERPRINT_MISMATCH:<fp>:<type>` error strings** the frontend parses; `ssh_trust_host` + retry flow preserved | gwshell store + Tabby UX           |
+| Shell / input / resize                                           | as in Core architecture                                                                                                                                                                                                                                                                                  | russh example                      |
+| SFTP                                                             | `request_subsystem(true, "sftp")` on a second channel → `russh_sftp::client::SftpSession::new(channel.into_stream())`; map all current ops (readdir/stat/realpath/mkdir/rmdir/unlink/rename/open/read/write/chmod/create)                                                                                | russh sftp example                 |
+| exec / metrics                                                   | `channel_open_session` + `exec` on the same connection                                                                                                                                                                                                                                                   | russh                              |
+| Local port forward (tunnel)                                      | local TCP listener → per accept, `channel_open_direct_tcpip` → bridge socket↔channel stream                                                                                                                                                                                                              | Tabby `forwards.ts`                |
+| Keepalive / idle disconnect                                      | `Config.keepalive_interval` + `keepalive_max` + `inactivity_timeout`                                                                                                                                                                                                                                     | replaces manual blocking keepalive |
 
 ## IPC contract (unchanged)
 
@@ -85,6 +86,7 @@ Each unit has one purpose and a narrow interface; the previous single 1700-line 
 ## Testing
 
 No automated SSH tests exist (project convention). Verification:
+
 1. `cargo build` clean; `npm run smoke:check` PASS.
 2. `GWSHELL_SSH_DEBUG=1` heartbeat confirms no error-spin under load.
 3. Live repro matrix: rapid Enter/typing stays responsive (the original bug); large output burst (`cat` big file, `top`); idle >2 s then type; SFTP browse/upload/download/edit; jump host; SOCKS5 + HTTP proxy; local tunnel; server metrics panel; reconnect-on-disconnect.

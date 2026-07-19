@@ -20,7 +20,8 @@ export function getSftpHomeCandidates(username?: string): string[] {
         : [`/home/${user}`, `/Users/${user}`, '.', '/']
       : ['.', '/'];
 
-  return candidates.filter((candidate, index) => (
-    candidate && !hasLiteralTildeSegment(candidate) && candidates.indexOf(candidate) === index
-  ));
+  return candidates.filter(
+    (candidate, index) =>
+      candidate && !hasLiteralTildeSegment(candidate) && candidates.indexOf(candidate) === index,
+  );
 }

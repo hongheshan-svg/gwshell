@@ -34,6 +34,7 @@
 ## Task 1: Three command tables + `table` param in the dictionary
 
 **Files:**
+
 - Modify: `src/lib/commandDictionary.ts`
 - Test: `scripts/test-completion.mjs`
 
@@ -44,11 +45,20 @@ Insert the following block immediately after the existing line `console.log('com
 ```js
 // ---- system-specific tables ----
 const cmdMatches = dict.lookupCommands('d', 'en', 'cmd').map((x) => x.cmd);
-assert.ok(cmdMatches.includes('dir') && cmdMatches.includes('del'), 'cmd table has dir/del for "d"');
-assert.ok(!cmdMatches.includes('df') && !cmdMatches.includes('du'), 'cmd table excludes unix-only commands');
+assert.ok(
+  cmdMatches.includes('dir') && cmdMatches.includes('del'),
+  'cmd table has dir/del for "d"',
+);
+assert.ok(
+  !cmdMatches.includes('df') && !cmdMatches.includes('du'),
+  'cmd table excludes unix-only commands',
+);
 
 const psMatches = dict.lookupCommands('Get-', 'en', 'powershell').map((x) => x.cmd);
-assert.ok(psMatches.includes('Get-ChildItem') && psMatches.includes('Get-Process'), 'powershell table has Get-* cmdlets');
+assert.ok(
+  psMatches.includes('Get-ChildItem') && psMatches.includes('Get-Process'),
+  'powershell table has Get-* cmdlets',
+);
 assert.ok(
   dict.lookupCommands('ls', 'en', 'powershell').some((x) => x.cmd === 'ls') === false,
   'exact-length alias excluded',
@@ -325,6 +335,7 @@ git commit -m "feat(completion): add cmd and powershell command tables"
 ## Task 2: Thread the table through `buildCompletions`
 
 **Files:**
+
 - Modify: `src/lib/commandHistory.ts:12-16`
 - Modify: `src/lib/completion.ts`
 - Test: `scripts/test-completion.mjs`
@@ -348,7 +359,10 @@ Insert this block immediately before the final `console.log('completion tests pa
   });
   const r = c.buildCompletions('d', { table: 'cmd' }, 'en', 8);
   assert.equal(receivedTable, 'cmd', 'ctx.table is forwarded to lookupCommands');
-  assert.ok(r.some((x) => x.kind === 'command' && x.text === 'dir'), 'cmd dictionary result surfaces');
+  assert.ok(
+    r.some((x) => x.kind === 'command' && x.text === 'dir'),
+    'cmd dictionary result surfaces',
+  );
 }
 ```
 
@@ -412,6 +426,7 @@ git commit -m "feat(completion): forward command table to lookupCommands"
 ## Task 3: Backend — `remote_shell` field, probe, and `detect_remote_os` command
 
 **Files:**
+
 - Modify: `src-tauri/src/session.rs:53` and `:139`
 - Create: `src-tauri/src/ssh/probe.rs`
 - Modify: `src-tauri/src/ssh/mod.rs:1-12` and method list
@@ -577,6 +592,7 @@ git commit -m "feat(ssh): detect remote OS for completion table selection"
 ## Task 4: Manual override field in the asset editor + i18n
 
 **Files:**
+
 - Modify: `src/types/index.ts:45`
 - Modify: `src/i18n/locales/gwshell.en.json` and `src/i18n/locales/gwshell.zh.json`
 - Modify: `src/components/Modals/NewSessionModal.tsx:142` (save mapping) and `:681` (UI)
@@ -627,49 +643,54 @@ After the `agent_forward: form.agent_forward || undefined,` line (currently line
 In `NewSessionModal.tsx`, replace the agent-forward form row (currently lines 669-681) so a Remote-Shell select sits beside it. Change:
 
 ```tsx
-              <div className="ssh-form-row">
-                <div className="ssh-form-group">
-                  <label style={{ visibility: 'hidden' }}>{t('common_placeholder')}</label>
-                  <label className="ssh-toggle-label">
-                    <input
-                      type="checkbox"
-                      checked={form.agent_forward || false}
-                      onChange={(e) => setForm({ ...form, agent_forward: e.target.checked })}
-                    />
-                    <span>{t('ssh_agent_forward')}</span>
-                  </label>
-                </div>
-              </div>
+<div className="ssh-form-row">
+  <div className="ssh-form-group">
+    <label style={{ visibility: 'hidden' }}>{t('common_placeholder')}</label>
+    <label className="ssh-toggle-label">
+      <input
+        type="checkbox"
+        checked={form.agent_forward || false}
+        onChange={(e) => setForm({ ...form, agent_forward: e.target.checked })}
+      />
+      <span>{t('ssh_agent_forward')}</span>
+    </label>
+  </div>
+</div>
 ```
 
 to:
 
 ```tsx
-              <div className="ssh-form-row">
-                <div className="ssh-form-group">
-                  <label style={{ visibility: 'hidden' }}>{t('common_placeholder')}</label>
-                  <label className="ssh-toggle-label">
-                    <input
-                      type="checkbox"
-                      checked={form.agent_forward || false}
-                      onChange={(e) => setForm({ ...form, agent_forward: e.target.checked })}
-                    />
-                    <span>{t('ssh_agent_forward')}</span>
-                  </label>
-                </div>
-                <div className="ssh-form-group">
-                  <label>{t('ssh_remote_shell')}</label>
-                  <select
-                    value={form.remote_shell || 'auto'}
-                    onChange={(e) => setForm({ ...form, remote_shell: e.target.value as 'auto' | 'linux' | 'cmd' | 'powershell' })}
-                  >
-                    <option value="auto">{t('ssh_remote_shell_auto')}</option>
-                    <option value="linux">{t('ssh_remote_shell_linux')}</option>
-                    <option value="cmd">{t('ssh_remote_shell_cmd')}</option>
-                    <option value="powershell">{t('ssh_remote_shell_powershell')}</option>
-                  </select>
-                </div>
-              </div>
+<div className="ssh-form-row">
+  <div className="ssh-form-group">
+    <label style={{ visibility: 'hidden' }}>{t('common_placeholder')}</label>
+    <label className="ssh-toggle-label">
+      <input
+        type="checkbox"
+        checked={form.agent_forward || false}
+        onChange={(e) => setForm({ ...form, agent_forward: e.target.checked })}
+      />
+      <span>{t('ssh_agent_forward')}</span>
+    </label>
+  </div>
+  <div className="ssh-form-group">
+    <label>{t('ssh_remote_shell')}</label>
+    <select
+      value={form.remote_shell || 'auto'}
+      onChange={(e) =>
+        setForm({
+          ...form,
+          remote_shell: e.target.value as 'auto' | 'linux' | 'cmd' | 'powershell',
+        })
+      }
+    >
+      <option value="auto">{t('ssh_remote_shell_auto')}</option>
+      <option value="linux">{t('ssh_remote_shell_linux')}</option>
+      <option value="cmd">{t('ssh_remote_shell_cmd')}</option>
+      <option value="powershell">{t('ssh_remote_shell_powershell')}</option>
+    </select>
+  </div>
+</div>
 ```
 
 - [ ] **Step 5: Type-check the frontend**
@@ -689,6 +710,7 @@ git commit -m "feat(ssh): add per-asset remote-shell override for completion"
 ## Task 5: Wire per-tab table selection + detection in `TerminalView.tsx`
 
 **Files:**
+
 - Modify: `src/components/Terminal/TerminalView.tsx` — imports (~line 28), per-tab maps (~line 181), `tabScope` neighborhood (~line 210), completion compute (~line 1207), reconnect teardown (~line 1521), SSH connect success (~line 1633), reconnect success (~line 1548).
 
 - [ ] **Step 1: Import the table helpers and type**
@@ -703,7 +725,11 @@ to:
 
 ```ts
 import { buildCompletions, type Completion } from '../../lib/completion';
-import { tableForShellName, tableForRemoteShell, type CommandTable } from '../../lib/commandDictionary';
+import {
+  tableForShellName,
+  tableForRemoteShell,
+  type CommandTable,
+} from '../../lib/commandDictionary';
 ```
 
 - [ ] **Step 2: Add the per-tab table map**
@@ -744,14 +770,14 @@ function normalizeTable(s: string): CommandTable {
 Change the completion call (currently line 1207) from:
 
 ```ts
-              const items = buildCompletions(buf, { scope, cwd, sessionType }, locale);
+const items = buildCompletions(buf, { scope, cwd, sessionType }, locale);
 ```
 
 to:
 
 ```ts
-              const table = tabCommandTable.get(tab.id) ?? syncTable(tab.type, sess);
-              const items = buildCompletions(buf, { scope, cwd, sessionType, table }, locale);
+const table = tabCommandTable.get(tab.id) ?? syncTable(tab.type, sess);
+const items = buildCompletions(buf, { scope, cwd, sessionType, table }, locale);
 ```
 
 (`sess` is already in scope here — it's resolved at the top of this block, currently line 1189.)
@@ -761,13 +787,15 @@ to:
 After `connectionReady = true;` in the SSH branch (currently line 1627), and after the OSC-133 injection block, add (place it right after the closing `}` of the `if (useSettingsStore...cmdHintShellIntegration)` block at ~line 1640):
 
 ```ts
-            // Resolve the completion table: concrete override is synchronous;
-            // 'auto'/unset triggers a one-shot remote probe (best-effort).
-            if (tableForRemoteShell(session.remote_shell ?? null) === null) {
-              invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
-                .then((tbl) => { tabCommandTable.set(tab.id, normalizeTable(tbl)); })
-                .catch(() => {});
-            }
+// Resolve the completion table: concrete override is synchronous;
+// 'auto'/unset triggers a one-shot remote probe (best-effort).
+if (tableForRemoteShell(session.remote_shell ?? null) === null) {
+  invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
+    .then((tbl) => {
+      tabCommandTable.set(tab.id, normalizeTable(tbl));
+    })
+    .catch(() => {});
+}
 ```
 
 - [ ] **Step 6: Re-detect on reconnect**
@@ -775,17 +803,23 @@ After `connectionReady = true;` in the SSH branch (currently line 1627), and aft
 In the `reconnect` function, where stale per-tab state is cleared (after `inputBuffers.set(tab.id, '');`, currently line 1523), add:
 
 ```ts
-        tabCommandTable.delete(tab.id);
+tabCommandTable.delete(tab.id);
 ```
 
 Then, after the reconnect path marks the tab connected (`connectedTabs.add(tab.id);`, currently line 1548), add:
 
 ```ts
-          if (tab.type === 'ssh' && freshSession && tableForRemoteShell(freshSession.remote_shell ?? null) === null) {
-            invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
-              .then((tbl) => { tabCommandTable.set(tab.id, normalizeTable(tbl)); })
-              .catch(() => {});
-          }
+if (
+  tab.type === 'ssh' &&
+  freshSession &&
+  tableForRemoteShell(freshSession.remote_shell ?? null) === null
+) {
+  invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
+    .then((tbl) => {
+      tabCommandTable.set(tab.id, normalizeTable(tbl));
+    })
+    .catch(() => {});
+}
 ```
 
 - [ ] **Step 7: Clean up the map when a tab's terminal is torn down**
@@ -793,7 +827,7 @@ Then, after the reconnect path marks the tab connected (`connectedTabs.add(tab.i
 Find where per-tab maps are deleted on teardown (search the file for `inputBuffers.delete(` — it appears in the tab-cleanup path). Add alongside the other deletions:
 
 ```ts
-    tabCommandTable.delete(tabId);
+tabCommandTable.delete(tabId);
 ```
 
 Use the same key variable (`tabId` or `tab.id`) that the surrounding deletions use. If `inputBuffers.delete` is not present, add `tabCommandTable.delete(tab.id);` next to where `connectedTabs.delete(tab.id)` is called during tab teardown.

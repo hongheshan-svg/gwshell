@@ -41,20 +41,32 @@ export const QuickConnectModal: React.FC = () => {
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') { e.preventDefault(); connect(); }
-    else if (e.key === 'Escape') { e.preventDefault(); close(); }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      connect();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+    }
   };
 
   return (
     <div className="quick-connect-overlay" onMouseDown={close}>
-      <div className="quick-connect-card" onMouseDown={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
+      <div
+        className="quick-connect-card"
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
+      >
         <div className="quick-connect-title">{t('quickconnect_title')}</div>
         <input
           className="quick-connect-input"
           autoFocus
           placeholder={t('quickconnect_placeholder')}
           value={target}
-          onChange={(e) => { setTarget(e.target.value); setError(''); }}
+          onChange={(e) => {
+            setTarget(e.target.value);
+            setError('');
+          }}
         />
         <input
           className="quick-connect-input"
@@ -66,8 +78,12 @@ export const QuickConnectModal: React.FC = () => {
         />
         {error && <div className="quick-connect-error">{error}</div>}
         <div className="quick-connect-actions">
-          <button className="quick-connect-btn" onClick={close}>{t('quickconnect_cancel')}</button>
-          <button className="quick-connect-btn primary" onClick={connect}>{t('quickconnect_connect')}</button>
+          <button className="quick-connect-btn" onClick={close}>
+            {t('quickconnect_cancel')}
+          </button>
+          <button className="quick-connect-btn primary" onClick={connect}>
+            {t('quickconnect_connect')}
+          </button>
         </div>
       </div>
     </div>

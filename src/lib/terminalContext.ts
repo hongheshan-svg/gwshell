@@ -18,6 +18,7 @@ const ensureContext = (tabId: string): TerminalAiContext => {
 };
 
 const stripAnsi = (text: string) =>
+  // eslint-disable-next-line no-control-regex -- ANSI escape sequence, control chars intentional
   text.replace(/\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g, '');
 
 export const setTerminalCwd = (tabId: string, cwd: string) => {
@@ -38,8 +39,13 @@ export const appendTerminalOutput = (tabId: string, payload: string) => {
   const context = ensureContext(tabId);
   const next = `${context.recentOutput ?? ''}${clean}`;
   context.recentOutput =
-    next.length > MAX_RECENT_OUTPUT_CHARS ? next.slice(next.length - MAX_RECENT_OUTPUT_CHARS) : next;
-  const lines = context.recentOutput.split('\n').map((line) => line.trim()).filter(Boolean);
+    next.length > MAX_RECENT_OUTPUT_CHARS
+      ? next.slice(next.length - MAX_RECENT_OUTPUT_CHARS)
+      : next;
+  const lines = context.recentOutput
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
   const maybePrompt = [...lines].reverse().find((line) => /[$#>]\s*$/.test(line));
   if (maybePrompt) context.prompt = maybePrompt.slice(-120);
 };

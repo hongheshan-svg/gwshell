@@ -42,10 +42,11 @@ export function useAgentAutoContinuation(): AgentAutoContinuationStatus {
       setRuntimeStatus({ inFlight: false, count: 0 });
     }
 
-    const autoEvidence = evidence.filter((item) =>
-      item.source === 'manual' ||
-      item.source === 'alert_rules' ||
-      (policy.live_log_auto_analysis && item.source === 'live_log')
+    const autoEvidence = evidence.filter(
+      (item) =>
+        item.source === 'manual' ||
+        item.source === 'alert_rules' ||
+        (policy.live_log_auto_analysis && item.source === 'live_log'),
     );
     const hasNewAutoEvidence = autoEvidence.length > analyzedAutoEvidenceRef.current;
     const hasNewResults = results.length > analyzedResultsRef.current;
@@ -53,35 +54,39 @@ export function useAgentAutoContinuation(): AgentAutoContinuationStatus {
     if (inFlightRef.current) return;
     if (continuationCountRef.current >= policy.max_auto_continuations) return;
 
-    const timer = window.setTimeout(() => {
-      const snapshot = useAgentStore.getState();
-      if (!snapshot.activeSession || snapshot.activeSession.status === 'cancelled') return;
+    const timer = window.setTimeout(
+      () => {
+        const snapshot = useAgentStore.getState();
+        if (!snapshot.activeSession || snapshot.activeSession.status === 'cancelled') return;
 
-      inFlightRef.current = true;
-      continuationCountRef.current += 1;
-      setRuntimeStatus({ inFlight: true, count: continuationCountRef.current });
-      const request: AgentContinuationRequest = {
-        agent_session_id: snapshot.activeSession.id,
-        evidence: snapshot.evidence.slice(-30),
-        latest_update: snapshot.latestUpdate,
-        results: snapshot.results.slice(-20),
-      };
+        inFlightRef.current = true;
+        continuationCountRef.current += 1;
+        setRuntimeStatus({ inFlight: true, count: continuationCountRef.current });
+        const request: AgentContinuationRequest = {
+          agent_session_id: snapshot.activeSession.id,
+          evidence: snapshot.evidence.slice(-30),
+          latest_update: snapshot.latestUpdate,
+          results: snapshot.results.slice(-20),
+        };
 
-      invoke('continue_agent_session', { request })
-        .then(() => {
-          analyzedAutoEvidenceRef.current = snapshot.evidence.filter((item) =>
-            item.source === 'manual' ||
-            item.source === 'alert_rules' ||
-            (policy.live_log_auto_analysis && item.source === 'live_log')
-          ).length;
-          analyzedResultsRef.current = snapshot.results.length;
-        })
-        .catch((err) => setError(String(err)))
-        .finally(() => {
-          inFlightRef.current = false;
-          setRuntimeStatus({ inFlight: false, count: continuationCountRef.current });
-        });
-    }, hasNewResults ? 500 : 3000);
+        invoke('continue_agent_session', { request })
+          .then(() => {
+            analyzedAutoEvidenceRef.current = snapshot.evidence.filter(
+              (item) =>
+                item.source === 'manual' ||
+                item.source === 'alert_rules' ||
+                (policy.live_log_auto_analysis && item.source === 'live_log'),
+            ).length;
+            analyzedResultsRef.current = snapshot.results.length;
+          })
+          .catch((err) => setError(String(err)))
+          .finally(() => {
+            inFlightRef.current = false;
+            setRuntimeStatus({ inFlight: false, count: continuationCountRef.current });
+          });
+      },
+      hasNewResults ? 500 : 3000,
+    );
 
     return () => window.clearTimeout(timer);
   }, [activeSession, evidence, results, policy, setError]);

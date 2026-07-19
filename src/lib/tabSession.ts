@@ -30,13 +30,21 @@ function restorableTabs(tabs: TabInfo[], sessions: SessionConfig[]): TabInfo[] {
 
 // Serializes the restorable open tabs to localStorage. Never stores `connected`
 // or tab ids (regenerated on restore).
-export function saveOpenTabs(tabs: TabInfo[], sessions: SessionConfig[], activeTabId: string | null): void {
+export function saveOpenTabs(
+  tabs: TabInfo[],
+  sessions: SessionConfig[],
+  activeTabId: string | null,
+): void {
   const restorable = restorableTabs(tabs, sessions);
-  const persisted: PersistedTab[] = restorable.map((t) => ({ sessionId: t.sessionId, type: t.type, title: t.title }));
+  const persisted: PersistedTab[] = restorable.map((t) => ({
+    sessionId: t.sessionId,
+    type: t.type,
+    title: t.title,
+  }));
   const foundIdx = restorable.findIndex((t) => t.id === activeTabId);
   const activeTabIndex = foundIdx >= 0 ? foundIdx : 0;
   try {
-    localStorage.setItem(KEY, JSON.stringify({ tabs: persisted, activeTabIndex } as StoredTabs));
+    localStorage.setItem(KEY, JSON.stringify({ tabs: persisted, activeTabIndex }));
   } catch {
     // quota exceeded / storage disabled — ignore
   }
@@ -46,7 +54,7 @@ export function loadOpenTabs(): StoredTabs | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as StoredTabs;
+    const parsed = JSON.parse(raw) as StoredTabs; // eslint-disable-line no-restricted-syntax -- JSON.parse returns unknown; narrowing via StoredTabs
     if (!parsed || !Array.isArray(parsed.tabs)) return null;
     return parsed;
   } catch {
@@ -56,7 +64,14 @@ export function loadOpenTabs(): StoredTabs | null {
 
 // A stable signature of the restorable tab set + active tab — used to debounce
 // persistence so that `connected`-only changes don't trigger a rewrite.
-export function tabsSignature(tabs: TabInfo[], sessions: SessionConfig[], activeTabId: string | null): string {
+export function tabsSignature(
+  tabs: TabInfo[],
+  sessions: SessionConfig[],
+  activeTabId: string | null,
+): string {
   const restorable = restorableTabs(tabs, sessions);
-  return restorable.map((t) => `${t.sessionId}|${t.type}|${t.title}`).join('\n') + `#${activeTabId ?? ''}`;
+  return (
+    restorable.map((t) => `${t.sessionId}|${t.type}|${t.title}`).join('\n') +
+    `#${activeTabId ?? ''}`
+  );
 }

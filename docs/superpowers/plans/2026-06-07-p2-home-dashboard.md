@@ -16,17 +16,17 @@
 
 ## 文件结构
 
-| 文件 | 职责 |
-|---|---|
-| `src-tauri/src/metrics.rs` | +`DiskStats`、+`df` 探针与解析、+`MetricsManager` ref-count |
-| `src/types/serverMetrics.ts` | 镜像 `DiskStats` + `disk` |
-| `src/hooks/useAssetData.ts` | 新增：资产数据/handlers 共享 hook |
-| `src/components/AssetTable/AssetTable.tsx` | 改用 hook；加「卡片/列表」切换 |
-| `src/components/AssetDashboard/AssetDashboard.tsx` | 新增：分组卡片网格 + 实时指标接线 |
-| `src/components/AssetDashboard/HostDashCard.tsx` | 新增：单卡两态 |
-| `src/components/AssetDashboard/AssetDashboard.css` | 新增：卡片样式（令牌化） |
-| `src/stores/settingsStore.ts` + `src/components/Settings/SettingsModal.tsx` | +`homeView` 默认（两处） |
-| `src/i18n/locales/gwshell.{en,zh}.json` | 文案 |
+| 文件                                                                        | 职责                                                        |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `src-tauri/src/metrics.rs`                                                  | +`DiskStats`、+`df` 探针与解析、+`MetricsManager` ref-count |
+| `src/types/serverMetrics.ts`                                                | 镜像 `DiskStats` + `disk`                                   |
+| `src/hooks/useAssetData.ts`                                                 | 新增：资产数据/handlers 共享 hook                           |
+| `src/components/AssetTable/AssetTable.tsx`                                  | 改用 hook；加「卡片/列表」切换                              |
+| `src/components/AssetDashboard/AssetDashboard.tsx`                          | 新增：分组卡片网格 + 实时指标接线                           |
+| `src/components/AssetDashboard/HostDashCard.tsx`                            | 新增：单卡两态                                              |
+| `src/components/AssetDashboard/AssetDashboard.css`                          | 新增：卡片样式（令牌化）                                    |
+| `src/stores/settingsStore.ts` + `src/components/Settings/SettingsModal.tsx` | +`homeView` 默认（两处）                                    |
+| `src/i18n/locales/gwshell.{en,zh}.json`                                     | 文案                                                        |
 
 ---
 
@@ -37,6 +37,7 @@
 - [ ] **Step 1: 加 `DiskStats` 结构 + 进 `MetricsSnapshot`**
 
 在 `metrics.rs` 的 `NetStats` 之后加：
+
 ```rust
 #[derive(Debug, Serialize, Clone, Default)]
 pub struct DiskStats {
@@ -45,7 +46,9 @@ pub struct DiskStats {
     pub mount: String,
 }
 ```
+
 在 `MetricsSnapshot` 里加字段（放在 `net` 后）：
+
 ```rust
     pub disk: Option<DiskStats>,
 ```
@@ -53,11 +56,14 @@ pub struct DiskStats {
 - [ ] **Step 2: 加 `parse_df` 解析函数**
 
 `df -kP /` 输出形如：
+
 ```
 Filesystem     1024-blocks     Used Available Capacity Mounted on
 /dev/sda1         41251136 12345678  26800000      32% /
 ```
+
 加解析（取第 2 数据行，单位 KiB→bytes）：
+
 ```rust
 /// Parse `df -kP /` output. Returns DiskStats for the (single) data row.
 pub fn parse_df(text: &str) -> Option<DiskStats> {
@@ -78,6 +84,7 @@ pub fn parse_df(text: &str) -> Option<DiskStats> {
 - [ ] **Step 3: 在探针批命令里加 DISK 段**
 
 找到周期探针字符串（含 `echo '---LOAD---'; cat /proc/loadavg` 那段，约 line 598-602），在末尾追加一行：
+
 ```
 echo '---DISK---';   df -kP / 2>/dev/null
 ```
@@ -89,6 +96,7 @@ echo '---DISK---';   df -kP / 2>/dev/null
 - [ ] **Step 5: 镜像到 TS 类型**
 
 `src/types/serverMetrics.ts`：加
+
 ```ts
 export interface DiskStats {
   total_bytes: number;
@@ -96,6 +104,7 @@ export interface DiskStats {
   mount: string;
 }
 ```
+
 并在 `MetricsSnapshot` 加 `disk: DiskStats | null;`（放在 `net` 后）。
 
 - [ ] **Step 6: 验证**
@@ -105,6 +114,7 @@ Run: `cd .. && npm run build` → 通过（TS 镜像无误）。
 （若 metrics.rs 有 `#[cfg(test)]` 解析测试，加一个 `parse_df` 单测；否则跳过。）
 
 - [ ] **Step 7: Commit**
+
 ```bash
 git add src-tauri/src/metrics.rs src/types/serverMetrics.ts
 git commit -m "feat(metrics): collect root-fs disk usage via df (P2)"
@@ -123,10 +133,11 @@ Read `MetricsManager`（`start` / `stop` / `stop_all` / 内部 map）。确认�
 - [ ] **Step 2: 加 ref-count**
 
 为每个 `session_id` 维护计数（如 `HashMap<String, usize>` 或在现有句柄结构里加 `refs: usize`）：
+
 - `start(session_id, ..)`：计数 +1；仅当从 0→1 时真正 spawn 轮询任务（现有逻辑）。已在运行则只增计数并返回。
 - `stop(session_id)`：计数 -1；仅当降到 0 时真正中止任务并移除（现有逻辑）。
 - `stop_all`：清零所有并中止。
-保持现有的 emit / 任务体不变，只在外层包计数。注意加锁（现有 map 应已在 `Mutex`/`DashMap` 下，沿用）。
+  保持现有的 emit / 任务体不变，只在外层包计数。注意加锁（现有 map 应已在 `Mutex`/`DashMap` 下，沿用）。
 
 - [ ] **Step 3: 验证**
 
@@ -134,6 +145,7 @@ Run: `cd src-tauri && cargo build` → 通过。
 逻辑核对：连续两次 `start` 同一 session 只启一个任务；两次 `stop` 才真正停。
 
 - [ ] **Step 4: Commit**
+
 ```bash
 git add src-tauri/src/metrics.rs
 git commit -m "feat(metrics): ref-count pollers so panel+dashboard can share a session (P2)"
@@ -152,15 +164,17 @@ Read `AssetTable.tsx` 全文。识别：session 列表来源、搜索过滤、`h
 - [ ] **Step 2: 新建 hook**
 
 `src/hooks/useAssetData.ts`，导出表格与仪表盘都要用的状态与方法：
+
 ```ts
 export function useAssetData() {
   // sessions, groups, searchQuery+setSearchQuery, filteredSessions,
   // latencyMap, ping(sessionId)/pingAll, handleConnect(session),
   // selectedIds+toggleSelect, deleteSelected
   // ...移动 AssetTable 中对应实现到此，保持行为完全一致
-  return { /* ...上述 */ };
+  return {/* ...上述 */};
 }
 ```
+
 **纯搬运**：把 AssetTable 里这些逻辑原样移入 hook，不改行为。
 
 - [ ] **Step 3: AssetTable 改用 hook**
@@ -173,6 +187,7 @@ Run: `npm run build && npm run smoke:check` → 通过。
 浏览器桩（[[preview-tauri-app-in-browser]]）：主页表格视图渲染、搜索/空态与改前一致（截图比对）。
 
 - [ ] **Step 5: Commit**
+
 ```bash
 git add src/hooks/useAssetData.ts src/components/AssetTable/AssetTable.tsx
 git commit -m "refactor(assets): extract useAssetData hook shared by table+dashboard (P2)"
@@ -196,16 +211,19 @@ Run: `grep -rn "homeView" src/stores/settingsStore.ts src/components/Settings/Se
 - [ ] **Step 3: 工具栏切换控件**
 
 在主页工具栏（`AssetTable` 顶部 `asset-toolbar-left`）加分段切换：
+
 ```tsx
 const homeView = useSettingsStore((s) => s.settings.homeView);
 const setSettings = useSettingsStore((s) => s.setSettings); // 用现有更新方法
 // 渲染两个按钮「卡片/列表」，点击 setSettings({ homeView: 'card' | 'table' })
 ```
+
 （用项目现有的 settings 更新 API；读 settingsStore 确认方法名。）
 
 - [ ] **Step 4: 验证 + Commit**
 
 Run: `npm run build && npm run smoke:check`。
+
 ```bash
 git add src/stores/settingsStore.ts src/components/Settings/SettingsModal.tsx src/components/AssetTable/AssetTable.tsx
 git commit -m "feat(home): add homeView setting + card/list toggle (P2)"
@@ -226,21 +244,32 @@ import type { MetricsSnapshot } from '../../types/serverMetrics';
 interface Props {
   session: SessionConfig;
   connected: boolean;
-  snapshot?: MetricsSnapshot | null;   // live metrics when connected
-  cpuHistory?: number[];               // sparkline
-  latency?: number | null;             // ping ms when not connected
+  snapshot?: MetricsSnapshot | null; // live metrics when connected
+  cpuHistory?: number[]; // sparkline
+  latency?: number | null; // ping ms when not connected
   onConnect: (s: SessionConfig) => void;
   onEdit: (s: SessionConfig) => void;
   onFocus?: (s: SessionConfig) => void; // focus existing tab if connected
 }
 
-export const HostDashCard: React.FC<Props> = ({ session, connected, snapshot, cpuHistory, latency, onConnect, onEdit, onFocus }) => {
+export const HostDashCard: React.FC<Props> = ({
+  session,
+  connected,
+  snapshot,
+  cpuHistory,
+  latency,
+  onConnect,
+  onEdit,
+  onFocus,
+}) => {
   // header: status dot (ok/off) + name + color tag stripe + actions (edit, connect/focus)
   // connected: <MetricStrip snapshot cpuHistory/>  (CPU ring, MEM bar, DISK bar, LOAD chip, net sparkline)
   // disconnected: ping badge + 连接 + last-seen
 };
 ```
+
 指标小件（同文件内小组件或内联）：
+
 - CPU 环：`conic-gradient(var(--accent) calc(p%), var(--border-color) 0)`；阈值色 <70 `--accent` / 70–90 `--warning` / >90 `--danger`。
 - 内存条/磁盘条：`width: used/total%`；磁盘来自 `snapshot.disk`（无则隐藏该条）。
 - 负载：`snapshot.cpu.loadavg_1m`（按核数着色：>cores 警示）。
@@ -255,6 +284,7 @@ export const HostDashCard: React.FC<Props> = ({ session, connected, snapshot, cp
 Run: `npm run build`。先在 Task 6 接入网格后用桩截图看卡。此步仅保证编译通过。
 
 - [ ] **Step 4: Commit**
+
 ```bash
 git add src/components/AssetDashboard/HostDashCard.tsx src/components/AssetDashboard/AssetDashboard.css
 git commit -m "feat(dashboard): HostDashCard with connected/offline states (P2)"
@@ -279,6 +309,7 @@ export const AssetDashboard: React.FC = () => {
   //   onConnect={handleConnect} onEdit=... onFocus=... /> </div>
 };
 ```
+
 网格 CSS（布局 A）：`.dash-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }`。
 
 - [ ] **Step 2: 主页按 homeView 切换渲染**
@@ -291,6 +322,7 @@ Run: `npm run build && npm run smoke:check`。
 浏览器桩：注入若干假 session（或用真应用）确认——默认进卡片视图、按分组、卡片两态、切到列表是原表格。截图确认布局 A 紧凑。
 
 - [ ] **Step 4: Commit**
+
 ```bash
 git add src/components/AssetDashboard/AssetDashboard.tsx src/components/AssetTable/AssetTable.tsx
 git commit -m "feat(dashboard): grouped host-card grid as default home view (P2)"
@@ -305,11 +337,13 @@ git commit -m "feat(dashboard): grouped host-card grid as default home view (P2)
 - [ ] **Step 1: 为已连接会话启动/订阅指标**
 
 在 `AssetDashboard` 内 `useEffect`：
+
 ```ts
 // connectedSshSessionIds = tabs.filter(t=>t.type==='ssh' && t.connected).map(t=>t.sessionId)
 // for each id: invoke('start_server_metrics', { sessionId: id }); listen(`server-metrics-${id}`, e => setSnap(id, e.payload))
 // cleanup: unlisten all; for each id: invoke('stop_server_metrics'... or existing stop cmd)
 ```
+
 读 ServerPanel.tsx 复用其 invoke 命令名/事件名（`server-metrics-${id}` / `server-metrics-error-${id}`）与 history 节流模式。指标快照存 `Record<sessionId, MetricsSnapshot>`，CPU history 存 `Record<sessionId, number[]>`（长度 ≤60），节流 forceRender。
 
 - [ ] **Step 2: 喂给卡片**
@@ -326,6 +360,7 @@ Run: `npm run build && npm run smoke:check`。
 真应用：连 1–2 台 SSH → 主页卡片实时显示 CPU/内存/磁盘/负载/网络；断开降级；与服务器面板抽屉同开同一台无冲突。
 
 - [ ] **Step 5: Commit**
+
 ```bash
 git add src/components/AssetDashboard/AssetDashboard.tsx
 git commit -m "feat(dashboard): live metrics on connected host cards (P2)"
@@ -345,6 +380,7 @@ git commit -m "feat(dashboard): live metrics on connected host cards (P2)"
 - [ ] **Step 2: 校验 + Commit**
 
 Run: `npm run build`（i18n 类型若由 keys 生成则验证）。
+
 ```bash
 git add src/i18n/locales/gwshell.en.json src/i18n/locales/gwshell.zh.json src/components/AssetDashboard
 git commit -m "i18n(dashboard): card/list, disk, load, offline strings (P2)"

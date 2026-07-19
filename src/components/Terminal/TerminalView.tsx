@@ -1,28 +1,45 @@
-import React, { useEffect, useRef, useCallback, useState } from "react";
-import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import { SearchAddon } from "@xterm/addon-search";
-import { WebLinksAddon } from "@xterm/addon-web-links";
-import { WebglAddon } from "@xterm/addon-webgl";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { readText as clipboardRead, writeText as clipboardWrite } from "@tauri-apps/plugin-clipboard-manager";
+import React, { useEffect, useRef, useCallback, useState } from 'react';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { SearchAddon } from '@xterm/addon-search';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import { WebglAddon } from '@xterm/addon-webgl';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import {
+  readText as clipboardRead,
+  writeText as clipboardWrite,
+} from '@tauri-apps/plugin-clipboard-manager';
 import { useTranslation } from 'react-i18next';
-import type { TabInfo } from "../../types";
-import { useAppStore } from "../../stores/appStore";
-import { useSettingsStore } from "../../stores/settingsStore";
-import { terminalInstances } from "./terminalRegistry";
+import type { TabInfo } from '../../types';
+import { useAppStore } from '../../stores/appStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { terminalInstances } from './terminalRegistry';
 import * as commandHistory from '../../lib/commandHistory';
 import { resolveTerminalTheme } from '../../lib/terminalThemes';
 import { runLoginScript } from '../../lib/sendScript';
 import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';
 import { buildCompletions, type Completion } from '../../lib/completion';
-import { tableForShellName, tableForRemoteShell, type CommandTable } from '../../lib/commandDictionary';
+import {
+  listenTypedEvent,
+  type DockerPickPayload,
+  type DockerCancelPayload,
+} from '../../lib/ipcEvents';
+import {
+  tableForShellName,
+  tableForRemoteShell,
+  type CommandTable,
+} from '../../lib/commandDictionary';
 import { getXtermWindowsPty } from '../../lib/terminalPtyOptions';
-import { appendTerminalOutput, clearTerminalAiContext, setTerminalCwd, setTerminalSelection } from '../../lib/terminalContext';
+import {
+  appendTerminalOutput,
+  clearTerminalAiContext,
+  setTerminalCwd,
+  setTerminalSelection,
+} from '../../lib/terminalContext';
 import { CompletionDropdown } from './CompletionDropdown';
 import i18n from '../../i18n';
-import "@xterm/xterm/css/xterm.css";
+import '@xterm/xterm/css/xterm.css';
 
 interface TerminalViewProps {
   tab: TabInfo;
@@ -47,7 +64,8 @@ interface TerminalContextMenu {
   canCopy: boolean;
 }
 
-const isPasteAction = (value: string) => value === "paste" || value === "Paste" || value === "\u7c98\u8d34";
+const isPasteAction = (value: string) =>
+  value === 'paste' || value === 'Paste' || value === '\u7c98\u8d34';
 
 // Matches the tail of a terminal line that prompts for a secret. Covers
 // English + Chinese prompts from sudo/su/mysql/ssh-keygen/passphrase/TOTP etc.
@@ -59,12 +77,13 @@ const isPasteAction = (value: string) => value === "paste" || value === "Paste" 
 // The keyword must be the last word-ish token before the colon (allowing only a
 // short trailing qualifier like "for user"), so MOTD/banner/help lines that
 // merely mention "password" don't trip it. Anchored to end-of-line.
-const PASSWORD_PROMPT_RE = /(?:password|passphrase|passcode|verification code|密码|口令|密钥短语|验证码)(?:\s+for\s+\S+)?[:：]\s*$/i;
+const PASSWORD_PROMPT_RE =
+  /(?:password|passphrase|passcode|verification code|密码|口令|密钥短语|验证码)(?:\s+for\s+\S+)?[:：]\s*$/i;
 
 const writeClipboardText = async (text: string) => {
   const browserWrite = navigator.clipboard?.writeText(text).catch(() => {});
   await clipboardWrite(text).catch(() => browserWrite);
-  const current = await clipboardRead().catch(() => "");
+  const current = await clipboardRead().catch(() => '');
   if (current !== text) {
     await browserWrite;
     await clipboardWrite(text).catch(() => {});
@@ -73,24 +92,24 @@ const writeClipboardText = async (text: string) => {
 
 const readClipboardText = async () => {
   const tauriText = await clipboardRead().catch(() => undefined);
-  if (typeof tauriText === "string") return tauriText;
-  return navigator.clipboard?.readText().catch(() => "") ?? "";
+  if (typeof tauriText === 'string') return tauriText;
+  return navigator.clipboard?.readText().catch(() => '') ?? '';
 };
 
 const readTerminalSelection = (terminal: Terminal) => {
   const selection = terminal.getSelection();
-  return selection && selection.trim().length > 0 ? selection : "";
+  return selection && selection.trim().length > 0 ? selection : '';
 };
 
 const isMacPlatform = () => {
-  if (cachedOsInfo?.os === "macos") return true;
+  if (cachedOsInfo?.os === 'macos') return true;
   return /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
 };
 
 const isCopyShortcut = (e: KeyboardEvent) => {
   const key = e.key.toLowerCase();
-  const isKeyC = e.code === "KeyC" || key === "c";
-  const isInsert = e.code === "Insert" || key === "insert";
+  const isKeyC = e.code === 'KeyC' || key === 'c';
+  const isInsert = e.code === 'Insert' || key === 'insert';
   const isMac = isMacPlatform();
 
   if (isMac && e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && isKeyC) return true;
@@ -101,13 +120,14 @@ const isCopyShortcut = (e: KeyboardEvent) => {
 
 const isPasteShortcut = (e: KeyboardEvent, ctrlVPaste: boolean) => {
   const key = e.key.toLowerCase();
-  const isKeyV = e.code === "KeyV" || key === "v";
-  const isInsert = e.code === "Insert" || key === "insert";
+  const isKeyV = e.code === 'KeyV' || key === 'v';
+  const isInsert = e.code === 'Insert' || key === 'insert';
   const isMac = isMacPlatform();
 
   if (isMac && e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && isKeyV) return true;
   if (!e.metaKey && e.ctrlKey && e.shiftKey && !e.altKey && isKeyV) return true;
-  if (!isMac && ctrlVPaste && !e.metaKey && e.ctrlKey && !e.shiftKey && !e.altKey && isKeyV) return true;
+  if (!isMac && ctrlVPaste && !e.metaKey && e.ctrlKey && !e.shiftKey && !e.altKey && isKeyV)
+    return true;
   return !e.metaKey && !e.ctrlKey && e.shiftKey && !e.altKey && isInsert;
 };
 
@@ -117,17 +137,22 @@ let osInfoPromise: Promise<{ os: string; windowsBuild?: number }> | null = null;
 
 async function getOsInfo(): Promise<{ os: string; windowsBuild?: number }> {
   if (cachedOsInfo) return cachedOsInfo;
-  if (!osInfoPromise) {
-    osInfoPromise = invoke<{ os: string; windowsBuild?: number }>("get_os_info")
-      .then((info) => { cachedOsInfo = info; return info; })
-      .catch(() => { const fallback = { os: "unknown" }; cachedOsInfo = fallback; return fallback; });
-  }
+  osInfoPromise ??= invoke<{ os: string; windowsBuild?: number }>('get_os_info')
+    .then((info) => {
+      cachedOsInfo = info;
+      return info;
+    })
+    .catch(() => {
+      const fallback = { os: 'unknown' };
+      cachedOsInfo = fallback;
+      return fallback;
+    });
   return osInfoPromise;
 }
 
 // Pre-warm: start fetching OS info immediately at module load time
 // so it's ready before the first terminal is created.
-getOsInfo();
+void getOsInfo();
 
 // Track which tab IDs have active backend connections (SSH/PTY/serial)
 // so we can avoid closing them during split-mode transitions.
@@ -138,6 +163,23 @@ const connectedTabs = new Set<string>();
 // Matches VSCode's _suggestedRendererType mechanism — avoids repeated
 // WebGL init failures across multiple tabs.
 let suggestedRendererTypeDom = false;
+
+// Dev-only WebGL renderer observability. Toggle from devtools at runtime:
+//   localStorage.setItem('gwshell:webgl-debug', '1')
+// When enabled, the WebGL addon's texture-atlas lifecycle events (atlas
+// rebuild / page add / page remove) are traced to the console. This is the
+// runtime signal that the renderer is exercising the atlas — e.g. confirming
+// a DPR/resize-triggered atlas swap, or that a context-loss → DOM fallback
+// happened. Matches VSCode's WebGL renderer logging/telemetry path. Silent
+// in production (the read is cheap and cached per call). Used by the atlas
+// event wiring in the WebGL load block below.
+function webglDebugEnabled(): boolean {
+  try {
+    return localStorage.getItem('gwshell:webgl-debug') === '1';
+  } catch {
+    return false;
+  }
+}
 
 // Global map of event-listener cleanup functions keyed by tab ID.
 // Ensures only ONE set of listeners exists per tab at any time, even
@@ -162,34 +204,37 @@ const sentFirstResize = new Set<string>();
 const reconnectableTabs = new Set<string>();
 
 // Command history: per-tab line buffer, completion state, and callbacks.
-const inputBuffers         = new Map<string, string>();
-const completionSetters    = new Map<string, (items: Completion[], index: number, x: number, y: number, above: boolean) => void>();
-const completionAccept     = new Map<string, (suffix: string) => void>();
+const inputBuffers = new Map<string, string>();
+const completionSetters = new Map<
+  string,
+  (items: Completion[], index: number, x: number, y: number, above: boolean) => void
+>();
+const completionAccept = new Map<string, (suffix: string) => void>();
 
-const tabCwd            = new Map<string, string>();
+const tabCwd = new Map<string, string>();
 // Cache of remote-OS probe results keyed by host, so opening multiple SSH
 // tabs to the same host doesn't re-run `uname`/`%COMSPEC%` exec probes each
 // time. Entries expire after 5 minutes (a host's OS doesn't change often,
 // but a re-provisioned box should eventually be re-detected).
-const remoteOsCache     = new Map<string, { table: CommandTable; at: number }>();
-const REMOTE_OS_TTL_MS  = 5 * 60 * 1000;
-const tabCompletions    = new Map<string, Completion[]>();
-const tabCompletionIdx  = new Map<string, number>();
-const completionNav     = new Map<string, boolean>(); // user moved selection with ↑/↓
-const tabInputSenders   = new Map<string, (data: string) => void>(); // populated by the snippet input-sender task
-const bracketedPaste    = new Map<string, boolean>();
+const remoteOsCache = new Map<string, { table: CommandTable; at: number }>();
+const REMOTE_OS_TTL_MS = 5 * 60 * 1000;
+const tabCompletions = new Map<string, Completion[]>();
+const tabCompletionIdx = new Map<string, number>();
+const completionNav = new Map<string, boolean>(); // user moved selection with ↑/↓
+const tabInputSenders = new Map<string, (data: string) => void>(); // populated by the snippet input-sender task
+const bracketedPaste = new Map<string, boolean>();
 // Set when the terminal's last output line looks like a password / passphrase
 // / verification-code prompt. While set, typed input is NOT recorded as command
 // history and completions are suppressed — otherwise a password entered at a
 // sudo/mysql/su prompt would be captured verbatim and later surfaced as a
 // completion suggestion.
-const awaitingPassword  = new Map<string, boolean>();
+const awaitingPassword = new Map<string, boolean>();
 // Auto-clears awaitingPassword after a few seconds so a stale prompt (or a rare
 // false positive) can't permanently disable history/completions for a tab.
 const awaitingPasswordTimer = new Map<string, ReturnType<typeof setTimeout>>();
 // Resolved completion table per tab. For SSH 'auto', filled in asynchronously
 // by detect_remote_os; for other types it is derived synchronously (see syncTable).
-const tabCommandTable   = new Map<string, CommandTable>();
+const tabCommandTable = new Map<string, CommandTable>();
 
 function isInteractiveTerminal(type: string): boolean {
   return type === 'ssh' || type === 'localshell' || type === 'serial' || type === 'docker';
@@ -203,9 +248,13 @@ function isInteractiveTerminal(type: string): boolean {
  * (proposed/internal) render service shape is unavailable.
  */
 function cellSize(term: Terminal, el: HTMLElement): { w: number; h: number } {
-  const cell = (term as unknown as {
-    _core?: { _renderService?: { dimensions?: { css?: { cell?: { width: number; height: number } } } } };
-  })._core?._renderService?.dimensions?.css?.cell;
+  // eslint-disable-next-line no-restricted-syntax
+  const termWithCore = term as unknown as {
+    _core?: {
+      _renderService?: { dimensions?: { css?: { cell?: { width: number; height: number } } } };
+    };
+  };
+  const cell = termWithCore._core?._renderService?.dimensions?.css?.cell;
   if (cell && cell.width > 0 && cell.height > 0) return { w: cell.width, h: cell.height };
   return { w: el.clientWidth / term.cols, h: el.clientHeight / term.rows };
 }
@@ -255,16 +304,23 @@ function estimateDropdownRows(items: Completion[]): number {
 /** Remove event listeners for a tab (idempotent). */
 function cleanupTabListeners(tabId: string): void {
   const fn = tabListenerCleanups.get(tabId);
-  if (fn) { fn(); tabListenerCleanups.delete(tabId); }
+  if (fn) {
+    fn();
+    tabListenerCleanups.delete(tabId);
+  }
   reconnectableTabs.delete(tabId);
 }
 
 function cleanupTerminalInteractions(tabId: string): void {
   const fn = terminalInteractionCleanups.get(tabId);
-  if (fn) { fn(); terminalInteractionCleanups.delete(tabId); }
+  if (fn) {
+    fn();
+    terminalInteractionCleanups.delete(tabId);
+  }
 }
 
 // Returns true if input could be queued for the given tab.
+// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
 export function sendInputToTab(tabId: string, data: string): boolean {
   const sender = tabInputSenders.get(tabId);
   if (!sender) return false;
@@ -273,6 +329,7 @@ export function sendInputToTab(tabId: string, data: string): boolean {
 }
 
 /** Destroy a terminal instance associated with a tab (called when the tab closes). */
+// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
 export function destroyTerminal(tabId: string): void {
   cleanupTabListeners(tabId);
   cleanupTerminalInteractions(tabId);
@@ -299,12 +356,17 @@ export function destroyTerminal(tabId: string): void {
   tabInputSenders.delete(tabId);
   bracketedPaste.delete(tabId);
   const apTimer = awaitingPasswordTimer.get(tabId);
-  if (apTimer) { clearTimeout(apTimer); awaitingPasswordTimer.delete(tabId); }
+  if (apTimer) {
+    clearTimeout(apTimer);
+    awaitingPasswordTimer.delete(tabId);
+  }
   awaitingPassword.delete(tabId);
   clearTerminalAiContext(tabId);
   const inst = terminalInstances.get(tabId);
   if (inst) {
-    try { inst.rendererAddon?.dispose(); } catch {}
+    try {
+      inst.rendererAddon?.dispose();
+    } catch {}
     inst.terminal.dispose();
     terminalInstances.delete(tabId);
   }
@@ -316,6 +378,7 @@ export function destroyTerminal(tabId: string): void {
  * After fitting, forces a full row redraw so the renderer always
  * shows content consistent with the new dimensions.
  */
+// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
 export function safeFit(tabId: string): void {
   const inst = terminalInstances.get(tabId);
   if (!inst) return;
@@ -329,6 +392,7 @@ export function safeFit(tabId: string): void {
   } catch {}
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
 export function scheduleTerminalFit(tabId: string): void {
   if (fitFrameIds.has(tabId)) return;
   const frameId = requestAnimationFrame(() => {
@@ -338,11 +402,12 @@ export function scheduleTerminalFit(tabId: string): void {
   fitFrameIds.set(tabId, frameId);
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
 export function scheduleTerminalResizeSettle(
   tabId: string,
   sessionId: string,
   tabType: TabInfo['type'],
-  delayMs = 180
+  delayMs = 180,
 ): void {
   const existing = settleTimerIds.get(tabId);
   if (existing) clearTimeout(existing);
@@ -371,10 +436,11 @@ export function scheduleTerminalResizeSettle(
  *     re-issue resize_pty/resize_ssh unconditionally to trigger SIGWINCH
  *     and force the TUI to repaint.
  */
+// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
 export function forceTerminalRedraw(
   tabId: string,
   sessionId: string,
-  tabType: TabInfo['type']
+  tabType: TabInfo['type'],
 ): void {
   const inst = terminalInstances.get(tabId);
   if (!inst) return;
@@ -382,17 +448,27 @@ export function forceTerminalRedraw(
   if (!el) return;
   const rect = el.getBoundingClientRect();
   if (rect.width < 2 || rect.height < 2) return;
-  try { inst.fitAddon.fit(); } catch {}
-  try { inst.terminal.clearTextureAtlas(); } catch {}
-  try { inst.terminal.refresh(0, inst.terminal.rows - 1); } catch {}
+  try {
+    inst.fitAddon.fit();
+  } catch {}
+  try {
+    inst.terminal.clearTextureAtlas();
+  } catch {}
+  try {
+    inst.terminal.refresh(0, inst.terminal.rows - 1);
+  } catch {}
 
   // ConPTY redraws asynchronously after receiving SIGWINCH. The first refresh
   // clears the stale glyph atlas; this deferred second pass catches ConPTY's
   // asynchronous repaint, eliminating ghost cells in TUI apps.
   const term = inst.terminal;
   requestAnimationFrame(() => {
-    try { term.clearTextureAtlas(); } catch {}
-    try { term.refresh(0, term.rows - 1); } catch {}
+    try {
+      term.clearTextureAtlas();
+    } catch {}
+    try {
+      term.refresh(0, term.rows - 1);
+    } catch {}
   });
 
   if (tabType === 'serial' || tabType === 'asset-list') return;
@@ -416,7 +492,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
   const { t } = useTranslation();
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
-  const selectionSnapshotRef = useRef("");
+  const selectionSnapshotRef = useRef('');
 
   useEffect(() => {
     completionSetters.set(tab.id, (items, index, x, y, above) => {
@@ -462,20 +538,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
     if (selection) {
       void writeClipboardText(selection);
       terminal.clearSelection();
-      selectionSnapshotRef.current = "";
+      selectionSnapshotRef.current = '';
     }
     terminal.focus();
     setContextMenu(null);
   }, [tab.id]);
 
-  const maybePasteText = useCallback((text: string) => {
-    if (!text) return;
-    if (useSettingsStore.getState().settings.pasteWarnMultiline && text.includes('\n')) {
-      setPasteConfirm(text);
-    } else {
-      terminalInstances.get(tab.id)?.terminal.paste(text);
-    }
-  }, [tab.id]);
+  const maybePasteText = useCallback(
+    (text: string) => {
+      if (!text) return;
+      if (useSettingsStore.getState().settings.pasteWarnMultiline && text.includes('\n')) {
+        setPasteConfirm(text);
+      } else {
+        terminalInstances.get(tab.id)?.terminal.paste(text);
+      }
+    },
+    [tab.id],
+  );
 
   const pasteClipboard = useCallback(() => {
     const inst = terminalInstances.get(tab.id);
@@ -518,7 +597,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
     // runLoginScript schedules nested setTimeouts for delayed segments; collect
     // their cancel functions too so teardown aborts the whole script, not just
     // the outer 300ms trigger.
-    const initScriptCancels: Array<() => void> = [];
+    const initScriptCancels: (() => void)[] = [];
 
     const initTerminal = async () => {
       const existingInstance = terminalInstances.get(tab.id);
@@ -530,10 +609,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // advertising `windowsPty` for them is wrong. Defined here (outside the
       // `if (!instance)` block) so it's available throughout initTerminal.
       const usesLocalConpty = (): boolean => {
-        if (tab.type === "localshell") return true;
-        if (tab.type === "docker") {
+        if (tab.type === 'localshell') return true;
+        if (tab.type === 'docker') {
           const dsess = sessionsRef.current.find((s) => s.id === tab.sessionId);
-          return (dsess?.docker_connect_method ?? "").toLowerCase() !== "ssh";
+          return (dsess?.docker_connect_method ?? '').toLowerCase() !== 'ssh';
         }
         return false;
       };
@@ -541,7 +620,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // Collects dispose functions for per-tab xterm parser handlers (e.g. the
       // ConPTY DA1 response handler) that need to be torn down with the rest
       // of the tab's listeners on remount/close.
-      const pendingDisposes: Array<{ dispose(): void }> = [];
+      const pendingDisposes: { dispose(): void }[] = [];
 
       if (!instance) {
         // Fetch platform info to configure windowsPty for the LOCAL ConPTY
@@ -571,7 +650,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           // reliably forward it — a blinking default would then leak through as a
           // never-stopping blink on Windows. Apps still override this on macOS.
           cursorBlink: false,
-          cursorStyle: "block",
+          cursorStyle: 'block',
           cursorWidth: 1,
           // Match VSCode: use 'outline' for inactive cursor so the cursor
           // doesn't toggle between full-block and bar during focus changes
@@ -580,7 +659,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           // Show cursor before first write so it doesn't pop in.
           showCursorImmediately: true,
           blinkIntervalDuration: 600,
-          theme: resolveTerminalTheme(useSettingsStore.getState().settings.terminalColorScheme, useAppStore.getState().theme),
+          theme: resolveTerminalTheme(
+            useSettingsStore.getState().settings.terminalColorScheme,
+            useAppStore.getState().theme,
+          ),
           allowProposedApi: true,
           scrollback: parseInt(s.terminalMaxScrollback) || 10000,
           copyOnSelect: false,
@@ -606,6 +688,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           // Match VSCode: scroll sensitivity for mouse wheel.
           fastScrollSensitivity: 5,
           scrollSensitivity: 1,
+          // Match VSCode: smooth scroll duration. VSCode maps
+          // terminal.integrated.smoothScrolling → smoothScrollDuration (0 when
+          // off, a positive ms value when on). Default is off (0 = instant),
+          // which keeps the terminal in lockstep with the PTY's output stream
+          // instead of animating behind it. Set explicitly so the hook point is
+          // visible if a smoothScrolling setting is added later.
+          smoothScrollDuration: 0,
         };
 
         // Only the LOCAL PTY backend (local shell, and Docker-over-local-PTY)
@@ -622,7 +711,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         // keyboard protocol for enhanced key reporting. Both are opt-in: apps
         // must request them via CSI sequences to activate, so setting them for
         // SSH/serial is safe — remote TUI apps can then use these protocols.
-        (termOpts as Record<string, unknown>).vtExtensions = {
+        termOpts.vtExtensions = {
           win32InputMode: usesLocalConpty(),
           kittyKeyboard: false,
         };
@@ -634,9 +723,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         // forces a re-measure. Race against a 600ms cap because document.fonts
         // .load hangs indefinitely for a missing/404'd font.
         try {
-          if (typeof document !== "undefined" && document.fonts?.load) {
+          if (typeof document !== 'undefined' && document.fonts?.load) {
             const fs = parseInt(s.terminalFontSize) || 13;
-            const family = (s.terminalFont || "monospace").trim();
+            const family = (s.terminalFont || 'monospace').trim();
             await Promise.race([
               document.fonts.load(`${fs}px "${family}"`),
               new Promise<void>((resolve) => setTimeout(resolve, 600)),
@@ -647,7 +736,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         }
         if (cancelled) return;
 
-        const terminal = new Terminal(termOpts as ConstructorParameters<typeof Terminal>[0]);
+        const terminal = new Terminal(termOpts);
 
         const fitAddon = new FitAddon();
         terminal.loadAddon(fitAddon);
@@ -685,9 +774,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         const termRef = instance.terminal;
 
         const doPaste = () => {
-          readClipboardText().then((text) => {
-            if (text) maybePasteText(text);
-          }).catch(() => {});
+          readClipboardText()
+            .then((text) => {
+              if (text) maybePasteText(text);
+            })
+            .catch(() => {});
         };
 
         const doCopy = () => {
@@ -696,7 +787,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           if (!sel) return false;
           void writeClipboardText(sel);
           termRef.clearSelection();
-          selectionSnapshotRef.current = "";
+          selectionSnapshotRef.current = '';
           return true;
         };
 
@@ -765,8 +856,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         const handleMouseDown = (e: MouseEvent) => {
           const s = useSettingsStore.getState().settings;
           if (e.button === 0) {
-            selectionSnapshotRef.current = "";
-            setTerminalSelection(tab.id, "");
+            selectionSnapshotRef.current = '';
+            setTerminalSelection(tab.id, '');
             setContextMenu(null);
             return;
           }
@@ -821,7 +912,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         };
 
         termRef.attachCustomKeyEventHandler((e) => {
-          if (e.type !== "keydown") return true;
+          if (e.type !== 'keydown') return true;
 
           // Completion dropdown: navigate (↑/↓/Ctrl-N/Ctrl-P), accept (Tab/→),
           // dismiss (Esc), smart Enter (accept only if the user navigated).
@@ -890,7 +981,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               e.preventDefault();
               void writeClipboardText(selection);
               termRef.clearSelection();
-              selectionSnapshotRef.current = "";
+              selectionSnapshotRef.current = '';
               return false;
             }
           }
@@ -908,15 +999,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           const selection = readTerminalSelection(termRef) || selectionSnapshotRef.current;
           if (!selection) return;
           e.preventDefault();
-          e.clipboardData?.setData("text/plain", selection);
+          e.clipboardData?.setData('text/plain', selection);
           void writeClipboardText(selection);
           termRef.clearSelection();
-          selectionSnapshotRef.current = "";
+          selectionSnapshotRef.current = '';
         };
 
         const handlePaste = (e: ClipboardEvent) => {
           e.preventDefault();
-          const text = e.clipboardData?.getData("text/plain");
+          const text = e.clipboardData?.getData('text/plain');
           if (text) {
             maybePasteText(text);
           } else {
@@ -926,29 +1017,31 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
 
         const closeContextMenu = () => setContextMenu(null);
 
-        termEl.addEventListener("contextmenu", handleContextMenu, true);
-        termEl.addEventListener("pointerdown", handlePointerDown, true);
-        termEl.addEventListener("mousedown", handleMouseDown, true);
-        termEl.addEventListener("mouseup", handleMouseUp, true);
-        termEl.addEventListener("keydown", handleKeyDown, true);
-        termEl.addEventListener("copy", handleCopy, true);
-        termEl.addEventListener("paste", handlePaste, true);
-        window.addEventListener("click", closeContextMenu);
-        window.addEventListener("blur", closeContextMenu);
+        termEl.addEventListener('contextmenu', handleContextMenu, true);
+        termEl.addEventListener('pointerdown', handlePointerDown, true);
+        termEl.addEventListener('mousedown', handleMouseDown, true);
+        termEl.addEventListener('mouseup', handleMouseUp, true);
+        termEl.addEventListener('keydown', handleKeyDown, true);
+        termEl.addEventListener('copy', handleCopy, true);
+        termEl.addEventListener('paste', handlePaste, true);
+        window.addEventListener('click', closeContextMenu);
+        window.addEventListener('blur', closeContextMenu);
 
         terminalInteractionCleanups.set(tab.id, () => {
-          termEl.removeEventListener("contextmenu", handleContextMenu, true);
-          termEl.removeEventListener("pointerdown", handlePointerDown, true);
-          termEl.removeEventListener("mousedown", handleMouseDown, true);
-          termEl.removeEventListener("mouseup", handleMouseUp, true);
-          termEl.removeEventListener("keydown", handleKeyDown, true);
-          termEl.removeEventListener("copy", handleCopy, true);
-          termEl.removeEventListener("paste", handlePaste, true);
-          window.removeEventListener("click", closeContextMenu);
-          window.removeEventListener("blur", closeContextMenu);
+          termEl.removeEventListener('contextmenu', handleContextMenu, true);
+          termEl.removeEventListener('pointerdown', handlePointerDown, true);
+          termEl.removeEventListener('mousedown', handleMouseDown, true);
+          termEl.removeEventListener('mouseup', handleMouseUp, true);
+          termEl.removeEventListener('keydown', handleKeyDown, true);
+          termEl.removeEventListener('copy', handleCopy, true);
+          termEl.removeEventListener('paste', handlePaste, true);
+          window.removeEventListener('click', closeContextMenu);
+          window.removeEventListener('blur', closeContextMenu);
           if (selectionCopyTimer) clearTimeout(selectionCopyTimer);
           termRef.attachCustomKeyEventHandler(() => true);
-          try { selectionDispose.dispose(); } catch {}
+          try {
+            selectionDispose.dispose();
+          } catch {}
         });
       }
 
@@ -963,15 +1056,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // attempt for subsequent terminals in the same session (VSCode's
       // _suggestedRendererType mechanism).
       if ((wasFreshlyOpened || instance.rendererLost) && !suggestedRendererTypeDom) {
-        try { instance.rendererAddon?.dispose(); } catch {}
+        try {
+          instance.rendererAddon?.dispose();
+        } catch {}
         instance.rendererAddon = undefined;
+        // Reset atlas tracking from any previous (disposed) WebGL addon.
+        instance.textureAtlasCanvases = undefined;
         try {
           // Match VSCode: pass customGlyphs so powerline/box-drawing/custom CSI
           // shapes render as designed glyphs instead of degraded fallbacks.
           const webgl = new WebglAddon({ customGlyphs: true });
           webgl.onContextLoss(() => {
             instance.rendererLost = true;
-            try { webgl.dispose(); } catch {}
+            instance.textureAtlasCanvases = undefined;
+            try {
+              webgl.dispose();
+            } catch {}
             // Match VSCode: re-fit after WebGL dispose because WebGL cell
             // dimensions differ from the DOM renderer's — without this the
             // cursor's per-cell position math uses stale metrics, causing
@@ -979,6 +1079,65 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             safeFit(tab.id);
             forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
           });
+          // Match VSCode: wire the WebGL texture-atlas lifecycle events.
+          // VSCode forwards these to its "Show Terminal Texture Atlas" debug
+          // command and uses them for renderer telemetry. Here we maintain
+          // the live atlas-canvas page list on the instance (so a future debug
+          // viewer can render them without re-touching the addon) and, when
+          // gwshell:webgl-debug is set, trace the lifecycle to the console.
+          //
+          // Semantics (per @xterm/addon-webgl source):
+          //  - onChangeTextureAtlas: a FRESH atlas instance was acquired
+          //    (first load, or a swap after DPR/dimension change / cache
+          //    eviction). Fires with pages[0].canvas. Note: a plain
+          //    clearTextureAtlas() does NOT swap the instance — it only
+          //    clears the pixels and requests a redraw — so this event is the
+          //    signal for an actual atlas replacement, not a texture clear.
+          //  - onAddTextureAtlasCanvas / onRemoveTextureAtlasCanvas: a page
+          //    was added (cache pressure → new page) or removed (compaction).
+          instance.textureAtlasCanvases = [];
+          const dbg = webglDebugEnabled();
+          try {
+            webgl.onChangeTextureAtlas((canvas) => {
+              // Atlas instance replaced — start the page list from page 0.
+              instance.textureAtlasCanvases = [canvas];
+              if (dbg)
+                console.debug(
+                  '[gwshell:webgl] atlas rebuilt (page 0)',
+                  canvas.width,
+                  'x',
+                  canvas.height,
+                );
+            });
+          } catch {
+            /* onChangeTextureAtlas unavailable on this addon version */
+          }
+          try {
+            webgl.onAddTextureAtlasCanvas((canvas) => {
+              const list = instance.textureAtlasCanvases ?? (instance.textureAtlasCanvases = []);
+              if (!list.includes(canvas)) list.push(canvas);
+              if (dbg) console.debug('[gwshell:webgl] atlas page added →', list.length, 'page(s)');
+            });
+          } catch {
+            /* onAddTextureAtlasCanvas unavailable */
+          }
+          try {
+            webgl.onRemoveTextureAtlasCanvas((canvas) => {
+              const list = instance.textureAtlasCanvases;
+              if (list) {
+                const i = list.indexOf(canvas);
+                if (i >= 0) list.splice(i, 1);
+              }
+              if (dbg)
+                console.debug(
+                  '[gwshell:webgl] atlas page removed →',
+                  instance.textureAtlasCanvases?.length ?? 0,
+                  'page(s)',
+                );
+            });
+          } catch {
+            /* onRemoveTextureAtlasCanvas unavailable */
+          }
           instance.terminal.loadAddon(webgl);
           instance.rendererAddon = webgl;
           instance.rendererLost = false;
@@ -987,8 +1146,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           // cursor position is computed against stale cell metrics, causing
           // the cursor to shimmer/flicker in TUI apps (Claude Code, Codex).
           safeFit(tab.id);
-          try { instance.terminal.clearTextureAtlas(); } catch {}
-          try { instance.terminal.refresh(0, instance.terminal.rows - 1); } catch {}
+          try {
+            instance.terminal.clearTextureAtlas();
+          } catch {}
+          try {
+            instance.terminal.refresh(0, instance.terminal.rows - 1);
+          } catch {}
         } catch {
           // WebGL could not be loaded — fall back to the DOM renderer.
           suggestedRendererTypeDom = true;
@@ -1003,17 +1166,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // sessions — SSH/serial PTYs don't go through ConPTY.
       if (usesLocalConpty()) {
         try {
-          const da1Dispose = instance.terminal.parser.registerCsiHandler({ final: 'c' }, (params) => {
-            if (params.length === 0 || (params.length === 1 && params[0] === 0)) {
-              // Send the DA1 response to the PTY input (not terminal.write,
-              // which only writes to xterm's local render buffer). ConPTY
-              // needs to receive the response on its input pipe to avoid the
-              // 1.22+ startup timeout. Matches VSCode's _handleOnData path.
-              sendInputToTab(tab.id, '\x1b[?61;4c');
-              return true;
-            }
-            return false;
-          });
+          const da1Dispose = instance.terminal.parser.registerCsiHandler(
+            { final: 'c' },
+            (params) => {
+              if (params.length === 0 || (params.length === 1 && params[0] === 0)) {
+                // Send the DA1 response to the PTY input (not terminal.write,
+                // which only writes to xterm's local render buffer). ConPTY
+                // needs to receive the response on its input pipe to avoid the
+                // 1.22+ startup timeout. Matches VSCode's _handleOnData path.
+                sendInputToTab(tab.id, '\x1b[?61;4c');
+                return true;
+              }
+              return false;
+            },
+          );
           pendingDisposes.push(da1Dispose);
         } catch {}
       }
@@ -1070,7 +1236,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // BEL — rapid bells (e.g. a script emitting several) would otherwise hit
       // the browser's concurrent-AudioContext cap and silently drop sound.
       let bellCtx: AudioContext | null = null;
-      const bellDispose = instance!.terminal.onBell(() => {
+      const bellDispose = instance.terminal.onBell(() => {
         if (!useSettingsStore.getState().settings.terminalSound) return;
         try {
           if (!bellCtx || bellCtx.state === 'closed') bellCtx = new AudioContext();
@@ -1086,13 +1252,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           osc.start(ctx.currentTime);
           osc.stop(ctx.currentTime + 0.08);
           // The oscillator self-stops; leave the context open for reuse.
-        } catch { /* AudioContext unavailable — silently skip */ }
+        } catch {
+          /* AudioContext unavailable — silently skip */
+        }
       });
 
       // Mouse-wheel zoom: Ctrl+wheel adjusts terminalFontSize when enabled.
       // Attached to the terminal element; reads the setting live so toggling
       // takes effect without reconnect.
-      const termElForWheel = instance!.terminal.element;
+      const termElForWheel = instance.terminal.element;
       const handleWheelZoom = (e: WheelEvent) => {
         if (!e.ctrlKey) return;
         if (!useSettingsStore.getState().settings.mouseWheelZoom) return;
@@ -1105,8 +1273,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         if (next === current) return;
         const newSize = `${next}px`;
         inst.terminal.options.fontSize = next;
-        try { inst.fitAddon.fit(); } catch {}
-        useSettingsStore.getState().save({ ...st, terminalFontSize: newSize }).catch(() => {});
+        try {
+          inst.fitAddon.fit();
+        } catch {}
+        useSettingsStore
+          .getState()
+          .save({ ...st, terminalFontSize: newSize })
+          .catch(() => {});
       };
       if (termElForWheel) {
         termElForWheel.addEventListener('wheel', handleWheelZoom, { passive: false });
@@ -1115,116 +1288,128 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // ── Listener setup ─────────────────────────────────────
       cleanupTabListeners(tab.id);
 
-
       const setupConnection = async () => {
+        if (cancelled) return;
 
-      if (cancelled) return;
+        let eventPrefix: string;
+        let writeCmd: string;
+        let resizeCmd: string | null;
 
-      let eventPrefix: string;
-      let writeCmd: string;
-      let resizeCmd: string | null;
-
-      if (tab.type === "ssh") {
-        eventPrefix = "ssh";
-        writeCmd = "write_to_ssh";
-        resizeCmd = "resize_ssh";
-      } else if (tab.type === "serial") {
-        eventPrefix = "serial";
-        writeCmd = "write_to_serial";
-        resizeCmd = null;
-      } else if (tab.type === "docker") {
-        const dsess = sessionsRef.current.find((s) => s.id === tab.sessionId);
-        const isSshDocker = (dsess?.docker_connect_method ?? '').toLowerCase() === 'ssh';
-        eventPrefix = isSshDocker ? "ssh" : "pty";
-        writeCmd = isSshDocker ? "write_to_ssh" : "write_to_pty";
-        resizeCmd = isSshDocker ? "resize_ssh" : "resize_pty";
-      } else {
-        eventPrefix = "pty";
-        writeCmd = "write_to_pty";
-        resizeCmd = "resize_pty";
-      }
-
-      // Render flow control: coalesce incoming data events and flush to xterm
-      // once per animation frame. Under heavy output (cat, build logs, top) this
-      // caps xterm parsing to one write per frame so the WebView main thread
-      // never saturates and input stays responsive. A byte cap forces an
-      // immediate flush if a single frame accumulates a very large burst.
-      let renderQueue = "";
-      let renderRaf = 0;
-      const RENDER_CAP = 1 << 18; // 256 KB
-      const flushRender = () => {
-        renderRaf = 0;
-        if (!renderQueue) return;
-        const chunk = renderQueue;
-        renderQueue = "";
-        instance?.terminal.write(chunk);
-      };
-      const enqueueRender = (payload: string) => {
-        appendTerminalOutput(tab.id, payload);
-        // Detect password / passphrase / verification prompts in the terminal's
-        // output so we can stop treating the user's next input as a command.
-        // sudo, su, mysql, ssh-keygen, TOTP, etc. all print a prompt ending in
-        // ':' on its own line; matching the tail of the (ANSI-stripped) payload
-        // keeps this cheap. The flag is cleared on the next Enter.
-        if (payload) {
-          const stripped = payload.replace(ANSI_RE, '');
-          if (PASSWORD_PROMPT_RE.test(stripped)) {
-            awaitingPassword.set(tab.id, true);
-            // Auto-clear after 5s so a false positive (banner/help text) can't
-            // permanently suppress history/completions. Re-armed on each match.
-            const prev = awaitingPasswordTimer.get(tab.id);
-            if (prev) clearTimeout(prev);
-            awaitingPasswordTimer.set(tab.id, setTimeout(() => {
-              awaitingPassword.delete(tab.id);
-              awaitingPasswordTimer.delete(tab.id);
-            }, 5000));
-          }
+        if (tab.type === 'ssh') {
+          eventPrefix = 'ssh';
+          writeCmd = 'write_to_ssh';
+          resizeCmd = 'resize_ssh';
+        } else if (tab.type === 'serial') {
+          eventPrefix = 'serial';
+          writeCmd = 'write_to_serial';
+          resizeCmd = null;
+        } else if (tab.type === 'docker') {
+          const dsess = sessionsRef.current.find((s) => s.id === tab.sessionId);
+          const isSshDocker = (dsess?.docker_connect_method ?? '').toLowerCase() === 'ssh';
+          eventPrefix = isSshDocker ? 'ssh' : 'pty';
+          writeCmd = isSshDocker ? 'write_to_ssh' : 'write_to_pty';
+          resizeCmd = isSshDocker ? 'resize_ssh' : 'resize_pty';
+        } else {
+          eventPrefix = 'pty';
+          writeCmd = 'write_to_pty';
+          resizeCmd = 'resize_pty';
         }
-        renderQueue += payload;
-        if (renderQueue.length >= RENDER_CAP) {
-          if (renderRaf) { cancelAnimationFrame(renderRaf); renderRaf = 0; }
-          flushRender();
+
+        // Render flow control: coalesce incoming data events and flush to xterm
+        // once per animation frame. Under heavy output (cat, build logs, top) this
+        // caps xterm parsing to one write per frame so the WebView main thread
+        // never saturates and input stays responsive. A byte cap forces an
+        // immediate flush if a single frame accumulates a very large burst.
+        let renderQueue = '';
+        let renderRaf = 0;
+        const RENDER_CAP = 1 << 18; // 256 KB
+        const flushRender = () => {
+          renderRaf = 0;
+          if (!renderQueue) return;
+          const chunk = renderQueue;
+          renderQueue = '';
+          instance?.terminal.write(chunk);
+        };
+        const enqueueRender = (payload: string) => {
+          appendTerminalOutput(tab.id, payload);
+          // Detect password / passphrase / verification prompts in the terminal's
+          // output so we can stop treating the user's next input as a command.
+          // sudo, su, mysql, ssh-keygen, TOTP, etc. all print a prompt ending in
+          // ':' on its own line; matching the tail of the (ANSI-stripped) payload
+          // keeps this cheap. The flag is cleared on the next Enter.
+          if (payload) {
+            const stripped = payload.replace(ANSI_RE, '');
+            if (PASSWORD_PROMPT_RE.test(stripped)) {
+              awaitingPassword.set(tab.id, true);
+              // Auto-clear after 5s so a false positive (banner/help text) can't
+              // permanently suppress history/completions. Re-armed on each match.
+              const prev = awaitingPasswordTimer.get(tab.id);
+              if (prev) clearTimeout(prev);
+              awaitingPasswordTimer.set(
+                tab.id,
+                setTimeout(() => {
+                  awaitingPassword.delete(tab.id);
+                  awaitingPasswordTimer.delete(tab.id);
+                }, 5000),
+              );
+            }
+          }
+          renderQueue += payload;
+          if (renderQueue.length >= RENDER_CAP) {
+            if (renderRaf) {
+              cancelAnimationFrame(renderRaf);
+              renderRaf = 0;
+            }
+            flushRender();
+            return;
+          }
+          if (!renderRaf) renderRaf = requestAnimationFrame(flushRender);
+        };
+
+        // ── Session logging (optional) ─────────────────────────
+        // When enabled in settings, terminal output is appended (ANSI-stripped)
+        // to a per-session daily log file via the backend. Output is buffered
+        // and flushed on a 1s timer so logging adds no per-chunk IPC overhead.
+        const ANSI_RE =
+          // CSI sequences, OSC sequences (BEL or ST terminated), and other
+          // single/short ESC sequences.
+          // eslint-disable-next-line no-control-regex -- ANSI escape sequence, control chars intentional
+          /\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g;
+        const logName =
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+          sessionsRef.current.find((s) => s.id === tab.sessionId)?.name ||
+          tab.title ||
+          tab.sessionId;
+        let logQueue = '';
+        let logTimer: ReturnType<typeof setTimeout> | null = null;
+        let logDisposed = false;
+        const flushLog = () => {
+          logTimer = null;
+          if (!logQueue) return;
+          const data = logQueue.replace(ANSI_RE, '');
+          logQueue = '';
+          if (!data) return;
+          invoke('append_session_log', { sessionName: logName, data }).catch(() => {});
+        };
+        const enqueueLog = (payload: string) => {
+          if (logDisposed || !useSettingsStore.getState().settings.sessionLogEnabled) return;
+          logQueue += payload;
+          logTimer ??= setTimeout(flushLog, 1000);
+        };
+
+        const unlistenData = await listen<string>(
+          `${eventPrefix}-data-${tab.sessionId}`,
+          (event) => {
+            enqueueRender(event.payload);
+            enqueueLog(event.payload);
+          },
+        );
+        if (cancelled) {
+          unlistenData();
           return;
         }
-        if (!renderRaf) renderRaf = requestAnimationFrame(flushRender);
-      };
 
-      // ── Session logging (optional) ─────────────────────────
-      // When enabled in settings, terminal output is appended (ANSI-stripped)
-      // to a per-session daily log file via the backend. Output is buffered
-      // and flushed on a 1s timer so logging adds no per-chunk IPC overhead.
-      const ANSI_RE =
-        // CSI sequences, OSC sequences (BEL or ST terminated), and other
-        // single/short ESC sequences.
-        /\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g;
-      const logName =
-        sessionsRef.current.find((s) => s.id === tab.sessionId)?.name || tab.title || tab.sessionId;
-      let logQueue = "";
-      let logTimer: ReturnType<typeof setTimeout> | null = null;
-      let logDisposed = false;
-      const flushLog = () => {
-        logTimer = null;
-        if (!logQueue) return;
-        const data = logQueue.replace(ANSI_RE, "");
-        logQueue = "";
-        if (!data) return;
-        invoke("append_session_log", { sessionName: logName, data }).catch(() => {});
-      };
-      const enqueueLog = (payload: string) => {
-        if (logDisposed || !useSettingsStore.getState().settings.sessionLogEnabled) return;
-        logQueue += payload;
-        if (!logTimer) logTimer = setTimeout(flushLog, 1000);
-      };
-
-      const unlistenData = await listen<string>(
-        `${eventPrefix}-data-${tab.sessionId}`,
-        (event) => { enqueueRender(event.payload); enqueueLog(event.payload); }
-      );
-      if (cancelled) { unlistenData(); return; }
-
-      const unlistenExit = await listen(
-        `${eventPrefix}-exit-${tab.sessionId}`,
-        () => {
+        const unlistenExit = await listen(`${eventPrefix}-exit-${tab.sessionId}`, () => {
           flushRender();
           instance?.terminal.write(`\r\n\x1b[33m${t('term_session_ended')}\x1b[0m\r\n`);
           useAppStore.getState().updateTabConnected(tab.id, false);
@@ -1232,608 +1417,607 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           // Only SSH and serial offer press-any-key reconnect. Local shell
           // exit is user-driven; SFTP has no onData handler.
           if (tab.type === 'ssh' || tab.type === 'serial') {
-            instance?.terminal.write(
-              `\x1b[33m${t('term_press_any_key_to_reconnect')}\x1b[0m\r\n`
-            );
+            instance?.terminal.write(`\x1b[33m${t('term_press_any_key_to_reconnect')}\x1b[0m\r\n`);
             reconnectableTabs.add(tab.id);
           }
-        }
-      );
-      if (cancelled) { unlistenData(); unlistenExit(); return; }
-
-      // Coalesce input: normal typing flushes after a tiny delay, while paste
-      // bursts are sliced into bounded IPC payloads. Backend terminal commands
-      // only enqueue to per-session owner threads, so keep a few writes in
-      // flight instead of letting one slow IPC promise stall later keystrokes.
-      let writeQueue = "";
-      let writeTimer: ReturnType<typeof setTimeout> | null = null;
-      let writesInFlight = 0;
-      let writeDisposed = false;
-      const WRITE_FLUSH_MS = 8;
-      const WRITE_RETRY_MS = 24;
-      const WRITE_CHUNK_SIZE = 16 * 1024;
-      const WRITE_INVOKE_TIMEOUT_MS = 1500;
-      // Serialize writes: only one chunk in flight at a time. Parallel dispatch
-      // (with >1 in-flight) reorders bytes on retry — a failed chunk is pushed
-      // back to the queue head while later chunks may already have landed,
-      // corrupting large pastes. Serial dispatch preserves byte order.
-      const WRITE_MAX_IN_FLIGHT = 1;
-      const scheduleWriteFlush = (delayMs = WRITE_FLUSH_MS) => {
-        if (writeTimer || writeDisposed) return;
-        writeTimer = setTimeout(flushWrites, delayMs);
-      };
-      const invokeWrite = (payload: string) =>
-        new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(
-            () => reject(new Error("terminal write timeout")),
-            WRITE_INVOKE_TIMEOUT_MS,
-          );
-          invoke(writeCmd, { sessionId: tab.sessionId, data: payload })
-            .then(() => resolve())
-            .catch(reject)
-            .finally(() => clearTimeout(timeout));
         });
-      const flushWrites = () => {
-        writeTimer = null;
-        if (!writeQueue || writeDisposed) return;
-        while (writeQueue && writesInFlight < WRITE_MAX_IN_FLIGHT && !writeDisposed) {
-          const payload = writeQueue.length > WRITE_CHUNK_SIZE
-            ? writeQueue.slice(0, WRITE_CHUNK_SIZE)
-            : writeQueue;
-          writeQueue = writeQueue.slice(payload.length);
-          writesInFlight += 1;
-          invokeWrite(payload)
-            .catch((err) => {
-              // Any interactive backend can transiently reject a write when its
-              // input buffer is full (PTY/serial return "input buffer full";
-              // SSH's mpsc channel blocks until the 1.5s IPC timeout). Requeue
-              // the chunk and retry with backoff instead of dropping bytes,
-              // which would corrupt pasted input on any backend type.
-              if (isInteractiveTerminal(tab.type) && (String(err).includes("buffer full") || String(err).includes("timeout"))) {
-                writeQueue = payload + writeQueue;
-                scheduleWriteFlush(WRITE_RETRY_MS);
-              }
-            })
-            .finally(() => {
-              writesInFlight -= 1;
-              if (writeQueue) scheduleWriteFlush(0);
-            });
-        }
-        if (writeQueue) scheduleWriteFlush(WRITE_RETRY_MS);
-      };
-      // OSC 7 (cwd) reporting. Command capture is heuristic (onData buffer).
-      const term133 = instance!.terminal;
-      const osc7Dispose = term133.parser.registerOscHandler(7, (payload) => {
-        // payload like file://host/abs/path
-        const m = /^file:\/\/[^/]*(\/.*)$/.exec(payload);
-        if (m) {
-          const cwd = decodeURIComponent(m[1]);
-          tabCwd.set(tab.id, cwd);
-          setTerminalCwd(tab.id, cwd);
-        }
-        return false; // let other handlers run
-      });
-
-      const dataDispose = instance!.terminal.onData((data) => {
-        if (reconnectableTabs.has(tab.id)) {
-          // Connection is dead — swallow this keystroke and reconnect instead.
-          // The keystroke could not have reached the server anyway.
-          reconnectableTabs.delete(tab.id);
-          void reconnect();
+        if (cancelled) {
+          unlistenData();
+          unlistenExit();
           return;
         }
 
-        // Command history: track input line and compute completions.
-        // Generalized beyond SSH; gated by sshHistoryCmd (capture) + cmdHintAllSessions.
-        {
-          const st = useSettingsStore.getState().settings;
-          const captureOn =
-            st.sshHistoryCmd &&
-            isInteractiveTerminal(tab.type) &&
-            (tab.type === 'ssh' || st.cmdHintAllSessions);
-          if (captureOn) {
-            const sess = sessionsRef.current.find((s) => s.id === tab.sessionId);
-            const scope = st.cmdHintScopeByHost ? tabScope(tab.type, sess) : '';
-            const cwd = st.cmdHintScopeByHost ? (tabCwd.get(tab.id) ?? '') : '';
-            const sessionType = tab.type;
+        // Coalesce input: normal typing flushes after a tiny delay, while paste
+        // bursts are sliced into bounded IPC payloads. Backend terminal commands
+        // only enqueue to per-session owner threads, so keep a few writes in
+        // flight instead of letting one slow IPC promise stall later keystrokes.
+        let writeQueue = '';
+        let writeTimer: ReturnType<typeof setTimeout> | null = null;
+        let writesInFlight = 0;
+        let writeDisposed = false;
+        const WRITE_FLUSH_MS = 8;
+        const WRITE_RETRY_MS = 24;
+        const WRITE_CHUNK_SIZE = 16 * 1024;
+        const WRITE_INVOKE_TIMEOUT_MS = 1500;
+        // Serialize writes: only one chunk in flight at a time. Parallel dispatch
+        // (with >1 in-flight) reorders bytes on retry — a failed chunk is pushed
+        // back to the queue head while later chunks may already have landed,
+        // corrupting large pastes. Serial dispatch preserves byte order.
+        const WRITE_MAX_IN_FLIGHT = 1;
+        const scheduleWriteFlush = (delayMs = WRITE_FLUSH_MS) => {
+          if (writeTimer || writeDisposed) return;
+          writeTimer = setTimeout(flushWrites, delayMs);
+        };
+        const invokeWrite = (payload: string) =>
+          new Promise<void>((resolve, reject) => {
+            const timeout = setTimeout(
+              () => reject(new Error('terminal write timeout')),
+              WRITE_INVOKE_TIMEOUT_MS,
+            );
+            invoke(writeCmd, { sessionId: tab.sessionId, data: payload })
+              .then(() => resolve())
+              .catch(reject)
+              .finally(() => clearTimeout(timeout));
+          });
+        const flushWrites = () => {
+          writeTimer = null;
+          if (!writeQueue || writeDisposed) return;
+          while (writeQueue && writesInFlight < WRITE_MAX_IN_FLIGHT && !writeDisposed) {
+            const payload =
+              writeQueue.length > WRITE_CHUNK_SIZE
+                ? writeQueue.slice(0, WRITE_CHUNK_SIZE)
+                : writeQueue;
+            writeQueue = writeQueue.slice(payload.length);
+            writesInFlight += 1;
+            invokeWrite(payload)
+              .catch((err) => {
+                // Any interactive backend can transiently reject a write when its
+                // input buffer is full (PTY/serial return "input buffer full";
+                // SSH's mpsc channel blocks until the 1.5s IPC timeout). Requeue
+                // the chunk and retry with backoff instead of dropping bytes,
+                // which would corrupt pasted input on any backend type.
+                if (
+                  isInteractiveTerminal(tab.type) &&
+                  (String(err).includes('buffer full') || String(err).includes('timeout'))
+                ) {
+                  writeQueue = payload + writeQueue;
+                  scheduleWriteFlush(WRITE_RETRY_MS);
+                }
+              })
+              .finally(() => {
+                writesInFlight -= 1;
+                if (writeQueue) scheduleWriteFlush(0);
+              });
+          }
+          if (writeQueue) scheduleWriteFlush(WRITE_RETRY_MS);
+        };
+        // OSC 7 (cwd) reporting. Command capture is heuristic (onData buffer).
+        const term133 = instance.terminal;
+        const osc7Dispose = term133.parser.registerOscHandler(7, (payload) => {
+          // payload like file://host/abs/path
+          const m = /^file:\/\/[^/]*(\/.*)$/.exec(payload);
+          if (m) {
+            const cwd = decodeURIComponent(m[1]);
+            tabCwd.set(tab.id, cwd);
+            setTerminalCwd(tab.id, cwd);
+          }
+          return false; // let other handlers run
+        });
 
-            let buf = inputBuffers.get(tab.id) ?? '';
-            const setter = completionSetters.get(tab.id);
-            const inst = terminalInstances.get(tab.id);
-            const cursorX = inst?.terminal.buffer.active.cursorX ?? 0;
-            const cursorY = inst?.terminal.buffer.active.cursorY ?? 0;
-            const rows = inst?.terminal.rows ?? 24;
-            const locale = i18n.language?.startsWith('zh') ? 'zh' : 'en';
+        const dataDispose = instance.terminal.onData((data) => {
+          if (reconnectableTabs.has(tab.id)) {
+            // Connection is dead — swallow this keystroke and reconnect instead.
+            // The keystroke could not have reached the server anyway.
+            reconnectableTabs.delete(tab.id);
+            void reconnect();
+            return;
+          }
 
-            const showCompletions = () => {
-              // Suppress completions while the terminal is awaiting a password —
-              // the buffer holds a secret, not a command.
-              if (awaitingPassword.get(tab.id)) { hideCompletions(); return; }
-              const table = tabCommandTable.get(tab.id) ?? syncTable(tab.type, sess);
-              const items = buildCompletions(buf, { scope, cwd, sessionType, table }, locale);
-              tabCompletions.set(tab.id, items);
-              tabCompletionIdx.set(tab.id, 0);
-              completionNav.set(tab.id, false);
-              const above = cursorY > rows - estimateDropdownRows(items) - 1;
-              setter?.(items, 0, cursorX, cursorY, above);
-            };
-            const hideCompletions = () => {
-              tabCompletions.set(tab.id, []);
-              tabCompletionIdx.set(tab.id, 0);
-              completionNav.set(tab.id, false);
-              setter?.([], 0, 0, 0, false);
-            };
+          // Command history: track input line and compute completions.
+          // Generalized beyond SSH; gated by sshHistoryCmd (capture) + cmdHintAllSessions.
+          {
+            const st = useSettingsStore.getState().settings;
+            const captureOn =
+              st.sshHistoryCmd &&
+              isInteractiveTerminal(tab.type) &&
+              (tab.type === 'ssh' || st.cmdHintAllSessions);
+            if (captureOn) {
+              const sess = sessionsRef.current.find((s) => s.id === tab.sessionId);
+              const scope = st.cmdHintScopeByHost ? tabScope(tab.type, sess) : '';
+              const cwd = st.cmdHintScopeByHost ? (tabCwd.get(tab.id) ?? '') : '';
+              const sessionType = tab.type;
 
-            // Bracketed paste: buffer the pasted content into the line, hide completions.
-            if (data.includes('\x1b[200~')) bracketedPaste.set(tab.id, true);
-            if (bracketedPaste.get(tab.id)) {
-              const end = data.indexOf('\x1b[201~');
-              const chunk = (end >= 0 ? data.slice(0, end) : data)
-                .replace(/\x1b\[200~/g, '');
-              buf += chunk;
-              if (end >= 0) {
-                bracketedPaste.set(tab.id, false);
-                // The pasted content (often multi-line) is not a reliable
-                // command prefix — reset buf so the next keystroke starts a
-                // fresh completion context instead of matching against the
-                // whole paste blob.
+              let buf = inputBuffers.get(tab.id) ?? '';
+              const setter = completionSetters.get(tab.id);
+              const inst = terminalInstances.get(tab.id);
+              const cursorX = inst?.terminal.buffer.active.cursorX ?? 0;
+              const cursorY = inst?.terminal.buffer.active.cursorY ?? 0;
+              const rows = inst?.terminal.rows ?? 24;
+              const locale = i18n.language?.startsWith('zh') ? 'zh' : 'en';
+
+              const showCompletions = () => {
+                // Suppress completions while the terminal is awaiting a password —
+                // the buffer holds a secret, not a command.
+                if (awaitingPassword.get(tab.id)) {
+                  hideCompletions();
+                  return;
+                }
+                const table = tabCommandTable.get(tab.id) ?? syncTable(tab.type, sess);
+                const items = buildCompletions(buf, { scope, cwd, sessionType, table }, locale);
+                tabCompletions.set(tab.id, items);
+                tabCompletionIdx.set(tab.id, 0);
+                completionNav.set(tab.id, false);
+                const above = cursorY > rows - estimateDropdownRows(items) - 1;
+                setter?.(items, 0, cursorX, cursorY, above);
+              };
+              const hideCompletions = () => {
+                tabCompletions.set(tab.id, []);
+                tabCompletionIdx.set(tab.id, 0);
+                completionNav.set(tab.id, false);
+                setter?.([], 0, 0, 0, false);
+              };
+
+              // Bracketed paste: buffer the pasted content into the line, hide completions.
+              if (data.includes('\x1b[200~')) bracketedPaste.set(tab.id, true);
+              if (bracketedPaste.get(tab.id)) {
+                const end = data.indexOf('\x1b[201~');
+                // eslint-disable-next-line no-control-regex -- ANSI bracketed-paste markers, control chars intentional
+                const chunk = (end >= 0 ? data.slice(0, end) : data).replace(/\x1b\[200~/g, '');
+                buf += chunk;
+                if (end >= 0) {
+                  bracketedPaste.set(tab.id, false);
+                  // The pasted content (often multi-line) is not a reliable
+                  // command prefix — reset buf so the next keystroke starts a
+                  // fresh completion context instead of matching against the
+                  // whole paste blob.
+                  buf = '';
+                }
+                hideCompletions();
+              } else if (data === '\r' || data === '\n') {
+                const trimmed = buf.trim();
+                // Record command history on Enter (heuristic capture) — but NOT
+                // when the preceding output was a password prompt: the "command"
+                // here is actually a secret being typed into sudo/su/mysql/etc.
+                if (trimmed.length > 0 && !awaitingPassword.get(tab.id)) {
+                  commandHistory.record(trimmed, { scope, cwd, sessionType });
+                }
+                const apT = awaitingPasswordTimer.get(tab.id);
+                if (apT) {
+                  clearTimeout(apT);
+                  awaitingPasswordTimer.delete(tab.id);
+                }
+                awaitingPassword.delete(tab.id);
                 buf = '';
-              }
-              hideCompletions();
-            } else if (data === '\r' || data === '\n') {
-              const trimmed = buf.trim();
-              // Record command history on Enter (heuristic capture) — but NOT
-              // when the preceding output was a password prompt: the "command"
-              // here is actually a secret being typed into sudo/su/mysql/etc.
-              if (trimmed.length > 0 && !awaitingPassword.get(tab.id)) {
-                commandHistory.record(trimmed, { scope, cwd, sessionType });
-              }
-              const apT = awaitingPasswordTimer.get(tab.id);
-              if (apT) { clearTimeout(apT); awaitingPasswordTimer.delete(tab.id); }
-              awaitingPassword.delete(tab.id);
-              buf = '';
-              hideCompletions();
-            } else if (data === '\x7f' || data === '\b') {
-              // Backspace — delete by code point so surrogate pairs (emoji,
-              // CJK outside the BMP) aren't split into half a character.
-              buf = Array.from(buf).slice(0, -1).join('');
-              if (buf.length > 0) showCompletions();
-              else hideCompletions();
-            } else if (data === '\x17') {
-              // Ctrl+W — delete the previous word
-              buf = buf.replace(/\s*\S+\s*$/, '');
-              if (buf.length > 0) showCompletions();
-              else hideCompletions();
-            } else if (data === '\x15' || data === '\x0b' || data === '\x0c') {
-              // Ctrl+U (kill line) / Ctrl+K (kill to EOL) / Ctrl+L (clear screen)
-              // all change the line in a way the tracked buf can't reflect, so
-              // reset it and disable completions until the next fresh line.
-              buf = '';
-              hideCompletions();
-            } else if (
-              data === '\x1b[A' || data === '\x1b[B' || data === '\x1b[C' || data === '\x1b[D' ||
-              data === '\x1b[H' || data === '\x1b[F' || data === '\x01' || data === '\x05'
-            ) {
-              // Arrows / Home / End / Ctrl-A / Ctrl-E — cursor moves: the tracked
-              // buf can no longer reflect the real line (insertion point moved),
-              // so reset it and disable completions until the next full line.
-              // Otherwise backspace would delete the wrong position and Enter
-              // would record a command that doesn't match what actually ran.
-              buf = '';
-              inputBuffers.set(tab.id, buf);
-              hideCompletions();
-            } else if (data.startsWith('\x1b')) {
-              // Other escape sequences — hide the dropdown.
-              hideCompletions();
-            } else if (data.length >= 1 && data.charCodeAt(0) >= 0x20) {
-              // Printable text (single char or multi-char without bracketed markers).
-              buf += data;
-              showCompletions();
-            }
-            inputBuffers.set(tab.id, buf);
-          }
-        }
-
-        // Input broadcast: fan this keystroke to all OTHER connected interactive
-        // terminals. The focused tab still writes to itself below. No echo loop:
-        // sendInputToTab feeds writeQueue/IPC, it does not trigger onData.
-        {
-          const app = useAppStore.getState();
-          if (app.broadcastInput) {
-            for (const tb of app.tabs) {
-              if (
-                tb.id !== tab.id && tb.connected &&
-                (tb.type === 'ssh' || tb.type === 'localshell' || tb.type === 'serial' || tb.type === 'docker')
+                hideCompletions();
+              } else if (data === '\x7f' || data === '\b') {
+                // Backspace — delete by code point so surrogate pairs (emoji,
+                // CJK outside the BMP) aren't split into half a character.
+                buf = Array.from(buf).slice(0, -1).join('');
+                if (buf.length > 0) showCompletions();
+                else hideCompletions();
+              } else if (data === '\x17') {
+                // Ctrl+W — delete the previous word
+                buf = buf.replace(/\s*\S+\s*$/, '');
+                if (buf.length > 0) showCompletions();
+                else hideCompletions();
+              } else if (data === '\x15' || data === '\x0b' || data === '\x0c') {
+                // Ctrl+U (kill line) / Ctrl+K (kill to EOL) / Ctrl+L (clear screen)
+                // all change the line in a way the tracked buf can't reflect, so
+                // reset it and disable completions until the next fresh line.
+                buf = '';
+                hideCompletions();
+              } else if (
+                data === '\x1b[A' ||
+                data === '\x1b[B' ||
+                data === '\x1b[C' ||
+                data === '\x1b[D' ||
+                data === '\x1b[H' ||
+                data === '\x1b[F' ||
+                data === '\x01' ||
+                data === '\x05'
               ) {
-                sendInputToTab(tb.id, data);
+                // Arrows / Home / End / Ctrl-A / Ctrl-E — cursor moves: the tracked
+                // buf can no longer reflect the real line (insertion point moved),
+                // so reset it and disable completions until the next full line.
+                // Otherwise backspace would delete the wrong position and Enter
+                // would record a command that doesn't match what actually ran.
+                buf = '';
+                inputBuffers.set(tab.id, buf);
+                hideCompletions();
+              } else if (data.startsWith('\x1b')) {
+                // Other escape sequences — hide the dropdown.
+                hideCompletions();
+              } else if (data.length >= 1 && data.charCodeAt(0) >= 0x20) {
+                // Printable text (single char or multi-char without bracketed markers).
+                buf += data;
+                showCompletions();
+              }
+              inputBuffers.set(tab.id, buf);
+            }
+          }
+
+          // Input broadcast: fan this keystroke to all OTHER connected interactive
+          // terminals. The focused tab still writes to itself below. No echo loop:
+          // sendInputToTab feeds writeQueue/IPC, it does not trigger onData.
+          {
+            const app = useAppStore.getState();
+            if (app.broadcastInput) {
+              for (const tb of app.tabs) {
+                if (
+                  tb.id !== tab.id &&
+                  tb.connected &&
+                  (tb.type === 'ssh' ||
+                    tb.type === 'localshell' ||
+                    tb.type === 'serial' ||
+                    tb.type === 'docker')
+                ) {
+                  sendInputToTab(tb.id, data);
+                }
               }
             }
           }
-        }
 
-        writeQueue += data;
-        if (writeQueue.length >= WRITE_CHUNK_SIZE) {
-          if (writeTimer) {
-            clearTimeout(writeTimer);
-            writeTimer = null;
-          }
-          flushWrites();
-        } else {
-          scheduleWriteFlush();
-        }
-      });
-
-      // Register the completion accept callback so the key handler can send completion text.
-      if (isInteractiveTerminal(tab.type)) {
-        completionAccept.set(tab.id, (suffix: string) => {
-          if (writeDisposed) return;
-          const buf = (inputBuffers.get(tab.id) ?? '') + suffix;
-          inputBuffers.set(tab.id, buf);
-          tabCompletions.set(tab.id, []);
-          tabCompletionIdx.set(tab.id, 0);
-          completionNav.set(tab.id, false);
-          completionSetters.get(tab.id)?.([], 0, 0, 0, false);
-          writeQueue += suffix;
+          writeQueue += data;
           if (writeQueue.length >= WRITE_CHUNK_SIZE) {
-            if (writeTimer) { clearTimeout(writeTimer); writeTimer = null; }
+            if (writeTimer) {
+              clearTimeout(writeTimer);
+              writeTimer = null;
+            }
             flushWrites();
           } else {
             scheduleWriteFlush();
           }
         });
-      }
 
-      // Generic external input injection (used by the snippet panel). Reuses the
-      // same writeQueue/flush path as keystrokes, so backpressure & retry apply.
-      tabInputSenders.set(tab.id, (payload: string) => {
-        if (writeDisposed || !payload) return;
-        writeQueue += payload;
-        if (writeQueue.length >= WRITE_CHUNK_SIZE) {
-          if (writeTimer) { clearTimeout(writeTimer); writeTimer = null; }
-          flushWrites();
-        } else {
-          scheduleWriteFlush();
-        }
-      });
-
-      let resizeDispose: { dispose(): void } | null = null;
-      if (resizeCmd) {
-        const cmd = resizeCmd;
-        const tabId = tab.id;
-        const sessionId = tab.sessionId;
-        const isSsh = tab.type === "ssh";
-        resizeDispose = instance!.terminal.onResize(({ rows, cols }) => {
-          const fire = () => {
-            if (isSsh) {
-              invoke(cmd, { sessionId, cols, rows }).catch(() => {});
+        // Register the completion accept callback so the key handler can send completion text.
+        if (isInteractiveTerminal(tab.type)) {
+          completionAccept.set(tab.id, (suffix: string) => {
+            if (writeDisposed) return;
+            const buf = (inputBuffers.get(tab.id) ?? '') + suffix;
+            inputBuffers.set(tab.id, buf);
+            tabCompletions.set(tab.id, []);
+            tabCompletionIdx.set(tab.id, 0);
+            completionNav.set(tab.id, false);
+            completionSetters.get(tab.id)?.([], 0, 0, 0, false);
+            writeQueue += suffix;
+            if (writeQueue.length >= WRITE_CHUNK_SIZE) {
+              if (writeTimer) {
+                clearTimeout(writeTimer);
+                writeTimer = null;
+              }
+              flushWrites();
             } else {
-              invoke(cmd, { sessionId, rows, cols }).catch(() => {});
+              scheduleWriteFlush();
             }
-          };
-          // First resize per tab fires immediately — the terminal needs its
-          // real size before the first paint and the user isn't dragging yet.
-          if (!sentFirstResize.has(tabId)) {
-            sentFirstResize.add(tabId);
-            fire();
-            return;
-          }
-          // Subsequent resizes (window drag fires onResize at frame rate) are
-          // debounced 40ms trailing so we don't flood the backend with
-          // resize_*/SIGWINCH on every frame.
-          const existing = pendingBackendResize.get(tabId);
-          if (existing) clearTimeout(existing);
-          pendingBackendResize.set(tabId, setTimeout(() => {
-            pendingBackendResize.delete(tabId);
-            fire();
-          }, 40));
-        });
-      }
-
-      // Card frames bake in a fixed row-span at creation, so a width change that
-      // rewraps lines leaves them stale. Rebuild on resize for ALL interactive
-      // terminals — serial has no resizeCmd, so this can't live in that block.
-
-      if (cancelled) {
-        unlistenData(); unlistenExit();
-        try { dataDispose.dispose(); } catch {}
-        try { resizeDispose?.dispose(); } catch {}
-        try { osc7Dispose.dispose(); } catch {}
-        return;
-      }
-
-      // Store listener cleanup in the global map so it can be called from
-      // anywhere (next effect run, unmount, or destroyTerminal).
-      tabListenerCleanups.set(tab.id, () => {
-        unlistenData();
-        unlistenExit();
-        if (renderRaf) { cancelAnimationFrame(renderRaf); renderRaf = 0; }
-        // Flush any bytes that arrived but were never rendered (the RAF was
-        // cancelled above). Dropping them would lose terminal output across a
-        // remount/split transition.
-        if (renderQueue) {
-          const chunk = renderQueue;
-          renderQueue = "";
-          try { instance?.terminal.write(chunk); } catch {}
-        }
-        // Flush any buffered log output before tearing the listeners down.
-        if (logTimer) { clearTimeout(logTimer); }
-        flushLog();
-        logDisposed = true;
-        writeDisposed = true;
-        if (writeTimer) { clearTimeout(writeTimer); writeTimer = null; }
-        writeQueue = "";
-        const pendingResize = pendingBackendResize.get(tab.id);
-        if (pendingResize) { clearTimeout(pendingResize); pendingBackendResize.delete(tab.id); }
-        // Reset the first-resize guard so a remount (split toggle, StrictMode)
-        // re-sends an immediate SIGWINCH instead of falling into the debounce
-        // branch — otherwise TUIs render at a stale size after reparenting.
-        sentFirstResize.delete(tab.id);
-        for (const d of pendingDisposes) { try { d.dispose(); } catch {} }
-        try { dataDispose.dispose(); } catch {}
-        try { resizeDispose?.dispose(); } catch {}
-        try { osc7Dispose.dispose(); } catch {}
-        try { bellDispose.dispose(); } catch {}
-        // Close the shared bell AudioContext so it isn't left running.
-        try { if (bellCtx) bellCtx.close(); } catch {}
-        if (termElForWheel) {
-          try { termElForWheel.removeEventListener('wheel', handleWheelZoom); } catch {}
-        }
-        completionAccept.delete(tab.id);
-        // completionSetters is NOT deleted here — it is cleaned up by the
-        // component useEffect return and destroyTerminal, matching the
-        // pre-migration ghostTextSetters lifecycle exactly.
-        tabInputSenders.delete(tab.id);
-        tabCompletions.delete(tab.id);
-        tabCompletionIdx.delete(tab.id);
-        completionNav.delete(tab.id);
-        bracketedPaste.delete(tab.id);
-        const apT = awaitingPasswordTimer.get(tab.id);
-        if (apT) { clearTimeout(apT); awaitingPasswordTimer.delete(tab.id); }
-        awaitingPassword.delete(tab.id);
-      });
-
-      const rawSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
-      const session = rawSession ? applyGroupDefaults(rawSession, loadGroupDefaults()) : rawSession;
-
-      const buildSshParams = (sess: typeof session) => ({
-        sessionId: tab.sessionId,
-        host: sess?.host ?? "",
-        port: sess?.port ?? 22,
-        username: sess?.username ?? "root",
-        password: sess?.password ?? null,
-        privateKeyPath: sess?.private_key_path ?? null,
-        authMethod: sess?.auth_method ?? "password",
-        totpCode: sess?.totp_code ?? null,
-        jumpHost: sess?.jump_host ?? null,
-        jumpPort: sess?.jump_port ?? 22,
-        jumpUsername: sess?.jump_username ?? null,
-        jumpPassword: sess?.jump_password ?? null,
-        jumpPrivateKeyPath: sess?.jump_private_key_path ?? null,
-        proxyType: sess?.proxy_type ?? null,
-        proxyHost: sess?.proxy_host ?? null,
-        proxyPort: sess?.proxy_port ?? 1080,
-        proxyUsername: sess?.proxy_username ?? null,
-        proxyPassword: sess?.proxy_password ?? null,
-        connectionTimeout: sess?.connection_timeout ?? 30,
-        idleDisconnectMinutes: sess?.idle_disconnect_minutes ?? null,
-        agentForward: sess?.agent_forward ?? false,
-        keepaliveInterval: (sess?.keepalive_interval != null && String(sess.keepalive_interval).trim() !== '')
-          ? Number(sess.keepalive_interval) : null,
-        serverAliveCountMax: (sess?.server_alive_count_max != null && String(sess.server_alive_count_max).trim() !== '')
-          ? Number(sess.server_alive_count_max) : null,
-        rows: instance!.terminal.rows,
-        cols: instance!.terminal.cols,
-      });
-
-      const shouldUseSavedSshConfig = (sess: typeof session): boolean =>
-        !!sess && !sess._temporary;
-
-      const invokeSshConnect = (sess: typeof session): Promise<void> => {
-        if (shouldUseSavedSshConfig(sess)) {
-          return invoke("ssh_connect_saved", {
-            sessionId: tab.sessionId,
-            rows: instance!.terminal.rows,
-            cols: instance!.terminal.cols,
           });
         }
-        return invoke("ssh_connect", buildSshParams(sess));
-      };
 
-      const doSshConnect = async (sess: typeof session): Promise<void> => {
-        try {
-          await invokeSshConnect(sess);
-        } catch (rawErr) {
-          const errStr = String(rawErr);
-          if (errStr.startsWith("FINGERPRINT_UNKNOWN:") || errStr.startsWith("FINGERPRINT_MISMATCH:")) {
-            const parts = errStr.split(":");
-            const isMismatch = parts[0] === "FINGERPRINT_MISMATCH";
-            const fingerprint = `${parts[1]}:${parts[2]}`;
-            const keyType = parts.slice(3).join(":") || "unknown";
-            const host = sess?.host ?? "";
-            const port = sess?.port ?? 22;
-
-            const accepted = await new Promise<boolean>((resolve) => {
-              fingerprintResolveRef.current = resolve;
-              setFingerprintInfo({ fingerprint, keyType, host, port });
-            });
-            // Reset to a no-op so a later teardown can't re-resolve this promise.
-            fingerprintResolveRef.current = () => {};
-            // If the tab was closed/relocated while the prompt was open, the
-            // cleanup resolved us with `false`; bail before touching the
-            // (possibly disposed) terminal.
-            if (cancelled) return;
-            setFingerprintInfo(null);
-
-            if (accepted && !isMismatch) {
-              await invoke("ssh_trust_host", { host, port, fingerprint, keyType });
-              await invokeSshConnect(sess);
-            } else if (isMismatch) {
-              instance?.terminal.write(
-                `\r\n\x1b[31m[SECURITY] ${t('fp_mismatch_warning')}\x1b[0m\r\n` +
-                `\r\n\x1b[31m${t('fp_current_fingerprint', { fingerprint })}\x1b[0m\r\n` +
-                `\r\n\x1b[33m${t('fp_mismatch_hint')}\x1b[0m\r\n`
-              );
-            } else {
-              instance?.terminal.write(`\r\n\x1b[33m[${t('fp_cancelled')}]\x1b[0m\r\n`);
+        // Generic external input injection (used by the snippet panel). Reuses the
+        // same writeQueue/flush path as keystrokes, so backpressure & retry apply.
+        tabInputSenders.set(tab.id, (payload: string) => {
+          if (writeDisposed || !payload) return;
+          writeQueue += payload;
+          if (writeQueue.length >= WRITE_CHUNK_SIZE) {
+            if (writeTimer) {
+              clearTimeout(writeTimer);
+              writeTimer = null;
             }
-            return;
-          }
-          throw rawErr;
-        }
-      };
-
-      // Press-any-key reconnect (SSH/serial). Closes any backend residue from
-      // the dead session, then re-runs the connect path with the freshest
-      // session config from the store (user may have edited host/port/creds
-      // between disconnect and now). Failure re-arms so another keypress retries.
-      const reconnect = async (): Promise<void> => {
-        instance?.terminal.write(`\r\n\x1b[90m${t('term_reconnecting')}\x1b[0m\r\n`);
-        // Reset ALL per-tab completion/prompt state — the new shell is a fresh
-        // login (possibly a different user/host), so stale cwd, a lingering
-        // password flag, or an unclosed bracketed-paste mode from the old
-        // session would corrupt completions or silently swallow input.
-        tabCommandTable.delete(tab.id);
-        tabCwd.delete(tab.id);
-        tabCompletions.delete(tab.id);
-        tabCompletionIdx.delete(tab.id);
-        completionNav.delete(tab.id);
-        inputBuffers.set(tab.id, '');
-        bracketedPaste.delete(tab.id);
-        const apTimer = awaitingPasswordTimer.get(tab.id);
-        if (apTimer) { clearTimeout(apTimer); awaitingPasswordTimer.delete(tab.id); }
-        awaitingPassword.delete(tab.id);
-        const rawFreshSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
-        const freshSession = rawFreshSession ? applyGroupDefaults(rawFreshSession, loadGroupDefaults()) : rawFreshSession;
-        if (tab.type === 'ssh') {
-          await invoke('close_ssh', { sessionId: tab.sessionId }).catch(() => {});
-        } else if (tab.type === 'serial') {
-          await invoke('close_serial', { sessionId: tab.sessionId }).catch(() => {});
-        }
-
-        try {
-          if (!freshSession) throw new Error('session not found in store');
-          if (tab.type === 'ssh') {
-            await doSshConnect(freshSession);
-          } else if (tab.type === 'serial') {
-            if (!freshSession.serial_port) throw new Error('serial port not configured');
-            await invoke('serial_open', {
-              sessionId: freshSession.id,
-              portName: freshSession.serial_port,
-              baudRate: parseInt(freshSession.serial_baud_rate || '115200', 10),
-              dataBits: freshSession.serial_data_bits || '8',
-              stopBits: freshSession.serial_stop_bits || '1',
-              parity: freshSession.serial_parity || 'None',
-              serialEncoding: freshSession.serial_encoding || null,
-            });
-          }
-          connectedTabs.add(tab.id);
-          useAppStore.getState().updateTabConnected(tab.id, true);
-          reconnectableTabs.delete(tab.id);
-          if (tab.type === 'ssh' && freshSession && tableForRemoteShell(freshSession.remote_shell ?? null) === null) {
-            // Prefer a cached probe result for this host (5-min TTL) so opening
-            // several tabs to the same host doesn't re-run exec probes each time.
-            const host = freshSession.host ?? '';
-            const cached = host ? remoteOsCache.get(host) : undefined;
-            if (cached && Date.now() - cached.at < REMOTE_OS_TTL_MS) {
-              tabCommandTable.set(tab.id, cached.table);
-            } else {
-              invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
-                .then((tbl) => {
-                  const norm = normalizeTable(tbl);
-                  tabCommandTable.set(tab.id, norm);
-                  if (host) remoteOsCache.set(host, { table: norm, at: Date.now() });
-                })
-                .catch(() => {});
-            }
-          }
-        } catch (err) {
-          instance?.terminal.write(
-            `\r\n\x1b[31m${String(err)}\x1b[0m\r\n` +
-            `\x1b[33m${t('term_press_any_key_to_reconnect')}\x1b[0m\r\n`
-          );
-          // Re-arm so a second keypress tries again.
-          reconnectableTabs.add(tab.id);
-        }
-      };
-
-      // Only establish backend connection if not already connected (avoids race on split-mode transitions)
-      const alreadyConnected = connectedTabs.has(tab.id);
-      if (!alreadyConnected) {
-        connectedTabs.add(tab.id);
-      }
-
-      try {
-        let connectionReady = alreadyConnected;
-        if (!alreadyConnected) {
-        if (tab.type === "localshell") {
-          // Wait for layout to settle so the PTY is created with the
-          // terminal's real dimensions instead of the default 80×24.
-          // Without this the shell outputs text formatted for 80 cols
-          // but xterm renders at the actual (larger) width → garbled.
-          await new Promise<void>((resolve) => {
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
-                safeFit(tab.id);
-                resolve();
-              });
-            });
-          });
-          if (cancelled) return;
-
-          instance?.terminal.write(`\r\n\x1b[90m${t('term_starting_shell')}\x1b[0m\r\n`);
-          await invoke("create_local_shell", {
-            sessionId: tab.sessionId,
-            rows: instance!.terminal.rows,
-            cols: instance!.terminal.cols,
-            shellName: session?.shell_name ?? null,
-            workingDir: session?.working_dir ?? null,
-            charset: session?.charset ?? null,
-          });
-          connectionReady = true;
-          if (session?.init_command) {
-            const cmd = session.init_command;
-            initScriptTimers.push(setTimeout(() => {
-              initScriptCancels.push(runLoginScript((d) => { invoke("write_to_pty", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd));
-            }, 300));
-          }
-        } else if (tab.type === "ssh") {
-          if (!session?.host) {
-            instance?.terminal.write(`\r\n\x1b[31m${t('term_ssh_not_found')}\x1b[0m\r\n`);
+            flushWrites();
           } else {
-            // Wait for layout to settle so request_pty is sized to the
-            // actual terminal dimensions instead of the default 80×24.
-            // Without this the remote shell formats output for 80 cols
-            // while xterm renders at the real (wider) width → garbled.
-            await new Promise<void>((resolve) => {
-              requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                  safeFit(tab.id);
-                  resolve();
-                });
-              });
-            });
-            if (cancelled) return;
+            scheduleWriteFlush();
+          }
+        });
 
-            instance?.terminal.write(
-              `\r\n\x1b[90m${t('term_connecting', { user: session.username || 'root', host: session.host, port: session.port || 22 })}` +
-              `${session.jump_host ? ` ${t('term_via_jump', { jumpHost: session.jump_host })}` : ''}` +
-              `${session.proxy_type && session.proxy_type !== 'none' ? ` ${t('term_via_proxy', { proxyType: session.proxy_type })}` : ''}` +
-              `...\x1b[0m\r\n`
-            );
-            await doSshConnect(session);
-            connectionReady = true;
-            if (session.init_command) {
-              const cmd = session.init_command;
-              initScriptTimers.push(setTimeout(() => {
-                initScriptCancels.push(runLoginScript((d) => { invoke("write_to_ssh", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd));
-              }, 300));
+        let resizeDispose: { dispose(): void } | null = null;
+        if (resizeCmd) {
+          const cmd = resizeCmd;
+          const tabId = tab.id;
+          const sessionId = tab.sessionId;
+          const isSsh = tab.type === 'ssh';
+          resizeDispose = instance.terminal.onResize(({ rows, cols }) => {
+            const fire = () => {
+              if (isSsh) {
+                invoke(cmd, { sessionId, cols, rows }).catch(() => {});
+              } else {
+                invoke(cmd, { sessionId, rows, cols }).catch(() => {});
+              }
+            };
+            // First resize per tab fires immediately — the terminal needs its
+            // real size before the first paint and the user isn't dragging yet.
+            if (!sentFirstResize.has(tabId)) {
+              sentFirstResize.add(tabId);
+              fire();
+              return;
             }
+            // Subsequent resizes (window drag fires onResize at frame rate) are
+            // debounced 40ms trailing so we don't flood the backend with
+            // resize_*/SIGWINCH on every frame.
+            const existing = pendingBackendResize.get(tabId);
+            if (existing) clearTimeout(existing);
+            pendingBackendResize.set(
+              tabId,
+              setTimeout(() => {
+                pendingBackendResize.delete(tabId);
+                fire();
+              }, 40),
+            );
+          });
+        }
 
-            // Resolve the completion table: a concrete override is handled
-            // synchronously by syncTable; 'auto'/unset triggers a one-shot remote
-            // probe (best-effort, result cached per tab).
-            if (tableForRemoteShell(session.remote_shell ?? null) === null) {
-              const host = session.host ?? '';
+        // Card frames bake in a fixed row-span at creation, so a width change that
+        // rewraps lines leaves them stale. Rebuild on resize for ALL interactive
+        // terminals — serial has no resizeCmd, so this can't live in that block.
+
+        if (cancelled) {
+          unlistenData();
+          unlistenExit();
+          try {
+            dataDispose.dispose();
+          } catch {}
+          try {
+            resizeDispose?.dispose();
+          } catch {}
+          try {
+            osc7Dispose.dispose();
+          } catch {}
+          return;
+        }
+
+        // Store listener cleanup in the global map so it can be called from
+        // anywhere (next effect run, unmount, or destroyTerminal).
+        tabListenerCleanups.set(tab.id, () => {
+          unlistenData();
+          unlistenExit();
+          if (renderRaf) {
+            cancelAnimationFrame(renderRaf);
+            renderRaf = 0;
+          }
+          // Flush any bytes that arrived but were never rendered (the RAF was
+          // cancelled above). Dropping them would lose terminal output across a
+          // remount/split transition.
+          if (renderQueue) {
+            const chunk = renderQueue;
+            renderQueue = '';
+            try {
+              instance?.terminal.write(chunk);
+            } catch {}
+          }
+          // Flush any buffered log output before tearing the listeners down.
+          if (logTimer) {
+            clearTimeout(logTimer);
+          }
+          flushLog();
+          logDisposed = true;
+          writeDisposed = true;
+          if (writeTimer) {
+            clearTimeout(writeTimer);
+            writeTimer = null;
+          }
+          writeQueue = '';
+          const pendingResize = pendingBackendResize.get(tab.id);
+          if (pendingResize) {
+            clearTimeout(pendingResize);
+            pendingBackendResize.delete(tab.id);
+          }
+          // Reset the first-resize guard so a remount (split toggle, StrictMode)
+          // re-sends an immediate SIGWINCH instead of falling into the debounce
+          // branch — otherwise TUIs render at a stale size after reparenting.
+          sentFirstResize.delete(tab.id);
+          for (const d of pendingDisposes) {
+            try {
+              d.dispose();
+            } catch {}
+          }
+          try {
+            dataDispose.dispose();
+          } catch {}
+          try {
+            resizeDispose?.dispose();
+          } catch {}
+          try {
+            osc7Dispose.dispose();
+          } catch {}
+          try {
+            bellDispose.dispose();
+          } catch {}
+          // Close the shared bell AudioContext so it isn't left running.
+          try {
+            if (bellCtx) void bellCtx.close();
+          } catch {}
+          if (termElForWheel) {
+            try {
+              termElForWheel.removeEventListener('wheel', handleWheelZoom);
+            } catch {}
+          }
+          completionAccept.delete(tab.id);
+          // completionSetters is NOT deleted here — it is cleaned up by the
+          // component useEffect return and destroyTerminal, matching the
+          // pre-migration ghostTextSetters lifecycle exactly.
+          tabInputSenders.delete(tab.id);
+          tabCompletions.delete(tab.id);
+          tabCompletionIdx.delete(tab.id);
+          completionNav.delete(tab.id);
+          bracketedPaste.delete(tab.id);
+          const apT = awaitingPasswordTimer.get(tab.id);
+          if (apT) {
+            clearTimeout(apT);
+            awaitingPasswordTimer.delete(tab.id);
+          }
+          awaitingPassword.delete(tab.id);
+        });
+
+        const rawSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
+        const session = rawSession
+          ? applyGroupDefaults(rawSession, loadGroupDefaults())
+          : rawSession;
+
+        const buildSshParams = (sess: typeof session) => ({
+          sessionId: tab.sessionId,
+          host: sess?.host ?? '',
+          port: sess?.port ?? 22,
+          username: sess?.username ?? 'root',
+          password: sess?.password ?? null,
+          privateKeyPath: sess?.private_key_path ?? null,
+          authMethod: sess?.auth_method ?? 'password',
+          totpCode: sess?.totp_code ?? null,
+          jumpHost: sess?.jump_host ?? null,
+          jumpPort: sess?.jump_port ?? 22,
+          jumpUsername: sess?.jump_username ?? null,
+          jumpPassword: sess?.jump_password ?? null,
+          jumpPrivateKeyPath: sess?.jump_private_key_path ?? null,
+          proxyType: sess?.proxy_type ?? null,
+          proxyHost: sess?.proxy_host ?? null,
+          proxyPort: sess?.proxy_port ?? 1080,
+          proxyUsername: sess?.proxy_username ?? null,
+          proxyPassword: sess?.proxy_password ?? null,
+          connectionTimeout: sess?.connection_timeout ?? 30,
+          idleDisconnectMinutes: sess?.idle_disconnect_minutes ?? null,
+          agentForward: sess?.agent_forward ?? false,
+          keepaliveInterval:
+            sess?.keepalive_interval != null && String(sess.keepalive_interval).trim() !== ''
+              ? Number(sess.keepalive_interval)
+              : null,
+          serverAliveCountMax:
+            sess?.server_alive_count_max != null &&
+            String(sess.server_alive_count_max).trim() !== ''
+              ? Number(sess.server_alive_count_max)
+              : null,
+          rows: instance.terminal.rows,
+          cols: instance.terminal.cols,
+        });
+
+        const shouldUseSavedSshConfig = (sess: typeof session): boolean =>
+          !!sess && !sess._temporary;
+
+        const invokeSshConnect = (sess: typeof session): Promise<void> => {
+          if (shouldUseSavedSshConfig(sess)) {
+            return invoke('ssh_connect_saved', {
+              sessionId: tab.sessionId,
+              rows: instance.terminal.rows,
+              cols: instance.terminal.cols,
+            });
+          }
+          return invoke('ssh_connect', buildSshParams(sess));
+        };
+
+        const doSshConnect = async (sess: typeof session): Promise<void> => {
+          try {
+            await invokeSshConnect(sess);
+          } catch (rawErr) {
+            const errStr = String(rawErr);
+            if (
+              errStr.startsWith('FINGERPRINT_UNKNOWN:') ||
+              errStr.startsWith('FINGERPRINT_MISMATCH:')
+            ) {
+              const parts = errStr.split(':');
+              const isMismatch = parts[0] === 'FINGERPRINT_MISMATCH';
+              const fingerprint = `${parts[1]}:${parts[2]}`;
+              const keyType = parts.slice(3).join(':') || 'unknown';
+              const host = sess?.host ?? '';
+              const port = sess?.port ?? 22;
+
+              const accepted = await new Promise<boolean>((resolve) => {
+                fingerprintResolveRef.current = resolve;
+                setFingerprintInfo({ fingerprint, keyType, host, port });
+              });
+              // Reset to a no-op so a later teardown can't re-resolve this promise.
+              fingerprintResolveRef.current = () => {};
+              // If the tab was closed/relocated while the prompt was open, the
+              // cleanup resolved us with `false`; bail before touching the
+              // (possibly disposed) terminal.
+              if (cancelled) return;
+              setFingerprintInfo(null);
+
+              if (accepted && !isMismatch) {
+                try {
+                  await invoke('ssh_trust_host', { host, port, fingerprint, keyType });
+                } catch (trustErr) {
+                  // Backend overwrite guard refused to re-pin (MITM hardening).
+                  instance?.terminal.write(`\r\n\x1b[31m[SECURITY] ${String(trustErr)}\x1b[0m\r\n`);
+                  return;
+                }
+                await invokeSshConnect(sess);
+              } else if (isMismatch) {
+                instance?.terminal.write(
+                  `\r\n\x1b[31m[SECURITY] ${t('fp_mismatch_warning')}\x1b[0m\r\n` +
+                    `\r\n\x1b[31m${t('fp_current_fingerprint', { fingerprint })}\x1b[0m\r\n` +
+                    `\r\n\x1b[33m${t('fp_mismatch_hint')}\x1b[0m\r\n`,
+                );
+              } else {
+                instance?.terminal.write(`\r\n\x1b[33m[${t('fp_cancelled')}]\x1b[0m\r\n`);
+              }
+              return;
+            }
+            throw rawErr;
+          }
+        };
+
+        // Press-any-key reconnect (SSH/serial). Closes any backend residue from
+        // the dead session, then re-runs the connect path with the freshest
+        // session config from the store (user may have edited host/port/creds
+        // between disconnect and now). Failure re-arms so another keypress retries.
+        const reconnect = async (): Promise<void> => {
+          instance?.terminal.write(`\r\n\x1b[90m${t('term_reconnecting')}\x1b[0m\r\n`);
+          // Reset ALL per-tab completion/prompt state — the new shell is a fresh
+          // login (possibly a different user/host), so stale cwd, a lingering
+          // password flag, or an unclosed bracketed-paste mode from the old
+          // session would corrupt completions or silently swallow input.
+          tabCommandTable.delete(tab.id);
+          tabCwd.delete(tab.id);
+          tabCompletions.delete(tab.id);
+          tabCompletionIdx.delete(tab.id);
+          completionNav.delete(tab.id);
+          inputBuffers.set(tab.id, '');
+          bracketedPaste.delete(tab.id);
+          const apTimer = awaitingPasswordTimer.get(tab.id);
+          if (apTimer) {
+            clearTimeout(apTimer);
+            awaitingPasswordTimer.delete(tab.id);
+          }
+          awaitingPassword.delete(tab.id);
+          const rawFreshSession = sessionsRef.current.find((s) => s.id === tab.sessionId);
+          const freshSession = rawFreshSession
+            ? applyGroupDefaults(rawFreshSession, loadGroupDefaults())
+            : rawFreshSession;
+          if (tab.type === 'ssh') {
+            await invoke('close_ssh', { sessionId: tab.sessionId }).catch(() => {});
+          } else if (tab.type === 'serial') {
+            await invoke('close_serial', { sessionId: tab.sessionId }).catch(() => {});
+          }
+
+          try {
+            if (!freshSession) throw new Error('session not found in store');
+            if (tab.type === 'ssh') {
+              await doSshConnect(freshSession);
+            } else if (tab.type === 'serial') {
+              if (!freshSession.serial_port) throw new Error('serial port not configured');
+              await invoke('serial_open', {
+                sessionId: freshSession.id,
+                portName: freshSession.serial_port,
+                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+                baudRate: parseInt(freshSession.serial_baud_rate || '115200', 10),
+                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+                dataBits: freshSession.serial_data_bits || '8',
+                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+                stopBits: freshSession.serial_stop_bits || '1',
+                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+                parity: freshSession.serial_parity || 'None',
+                flowControl: freshSession.serial_flow_control ?? 'none',
+                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+                serialEncoding: freshSession.serial_encoding || null,
+              });
+            }
+            connectedTabs.add(tab.id);
+            useAppStore.getState().updateTabConnected(tab.id, true);
+            reconnectableTabs.delete(tab.id);
+            if (
+              tab.type === 'ssh' &&
+              freshSession &&
+              tableForRemoteShell(freshSession.remote_shell ?? null) === null
+            ) {
+              // Prefer a cached probe result for this host (5-min TTL) so opening
+              // several tabs to the same host doesn't re-run exec probes each time.
+              const host = freshSession.host ?? '';
               const cached = host ? remoteOsCache.get(host) : undefined;
               if (cached && Date.now() - cached.at < REMOTE_OS_TTL_MS) {
                 tabCommandTable.set(tab.id, cached.table);
@@ -1847,156 +2031,313 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                   .catch(() => {});
               }
             }
-
-            // Dynamic (SOCKS) only needs a local port; local/remote need the full triple.
-            const tunnelReady = session.tunnel_enabled && (
-              session.tunnel_type === 'dynamic'
-                ? !!session.tunnel_local_port
-                : !!(session.tunnel_local_port && session.tunnel_remote_host && session.tunnel_remote_port)
-            );
-            if (tunnelReady) {
-              try {
-                const actualPort = await invoke<number>("start_tunnel", {
-                  sessionId: tab.sessionId,
-                  host: "",
-                  port: 22,
-                  username: "",
-                  password: null,
-                  privateKeyPath: null,
-                  authMethod: "none",
-                  jumpHost: null,
-                  jumpPort: 22,
-                  jumpUsername: null,
-                  jumpPassword: null,
-                  jumpPrivateKeyPath: null,
-                  proxyType: null,
-                  proxyHost: null,
-                  proxyPort: 1080,
-                  proxyUsername: null,
-                  proxyPassword: null,
-                  localPort: session.tunnel_local_port ?? 0,
-                  // Backend expects non-null host/port; dynamic (SOCKS) ignores them.
-                  remoteHost: session.tunnel_remote_host ?? "",
-                  remotePort: session.tunnel_remote_port ?? 0,
-                  tunnelType: session.tunnel_type ?? 'local',
-                });
-                instance?.terminal.write(
-                  session.tunnel_type === 'dynamic'
-                    ? `\r\n\x1b[90m${t('term_tunnel_socks_ok', { localPort: actualPort })}\x1b[0m\r\n`
-                    : session.tunnel_type === 'remote'
-                    ? `\r\n\x1b[90m${t('term_tunnel_remote_ok', { port: actualPort, host: session.tunnel_remote_host!, localPort: session.tunnel_remote_port! })}\x1b[0m\r\n`
-                    : `\r\n\x1b[90m${t('term_tunnel_ok', { localPort: actualPort, remoteHost: session.tunnel_remote_host!, remotePort: session.tunnel_remote_port! })}\x1b[0m\r\n`
-                );
-              } catch (tunnelErr) {
-                instance?.terminal.write(`\r\n\x1b[33m${t('term_tunnel_fail', { error: String(tunnelErr) })}\x1b[0m\r\n`);
-              }
-            }
-          }
-        } else if (tab.type === "serial") {
-          if (!session?.serial_port) {
-            instance?.terminal.write(`\r\n\x1b[31m${t('term_serial_not_configured')}\x1b[0m\r\n`);
-          } else {
-            instance?.terminal.write(
-              `\r\n\x1b[90m${t('term_opening_serial', { port: session.serial_port, baud: session.serial_baud_rate || '115200' })}\x1b[0m\r\n`
-            );
-            await invoke("serial_open", {
-              sessionId: tab.sessionId,
-              portName: session.serial_port,
-              baudRate: parseInt(session.serial_baud_rate || "115200", 10),
-              dataBits: session.serial_data_bits || "8",
-              stopBits: session.serial_stop_bits || "1",
-              parity: session.serial_parity || "None",
-              serialEncoding: session.serial_encoding || null,
-            });
-            connectionReady = true;
-            if (session.serial_init_commands) {
-              const cmd = session.serial_init_commands;
-              initScriptTimers.push(setTimeout(() => {
-                initScriptCancels.push(runLoginScript((d) => { invoke("write_to_serial", { sessionId: tab.sessionId, data: d }).catch(() => {}); }, cmd));
-              }, 300));
-            }
-          }
-        } else if (tab.type === "docker") {
-          const method = (session?.docker_connect_method ?? '');
-          const tunnelId = session?.docker_ssh_tunnel ?? null;
-          instance?.terminal.write(`\r\n\x1b[90m${t('docker_listing')}\x1b[0m\r\n`);
-          let containers: { id: string; name: string; image: string; status: string }[];
-          try {
-            containers = await invoke('docker_list_containers', {
-              connectMethod: method,
-              tunnelSessionId: tunnelId,
-            });
           } catch (err) {
-            instance?.terminal.write(`\r\n\x1b[31m${String(err)}\x1b[0m\r\n`);
-            useAppStore.getState().updateTabConnected(tab.id, false);
-            connectedTabs.delete(tab.id);
-            return;
+            instance?.terminal.write(
+              `\r\n\x1b[31m${String(err)}\x1b[0m\r\n` +
+                `\x1b[33m${t('term_press_any_key_to_reconnect')}\x1b[0m\r\n`,
+            );
+            // Re-arm so a second keypress tries again.
+            reconnectableTabs.add(tab.id);
           }
-          if (cancelled) return;
-          if (containers.length === 0) {
-            instance?.terminal.write(`\r\n\x1b[33m${t('docker_no_containers')}\x1b[0m\r\n`);
-            useAppStore.getState().updateTabConnected(tab.id, false);
-            connectedTabs.delete(tab.id);
-            return;
-          }
-          // Ask the user to pick (App-root picker, bridged via window events).
-          const containerId = await new Promise<string | null>((resolve) => {
-            resolveDockerPick = resolve;
-            const onPick = (e: Event) => {
-              const d = (e as CustomEvent).detail;
-              if (d?.tabId === tab.id) { cleanup(); resolve(d.id as string); }
-            };
-            const onCancel = (e: Event) => {
-              const d = (e as CustomEvent).detail;
-              if (d?.tabId === tab.id) { cleanup(); resolve(null); }
-            };
-            const cleanup = () => {
+        };
+
+        // Only establish backend connection if not already connected (avoids race on split-mode transitions)
+        const alreadyConnected = connectedTabs.has(tab.id);
+        if (!alreadyConnected) {
+          connectedTabs.add(tab.id);
+        }
+
+        try {
+          let connectionReady = alreadyConnected;
+          if (!alreadyConnected) {
+            if (tab.type === 'localshell') {
+              // Wait for layout to settle so the PTY is created with the
+              // terminal's real dimensions instead of the default 80×24.
+              // Without this the shell outputs text formatted for 80 cols
+              // but xterm renders at the actual (larger) width → garbled.
+              await new Promise<void>((resolve) => {
+                requestAnimationFrame(() => {
+                  requestAnimationFrame(() => {
+                    safeFit(tab.id);
+                    resolve();
+                  });
+                });
+              });
+              if (cancelled) return;
+
+              instance?.terminal.write(`\r\n\x1b[90m${t('term_starting_shell')}\x1b[0m\r\n`);
+              await invoke('create_local_shell', {
+                sessionId: tab.sessionId,
+                rows: instance.terminal.rows,
+                cols: instance.terminal.cols,
+                shellName: session?.shell_name ?? null,
+                workingDir: session?.working_dir ?? null,
+                charset: session?.charset ?? null,
+              });
+              connectionReady = true;
+              if (session?.init_command) {
+                const cmd = session.init_command;
+                initScriptTimers.push(
+                  setTimeout(() => {
+                    initScriptCancels.push(
+                      runLoginScript((d) => {
+                        invoke('write_to_pty', { sessionId: tab.sessionId, data: d }).catch(
+                          () => {},
+                        );
+                      }, cmd),
+                    );
+                  }, 300),
+                );
+              }
+            } else if (tab.type === 'ssh') {
+              if (!session?.host) {
+                instance?.terminal.write(`\r\n\x1b[31m${t('term_ssh_not_found')}\x1b[0m\r\n`);
+              } else {
+                // Wait for layout to settle so request_pty is sized to the
+                // actual terminal dimensions instead of the default 80×24.
+                // Without this the remote shell formats output for 80 cols
+                // while xterm renders at the real (wider) width → garbled.
+                await new Promise<void>((resolve) => {
+                  requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                      safeFit(tab.id);
+                      resolve();
+                    });
+                  });
+                });
+                if (cancelled) return;
+
+                instance?.terminal.write(
+                  `\r\n\x1b[90m${t('term_connecting', {
+                    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+                    user: session.username || 'root',
+                    host: session.host,
+                    port: session.port ?? 22,
+                  })}` +
+                    `${session.jump_host ? ` ${t('term_via_jump', { jumpHost: session.jump_host })}` : ''}` +
+                    `${session.proxy_type && session.proxy_type !== 'none' ? ` ${t('term_via_proxy', { proxyType: session.proxy_type })}` : ''}` +
+                    `...\x1b[0m\r\n`,
+                );
+                await doSshConnect(session);
+                connectionReady = true;
+                if (session.init_command) {
+                  const cmd = session.init_command;
+                  initScriptTimers.push(
+                    setTimeout(() => {
+                      initScriptCancels.push(
+                        runLoginScript((d) => {
+                          invoke('write_to_ssh', { sessionId: tab.sessionId, data: d }).catch(
+                            () => {},
+                          );
+                        }, cmd),
+                      );
+                    }, 300),
+                  );
+                }
+
+                // Resolve the completion table: a concrete override is handled
+                // synchronously by syncTable; 'auto'/unset triggers a one-shot remote
+                // probe (best-effort, result cached per tab).
+                if (tableForRemoteShell(session.remote_shell ?? null) === null) {
+                  const host = session.host ?? '';
+                  const cached = host ? remoteOsCache.get(host) : undefined;
+                  if (cached && Date.now() - cached.at < REMOTE_OS_TTL_MS) {
+                    tabCommandTable.set(tab.id, cached.table);
+                  } else {
+                    invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
+                      .then((tbl) => {
+                        const norm = normalizeTable(tbl);
+                        tabCommandTable.set(tab.id, norm);
+                        if (host) remoteOsCache.set(host, { table: norm, at: Date.now() });
+                      })
+                      .catch(() => {});
+                  }
+                }
+
+                // Dynamic (SOCKS) only needs a local port; local/remote need the full triple.
+                const tunnelReady =
+                  session.tunnel_enabled &&
+                  (session.tunnel_type === 'dynamic'
+                    ? !!session.tunnel_local_port
+                    : !!(
+                        session.tunnel_local_port &&
+                        session.tunnel_remote_host &&
+                        session.tunnel_remote_port
+                      ));
+                if (tunnelReady) {
+                  try {
+                    const actualPort = await invoke<number>('start_tunnel', {
+                      sessionId: tab.sessionId,
+                      host: '',
+                      port: 22,
+                      username: '',
+                      password: null,
+                      privateKeyPath: null,
+                      authMethod: 'none',
+                      jumpHost: null,
+                      jumpPort: 22,
+                      jumpUsername: null,
+                      jumpPassword: null,
+                      jumpPrivateKeyPath: null,
+                      proxyType: null,
+                      proxyHost: null,
+                      proxyPort: 1080,
+                      proxyUsername: null,
+                      proxyPassword: null,
+                      localPort: session.tunnel_local_port ?? 0,
+                      // Backend expects non-null host/port; dynamic (SOCKS) ignores them.
+                      remoteHost: session.tunnel_remote_host ?? '',
+                      remotePort: session.tunnel_remote_port ?? 0,
+                      tunnelType: session.tunnel_type ?? 'local',
+                    });
+                    instance?.terminal.write(
+                      session.tunnel_type === 'dynamic'
+                        ? `\r\n\x1b[90m${t('term_tunnel_socks_ok', { localPort: actualPort })}\x1b[0m\r\n`
+                        : session.tunnel_type === 'remote'
+                          ? `\r\n\x1b[90m${t('term_tunnel_remote_ok', { port: actualPort, host: session.tunnel_remote_host!, localPort: session.tunnel_remote_port! })}\x1b[0m\r\n`
+                          : `\r\n\x1b[90m${t('term_tunnel_ok', { localPort: actualPort, remoteHost: session.tunnel_remote_host!, remotePort: session.tunnel_remote_port! })}\x1b[0m\r\n`,
+                    );
+                  } catch (tunnelErr) {
+                    instance?.terminal.write(
+                      `\r\n\x1b[33m${t('term_tunnel_fail', { error: String(tunnelErr) })}\x1b[0m\r\n`,
+                    );
+                  }
+                }
+              }
+            } else if (tab.type === 'serial') {
+              if (!session?.serial_port) {
+                instance?.terminal.write(
+                  `\r\n\x1b[31m${t('term_serial_not_configured')}\x1b[0m\r\n`,
+                );
+              } else {
+                instance?.terminal.write(
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+                  `\r\n\x1b[90m${t('term_opening_serial', { port: session.serial_port, baud: session.serial_baud_rate || '115200' })}\x1b[0m\r\n`,
+                );
+                await invoke('serial_open', {
+                  sessionId: tab.sessionId,
+                  portName: session.serial_port,
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+                  baudRate: parseInt(session.serial_baud_rate || '115200', 10),
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+                  dataBits: session.serial_data_bits || '8',
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+                  stopBits: session.serial_stop_bits || '1',
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+                  parity: session.serial_parity || 'None',
+                  flowControl: session.serial_flow_control ?? 'none',
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+                  serialEncoding: session.serial_encoding || null,
+                });
+                connectionReady = true;
+                if (session.serial_init_commands) {
+                  const cmd = session.serial_init_commands;
+                  initScriptTimers.push(
+                    setTimeout(() => {
+                      initScriptCancels.push(
+                        runLoginScript((d) => {
+                          invoke('write_to_serial', { sessionId: tab.sessionId, data: d }).catch(
+                            () => {},
+                          );
+                        }, cmd),
+                      );
+                    }, 300),
+                  );
+                }
+              }
+            } else if (tab.type === 'docker') {
+              const method = session?.docker_connect_method ?? '';
+              const tunnelId = session?.docker_ssh_tunnel ?? null;
+              instance?.terminal.write(`\r\n\x1b[90m${t('docker_listing')}\x1b[0m\r\n`);
+              let containers: { id: string; name: string; image: string; status: string }[];
+              try {
+                containers = await invoke('docker_list_containers', {
+                  connectMethod: method,
+                  tunnelSessionId: tunnelId,
+                });
+              } catch (err) {
+                instance?.terminal.write(`\r\n\x1b[31m${String(err)}\x1b[0m\r\n`);
+                useAppStore.getState().updateTabConnected(tab.id, false);
+                connectedTabs.delete(tab.id);
+                return;
+              }
+              if (cancelled) return;
+              if (containers.length === 0) {
+                instance?.terminal.write(`\r\n\x1b[33m${t('docker_no_containers')}\x1b[0m\r\n`);
+                useAppStore.getState().updateTabConnected(tab.id, false);
+                connectedTabs.delete(tab.id);
+                return;
+              }
+              // Ask the user to pick (App-root picker, bridged via window events).
+              const containerId = await new Promise<string | null>((resolve) => {
+                resolveDockerPick = resolve;
+                const unlistenPick = listenTypedEvent<DockerPickPayload>(
+                  'gwshell:docker-pick',
+                  (d) => {
+                    if (d?.tabId === tab.id) {
+                      cleanup();
+                      resolve(d.id);
+                    }
+                  },
+                );
+                const unlistenCancel = listenTypedEvent<DockerCancelPayload>(
+                  'gwshell:docker-cancel',
+                  (d) => {
+                    if (d?.tabId === tab.id) {
+                      cleanup();
+                      resolve(null);
+                    }
+                  },
+                );
+                const cleanup = () => {
+                  cancelDockerPick = null;
+                  resolveDockerPick = null;
+                  unlistenPick();
+                  unlistenCancel();
+                };
+                cancelDockerPick = cleanup;
+                useAppStore.getState().setDockerPicker({ tabId: tab.id, containers });
+              });
               cancelDockerPick = null;
               resolveDockerPick = null;
-              window.removeEventListener('gwshell:docker-pick', onPick);
-              window.removeEventListener('gwshell:docker-cancel', onCancel);
-            };
-            cancelDockerPick = cleanup;
-            window.addEventListener('gwshell:docker-pick', onPick);
-            window.addEventListener('gwshell:docker-cancel', onCancel);
-            useAppStore.getState().setDockerPicker({ tabId: tab.id, containers });
-          });
-          cancelDockerPick = null;
-          resolveDockerPick = null;
-          if (cancelled) return;
-          if (!containerId) {
-            // Cancelled — close the docker tab (no live session).
-            destroyTerminal(tab.id);
-            useAppStore.getState().removeTab(tab.id);
-            return;
+              if (cancelled) return;
+              if (!containerId) {
+                // Cancelled — close the docker tab (no live session).
+                destroyTerminal(tab.id);
+                useAppStore.getState().removeTab(tab.id);
+                return;
+              }
+              instance?.terminal.write(
+                `\r\n\x1b[90m${t('docker_connecting_container')}\x1b[0m\r\n`,
+              );
+              await invoke('docker_exec', {
+                sessionId: tab.sessionId,
+                containerId,
+                rows: instance.terminal.rows,
+                cols: instance.terminal.cols,
+                connectMethod: method,
+                tunnelSessionId: tunnelId,
+              });
+              connectionReady = true;
+            }
+          } // end if (!alreadyConnected)
+          if (!connectionReady && !alreadyConnected) {
+            connectedTabs.delete(tab.id);
           }
-          instance?.terminal.write(`\r\n\x1b[90m${t('docker_connecting_container')}\x1b[0m\r\n`);
-          await invoke('docker_exec', {
-            sessionId: tab.sessionId,
-            containerId,
-            rows: instance!.terminal.rows,
-            cols: instance!.terminal.cols,
-            connectMethod: method,
-            tunnelSessionId: tunnelId,
-          });
-          connectionReady = true;
-        }
-        } // end if (!alreadyConnected)
-        if (!connectionReady && !alreadyConnected) {
+          useAppStore.getState().updateTabConnected(tab.id, connectionReady);
+        } catch (err) {
           connectedTabs.delete(tab.id);
+          useAppStore.getState().updateTabConnected(tab.id, false);
+          instance?.terminal.write(
+            `\r\n\x1b[31m${t('term_conn_error', { error: String(err) })}\x1b[0m\r\n`,
+          );
         }
-        useAppStore.getState().updateTabConnected(tab.id, connectionReady);
-      } catch (err) {
-        connectedTabs.delete(tab.id);
-        useAppStore.getState().updateTabConnected(tab.id, false);
-        instance?.terminal.write(`\r\n\x1b[31m${t('term_conn_error', { error: String(err) })}\x1b[0m\r\n`);
-      }
-    };
+      };
 
-      setupConnection();
+      void setupConnection();
     }; // end initTerminal
 
-    initTerminal();
+    void initTerminal();
 
     return () => {
       cancelled = true;
@@ -2012,7 +2353,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // Capture resolve ref BEFORE cancelDockerPick nulls it (cleanup sets both
       // cancelDockerPick and resolveDockerPick to null).
       const pendingResolve = resolveDockerPick;
-      cancelDockerPick?.();   // removes listeners + nulls cancelDockerPick & resolveDockerPick
+      cancelDockerPick?.(); // removes listeners + nulls cancelDockerPick & resolveDockerPick
       pendingResolve?.(null); // unblocks the awaiting async frame
       useAppStore.getState().setDockerPicker(null);
       // Unstick a pending fingerprint-confirm prompt so its awaiting async frame
@@ -2022,25 +2363,53 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       cleanupTerminalInteractions(tab.id);
       // Only close backend connection if tab is being removed (not just relocated to split pane)
       const store = useAppStore.getState();
-      const tabStillExists = store.tabs.some(t2 => t2.id === tab.id);
+      const tabStillExists = store.tabs.some((t2) => t2.id === tab.id);
       if (!tabStillExists) {
         connectedTabs.delete(tab.id);
         useAppStore.getState().updateTabConnected(tab.id, false);
-        const isSshDocker = tab.type === "docker"
-          && (sessionsRef.current.find((s) => s.id === tab.sessionId)?.docker_connect_method ?? '').toLowerCase() === 'ssh';
-        const closeCmd = (tab.type === "ssh" || isSshDocker) ? "close_ssh"
-          : tab.type === "serial" ? "close_serial"
-          : "close_pty";
+        const isSshDocker =
+          tab.type === 'docker' &&
+          (
+            sessionsRef.current.find((s) => s.id === tab.sessionId)?.docker_connect_method ?? ''
+          ).toLowerCase() === 'ssh';
+        const closeCmd =
+          tab.type === 'ssh' || isSshDocker
+            ? 'close_ssh'
+            : tab.type === 'serial'
+              ? 'close_serial'
+              : 'close_pty';
         invoke(closeCmd, { sessionId: tab.sessionId }).catch(() => {});
       }
     };
+    // Per-tab init: intentionally omits maybePasteText, t, and tab.title —
+    // this effect should run once per tab lifecycle, not on every prop change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab.id, tab.sessionId, tab.type]);
 
   // Update terminal theme when app theme changes
   useEffect(() => {
     const inst = terminalInstances.get(tab.id);
     if (inst) {
-      inst.terminal.options.theme = resolveTerminalTheme(useSettingsStore.getState().settings.terminalColorScheme, theme);
+      inst.terminal.options.theme = resolveTerminalTheme(
+        useSettingsStore.getState().settings.terminalColorScheme,
+        theme,
+      );
+      // Match VSCode: when the app theme flips dark↔light, the 'auto' terminal
+      // color scheme resolves to a different palette. The WebGL renderer's
+      // glyph atlas still holds pixels rasterized with the old palette, so a
+      // bare options.theme assignment leaves the on-screen colors stale until
+      // something else forces an atlas rebuild. Clear the atlas + force a full
+      // repaint so the new palette takes effect immediately.
+      const dbg = webglDebugEnabled();
+      requestAnimationFrame(() => {
+        try {
+          inst.terminal.clearTextureAtlas();
+          if (dbg) console.debug('[gwshell:webgl] clearTextureAtlas (app theme change)');
+        } catch {}
+        try {
+          inst.terminal.refresh(0, inst.terminal.rows - 1);
+        } catch {}
+      });
     }
   }, [theme, tab.id]);
 
@@ -2052,18 +2421,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
     // renders a hollow cursor on unfocused panes natively — no need to
     // force cursorBlink/visibility, which would clobber the running app.
     if (isActive) {
-        // Double-RAF: wait for layout to settle (especially after
-        // display:none → block). Going from hidden → visible may leave the
-        // glyph atlas stale and the cached TUI state out of sync, so do a
-        // full renderer reset instead of a plain fit.
+      // Double-RAF: wait for layout to settle (especially after
+      // display:none → block). Going from hidden → visible may leave the
+      // glyph atlas stale and the cached TUI state out of sync, so do a
+      // full renderer reset instead of a plain fit.
+      requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
-            try { inst.terminal.focus(); } catch {}
-          });
+          forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
+          try {
+            inst.terminal.focus();
+          } catch {}
         });
+      });
     } else {
-      try { inst.terminal.blur(); } catch {}
+      try {
+        inst.terminal.blur();
+      } catch {}
     }
   }, [isActive, tab.id, tab.sessionId, tab.type]);
 
@@ -2117,16 +2490,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         resizeTimerId = setTimeout(() => {
           const inst = terminalInstances.get(tab.id);
           if (inst) {
-            try { inst.terminal.clearTextureAtlas(); } catch {}
+            try {
+              inst.terminal.clearTextureAtlas();
+            } catch {}
           }
           forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
         }, 100);
       }
     };
     const setupDprListener = () => {
-      if (activeDprMedia) activeDprMedia.removeEventListener("change", handleDprChange);
+      if (activeDprMedia) activeDprMedia.removeEventListener('change', handleDprChange);
       activeDprMedia = window.matchMedia(`screen and (resolution: ${currentDpr}dppx)`);
-      activeDprMedia.addEventListener("change", handleDprChange);
+      activeDprMedia.addEventListener('change', handleDprChange);
     };
     setupDprListener();
 
@@ -2139,7 +2514,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       settleTimerIds.delete(tab.id);
       if (resizeTimerId) clearTimeout(resizeTimerId);
       observer.disconnect();
-      if (activeDprMedia) activeDprMedia.removeEventListener("change", handleDprChange);
+      if (activeDprMedia) activeDprMedia.removeEventListener('change', handleDprChange);
     };
   }, [tab.id, tab.sessionId, tab.type]);
 
@@ -2148,25 +2523,31 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       <div
         ref={containerRef}
         className={`terminal-pane${broadcastInput ? ' broadcasting' : ''}`}
-        style={{ display: (visible ?? isActive) ? "block" : "none" }}
+        style={{ display: (visible ?? isActive) ? 'block' : 'none' }}
         onMouseDown={() => useAppStore.getState().setActiveTab(tab.id)}
       />
 
       {/* NOTE: in 2-pane split mode the completion dropdown anchors to the terminal-container, so when the active pane is the right column the hint can be offset. Known limitation (command hints are off by default); proper fix needs a per-pane positioned wrapper. */}
-      {completionItems.length > 0 && isActive && terminalCmdHint && isInteractiveTerminal(tab.type) && (
-        <CompletionDropdown
-          items={completionItems}
-          selectedIndex={completionIndex}
-          x={completionPos.x}
-          y={completionPos.y}
-          placeAbove={completionPos.above}
-          fontFamily={terminalFont}
-          fontSize={parseInt(terminalFontSize) || 13}
-        />
-      )}
+      {completionItems.length > 0 &&
+        isActive &&
+        terminalCmdHint &&
+        isInteractiveTerminal(tab.type) && (
+          <CompletionDropdown
+            items={completionItems}
+            selectedIndex={completionIndex}
+            x={completionPos.x}
+            y={completionPos.y}
+            placeAbove={completionPos.above}
+            fontFamily={terminalFont}
+            fontSize={parseInt(terminalFontSize) || 13}
+          />
+        )}
 
       {contextMenu && isActive && (
-        <div className="context-menu terminal-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
+        <div
+          className="context-menu terminal-context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
           <button
             type="button"
             className="context-menu-item"
@@ -2175,26 +2556,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           >
             {t('settings_sc_copy')}
           </button>
-          <button
-            type="button"
-            className="context-menu-item"
-            onClick={pasteClipboard}
-          >
+          <button type="button" className="context-menu-item" onClick={pasteClipboard}>
             {t('settings_sc_paste')}
           </button>
           <div className="context-menu-divider" />
-          <button
-            type="button"
-            className="context-menu-item"
-            onClick={selectAllTerminal}
-          >
+          <button type="button" className="context-menu-item" onClick={selectAllTerminal}>
             {t('settings_sc_selectall')}
           </button>
-          <button
-            type="button"
-            className="context-menu-item"
-            onClick={clearTerminal}
-          >
+          <button type="button" className="context-menu-item" onClick={clearTerminal}>
             {t('settings_sc_clear')}
           </button>
         </div>
@@ -2206,14 +2575,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             <div className="fingerprint-dialog-title">🔒 {t('fp_title')}</div>
             <div className="fingerprint-dialog-body">
               <p>{t('fp_desc')}</p>
-              <div className="fingerprint-host">{fingerprintInfo.host}:{fingerprintInfo.port}</div>
+              <div className="fingerprint-host">
+                {fingerprintInfo.host}:{fingerprintInfo.port}
+              </div>
               <div className="fingerprint-hash">
                 <span className="fingerprint-label">{fingerprintInfo.keyType}</span>
                 <code>{fingerprintInfo.fingerprint}</code>
               </div>
-              <p className="fingerprint-warning">
-                {t('fp_warning')}
-              </p>
+              <p className="fingerprint-warning">{t('fp_warning')}</p>
             </div>
             <div className="fingerprint-dialog-footer">
               <button
@@ -2250,7 +2619,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               </button>
               <button
                 className="paste-confirm-btn primary"
-                onClick={() => { terminalInstances.get(tab.id)?.terminal.paste(pasteConfirm); setPasteConfirm(null); }}
+                onClick={() => {
+                  terminalInstances.get(tab.id)?.terminal.paste(pasteConfirm);
+                  setPasteConfirm(null);
+                }}
               >
                 {t('paste_confirm_paste')}
               </button>

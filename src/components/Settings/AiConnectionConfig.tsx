@@ -1,7 +1,21 @@
 import React, { useState } from 'react';
-import { AlertCircle, CheckCircle2, KeyRound, PlugZap, RotateCcw, Save, SlidersHorizontal, TestTube2 } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  KeyRound,
+  PlugZap,
+  RotateCcw,
+  Save,
+  SlidersHorizontal,
+  TestTube2,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { compatibleProviderLabels, findAiModelPreset, getAiModelDisplayName, providerDefaults } from '../../lib/aiModels';
+import {
+  compatibleProviderLabels,
+  findAiModelPreset,
+  getAiModelDisplayName,
+  providerDefaults,
+} from '../../lib/aiModels';
 import type { AiProviderSettings } from '../../types/agent';
 
 interface Props {
@@ -21,8 +35,19 @@ interface Props {
 }
 
 export const AiConnectionConfig: React.FC<Props> = ({
-  settings, apiKey, status, keyPlaceholder, usable, busy, message,
-  onSettingsChange, onApiKeyChange, onSelectProvider, onClearKey, onTest, onSave,
+  settings,
+  apiKey,
+  status,
+  keyPlaceholder,
+  usable,
+  busy,
+  message,
+  onSettingsChange,
+  onApiKeyChange,
+  onSelectProvider,
+  onClearKey,
+  onTest,
+  onSave,
 }) => {
   const { t } = useTranslation();
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -37,6 +62,7 @@ export const AiConnectionConfig: React.FC<Props> = ({
             <span>{getAiModelDisplayName(settings)}</span>
           </div>
           <div className="ai-settings-model-meta">
+            {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing */}
             <span>{selectedPreset?.vendor || compatibleProviderLabels[settings.provider]}</span>
             <span>{settings.model || '-'}</span>
           </div>
@@ -75,6 +101,7 @@ export const AiConnectionConfig: React.FC<Props> = ({
         </div>
         <p className="ai-custom-provider-hint">{t('agent_ai_compat_hint')}</p>
         <div className="ai-provider-segments">
+          {/* eslint-disable-next-line no-restricted-syntax */}
           {(Object.keys(providerDefaults) as AiProviderSettings['provider'][]).map((provider) => (
             <button
               className={settings.provider === provider ? 'active' : ''}
@@ -114,7 +141,9 @@ export const AiConnectionConfig: React.FC<Props> = ({
               type="password"
               value={apiKey}
               onChange={(e) => onApiKeyChange(e.target.value)}
-              placeholder={settings.provider === 'ollama' ? t('agent_ai_key_optional') : keyPlaceholder}
+              placeholder={
+                settings.provider === 'ollama' ? t('agent_ai_key_optional') : keyPlaceholder
+              }
             />
             <small>
               {settings.provider === 'ollama'
@@ -147,7 +176,9 @@ export const AiConnectionConfig: React.FC<Props> = ({
               min={1}
               type="number"
               value={settings.request_timeout_secs}
-              onChange={(e) => onSettingsChange({ request_timeout_secs: parseInt(e.target.value, 10) || 45 })}
+              onChange={(e) =>
+                onSettingsChange({ request_timeout_secs: parseInt(e.target.value, 10) || 45 })
+              }
             />
           </label>
           <label>
@@ -158,7 +189,9 @@ export const AiConnectionConfig: React.FC<Props> = ({
               min={2000}
               type="number"
               value={settings.max_input_chars}
-              onChange={(e) => onSettingsChange({ max_input_chars: parseInt(e.target.value, 10) || 24000 })}
+              onChange={(e) =>
+                onSettingsChange({ max_input_chars: parseInt(e.target.value, 10) || 24000 })
+              }
             />
           </label>
           <label>
@@ -184,7 +217,12 @@ export const AiConnectionConfig: React.FC<Props> = ({
           {t('agent_ai_external_notice')}
         </span>
         <div className="ai-settings-actions">
-          <button className="settings-btn-outline" disabled={busy} onClick={onClearKey} type="button">
+          <button
+            className="settings-btn-outline"
+            disabled={busy}
+            onClick={onClearKey}
+            type="button"
+          >
             <RotateCcw size={14} />
             {t('agent_ai_clear_key')}
           </button>

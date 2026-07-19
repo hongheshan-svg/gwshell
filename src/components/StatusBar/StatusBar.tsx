@@ -9,7 +9,9 @@ export const StatusBar: React.FC = () => {
   // (batchUpdateLatency replaces the `sessions` array reference each round,
   // ~once/minute). Only subscribe to the slices actually rendered here.
   const activeTab = useAppStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
-  const connectedCount = useAppStore((s) => s.tabs.filter((t) => t.connected && t.type !== 'asset-list').length);
+  const connectedCount = useAppStore(
+    (s) => s.tabs.filter((t) => t.connected && t.type !== 'asset-list').length,
+  );
   const assetCount = useAppStore((s) => s.sessions.length);
   const activeSession = useAppStore((s) => {
     const tab = s.tabs.find((t) => t.id === s.activeTabId);
@@ -24,7 +26,9 @@ export const StatusBar: React.FC = () => {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
-    getVersion().then(setVersion).catch(() => {});
+    getVersion()
+      .then(setVersion)
+      .catch(() => {});
   }, []);
 
   // Align the clock tick to the next minute boundary so HH:MM never lags by
@@ -50,7 +54,8 @@ export const StatusBar: React.FC = () => {
     const target =
       sess.username && sess.host
         ? `${sess.username}@${sess.host}${sess.port ? `:${sess.port}` : ''}`
-        : sess.host || sess.serial_port || sess.shell_name || null;
+        : // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+          sess.host || sess.serial_port || sess.shell_name || null;
     return target;
   }, [activeSession]);
 
@@ -87,18 +92,28 @@ export const StatusBar: React.FC = () => {
           type="button"
         >
           <Radio size={11} />
-          <span>{t('status_broadcast')}{broadcastInput ? ` (${connectedCount})` : ''}</span>
+          <span>
+            {t('status_broadcast')}
+            {broadcastInput ? ` (${connectedCount})` : ''}
+          </span>
         </button>
       )}
 
       <div className="status-spacer" />
 
       <div className="status-item">
-        <span>{t('status_assets')}: {assetCount}</span>
+        <span>
+          {t('status_assets')}: {assetCount}
+        </span>
       </div>
       <div className="status-item">
         <Clock size={11} />
-        <span>{now.toLocaleTimeString(locale === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' })}</span>
+        <span>
+          {now.toLocaleTimeString(locale === 'zh' ? 'zh-CN' : 'en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </span>
       </div>
     </div>
   );

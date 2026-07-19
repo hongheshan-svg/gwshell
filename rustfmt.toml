@@ -1,0 +1,5 @@
+edition = "2021"
+max_width = 100
+# Note: fn_single_line = true is a nightly-only rustfmt option. CI uses stable
+# rustfmt, so it's omitted to avoid warnings and ensure the config is actually
+# enforced. If the project later pins nightly via rust-toolchain, re-add it.

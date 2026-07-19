@@ -39,6 +39,7 @@ The old `src-tauri/src/ssh.rs` and its `SshManager` remain the live implementati
 ## Task 1: Add russh dependencies, keep building
 
 **Files:**
+
 - Modify: `src-tauri/Cargo.toml`
 - Modify: `src-tauri/src/lib.rs` (declare new module)
 
@@ -94,6 +95,7 @@ git commit -m "build(ssh): add russh deps and empty ssh_next module"
 ## Task 2: known_hosts store + fingerprint formatting (pure logic, TDD)
 
 **Files:**
+
 - Create/replace: `src-tauri/src/ssh/known_hosts.rs`
 - Test: same file `#[cfg(test)]`
 
@@ -247,6 +249,7 @@ git commit -m "feat(ssh): known_hosts store + fingerprint verify (russh module)"
 ## Task 3: ConnectParams
 
 **Files:**
+
 - Create/replace: `src-tauri/src/ssh/params.rs`
 - Modify: `src-tauri/src/ssh/mod.rs` (already declares `mod params;`)
 
@@ -296,6 +299,7 @@ git commit -m "feat(ssh): ConnectParams for russh module"
 ## Task 4: Transport builder (direct / SOCKS5 / HTTP)
 
 **Files:**
+
 - Create: `src-tauri/src/ssh/transport.rs`
 - Modify: `src-tauri/src/ssh/mod.rs` (add `mod transport;`)
 
@@ -330,7 +334,7 @@ pub fn expand_tilde(path: &str) -> std::path::PathBuf {
 }
 ```
 
-- [ ] **Step 2: Direct + proxied TCP to the *target* (no jump yet)**
+- [ ] **Step 2: Direct + proxied TCP to the _target_ (no jump yet)**
 
 Append:
 
@@ -438,6 +442,7 @@ git commit -m "feat(ssh): transport builder (direct/SOCKS5/HTTP) for russh"
 ## Task 5: Handler with check_server_key
 
 **Files:**
+
 - Create: `src-tauri/src/ssh/handler.rs`
 - Modify: `src-tauri/src/ssh/mod.rs` (add `mod handler;`)
 
@@ -514,6 +519,7 @@ git commit -m "feat(ssh): russh Handler with known_hosts check_server_key"
 ## Task 6: Auth fallback loop
 
 **Files:**
+
 - Create: `src-tauri/src/ssh/auth.rs`
 - Modify: `src-tauri/src/ssh/mod.rs` (add `mod auth;`)
 
@@ -646,6 +652,7 @@ git commit -m "feat(ssh): russh auth fallback (pubkey/agent/password/keyboard-in
 ## Task 7: Connect orchestration + jump host
 
 **Files:**
+
 - Create: `src-tauri/src/ssh/connect.rs`
 - Modify: `src-tauri/src/ssh/mod.rs` (add `mod connect;`)
 
@@ -806,6 +813,7 @@ git commit -m "feat(ssh): connect orchestration with jump-host chaining"
 ## Task 8: Shell session task + SshManager (shell path)
 
 **Files:**
+
 - Create: `src-tauri/src/ssh/session.rs`
 - Replace: `src-tauri/src/ssh/mod.rs` (introduce `SshManager`)
 
@@ -993,6 +1001,7 @@ git commit -m "feat(ssh): shell session task + async SshManager (shell path)"
 ## Task 9: exec / metrics
 
 **Files:**
+
 - Create: `src-tauri/src/ssh/exec.rs`
 - Modify: `src-tauri/src/ssh/mod.rs` (store the connect params per session; add exec methods)
 
@@ -1076,6 +1085,7 @@ git commit -m "feat(ssh): exec/metrics over shared connection"
 ## Task 10: SFTP
 
 **Files:**
+
 - Create: `src-tauri/src/ssh/sftp.rs`
 - Modify: `src-tauri/src/ssh/mod.rs` (SFTP methods + `SftpEntry`)
 
@@ -1256,6 +1266,7 @@ git commit -m "feat(ssh): SFTP over russh-sftp on shared connection"
 ## Task 11: Local port forward
 
 **Files:**
+
 - Create: `src-tauri/src/ssh/forward.rs`
 - Modify: `src-tauri/src/ssh/mod.rs` (forward methods + registry)
 
@@ -1367,6 +1378,7 @@ git commit -m "feat(ssh): local port forwarding over russh"
 ## Task 12: Cutover — wire commands, delete ssh2
 
 **Files:**
+
 - Modify: `src-tauri/src/lib.rs`
 - Modify: `src-tauri/src/metrics.rs`
 - Delete: `src-tauri/src/ssh.rs`

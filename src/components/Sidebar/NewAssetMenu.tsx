@@ -21,14 +21,25 @@ interface NewAssetMenuProps {
 
 // Niche remote types kept under a submenu (disabled placeholders like RDP/Telnet
 // are hidden rather than shown as dead "unavailable" rows).
-const remoteItems: { id: string; icon: typeof TerminalSquare; labelKey: TranslationKeys; disabled?: boolean }[] = [
+const remoteItems: {
+  id: string;
+  icon: typeof TerminalSquare;
+  labelKey: TranslationKeys;
+  disabled?: boolean;
+}[] = [
   { id: 'ssh-tunnel', icon: Network, labelKey: 'newasset_ssh_tunnel' },
   { id: 'serial', icon: Usb, labelKey: 'newasset_serial' },
 ];
 
 // SSH is the app's core action, so it leads as a one-click top-level item rather
 // than being buried in the remote submenu. Unimplemented entries are omitted.
-const menuItems: { id: string; icon: typeof TerminalSquare; labelKey: TranslationKeys; hasSubmenu?: boolean; disabled?: boolean }[] = [
+const menuItems: {
+  id: string;
+  icon: typeof TerminalSquare;
+  labelKey: TranslationKeys;
+  hasSubmenu?: boolean;
+  disabled?: boolean;
+}[] = [
   { id: 'quickconnect', icon: Zap, labelKey: 'newasset_quickconnect' },
   { id: 'ssh', icon: Server, labelKey: 'newasset_ssh' },
   { id: 'localshell', icon: TerminalSquare, labelKey: 'newasset_localshell' },
@@ -46,6 +57,7 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
+      // eslint-disable-next-line no-restricted-syntax
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         onClose();
       }
@@ -66,7 +78,7 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
   const handleItemMouseEnter = (itemId: string, e: React.MouseEvent) => {
     setHoveredItem(itemId);
     if (itemId === 'remote') {
-      const target = e.currentTarget as HTMLElement;
+      const target = e.currentTarget as HTMLElement; // eslint-disable-line no-restricted-syntax -- DOM EventTarget narrowing; getBoundingClientRect needs HTMLElement
       const rect = target.getBoundingClientRect();
       // Flush against the panel's right edge (no gap). The submenu is a DOM child
       // of .new-asset-menu, so a flush position lets the cursor move from the
@@ -101,14 +113,20 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
             }}
             onMouseEnter={(e) => handleItemMouseEnter(item.id, e)}
           >
-            <span className="new-asset-menu-icon"><item.icon size={15} /></span>
+            <span className="new-asset-menu-icon">
+              <item.icon size={15} />
+            </span>
             <span>{t(item.labelKey)}</span>
             {item.disabled && (
               <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)' }}>
                 {t('common_unavailable')}
               </span>
             )}
-            {item.hasSubmenu && <span className="new-asset-menu-arrow"><ChevronRight size={14} /></span>}
+            {item.hasSubmenu && (
+              <span className="new-asset-menu-arrow">
+                <ChevronRight size={14} />
+              </span>
+            )}
           </div>
         ))}
 
@@ -134,7 +152,9 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
                   onClose();
                 }}
               >
-                <span className="new-asset-menu-icon"><item.icon size={15} /></span>
+                <span className="new-asset-menu-icon">
+                  <item.icon size={15} />
+                </span>
                 <span>{t(item.labelKey)}</span>
                 {item.disabled && (
                   <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)' }}>

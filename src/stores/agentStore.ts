@@ -1,5 +1,11 @@
 import { create } from 'zustand';
-import type { AgentAnalysisUpdate, AgentEvidence, AgentSessionInfo, AgentToolCall, AgentToolResult } from '../types/agent';
+import type {
+  AgentAnalysisUpdate,
+  AgentEvidence,
+  AgentSessionInfo,
+  AgentToolCall,
+  AgentToolResult,
+} from '../types/agent';
 
 interface AgentStore {
   activeSession: AgentSessionInfo | null;
@@ -30,14 +36,30 @@ export const useAgentStore = create<AgentStore>((set) => ({
   setActiveSession: (session) =>
     set((s) => {
       if (session === null) {
-        return { activeSession: null, evidence: [], analysisText: '', latestUpdate: null, actions: [], results: [], error: null };
+        return {
+          activeSession: null,
+          evidence: [],
+          analysisText: '',
+          latestUpdate: null,
+          actions: [],
+          results: [],
+          error: null,
+        };
       }
 
       if (s.activeSession?.id === session.id) {
         return { activeSession: session };
       }
 
-      return { activeSession: session, evidence: [], analysisText: '', latestUpdate: null, actions: [], results: [], error: null };
+      return {
+        activeSession: session,
+        evidence: [],
+        analysisText: '',
+        latestUpdate: null,
+        actions: [],
+        results: [],
+        error: null,
+      };
     }),
   pushEvidence: (evidence) => set((s) => ({ evidence: [...s.evidence, evidence] })),
   appendAnalysisText: (delta) => set((s) => ({ analysisText: s.analysisText + delta })),
@@ -55,5 +77,14 @@ export const useAgentStore = create<AgentStore>((set) => ({
     }),
   pushResult: (result) => set((s) => ({ results: [...s.results, result] })),
   setError: (error) => set({ error }),
-  reset: () => set({ activeSession: null, evidence: [], analysisText: '', latestUpdate: null, actions: [], results: [], error: null }),
+  reset: () =>
+    set({
+      activeSession: null,
+      evidence: [],
+      analysisText: '',
+      latestUpdate: null,
+      actions: [],
+      results: [],
+      error: null,
+    }),
 }));

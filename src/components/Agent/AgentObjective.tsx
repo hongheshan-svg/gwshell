@@ -27,7 +27,7 @@ export const AgentObjective: React.FC = () => {
   useEffect(() => clearSubscriptions, []);
 
   const start = async () => {
-    if (!activeTab || activeTab.type !== 'ssh' || !activeTab.connected) {
+    if (activeTab?.type !== 'ssh' || !activeTab?.connected) {
       setError(t('agent_requires_connected_ssh'));
       return;
     }
@@ -54,7 +54,7 @@ export const AgentObjective: React.FC = () => {
   };
 
   const draftPlan = async () => {
-    if (!activeTab || activeTab.type !== 'ssh' || !activeTab.connected) {
+    if (activeTab?.type !== 'ssh' || !activeTab?.connected) {
       setError(t('agent_requires_connected_ssh'));
       return;
     }
@@ -91,7 +91,7 @@ export const AgentObjective: React.FC = () => {
         className="agent-objective-select"
         disabled={busy}
         value={autonomy}
-        onChange={(e) => setAutonomy(e.target.value as AgentAutonomyLevel)}
+        onChange={(e) => setAutonomy(e.target.value as AgentAutonomyLevel)} // eslint-disable-line no-restricted-syntax -- select value union; runtime-validated by onChange
       >
         <option value="observe">{t('agent_autonomy_observe')}</option>
         <option value="recommend">{t('agent_autonomy_recommend')}</option>
@@ -99,10 +99,24 @@ export const AgentObjective: React.FC = () => {
         <option value="policy_auto_maintain">{t('agent_autonomy_policy_auto_maintain')}</option>
       </select>
       <div className="agent-objective-actions">
-        <button className="settings-btn-outline" onClick={draftPlan} disabled={busy || !objective.trim()} type="button">
+        <button
+          className="settings-btn-outline"
+          onClick={() => {
+            void draftPlan();
+          }}
+          disabled={busy || !objective.trim()}
+          type="button"
+        >
           {t('agent_draft_plan')}
         </button>
-        <button className="settings-btn-primary" onClick={start} disabled={busy || !objective.trim()} type="button">
+        <button
+          className="settings-btn-primary"
+          onClick={() => {
+            void start();
+          }}
+          disabled={busy || !objective.trim()}
+          type="button"
+        >
           {t('agent_start')}
         </button>
       </div>

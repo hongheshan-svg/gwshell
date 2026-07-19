@@ -14,13 +14,13 @@
 
 ## File Structure
 
-| 文件 | 责任 | 操作 |
-|---|---|---|
-| `src-tauri/src/ssh.rs` | `expand_tilde` 纯函数 + 主 SSH publickey 分支 + 跳板机 publickey 分支 + 单元测试 | Modify |
-| `src/i18n/locales/gwshell.en.json` | 3 个新 i18n key | Modify |
-| `src/i18n/locales/gwshell.zh.json` | 3 个新 i18n key | Modify |
-| `src/i18n/index.ts` | 如使用 `TranslationKeys` 类型补充新 key | Modify(可能) |
-| `src/components/Modals/NewSessionModal.tsx` | 主私钥路径加 📁 按钮、加 passphrase 输入框、跳板机私钥路径加 📁 按钮 | Modify |
+| 文件                                        | 责任                                                                             | 操作         |
+| ------------------------------------------- | -------------------------------------------------------------------------------- | ------------ |
+| `src-tauri/src/ssh.rs`                      | `expand_tilde` 纯函数 + 主 SSH publickey 分支 + 跳板机 publickey 分支 + 单元测试 | Modify       |
+| `src/i18n/locales/gwshell.en.json`          | 3 个新 i18n key                                                                  | Modify       |
+| `src/i18n/locales/gwshell.zh.json`          | 3 个新 i18n key                                                                  | Modify       |
+| `src/i18n/index.ts`                         | 如使用 `TranslationKeys` 类型补充新 key                                          | Modify(可能) |
+| `src/components/Modals/NewSessionModal.tsx` | 主私钥路径加 📁 按钮、加 passphrase 输入框、跳板机私钥路径加 📁 按钮             | Modify       |
 
 无新增文件，无新增依赖（`tauri-plugin-dialog`、`@tauri-apps/plugin-dialog`、`lucide-react`、`dirs` crate 全部已在）。
 
@@ -29,6 +29,7 @@
 ## Task 1: 后端 — `expand_tilde` 纯函数（TDD）
 
 **Files:**
+
 - Modify: `src-tauri/src/ssh.rs`（在文件末尾追加 `#[cfg(test)] mod tests` 模块；helper 函数加在 `impl SshManager` 之前或 use 块附近）
 
 **Why TDD here:** `expand_tilde` 是无副作用的纯函数；项目里已有 `src-tauri/src/metrics.rs:297` 用 `#[cfg(test)] mod tests` 写单元测试的先例，跟仓库一致。
@@ -78,6 +79,7 @@ mod tests {
 ```bash
 cd /Users/zhengshan/projects/gwshell/src-tauri && cargo test --lib expand_tilde 2>&1 | tail -10
 ```
+
 Expected: 编译失败，错误信息包含 `cannot find function expand_tilde in this scope` 或类似。
 
 - [ ] **Step 3: 实现 `expand_tilde`**
@@ -107,6 +109,7 @@ fn expand_tilde(path: &str) -> std::path::PathBuf {
 ```bash
 cd /Users/zhengshan/projects/gwshell/src-tauri && cargo test --lib expand_tilde 2>&1 | tail -10
 ```
+
 Expected: `test result: ok. 5 passed; 0 failed`
 
 - [ ] **Step 5: Commit**
@@ -128,6 +131,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ## Task 2: 后端 — 把 `expand_tilde` + 存在性预检 + 错误信息接到两处 publickey 分支
 
 **Files:**
+
 - Modify: `src-tauri/src/ssh.rs:228-231`（跳板机 publickey 分支，函数 `tcp_via_jump` 内）
 - Modify: `src-tauri/src/ssh.rs:421-426`（主 SSH publickey 分支，`SshManager::connect` 内）
 
@@ -190,6 +194,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ```bash
 cd /Users/zhengshan/projects/gwshell/src-tauri && cargo build 2>&1 | tail -15
 ```
+
 Expected: `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in ...` 无 warning 或仅有原有 warning（不应新增）。
 
 - [ ] **Step 4: 跑现有测试确认未回归**
@@ -197,6 +202,7 @@ Expected: `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in ...` 
 ```bash
 cd /Users/zhengshan/projects/gwshell/src-tauri && cargo test --lib 2>&1 | tail -10
 ```
+
 Expected: 所有测试通过（含 Task 1 的 5 个 expand_tilde 测试 + metrics.rs 既有测试）。
 
 - [ ] **Step 5: Commit**
@@ -220,6 +226,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ## Task 3: i18n — 新增 3 个 key（en + zh）
 
 **Files:**
+
 - Modify: `src/i18n/locales/gwshell.en.json`
 - Modify: `src/i18n/locales/gwshell.zh.json`
 - Modify (如果存在): `src/i18n/index.ts` (TranslationKeys 类型)
@@ -229,7 +236,9 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ```bash
 cd /Users/zhengshan/projects/gwshell && grep -n "TranslationKeys" src/i18n/index.ts 2>/dev/null | head -5
 ```
+
 Expected: 看到 `TranslationKeys` 是怎么定义的。
+
 - 如果是 `keyof typeof enJson` 之类自动推导 → 不需要手动改 `index.ts`
 - 如果是手写联合类型 → Step 3 需要手动加 3 个 key
 
@@ -260,6 +269,7 @@ Expected: 看到 `TranslationKeys` 是怎么定义的。
 - [ ] **Step 4: 如果 Step 1 显示 `TranslationKeys` 是手写联合类型，同步加入 3 个 key**
 
 只在 Step 1 输出表明需要时执行。打开 `src/i18n/index.ts`，找到 `TranslationKeys` 类型定义，在其它 `ssh_*` key 旁加：
+
 ```ts
 | 'ssh_select_key_file'
 | 'ssh_key_passphrase_label'
@@ -271,6 +281,7 @@ Expected: 看到 `TranslationKeys` 是怎么定义的。
 ```bash
 cd /Users/zhengshan/projects/gwshell && npm run build 2>&1 | tail -20
 ```
+
 Expected: `vite build` 完成，无 TS 错误。如果报 `Property '...' does not exist on type 'TranslationKeys'` 之类错，回到 Step 4 补类型。
 
 - [ ] **Step 6: Commit**
@@ -292,6 +303,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ## Task 4: 前端 — 文件选择器 + passphrase 字段（NewSessionModal）
 
 **Files:**
+
 - Modify: `src/components/Modals/NewSessionModal.tsx`
   - line 3: import 增加 `FolderOpen` 图标 + `dialogOpen`
   - line 313-323: 主私钥路径输入加 📁 按钮 + 紧接其后追加 passphrase 字段
@@ -321,14 +333,16 @@ import { useAppStore } from '../../stores/appStore';
 在 `src/components/Modals/NewSessionModal.tsx` 找到组件函数体里现有的事件处理（任意位置，比如靠近 `const handleSave = ...` 或在 `const t = ...` 之后）。如果不确定位置，放在 `return (` 上面一行。插入：
 
 ```tsx
-  const pickKeyFile = async (field: 'private_key_path' | 'jump_private_key_path') => {
-    try {
-      const selected = await dialogOpen({ multiple: false, title: t('ssh_select_key_file') });
-      if (typeof selected === 'string' && selected) {
-        setForm((prev) => ({ ...prev, [field]: selected }));
-      }
-    } catch { /* canceled */ }
-  };
+const pickKeyFile = async (field: 'private_key_path' | 'jump_private_key_path') => {
+  try {
+    const selected = await dialogOpen({ multiple: false, title: t('ssh_select_key_file') });
+    if (typeof selected === 'string' && selected) {
+      setForm((prev) => ({ ...prev, [field]: selected }));
+    }
+  } catch {
+    /* canceled */
+  }
+};
 ```
 
 - [ ] **Step 3: 改写主私钥路径区段（line 313-323）**
@@ -336,68 +350,76 @@ import { useAppStore } from '../../stores/appStore';
 找到：
 
 ```tsx
-              {/* Private key */}
-              {form.auth_method === 'publickey' && (
-                <div className="ssh-form-group">
-                  <label>{t('ssh_private_key_path')}</label>
-                  <input
-                    type="text"
-                    placeholder="~/.ssh/id_rsa"
-                    value={form.private_key_path || ''}
-                    onChange={(e) => setForm({ ...form, private_key_path: e.target.value })}
-                  />
-                </div>
-              )}
+{
+  /* Private key */
+}
+{
+  form.auth_method === 'publickey' && (
+    <div className="ssh-form-group">
+      <label>{t('ssh_private_key_path')}</label>
+      <input
+        type="text"
+        placeholder="~/.ssh/id_rsa"
+        value={form.private_key_path || ''}
+        onChange={(e) => setForm({ ...form, private_key_path: e.target.value })}
+      />
+    </div>
+  );
+}
 ```
 
 替换为：
 
 ```tsx
-              {/* Private key */}
-              {form.auth_method === 'publickey' && (
-                <>
-                  <div className="ssh-form-group">
-                    <label>{t('ssh_private_key_path')}</label>
-                    <div className="ssh-password-wrap">
-                      <input
-                        type="text"
-                        placeholder="~/.ssh/id_rsa"
-                        value={form.private_key_path || ''}
-                        onChange={(e) => setForm({ ...form, private_key_path: e.target.value })}
-                      />
-                      <button
-                        type="button"
-                        className="ssh-password-toggle"
-                        title={t('ssh_select_key_file')}
-                        onClick={() => pickKeyFile('private_key_path')}
-                      >
-                        <FolderOpen size={14} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="ssh-form-group">
-                    <label>{t('ssh_key_passphrase_label')}</label>
-                    <div className="ssh-password-wrap">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder=""
-                        value={form.password || ''}
-                        onChange={(e) => setForm({ ...form, password: e.target.value })}
-                      />
-                      <button
-                        className="ssh-password-toggle"
-                        onClick={() => setShowPassword(!showPassword)}
-                        type="button"
-                      >
-                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                    </div>
-                    <div className="ssh-tab-desc" style={{ marginTop: 4 }}>
-                      {t('ssh_key_passphrase_hint')}
-                    </div>
-                  </div>
-                </>
-              )}
+{
+  /* Private key */
+}
+{
+  form.auth_method === 'publickey' && (
+    <>
+      <div className="ssh-form-group">
+        <label>{t('ssh_private_key_path')}</label>
+        <div className="ssh-password-wrap">
+          <input
+            type="text"
+            placeholder="~/.ssh/id_rsa"
+            value={form.private_key_path || ''}
+            onChange={(e) => setForm({ ...form, private_key_path: e.target.value })}
+          />
+          <button
+            type="button"
+            className="ssh-password-toggle"
+            title={t('ssh_select_key_file')}
+            onClick={() => pickKeyFile('private_key_path')}
+          >
+            <FolderOpen size={14} />
+          </button>
+        </div>
+      </div>
+      <div className="ssh-form-group">
+        <label>{t('ssh_key_passphrase_label')}</label>
+        <div className="ssh-password-wrap">
+          <input
+            type={showPassword ? 'text' : 'password'}
+            placeholder=""
+            value={form.password || ''}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+          />
+          <button
+            className="ssh-password-toggle"
+            onClick={() => setShowPassword(!showPassword)}
+            type="button"
+          >
+            {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
+        <div className="ssh-tab-desc" style={{ marginTop: 4 }}>
+          {t('ssh_key_passphrase_hint')}
+        </div>
+      </div>
+    </>
+  );
+}
 ```
 
 - [ ] **Step 4: 改写跳板机私钥路径区段（line 680-688）**
@@ -405,39 +427,39 @@ import { useAppStore } from '../../stores/appStore';
 找到：
 
 ```tsx
-                  <div className="ssh-form-group">
-                    <label>{t('ssh_jump_key_path')}</label>
-                    <input
-                      type="text"
-                      placeholder="~/.ssh/id_rsa"
-                      value={form.jump_private_key_path || ''}
-                      onChange={(e) => setForm({ ...form, jump_private_key_path: e.target.value })}
-                    />
-                  </div>
+<div className="ssh-form-group">
+  <label>{t('ssh_jump_key_path')}</label>
+  <input
+    type="text"
+    placeholder="~/.ssh/id_rsa"
+    value={form.jump_private_key_path || ''}
+    onChange={(e) => setForm({ ...form, jump_private_key_path: e.target.value })}
+  />
+</div>
 ```
 
 替换为：
 
 ```tsx
-                  <div className="ssh-form-group">
-                    <label>{t('ssh_jump_key_path')}</label>
-                    <div className="ssh-password-wrap">
-                      <input
-                        type="text"
-                        placeholder="~/.ssh/id_rsa"
-                        value={form.jump_private_key_path || ''}
-                        onChange={(e) => setForm({ ...form, jump_private_key_path: e.target.value })}
-                      />
-                      <button
-                        type="button"
-                        className="ssh-password-toggle"
-                        title={t('ssh_select_key_file')}
-                        onClick={() => pickKeyFile('jump_private_key_path')}
-                      >
-                        <FolderOpen size={14} />
-                      </button>
-                    </div>
-                  </div>
+<div className="ssh-form-group">
+  <label>{t('ssh_jump_key_path')}</label>
+  <div className="ssh-password-wrap">
+    <input
+      type="text"
+      placeholder="~/.ssh/id_rsa"
+      value={form.jump_private_key_path || ''}
+      onChange={(e) => setForm({ ...form, jump_private_key_path: e.target.value })}
+    />
+    <button
+      type="button"
+      className="ssh-password-toggle"
+      title={t('ssh_select_key_file')}
+      onClick={() => pickKeyFile('jump_private_key_path')}
+    >
+      <FolderOpen size={14} />
+    </button>
+  </div>
+</div>
 ```
 
 - [ ] **Step 5: TypeScript + Smoke 检查**
@@ -445,7 +467,9 @@ import { useAppStore } from '../../stores/appStore';
 ```bash
 cd /Users/zhengshan/projects/gwshell && npm run build 2>&1 | tail -20 && npm run smoke:check 2>&1 | tail -20
 ```
+
 Expected:
+
 - `npm run build`: `vite v... building for production... ✓ built in ...` 无 TS 错。
 - `npm run smoke:check`: 输出收尾出现 `OK` / `passed` / `0 issues` 之类无问题字样（具体看 `scripts/stability-smoke.mjs` 的输出格式；只要返回码 0 即可）。
 
@@ -497,11 +521,13 @@ chmod 600 ~/.ssh/authorized_keys
 # 验证 OpenSSH 自身能用
 ssh -i ~/.ssh/gwshell_test_id_rsa -o StrictHostKeyChecking=no $(whoami)@127.0.0.1 echo OK
 ```
+
 Expected: 最后一行输出 `OK`。
 
 - [ ] **Step 2: 验证文件选择器 + 绝对路径（happy path）**
 
 在 GWShell 中新建一个 SSH 会话：
+
 - Host: `127.0.0.1`，Port: `22`，Username: 当前用户名
 - Auth: `Private Key`
 - 点击 📁 按钮 → 选择 `~/.ssh/gwshell_test_id_rsa`
@@ -525,6 +551,7 @@ Expected: 最后一行输出 `OK`。
 - [ ] **Step 5: 验证 passphrase**
 
 新建会话，📁 选择 `~/.ssh/gwshell_test_id_rsa_pass`：
+
 - 5a) 留 passphrase 空白 → **Expected:** 红字 `Public key auth failed (/Users/.../gwshell_test_id_rsa_pass): ...`（错误信息含路径）
 - 5b) 在 passphrase 框输入 `testpass123` → **Expected:** 连接成功
 
@@ -552,6 +579,7 @@ rm -f ~/.ssh/gwshell_test_id_rsa ~/.ssh/gwshell_test_id_rsa.pub ~/.ssh/gwshell_t
 ## Self-Review
 
 **Spec coverage:**
+
 - ✅ 文件选择器 → Task 4 Step 3 + Step 4
 - ✅ Passphrase 字段（复用 form.password）→ Task 4 Step 3
 - ✅ 跳板机同步加 📁 → Task 4 Step 4
@@ -563,6 +591,7 @@ rm -f ~/.ssh/gwshell_test_id_rsa ~/.ssh/gwshell_test_id_rsa.pub ~/.ssh/gwshell_t
 - ✅ `npm run build` → Task 4 Step 5
 
 **Type / 名称一致性：**
+
 - `expand_tilde` 函数签名（`fn expand_tilde(path: &str) -> std::path::PathBuf`）在 Task 1 定义、Task 2 两处调用、Task 1 测试均一致。
 - i18n key 名称 `ssh_select_key_file` / `ssh_key_passphrase_label` / `ssh_key_passphrase_hint` 在 Task 3 定义、Task 4 引用全部对得上。
 - `pickKeyFile` 形参签名 `'private_key_path' | 'jump_private_key_path'` 在 Task 4 Step 2 定义、Step 3/4 调用一致。
@@ -570,4 +599,5 @@ rm -f ~/.ssh/gwshell_test_id_rsa ~/.ssh/gwshell_test_id_rsa.pub ~/.ssh/gwshell_t
 **Placeholder 扫描：** 全 plan 无 TBD/TODO，无 "适当处理" 之类模糊词；每个修改步骤都给出完整替换代码块。
 
 **风险点确认：**
+
 - Task 3 Step 1 用条件分支处理 `TranslationKeys` 可能是自动推导也可能是手写 —— 这是真实的项目变体，不是占位符。
