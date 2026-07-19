@@ -22,10 +22,7 @@ export function TerminalContextMenu({
 }: TerminalContextMenuProps) {
   const { t } = useTranslation();
   return (
-    <div
-      className="context-menu terminal-context-menu"
-      style={{ left: state.x, top: state.y }}
-    >
+    <div className="context-menu terminal-context-menu" style={{ left: state.x, top: state.y }}>
       <button
         type="button"
         className="context-menu-item"

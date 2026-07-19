@@ -51,6 +51,7 @@ import {
 import { CompletionDropdown } from './CompletionDropdown';
 import { TerminalContextMenu } from './TerminalContextMenu';
 import { FingerprintDialog } from './FingerprintDialog';
+import { PasteConfirmDialog } from './PasteConfirmDialog';
 import type { FingerprintInfo, TerminalContextMenuState } from './types';
 import i18n from '../../i18n';
 import '@xterm/xterm/css/xterm.css';
@@ -2441,32 +2442,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       )}
 
       {pasteConfirm !== null && isActive && (
-        <div className="paste-confirm-overlay" onMouseDown={() => setPasteConfirm(null)}>
-          <div className="paste-confirm-card" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="paste-confirm-title">{t('paste_confirm_title')}</div>
-            <div className="paste-confirm-lines">
-              {t('paste_confirm_lines', { count: pasteConfirm.split('\n').length })}
-            </div>
-            <pre className="paste-confirm-preview">
-              {pasteConfirm.split('\n').slice(0, 8).join('\n')}
-              {pasteConfirm.split('\n').length > 8 ? '\n…' : ''}
-            </pre>
-            <div className="paste-confirm-actions">
-              <button className="paste-confirm-btn" onClick={() => setPasteConfirm(null)}>
-                {t('paste_confirm_cancel')}
-              </button>
-              <button
-                className="paste-confirm-btn primary"
-                onClick={() => {
-                  terminalInstances.get(tab.id)?.terminal.paste(pasteConfirm);
-                  setPasteConfirm(null);
-                }}
-              >
-                {t('paste_confirm_paste')}
-              </button>
-            </div>
-          </div>
-        </div>
+        <PasteConfirmDialog
+          text={pasteConfirm}
+          onCancel={() => setPasteConfirm(null)}
+          onPaste={() => {
+            const terminal = terminalInstances.get(tab.id)?.terminal;
+            if (terminal) terminal.paste(pasteConfirm);
+            setPasteConfirm(null);
+          }}
+        />
       )}
     </>
   );
