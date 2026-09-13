@@ -5,7 +5,7 @@ import { useAppStore } from '../../stores/appStore';
 import { useSnippetStore } from '../../stores/snippetStore';
 import { useConfirm } from '../../hooks/useConfirm';
 import { runScript } from '../../lib/sendScript';
-import { sendInputToTab } from '../Terminal/TerminalView';
+import { sendInputToTab } from '../../lib/terminalLifecycle';
 import type { Snippet } from '../../types';
 
 // Only interactive terminal tabs can receive snippet input. SFTP tabs render

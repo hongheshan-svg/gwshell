@@ -361,6 +361,8 @@
   "settings_session_tab_memory_desc": "启用后，自动会还原上次打开的标签",
   "settings_session_log": "会话日志",
   "settings_session_log_hint": "将终端输出（去除控制字符）按天追加保存到本地数据目录的 logs 文件夹。",
+  "settings_sticky_scroll": "粘性滚动（Sticky Scroll）",
+  "settings_sticky_scroll_hint": "滚动时把当前命令的提示符行固定在终端顶部（参考 VSCode 的 terminal.integrated.stickyScroll，需要 shell integration 支持）。",
   "settings_quake_enabled": "Quake 下拉控制台",
   "settings_quake_hotkey": "Quake 热键",
   "settings_quake_hint": "用全局热键从屏幕顶部下拉显示/隐藏窗口。需重启生效。",

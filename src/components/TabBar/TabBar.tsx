@@ -23,7 +23,7 @@ import { SortableContext, horizontalListSortingStrategy, useSortable } from '@dn
 import { CSS } from '@dnd-kit/utilities';
 import { useAppStore } from '../../stores/appStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { destroyTerminal } from '../Terminal/TerminalView';
+import { destroyTerminal } from '../../lib/terminalLifecycle';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
 import type { TabInfo } from '../../types';
 

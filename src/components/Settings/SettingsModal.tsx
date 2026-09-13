@@ -76,6 +76,7 @@ export interface AppSettings {
   quakeHotkey: string;
   homeView: 'card' | 'table';
   sessionLogEnabled: boolean;
+  terminalStickyScroll: boolean;
 }
 
 const CMD_TERMINAL_FONT = 'Consolas, "Cascadia Mono", "Courier New", monospace';
@@ -1044,6 +1045,15 @@ export const SettingsModal: React.FC = () => {
                       <Toggle
                         value={settings.sessionLogEnabled}
                         onChange={(v) => u('sessionLogEnabled', v)}
+                      />
+                    </Row>
+                    <Row
+                      label={t('settings_sticky_scroll')}
+                      desc={t('settings_sticky_scroll_hint')}
+                    >
+                      <Toggle
+                        value={settings.terminalStickyScroll}
+                        onChange={(v) => u('terminalStickyScroll', v)}
                       />
                     </Row>
                   </div>

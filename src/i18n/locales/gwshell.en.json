@@ -361,6 +361,8 @@
   "settings_session_tab_memory_desc": "When enabled, restore previously open tabs",
   "settings_session_log": "Session Logging",
   "settings_session_log_hint": "Append terminal output (control chars stripped) to daily log files in the app data logs folder.",
+  "settings_sticky_scroll": "Sticky Scroll",
+  "settings_sticky_scroll_hint": "Pin the current command's prompt at the top of the terminal while scrolling (mirrors VSCode's terminal.integrated.stickyScroll; requires shell integration).",
   "settings_quake_enabled": "Quake Dropdown Console",
   "settings_quake_hotkey": "Quake Hotkey",
   "settings_quake_hint": "Toggle the window from the top of the screen with a global hotkey. Restart to apply.",

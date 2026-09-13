@@ -1121,6 +1121,32 @@ button {
   }
 }
 
+/* ---- Terminal sticky scroll (VSCode terminal.integrated.stickyScroll parity) ---- */
+/* Pins the current command's prompt rows at the top of the pane while the user
+   scrolls past them. Rows sit over xterm's viewport; the right offset (12px)
+   keeps them clear of the scrollbar overwritten by the rules below. */
+.terminal-sticky-scroll {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 12px;
+  z-index: 18;
+}
+
+.terminal-sticky-scroll-rows {
+  border-bottom: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.terminal-sticky-scroll .terminal-sticky-scroll-line {
+  white-space: pre;
+  overflow: hidden;
+}
+
+.terminal-sticky-scroll.is-hovered .terminal-sticky-scroll-rows {
+  background: var(--bg-hover);
+}
+
 /* ---- Command completion dropdown ---- */
 .terminal-completion {
   position: absolute;
