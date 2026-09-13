@@ -65,7 +65,30 @@ import {
   isCopyShortcut,
   isPasteShortcut,
 } from '../../lib/terminalClipboard';
+import {
+  connectedTabs,
+  reconnectableTabs,
+  tabListenerCleanups,
+  terminalInteractionCleanups,
+  fitFrameIds,
+  settleTimerIds,
+  pendingBackendResize,
+  sentFirstResize,
+  getSuggestedRendererTypeDom,
+  setSuggestedRendererTypeDom,
+  cleanupTabListeners,
+  cleanupTerminalInteractions,
+  sendInputToTab,
+  destroyTerminal,
+  safeFit,
+  scheduleTerminalFit,
+  scheduleTerminalResizeSettle,
+  forceTerminalRedraw,
+} from '../../lib/terminalLifecycle';
+import { buildVscodeTerminalOptions } from '../../lib/terminalVscodeOptions';
+import { attachShellIntegration } from '../../lib/shellIntegration';
 import { CompletionDropdown } from './CompletionDropdown';
+import { StickyScrollOverlay } from './StickyScrollOverlay';
 import { TerminalContextMenu } from './TerminalContextMenu';
 import { FingerprintDialog } from './FingerprintDialog';
 import { PasteConfirmDialog } from './PasteConfirmDialog';
@@ -83,204 +106,6 @@ interface TerminalViewProps {
   visible?: boolean;
 }
 
-// Track which tab IDs have active backend connections (SSH/PTY/serial)
-// so we can avoid closing them during split-mode transitions.
-const connectedTabs = new Set<string>();
-
-// Sticky renderer fallback: once WebGL fails to load for one terminal,
-// skip the WebGL attempt for subsequent terminals in the same session.
-// Matches VSCode's _suggestedRendererType mechanism — avoids repeated
-// WebGL init failures across multiple tabs.
-let suggestedRendererTypeDom = false;
-
-// Global map of event-listener cleanup functions keyed by tab ID.
-
-// Ensures only ONE set of listeners exists per tab at any time, even
-// when React StrictMode double-invokes effects or when components
-// remount during single↔split transitions.
-const tabListenerCleanups = new Map<string, () => void>();
-const terminalInteractionCleanups = new Map<string, () => void>();
-const fitFrameIds = new Map<string, number>();
-const settleTimerIds = new Map<string, ReturnType<typeof setTimeout>>();
-
-/** Trailing-edge 40ms debounce for backend resize invokes, keyed by tab.id.
- *  Window drag fires xterm onResize at frame rate; the backend
- *  resize_ssh/resize_pty (→ SIGWINCH) doesn't need that granularity. The
- *  first resize per tab still fires immediately so initial mount is unaffected. */
-const pendingBackendResize = new Map<string, ReturnType<typeof setTimeout>>();
-const sentFirstResize = new Set<string>();
-
-/** Tabs whose connection just dropped. When a tab is in this set, the next
- *  keystroke triggers a reconnect instead of being sent to the (now dead)
- *  backend channel. Cleared on reconnect attempt, on tab destroy, and on
- *  listener cleanup. Only SSH and serial sessions are ever armed. */
-const reconnectableTabs = new Set<string>();
-
-/** Remove event listeners for a tab (idempotent). */
-function cleanupTabListeners(tabId: string): void {
-  const fn = tabListenerCleanups.get(tabId);
-  if (fn) {
-    fn();
-    tabListenerCleanups.delete(tabId);
-  }
-  reconnectableTabs.delete(tabId);
-}
-
-function cleanupTerminalInteractions(tabId: string): void {
-  const fn = terminalInteractionCleanups.get(tabId);
-  if (fn) {
-    fn();
-    terminalInteractionCleanups.delete(tabId);
-  }
-}
-
-// Returns true if input could be queued for the given tab.
-// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
-export function sendInputToTab(tabId: string, data: string): boolean {
-  const sender = tabInputSenders.get(tabId);
-  if (!sender) return false;
-  sender(data);
-  return true;
-}
-
-/** Destroy a terminal instance associated with a tab (called when the tab closes). */
-// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
-export function destroyTerminal(tabId: string): void {
-  cleanupTabListeners(tabId);
-  cleanupTerminalInteractions(tabId);
-  const frameId = fitFrameIds.get(tabId);
-  if (frameId !== undefined) cancelAnimationFrame(frameId);
-  fitFrameIds.delete(tabId);
-  const settleTimerId = settleTimerIds.get(tabId);
-  if (settleTimerId) clearTimeout(settleTimerId);
-  settleTimerIds.delete(tabId);
-  const pendingResize = pendingBackendResize.get(tabId);
-  if (pendingResize) clearTimeout(pendingResize);
-  pendingBackendResize.delete(tabId);
-  sentFirstResize.delete(tabId);
-  connectedTabs.delete(tabId);
-  reconnectableTabs.delete(tabId);
-  resetCompletionState(tabId);
-  clearTerminalAiContext(tabId);
-  const inst = terminalInstances.get(tabId);
-  if (inst) {
-    try {
-      inst.rendererAddon?.dispose();
-    } catch {}
-    inst.terminal.dispose();
-    terminalInstances.delete(tabId);
-  }
-}
-
-/**
- * Safely fit a terminal to its container.
- * Skips if the container is hidden or has zero dimensions.
- * After fitting, forces a full row redraw so the renderer always
- * shows content consistent with the new dimensions.
- */
-// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
-export function safeFit(tabId: string): void {
-  const inst = terminalInstances.get(tabId);
-  if (!inst) return;
-  const el = inst.terminal.element?.parentElement;
-  if (!el) return;
-  const rect = el.getBoundingClientRect();
-  if (rect.width < 2 || rect.height < 2) return;
-  try {
-    inst.fitAddon.fit();
-    inst.terminal.refresh(0, inst.terminal.rows - 1);
-  } catch {}
-}
-
-// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
-export function scheduleTerminalFit(tabId: string): void {
-  if (fitFrameIds.has(tabId)) return;
-  const frameId = requestAnimationFrame(() => {
-    fitFrameIds.delete(tabId);
-    safeFit(tabId);
-  });
-  fitFrameIds.set(tabId, frameId);
-}
-
-// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
-export function scheduleTerminalResizeSettle(
-  tabId: string,
-  sessionId: string,
-  tabType: TabInfo['type'],
-  delayMs = 180,
-): void {
-  const existing = settleTimerIds.get(tabId);
-  if (existing) clearTimeout(existing);
-  const timerId = setTimeout(() => {
-    settleTimerIds.delete(tabId);
-    forceTerminalRedraw(tabId, sessionId, tabType);
-  }, delayMs);
-  settleTimerIds.set(tabId, timerId);
-}
-
-/**
- * Full renderer reset: fit, clear the glyph atlas, force a redraw, and
- * notify the backend of the current terminal size — even if xterm thinks
- * the size hasn't changed.
- *
- * Use this after the xterm element has been reparented to a new container
- * or its parent toggled from display:none to visible (split-mode open/close,
- * tab switch). These transitions leave three things out of sync:
- *  1. the glyph texture atlas may hold stale cells from the previous
- *     container/DPR — fixed by clearTextureAtlas + refresh
- *  2. the xterm buffer's wrap state may not match the on-screen rendering
- *     until a full refresh is forced
- *  3. the backend PTY/SSH session has the right *size* but TUI apps like
- *     Claude / vim / htop cache their UI and only redraw on SIGWINCH.
- *     fitAddon.fit() only fires onResize on dimension changes, so we
- *     re-issue resize_pty/resize_ssh unconditionally to trigger SIGWINCH
- *     and force the TUI to repaint.
- */
-// eslint-disable-next-line react-refresh/only-export-components -- terminal control helpers exported alongside the component for tight coupling with the module-level terminal registry
-export function forceTerminalRedraw(
-  tabId: string,
-  sessionId: string,
-  tabType: TabInfo['type'],
-): void {
-  const inst = terminalInstances.get(tabId);
-  if (!inst) return;
-  const el = inst.terminal.element?.parentElement;
-  if (!el) return;
-  const rect = el.getBoundingClientRect();
-  if (rect.width < 2 || rect.height < 2) return;
-  try {
-    inst.fitAddon.fit();
-  } catch {}
-  try {
-    inst.terminal.clearTextureAtlas();
-  } catch {}
-  try {
-    inst.terminal.refresh(0, inst.terminal.rows - 1);
-  } catch {}
-
-  // ConPTY redraws asynchronously after receiving SIGWINCH. The first refresh
-  // clears the stale glyph atlas; this deferred second pass catches ConPTY's
-  // asynchronous repaint, eliminating ghost cells in TUI apps.
-  const term = inst.terminal;
-  requestAnimationFrame(() => {
-    try {
-      term.clearTextureAtlas();
-    } catch {}
-    try {
-      term.refresh(0, term.rows - 1);
-    } catch {}
-  });
-
-  if (tabType === 'serial' || tabType === 'asset-list') return;
-  const cols = inst.terminal.cols;
-  const rows = inst.terminal.rows;
-  if (tabType === 'ssh') {
-    invoke('resize_ssh', { sessionId, cols, rows }).catch(() => {});
-  } else {
-    invoke('resize_pty', { sessionId, rows, cols }).catch(() => {});
-  }
-}
-
 export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visible }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sessions = useAppStore((s) => s.sessions);
@@ -288,6 +113,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
   const terminalCmdHint = useSettingsStore((s) => s.settings.terminalCmdHint);
   const terminalFont = useSettingsStore((s) => s.settings.terminalFont);
   const terminalFontSize = useSettingsStore((s) => s.settings.terminalFontSize);
+  const terminalStickyScroll = useSettingsStore((s) => s.settings.terminalStickyScroll);
   const broadcastInput = useAppStore((s) => s.broadcastInput);
   const { t } = useTranslation();
   const sessionsRef = useRef(sessions);
@@ -431,71 +257,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         if (cancelled) return;
 
         const s = useSettingsStore.getState().settings;
-        const termOpts: Record<string, unknown> = {
-          fontFamily: s.terminalFont,
-          fontSize: parseInt(s.terminalFontSize) || 13,
-          lineHeight: parseFloat(s.terminalLineHeight) || 1.2,
-          letterSpacing: parseFloat(s.terminalLetterSpacing) || 0,
-          // Match VSCode: bold text rendering and font weights.
-          drawBoldTextInBrightColors: true,
-          fontWeight: 'normal',
-          fontWeightBold: 'bold',
-          // Cursor is left to the running program: TUI apps (Claude Code,
-          // Codex, vim) drive shape/blink/visibility via DECSCUSR (`\e[ q`)
-          // and DECTCEM (`\e[?25h/l`). We only set the fallback default for the
-          // bare shell prompt and never re-impose it afterwards, otherwise
-          // focus/theme changes would fight the app's cursor.
-          // Default is NON-blinking for cross-platform consistency: macOS passes
-          // the app's DECSCUSR through untouched, but Windows ConPTY does not
-          // reliably forward it — a blinking default would then leak through as a
-          // never-stopping blink on Windows. Apps still override this on macOS.
-          cursorBlink: false,
-          cursorStyle: 'block',
-          cursorWidth: 1,
-          // Match VSCode: use 'outline' for inactive cursor so the cursor
-          // doesn't toggle between full-block and bar during focus changes
-          // (which reads as flicker during streaming in TUI apps).
-          cursorInactiveStyle: 'outline',
-          // Show cursor before first write so it doesn't pop in.
-          showCursorImmediately: true,
-          blinkIntervalDuration: 600,
-          theme: resolveTerminalTheme(
+        // VSCode-aligned terminal.integrated.* → ITerminalOptions mapping,
+        // kept central in terminalVscodeOptions.ts. Per-option VSCode comments
+        // live there; additional per-tab/platform-specific bits (windowsPty,
+        // vtExtensions) come below.
+        const termOpts = buildVscodeTerminalOptions(
+          s,
+          resolveTerminalTheme(
             useSettingsStore.getState().settings.terminalColorScheme,
             useAppStore.getState().theme,
           ),
-          allowProposedApi: true,
-          scrollback: parseInt(s.terminalMaxScrollback) || 10000,
-          copyOnSelect: false,
-          // Match VSCode: scroll content into scrollback on erase (DECSED/ED),
-          // rescale overlapping glyphs for better font rendering, and report
-          // pixel/cell sizes to the PTY via windowOptions so ConPTY can use
-          // them for DPI-aware rendering heuristics.
-          scrollOnEraseInDisplay: true,
-          rescaleOverlappingGlyphs: true,
-          windowOptions: { getWinSizePixels: true, getCellSizePixels: true, getWinSizeChars: true },
-          // Match VSCode: minimum contrast ratio so dim colors remain readable
-          // on dark themes (e.g. gray-on-black from ls/ripgrep output).
-          minimumContrastRatio: 4.5,
-          // Match VSCode: word separators for double-click selection.
-          wordSeparator: ' ()[]{}\'"`,;:|',
-          // Match VSCode: ignore the host app's bracketed-paste-disable request
-          // so paste behavior is consistent across shells.
-          ignoreBracketedPasteMode: true,
-          // Match VSCode: macOS Option key as Meta (for emacs/readline), and
-          // Alt+click to move cursor in supported shells.
-          macOptionIsMeta: true,
-          altClickMovesCursor: true,
-          // Match VSCode: scroll sensitivity for mouse wheel.
-          fastScrollSensitivity: 5,
-          scrollSensitivity: 1,
-          // Match VSCode: smooth scroll duration. VSCode maps
-          // terminal.integrated.smoothScrolling → smoothScrollDuration (0 when
-          // off, a positive ms value when on). Default is off (0 = instant),
-          // which keeps the terminal in lockstep with the PTY's output stream
-          // instead of animating behind it. Set explicitly so the hook point is
-          // visible if a smoothScrolling setting is added later.
-          smoothScrollDuration: 0,
-        };
+        );
 
         // Only the LOCAL PTY backend (local shell, and Docker-over-local-PTY)
         // runs through Windows ConPTY. SSH and serial sessions talk to a remote
@@ -543,6 +315,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         const searchAddon = new SearchAddon();
         terminal.loadAddon(searchAddon);
         terminal.loadAddon(new WebLinksAddon());
+
+        // Shell integration (VSCode parity): OSC 133/633 prompt & command
+        // markers drive sticky scroll and future command-navigation features.
+        // Attached once per terminal so split/remount keeps the markers.
+        attachShellIntegration(tab.id, terminal);
 
         instance = { terminal, fitAddon, searchAddon };
         terminalInstances.set(tab.id, instance);
@@ -855,7 +632,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // Sticky fallback: once WebGL fails for one terminal, skip the WebGL
       // attempt for subsequent terminals in the same session (VSCode's
       // _suggestedRendererType mechanism).
-      if ((wasFreshlyOpened || instance.rendererLost) && !suggestedRendererTypeDom) {
+      if ((wasFreshlyOpened || instance.rendererLost) && !getSuggestedRendererTypeDom()) {
         try {
           instance.rendererAddon?.dispose();
         } catch {}
@@ -954,7 +731,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           } catch {}
         } catch {
           // WebGL could not be loaded — fall back to the DOM renderer.
-          suggestedRendererTypeDom = true;
+          setSuggestedRendererTypeDom(true);
         }
       }
 
@@ -2325,7 +2102,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         className={`terminal-pane${broadcastInput ? ' broadcasting' : ''}`}
         style={{ display: (visible ?? isActive) ? 'block' : 'none' }}
         onMouseDown={() => useAppStore.getState().setActiveTab(tab.id)}
-      />
+      >
+        <StickyScrollOverlay
+          tabId={tab.id}
+          fontFamily={terminalFont}
+          fontSize={parseInt(terminalFontSize) || 13}
+          enabled={terminalStickyScroll}
+        />
+      </div>
 
       {/* NOTE: in 2-pane split mode the completion dropdown anchors to the terminal-container, so when the active pane is the right column the hint can be offset. Known limitation (command hints are off by default); proper fix needs a per-pane positioned wrapper. */}
       {completionItems.length > 0 &&

@@ -43,6 +43,9 @@ export interface AppSettings {
   homeView: 'card' | 'table';
   // Append terminal output (ANSI-stripped) to per-session log files
   sessionLogEnabled: boolean;
+  // VSCode terminal.integrated.stickyScroll.enabled parity — pin the current
+  // command's prompt rows at the top while scrolling past them.
+  terminalStickyScroll: boolean;
 }
 
 export const defaultSettings: AppSettings = {
@@ -79,6 +82,7 @@ export const defaultSettings: AppSettings = {
   quakeHotkey: 'CommandOrControl+Shift+Backquote',
   homeView: 'card',
   sessionLogEnabled: false,
+  terminalStickyScroll: true,
 };
 
 interface SettingsStore {
