@@ -8,6 +8,8 @@
 
 ## [未发布]
 
+## v0.6.0 - 2026-09-13
+
 ### 🔒 安全
 
 - **无密钥环时不再明文落盘凭据**：此前当系统密钥环不可用（或加密失败）时，`encrypt_secret` 会回退为返回明文，导致 SSH / 跳板 / 代理密码与 TOTP 密钥以明文写入本地数据库。现改为丢弃该密钥（存为空串），仅持久化会话元数据；前端据 `secret_storage_available` 提示「密码将不会被保存」。
@@ -15,18 +17,27 @@
 - **SFTP 目录下载路径穿越**：递归下载时，恶意 / 被控 SFTP 服务器可通过含 `..`、`/`、`\` 的目录项名逃出本地下载根目录。现对每个远端条目名做校验，`.`/`..`/空名跳过、含分隔符或 NUL 的中止整个传输。
 - **PTY 写线程泄漏**：`close_pty_wait` 现会 join 写线程，修复队列压力下的线程泄漏。
 - **Argon2id 参数**：为主口令锁的 Argon2id 参数补充 OWASP 依据注释。
+- **依赖安全公告**：修复 `event-listener` 的 unsound 公告（RUSTSEC-2026-0221），补丁升级至 5.4.2。
 
 ### ✨ 新增
 
+- **终端 Sticky Scroll（粘性滚动）**：对齐 VSCode 的 `terminal.integrated.stickyScroll` 行为，滚动时把当前命令的提示符固定在终端顶部，基于 shell-integration（OSC 133）的提示符追踪实现；新增设置项（默认开启）。
 - **串口流控**：串口配置新增流控选项（无 / 软件 XON-XOFF / 硬件 RTS-CTS）。
 - **Toast 通知 + 确认对话框系统**：新增 toast 通知与带焦点陷阱的确认对话框，替换原生 `window.confirm` 调用点；更新检查、安全提示、乐观回滚失败等改由 toast 呈现。
 
 ### 🐛 修复
 
+- **Windows 终端拖拽缩放时光标闪烁**：在 Codex / Claude Code 等全屏 TUI 程序重绘期间拖拽窗口或分屏边界缩放终端时，WebGL 渲染器缓存的字形位置信息未及时刷新，导致光标闪烁/残影。现在缩放过程中的每一帧都会清空 WebGL 字形图集，而不是仅在拖拽停止 180ms 后才处理。
 - **命令补全**：`lookupCommands` 改为大小写不敏感，并修复历史预算下溢。
+
+### 🧹 清理 / 移除
+
+- 移除一处无效的终端配置项（`copyOnSelect`）——该选项在当前 xterm.js 版本中从未真正存在，赋值是无操作代码；实际的「选中即复制」功能由独立实现负责，不受影响。
+- 移除已废弃的 AI 代理运行时遗留依赖（`axum`、`http-body-util`、`bytes`、`toml`）及未使用的前端依赖 `@tauri-apps/plugin-deep-link`。
 
 ### 🔧 发布 / CI
 
+- **数据库迁移框架**：接入 `refinery 0.8`，`V001` 迁移脚本幂等地固化现有 schema；自动识别现有 v0.5.5 数据库并标记 `V001` 已应用，升级不会丢失数据。
 - 新增 `cargo audit` + `npm audit` 工作流（PR 严格阻断、每周巡检告警）；发布产物附带 CycloneDX SBOM。
 - 扩充静态 smoke 检查：i18n en/zh key 对齐、后端 emit ↔ 前端 listen 事件名对齐、capabilities 白名单、无 `window.confirm`。
 - 依赖固定：xterm 全家桶 beta 版本改为精确 pin（去除 `^`），避免 `npm install` 滑到不同 beta 序号。
