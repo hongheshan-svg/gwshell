@@ -8,7 +8,6 @@
 // does (its lookup is O(command count), so scanning on every frame is fine).
 
 import React, { useEffect, useState } from 'react';
-import type { Terminal } from '@xterm/xterm';
 import { terminalInstances } from './terminalRegistry';
 import { getCommandForLine } from '../../lib/shellIntegration';
 import { computeStickyScroll } from '../../lib/terminalStickyScroll';
@@ -92,7 +91,7 @@ export const StickyScrollOverlay: React.FC<StickyScrollOverlayProps> = ({
 
   const inst = terminalInstances.get(tabId);
   const terminal = inst?.terminal;
-  const paneEl = inst?.terminal.element?.parentElement as HTMLElement | null;
+  const paneEl = inst?.terminal.element?.parentElement;
   const theme = resolveTerminalTheme(colorScheme, appTheme);
   // VSCode adjusts for the scrollbar width on the right; ours is 12px per the
   // global CSS override (same right offset as the slider sits over).

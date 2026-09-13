@@ -38,7 +38,7 @@ export function computeStickyScroll(
   ignored: readonly string[] = VSCODE_STICKY_SCROLL_DEFAULTS.ignoredCommands,
   rawMaxLineCount: number = VSCODE_STICKY_SCROLL_DEFAULTS.maxLineCount,
 ): StickyScrollState | null {
-  if (!command || command.promptStartLine === undefined) return null;
+  if (command?.promptStartLine === undefined) return null;
   if (isIgnoredCommand(command.commandLine, ignored)) return null;
 
   const buffer = terminal.buffer.active;
@@ -59,7 +59,10 @@ export function computeStickyScroll(
 
   // Clamp to maxLineCount and never exceed 40% of the viewport height,
   // matching VSCode's defensive cap.
-  const maxLineCount = Math.min(rawMaxLineCount, Math.floor(terminal.rows * STICKY_SCROLL_PERCENTAGE_CAP));
+  const maxLineCount = Math.min(
+    rawMaxLineCount,
+    Math.floor(terminal.rows * STICKY_SCROLL_PERCENTAGE_CAP),
+  );
   const rowsAvailable = endLine - command.promptStartLine + 1;
   const rows = Math.min(rowsAvailable, maxLineCount);
   if (rows < 1) return null;

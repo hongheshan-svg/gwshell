@@ -25,7 +25,6 @@ import { tableForRemoteShell } from '../../lib/commandDictionary';
 import { getXtermWindowsPty } from '../../lib/terminalPtyOptions';
 import {
   appendTerminalOutput,
-  clearTerminalAiContext,
   setTerminalCwd,
   setTerminalSelection,
 } from '../../lib/terminalContext';
@@ -54,7 +53,6 @@ import {
   syncTable,
   normalizeTable,
   estimateDropdownRows,
-  resetCompletionState,
 } from '../../lib/terminalCompletionState';
 import {
   PASSWORD_PROMPT_RE,

@@ -69,14 +69,13 @@ function ensureTracker(tabId: string): TabCommandTracker {
 /** Extracted helpers mirroring VSCode's server-side OSC parsing. */
 export function deserializeOscMessage(message: string): string {
   // VSCode's deserializeVSCodeOscMessage: \\(op) where op is '\\' or 'xXX'
-  return message.replaceAll(
-    /\\(\\|x([0-9a-f]{2}))/gi,
-    (match: string, op: string, hex?: string) =>
-      hex ? String.fromCharCode(parseInt(hex, 16)) : op,
+  return message.replace(/\\(\\|x([0-9a-f]{2}))/gi, (_match: string, op: string, hex?: string) =>
+    hex ? String.fromCharCode(parseInt(hex, 16)) : op,
   );
 }
 
 export function serializeOscMessage(message: string): string {
+  // eslint-disable-next-line no-control-regex -- OSC protocol escaping, control chars intentional
   return message.replace(/[\\;\x00-\x20]/g, (char: string) => {
     if (char === '\\') return '\\\\';
     return `\\x${char.charCodeAt(0).toString(16).padStart(2, '0')}`;
@@ -132,10 +131,7 @@ function handleCommandLine(tabId: string, raw: string): void {
  * command start (VSCode's PartialTerminalCommand.extractCommandLine
  * heuristic, used when OSC 633 ; E never fires, e.g. FinalTerm-only shells).
  */
-export function extractCommandLine(
-  terminal: Terminal,
-  tracker: TabCommandTracker,
-): string {
+export function extractCommandLine(terminal: Terminal, tracker: TabCommandTracker): string {
   const start = tracker.current.promptStart;
   const end = tracker.current.commandStart;
   if (!start || start.line === -1) return '';
@@ -153,11 +149,7 @@ export function extractCommandLine(
   return text.trim();
 }
 
-function handleProperty(
-  tabId: string,
-  terminal: Terminal,
-  raw: string,
-): void {
+function handleProperty(raw: string): void {
   const { key, value } = parseKeyValueAssignment(deserializeOscMessage(raw));
   if (value === undefined) return;
   switch (key) {
@@ -196,7 +188,7 @@ function handleOsc(tabId: string, terminal: Terminal, data: string, protocol: 13
       if (protocol === 633) handleCommandLine(tabId, args[0] ?? '');
       return;
     case 'P':
-      if (protocol === 633) handleProperty(tabId, terminal, args.join(';'));
+      if (protocol === 633) handleProperty(args.join(';'));
       return;
   }
 }
@@ -270,7 +262,10 @@ export function getCommandForLine(
   // Running command takes precedence from its prompt start line onwards.
   if (t.current.promptStart && t.current.promptStart.line <= line) {
     ensureLineCommandLine(t, terminal);
-    return toCommandInfo({ ...t.current, exitCode: undefined, promptStart: t.current.promptStart }, true);
+    return toCommandInfo(
+      { ...t.current, exitCode: undefined, promptStart: t.current.promptStart },
+      true,
+    );
   }
 
   // Finished commands, newest first.

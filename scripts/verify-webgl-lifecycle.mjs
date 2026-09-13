@@ -65,14 +65,15 @@ assert(typeof tproto.dispose === 'function', 'Terminal.dispose() exists');
 // ── 3. Our wiring code is present in the built bundle ──────────────────
 console.log('\n[3] Built-bundle wiring presence');
 const distDir = `${root}/dist/assets`;
-const indexFiles = existsSync(distDir)
-  ? readdirSync(distDir).filter((f) => f.startsWith('index-') && f.endsWith('.js'))
-  : [];
-if (indexFiles.length === 0) {
+// Scan every emitted chunk, not just index-*: TerminalView (and its wiring)
+// loads behind TerminalContainer's lazy() boundary in App.tsx, so this code
+// legitimately lands in its own chunk rather than the eager entry bundle.
+const jsFiles = existsSync(distDir) ? readdirSync(distDir).filter((f) => f.endsWith('.js')) : [];
+if (jsFiles.length === 0) {
   console.log('  (skip) dist/ not present — run `npm run build` first');
 } else {
   let blob = '';
-  for (const f of indexFiles) blob += readFileSync(`${distDir}/${f}`, 'utf8');
+  for (const f of jsFiles) blob += readFileSync(`${distDir}/${f}`, 'utf8');
   assert(blob.includes('customGlyphs'), 'WebglAddon({ customGlyphs: true }) instantiation present');
   assert(blob.includes('onChangeTextureAtlas'), 'onChangeTextureAtlas wiring present');
   assert(blob.includes('onAddTextureAtlasCanvas'), 'onAddTextureAtlasCanvas wiring present');

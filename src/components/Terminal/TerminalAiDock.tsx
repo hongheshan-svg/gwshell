@@ -23,7 +23,7 @@ import {
 } from '../../lib/aiModels';
 import { getTerminalAiContext } from '../../lib/terminalContext';
 import type { AiProviderSettings, TerminalAiChatRequest } from '../../types/agent';
-import { sendInputToTab } from './TerminalView';
+import { sendInputToTab } from '../../lib/terminalLifecycle';
 
 interface TerminalAiEventPayload {
   textDelta?: string;

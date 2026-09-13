@@ -5,7 +5,7 @@
 // src/vs/workbench/contrib/terminal/browser/xterm/xtermTerminal.ts). Keeping
 // the mapping in one place makes it easy to audit option-for-option parity.
 
-import type { ITerminalOptions, ITheme } from '@xterm/xterm';
+import type { ITerminalInitOnlyOptions, ITerminalOptions, ITheme } from '@xterm/xterm';
 import type { AppSettings } from '../stores/settingsStore';
 
 const toNumber = (raw: string | number | undefined, fallback: number): number => {
@@ -25,7 +25,7 @@ const toNumber = (raw: string | number | undefined, fallback: number): number =>
 export function buildVscodeTerminalOptions(
   settings: AppSettings,
   resolvedTheme: ITheme,
-): ITerminalOptions {
+): ITerminalOptions & ITerminalInitOnlyOptions {
   return {
     // terminal.integrated.fontFamily / fontSize / lineHeight / letterSpacing
     fontFamily: settings.terminalFont,
@@ -66,8 +66,9 @@ export function buildVscodeTerminalOptions(
     // terminal.integrated.scrollback
     scrollback: toNumber(settings.terminalMaxScrollback, 10000),
 
-    // terminal.integrated.copyOnSelection (VSCode default false)
-    copyOnSelect: false,
+    // terminal.integrated.copyOnSelection (VSCode default false) — not an
+    // xterm.js constructor option; implemented via onSelectionChange +
+    // autoCopyOnSelect in TerminalView instead.
 
     // scrollOnEraseInDisplay: scroll DECSED/ED content into scrollback like
     // VSCode (keeps full-screen output resumable in history).
@@ -122,4 +123,4 @@ export const VSCODE_STICKY_SCROLL_DEFAULTS = {
     'codex',
     'gemini',
   ],
-} as const;
+};

@@ -1,5 +1,5 @@
 import type { TranslationKeys } from '../i18n';
-import { destroyTerminal } from '../components/Terminal/TerminalView';
+import { destroyTerminal } from '../lib/terminalLifecycle';
 import { useAppStore } from '../stores/appStore';
 import { IS_MACOS } from '../lib/platform';
 
