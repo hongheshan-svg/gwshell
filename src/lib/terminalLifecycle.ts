@@ -124,8 +124,16 @@ export function destroyTerminal(tabId: string): void {
 /**
  * Safely fit a terminal to its container.
  * Skips if the container is hidden or has zero dimensions.
- * After fitting, forces a full row redraw so the renderer always
- * shows content consistent with the new dimensions.
+ * After fitting, clears the WebGL glyph atlas and forces a full row redraw
+ * so the renderer always shows content consistent with the new dimensions.
+ *
+ * The atlas clear matters here, not just in forceTerminalRedraw's post-settle
+ * pass: this runs on EVERY frame of a live window/pane resize (via the
+ * ResizeObserver -> scheduleTerminalFit path), and without it WebGL's cached
+ * cell metrics go stale for the whole drag - the same stale-metrics cause as
+ * the WebGL-load/context-loss cursor shimmer fixed elsewhere in this file,
+ * just triggered by resize instead. TUI apps (Claude Code, Codex) redrawing
+ * mid-drag is exactly when this showed up as cursor flicker on Windows.
  */
 export function safeFit(tabId: string): void {
   const inst = terminalInstances.get(tabId);
@@ -136,6 +144,7 @@ export function safeFit(tabId: string): void {
   if (rect.width < 2 || rect.height < 2) return;
   try {
     inst.fitAddon.fit();
+    inst.terminal.clearTextureAtlas();
     inst.terminal.refresh(0, inst.terminal.rows - 1);
   } catch {}
 }
