@@ -33,10 +33,6 @@ socks = "0.3"
 base64 = "0.22"
 rusqlite = { version = "0.33", features = ["bundled"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "stream", "json"] }
-toml = { version = "0.8", features = ["parse"] }
-axum = "0.7"
-http-body-util = "0.1"
-bytes = "1"
 futures-util = "0.3"
 tauri-plugin-deep-link = "2"
 tauri-plugin-single-instance = "2"
