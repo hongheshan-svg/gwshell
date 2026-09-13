@@ -138,7 +138,7 @@ jobs:
         working-directory: src-tauri
         run: |
           cargo install cargo-cyclonedx --locked
-          cargo cyclonedx --format json --output-pattern package
+          cargo cyclonedx --format json
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
