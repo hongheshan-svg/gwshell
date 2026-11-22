@@ -1,10 +1,11 @@
 /* ============================================================================
-   P1 form polish — translucency, soft focus, motion. Centralized overrides so
-   the look is tunable from here + theme.css. (Appended = wins over earlier rules.)
+   Centralized surface polish — frosted floating panels, soft focus rings,
+   entrance motion, and micro-transitions. Appended last in global.css.
    ============================================================================ */
 
-/* Floating surfaces get a subtle frosted-glass treatment (they sit over content) */
+/* Floating surfaces get frosted-glass translucency & elevated shadow */
 .modal-content,
+.ssh-modal,
 .context-menu,
 .app-menu,
 .new-asset-menu,
@@ -12,14 +13,33 @@
 .command-palette-card,
 .session-dropdown,
 .quick-connect-card,
-.split-menu {
+.split-menu,
+.group-defaults-card,
+.paste-confirm-card {
   background: var(--chrome-bg);
   backdrop-filter: blur(var(--surface-blur));
   -webkit-backdrop-filter: blur(var(--surface-blur));
   box-shadow: var(--shadow-lg);
 }
 
-/* Soft, consistent focus ring on standalone text inputs */
+.modal-overlay,
+.settings-overlay,
+.quick-connect-overlay,
+.command-palette-overlay,
+.group-defaults-overlay {
+  animation: overlay-fade-in 140ms ease-out;
+}
+
+.modal-content,
+.ssh-modal,
+.settings-panel,
+.quick-connect-card,
+.command-palette-card,
+.group-defaults-card {
+  animation: modal-pop-in 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Soft, consistent focus ring on standalone inputs */
 input:focus,
 select:focus,
 textarea:focus,
@@ -28,16 +48,18 @@ select:focus-visible,
 textarea:focus-visible {
   outline: none;
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px var(--accent-bg);
+  box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
-/* Composite inputs highlight their outer wrapper instead of nesting a second box */
+/* Composite inputs highlight their outer wrapper instead of nesting a second ring */
 .sidebar-search input:focus,
 .sidebar-search input:focus-visible,
 .asset-search-box input:focus,
 .asset-search-box input:focus-visible,
 .command-palette-input:focus,
 .command-palette-input:focus-visible,
+.terminal-ai-input:focus,
+.terminal-ai-input:focus-visible,
 .terminal-ai-textarea:focus,
 .terminal-ai-textarea:focus-visible,
 input[type='checkbox']:focus,
@@ -46,7 +68,7 @@ input[type='checkbox']:focus-visible {
   box-shadow: none;
 }
 
-/* Gentle motion on interactive chrome */
+/* Gentle tactile motion on interactive chrome */
 button,
 input,
 select,
@@ -56,16 +78,19 @@ textarea,
 .session-group-header,
 .sidebar-action-btn,
 .sidebar-add-btn,
-.nav-icon-btn {
+.nav-icon-btn,
+.dash-card,
+.filter-pill {
   transition:
     background-color var(--transition-fast),
     border-color var(--transition-fast),
     color var(--transition-fast),
     box-shadow var(--transition-fast),
+    transform var(--transition-fast),
     opacity var(--transition-fast);
 }
 
-/* P3: command palette row alignment — label fills, icon left, sub/hint right */
+/* Command palette row alignment — label fills, icon left, sub/hint right */
 .command-palette-item {
   justify-content: flex-start;
 }

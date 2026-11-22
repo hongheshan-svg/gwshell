@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Zap, X } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { parseQuickConnect } from '../../lib/quickConnect';
 import { setTempPassword } from '../../lib/tempSecrets';
@@ -7,7 +8,6 @@ import type { SessionConfig } from '../../types';
 
 export const QuickConnectModal: React.FC = () => {
   const { t } = useTranslation();
-  // Action setters are stable references; select individually.
   const setShowQuickConnect = useAppStore((s) => s.setShowQuickConnect);
   const addTemporarySession = useAppStore((s) => s.addTemporarySession);
   const addTab = useAppStore((s) => s.addTab);
@@ -60,9 +60,26 @@ export const QuickConnectModal: React.FC = () => {
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={onKeyDown}
       >
-        <div className="quick-connect-title">{t('quickconnect_title')}</div>
+        <div className="quick-connect-header">
+          <div className="quick-connect-icon">
+            <Zap size={16} />
+          </div>
+          <div className="quick-connect-heading">
+            <div className="quick-connect-title">{t('quickconnect_title')}</div>
+            <div className="quick-connect-hint">{t('quickconnect_hint')}</div>
+          </div>
+          <button
+            type="button"
+            className="modal-close"
+            onClick={close}
+            aria-label={t('common.dismiss')}
+          >
+            <X size={15} />
+          </button>
+        </div>
+
         <input
-          className="quick-connect-input"
+          className="quick-connect-input quick-connect-input--mono"
           autoFocus
           placeholder={t('quickconnect_placeholder')}
           value={target}
@@ -81,10 +98,10 @@ export const QuickConnectModal: React.FC = () => {
         />
         {error && <div className="quick-connect-error">{error}</div>}
         <div className="quick-connect-actions">
-          <button className="quick-connect-btn" onClick={close}>
+          <button type="button" className="quick-connect-btn" onClick={close}>
             {t('quickconnect_cancel')}
           </button>
-          <button className="quick-connect-btn primary" onClick={connect}>
+          <button type="button" className="quick-connect-btn primary" onClick={connect}>
             {t('quickconnect_connect')}
           </button>
         </div>

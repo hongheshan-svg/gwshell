@@ -1,13 +1,13 @@
-/* ========== Status Bar ========== */
+/* ========== Slim Integrated Status Bar ========== */
 
 .status-bar {
-  height: var(--statusbar-height, 26px);
+  height: var(--statusbar-height, 28px);
   background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  gap: 8px;
+  padding: 0 12px;
+  gap: 6px;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
@@ -15,18 +15,19 @@
 }
 
 .status-item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 5px;
   height: 20px;
-  padding: 0 6px;
+  padding: 0 7px;
   border-radius: var(--radius-xs);
 }
 
-/* Active session target (user@host) — mono, truncated when narrow */
 .status-session-target {
   font-family: var(--font-mono);
-  max-width: 260px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  max-width: 280px;
 }
 
 .status-session-target span {
@@ -37,7 +38,7 @@
 
 .status-item:hover {
   background: var(--bg-hover);
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .status-dot {
@@ -48,8 +49,9 @@
 
 .status-dot.connected {
   background: var(--success);
-  box-shadow: 0 0 0 2px rgba(var(--success-rgb), 0.2);
+  box-shadow: 0 0 0 2.5px rgba(var(--success-rgb), 0.22);
 }
+
 .status-dot.disconnected {
   background: var(--text-muted);
   opacity: 0.45;
@@ -57,4 +59,38 @@
 
 .status-spacer {
   flex: 1;
+}
+
+.status-version-btn {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.status-update-pill {
+  border: 1px solid rgba(var(--accent-primary-rgb), 0.35);
+  background: var(--accent-bg);
+  color: var(--accent-primary);
+  font: inherit;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+
+.status-update-pill:hover {
+  background: rgba(var(--accent-primary-rgb), 0.24);
+  color: var(--accent-primary);
+}
+
+.status-update-pill--ready {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--accent-fg);
+}
+
+.status-update-pill--ready:hover {
+  background: var(--accent-hover);
+  color: var(--accent-fg);
 }

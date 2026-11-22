@@ -1,17 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import {
-  TerminalSquare,
-  Box,
-  Monitor,
-  ChevronRight,
-  Network,
-  Usb,
-  Server,
-  Zap,
-} from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useEscapeClose } from '../../lib/useEscapeClose';
 import type { TranslationKeys } from '../../i18n';
+import { ProtocolIcon, type ProtocolIconType } from '../Icons/BrandIcons';
 
 interface NewAssetMenuProps {
   anchorRef: React.RefObject<HTMLButtonElement | null>;
@@ -23,35 +15,35 @@ interface NewAssetMenuProps {
 // are hidden rather than shown as dead "unavailable" rows).
 const remoteItems: {
   id: string;
-  icon: typeof TerminalSquare;
+  icon: ProtocolIconType;
   labelKey: TranslationKeys;
   disabled?: boolean;
 }[] = [
-  { id: 'ssh-tunnel', icon: Network, labelKey: 'newasset_ssh_tunnel' },
-  { id: 'serial', icon: Usb, labelKey: 'newasset_serial' },
+  { id: 'ssh-tunnel', icon: 'tunnel', labelKey: 'newasset_ssh_tunnel' },
+  { id: 'serial', icon: 'serial', labelKey: 'newasset_serial' },
 ];
 
 // SSH is the app's core action, so it leads as a one-click top-level item rather
 // than being buried in the remote submenu. Unimplemented entries are omitted.
 const menuItems: {
   id: string;
-  icon: typeof TerminalSquare;
+  icon: ProtocolIconType;
   labelKey: TranslationKeys;
   hasSubmenu?: boolean;
   disabled?: boolean;
 }[] = [
-  { id: 'quickconnect', icon: Zap, labelKey: 'newasset_quickconnect' },
-  { id: 'ssh', icon: Server, labelKey: 'newasset_ssh' },
-  { id: 'localshell', icon: TerminalSquare, labelKey: 'newasset_localshell' },
-  { id: 'docker', icon: Box, labelKey: 'newasset_docker' },
-  { id: 'remote', icon: Monitor, labelKey: 'newasset_remote', hasSubmenu: true },
+  { id: 'quickconnect', icon: 'quickconnect', labelKey: 'newasset_quickconnect' },
+  { id: 'ssh', icon: 'ssh', labelKey: 'newasset_ssh' },
+  { id: 'localshell', icon: 'localshell', labelKey: 'newasset_localshell' },
+  { id: 'docker', icon: 'docker', labelKey: 'newasset_docker' },
+  { id: 'remote', icon: 'remote', labelKey: 'newasset_remote', hasSubmenu: true },
 ];
 
 export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, onSelect }) => {
   const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
-  const [submenuPos, setSubmenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [submenuTop, setSubmenuTop] = useState<number>(0);
 
   useEscapeClose(onClose);
 
@@ -66,11 +58,19 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [onClose]);
 
-  // Calculate position based on anchor
+  // Calculate viewport-clamped position based on anchor.
+  const MENU_EST_WIDTH = 190;
+  const SUBMENU_EST_WIDTH = 168;
+  const VIEWPORT_PAD = 10;
+
   const getMenuPosition = () => {
-    if (!anchorRef.current) return { top: 100, left: 60 };
+    if (!anchorRef.current) return { top: 100, left: 60, openSubmenuLeft: false };
     const rect = anchorRef.current.getBoundingClientRect();
-    return { top: rect.bottom + 4, left: rect.left };
+    const maxLeft = Math.max(VIEWPORT_PAD, window.innerWidth - MENU_EST_WIDTH - VIEWPORT_PAD);
+    const left = Math.min(Math.max(VIEWPORT_PAD, rect.left), maxLeft);
+    const openSubmenuLeft =
+      left + MENU_EST_WIDTH + SUBMENU_EST_WIDTH > window.innerWidth - VIEWPORT_PAD;
+    return { top: rect.bottom + 4, left, openSubmenuLeft };
   };
 
   const pos = getMenuPosition();
@@ -78,13 +78,8 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
   const handleItemMouseEnter = (itemId: string, e: React.MouseEvent) => {
     setHoveredItem(itemId);
     if (itemId === 'remote') {
-      const target = e.currentTarget as HTMLElement; // eslint-disable-line no-restricted-syntax -- DOM EventTarget narrowing; getBoundingClientRect needs HTMLElement
-      const rect = target.getBoundingClientRect();
-      // Flush against the panel's right edge (no gap). The submenu is a DOM child
-      // of .new-asset-menu, so a flush position lets the cursor move from the
-      // Remote row into the submenu without crossing a dead zone over the overlay
-      // (which would fire the panel's onMouseLeave and collapse the submenu).
-      setSubmenuPos({ top: rect.top, left: rect.right });
+      const target = e.currentTarget as HTMLElement; // eslint-disable-line no-restricted-syntax -- DOM EventTarget narrowing; offsetTop needs HTMLElement
+      setSubmenuTop(target.offsetTop);
     }
   };
 
@@ -114,7 +109,7 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
             onMouseEnter={(e) => handleItemMouseEnter(item.id, e)}
           >
             <span className="new-asset-menu-icon">
-              <item.icon size={15} />
+              <ProtocolIcon type={item.icon} size={17} />
             </span>
             <span>{t(item.labelKey)}</span>
             {item.disabled && (
@@ -130,14 +125,17 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
           </div>
         ))}
 
-        {/* Submenu for remote. It is a DOM child of .new-asset-menu and positioned
-            flush against the panel's right edge, so moving the cursor from the
-            Remote row into it stays within the panel's subtree and does not fire
-            the panel's onMouseLeave. onMouseEnter re-pins 'remote' as a safety net. */}
-        {hoveredItem === 'remote' && submenuPos && (
+        {/* Submenu for remote — positioned absolute relative to .new-asset-menu
+            so backdrop-filter containing blocks never offset it, and flips to
+            the left when anchored near the viewport's right edge. */}
+        {hoveredItem === 'remote' && (
           <div
             className="new-asset-submenu"
-            style={{ top: submenuPos.top, left: submenuPos.left }}
+            style={
+              pos.openSubmenuLeft
+                ? { top: submenuTop, right: '100%', left: 'auto' }
+                : { top: submenuTop, left: '100%' }
+            }
             onMouseEnter={() => setHoveredItem('remote')}
           >
             {remoteItems.map((item) => (
@@ -153,7 +151,7 @@ export const NewAssetMenu: React.FC<NewAssetMenuProps> = ({ anchorRef, onClose, 
                 }}
               >
                 <span className="new-asset-menu-icon">
-                  <item.icon size={15} />
+                  <ProtocolIcon type={item.icon} size={17} />
                 </span>
                 <span>{t(item.labelKey)}</span>
                 {item.disabled && (

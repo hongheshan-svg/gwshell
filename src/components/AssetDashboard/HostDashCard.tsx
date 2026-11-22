@@ -1,23 +1,23 @@
 import React, { useMemo } from 'react';
-import { Play, Pencil, Box, Usb, TerminalSquare, Server, ArrowUpRight } from 'lucide-react';
+import { Play, Pencil, ArrowUpRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { SessionConfig } from '../../types';
 import type { MetricsSnapshot } from '../../types/serverMetrics';
+import { OsDistroIcon, ProtocolIcon } from '../Icons/BrandIcons';
+import { shortOsLabel } from '../../lib/osDistro';
 import './AssetDashboard.css';
 
 interface Props {
   session: SessionConfig;
   connected: boolean;
   snapshot?: MetricsSnapshot | null;
-  cpuHistory?: number[]; // 0-100 values for sparkline
-  latency?: number | null; // ping ms (disconnected state)
+  cpuHistory?: number[];
+  latency?: number | null;
   onConnect: (s: SessionConfig) => void;
   onEdit: (s: SessionConfig) => void;
-  onFocus?: (s: SessionConfig) => void; // focus existing tab when connected
+  onFocus?: (s: SessionConfig) => void;
   onContextMenu?: (e: React.MouseEvent, s: SessionConfig) => void;
 }
-
-// ---- Helpers ----------------------------------------------------------------
 
 function formatBytes(n: number): string {
   if (n >= 1_073_741_824) return (n / 1_073_741_824).toFixed(1) + 'G';
@@ -37,18 +37,15 @@ function cpuColor(p: number): string {
   return 'var(--accent-primary)';
 }
 
-// ---- Sparkline SVG ----------------------------------------------------------
-
 interface SparklineProps {
-  values: number[]; // 0-100
+  values: number[];
   width?: number;
   height?: number;
 }
 
-const Sparkline: React.FC<SparklineProps> = ({ values, width = 80, height = 24 }) => {
+const Sparkline: React.FC<SparklineProps> = ({ values, width = 84, height = 22 }) => {
   const points = useMemo(() => {
     if (values.length === 0) {
-      // Flat baseline
       return `0,${height} ${width},${height}`;
     }
     const len = values.length;
@@ -73,19 +70,17 @@ const Sparkline: React.FC<SparklineProps> = ({ values, width = 80, height = 24 }
         points={points}
         fill="none"
         stroke="var(--accent-primary)"
-        strokeWidth="1.5"
+        strokeWidth="1.6"
         strokeLinejoin="round"
         strokeLinecap="round"
-        opacity={values.length === 0 ? 0.25 : 0.8}
+        opacity={values.length === 0 ? 0.25 : 0.88}
       />
     </svg>
   );
 };
 
-// ---- CPU Ring ---------------------------------------------------------------
-
 interface RingProps {
-  percent: number; // 0-100
+  percent: number;
 }
 
 const CpuRing: React.FC<RingProps> = ({ percent }) => {
@@ -94,7 +89,7 @@ const CpuRing: React.FC<RingProps> = ({ percent }) => {
     <div
       className="dash-cpu-ring"
       style={{
-        background: `conic-gradient(${color} calc(${percent} * 1%), var(--border-color) 0)`,
+        background: `conic-gradient(${color} calc(${percent} * 1%), var(--bg-tertiary) 0)`,
       }}
       aria-label={`CPU ${percent}%`}
     >
@@ -105,10 +100,8 @@ const CpuRing: React.FC<RingProps> = ({ percent }) => {
   );
 };
 
-// ---- Bar ----------------------------------------------------------------
-
 interface BarProps {
-  percent: number; // 0-100
+  percent: number;
   warn?: boolean;
 }
 
@@ -124,8 +117,6 @@ const Bar: React.FC<BarProps> = ({ percent, warn }) => (
   </div>
 );
 
-// ---- Main component ---------------------------------------------------------
-
 export const HostDashCard: React.FC<Props> = ({
   session,
   connected,
@@ -138,11 +129,8 @@ export const HostDashCard: React.FC<Props> = ({
   onContextMenu,
 }) => {
   const { t } = useTranslation('gwshell');
-
-  // Color stripe: explicit color label when assigned, subtle transparent tint otherwise
   const stripeColor = session.color_label ?? 'transparent';
 
-  // Derived metrics (only when connected + snapshot)
   const cpuPct = snapshot?.cpu ? Math.round(snapshot.cpu.total_percent) : 0;
   const memPct = snapshot?.mem ? pct(snapshot.mem.mem_used_bytes, snapshot.mem.mem_total_bytes) : 0;
   const diskPct = snapshot?.disk ? pct(snapshot.disk.used_bytes, snapshot.disk.total_bytes) : 0;
@@ -155,10 +143,8 @@ export const HostDashCard: React.FC<Props> = ({
     : '';
 
   const diskLabel = snapshot?.disk ? `${diskPct}%` : '';
-
   const hasSnapshot = connected && snapshot != null;
 
-  // Created date lives in the name tooltip — too low-value for a card row.
   const createdDisplay = session.created_at
     ? new Date(session.created_at).toLocaleDateString()
     : null;
@@ -166,47 +152,56 @@ export const HostDashCard: React.FC<Props> = ({
     ? `${session.name} · ${t('dash_created_at', { date: createdDisplay })}`
     : session.name;
 
-  // Every card gets a type badge so the session kind is identifiable at a
-  // glance. SSH additionally shows a latency badge alongside it (below); the
-  // non-pingable types only show the badge (latency would be meaningless).
-  const typeBadge = (() => {
+  const protoInfo = (() => {
     switch (session.session_type) {
       case 'docker':
-        return { icon: <Box size={11} />, label: t('newasset_docker') };
+        return {
+          icon: <ProtocolIcon type="docker" size={20} />,
+          label: t('newasset_docker'),
+          cls: 'proto--docker',
+        };
       case 'serial':
-        return { icon: <Usb size={11} />, label: t('newasset_serial') };
+        return {
+          icon: <ProtocolIcon type="serial" size={20} />,
+          label: t('newasset_serial'),
+          cls: 'proto--serial',
+        };
       case 'localshell':
-        return { icon: <TerminalSquare size={11} />, label: t('newasset_localshell') };
+        return {
+          icon: <ProtocolIcon type="localshell" size={20} />,
+          label: t('newasset_localshell'),
+          cls: 'proto--local',
+        };
       default:
-        return { icon: <Server size={11} />, label: t('newasset_ssh') };
+        return {
+          icon: <ProtocolIcon type="ssh" size={20} />,
+          label: t('newasset_ssh'),
+          cls: 'proto--ssh',
+        };
     }
   })();
 
-  // Only SSH sessions have a meaningful TCP latency to display.
+  const osPretty = hasSnapshot ? snapshot?.host?.os_pretty : null;
+  const osShort = shortOsLabel(osPretty);
+
   const isPingable = session.session_type === 'ssh';
-  // SSH reached via a jump host / proxy isn't directly TCP-reachable from here,
-  // so a direct probe is meaningless — show a neutral marker, not "timeout".
   const viaRelay = !!session.jump_host || (!!session.proxy_type && session.proxy_type !== 'none');
 
-  // Distinguish the three latency states so a not-yet-probed or relay-only host
-  // never renders the misleading "timeout":
-  //   number     → measured round-trip
-  //   null       → probed and failed (genuinely unreachable / timed out)
-  //   undefined  → not probed yet (initial render, or paused while unfocused)
   const pingBadge: { cls: string; text: string; title?: string } | null = (() => {
     if (!isPingable) return null;
     if (viaRelay) return { cls: '', text: '—', title: t('dash_via_relay_hint') };
-    if (typeof latency === 'number') return { cls: ' live', text: `${latency} ms` };
+    if (typeof latency === 'number') {
+      const tone = latency <= 100 ? ' live' : latency <= 300 ? ' warn' : ' bad';
+      return { cls: tone, text: `${latency} ms` };
+    }
     if (latency === null)
       return { cls: '', text: t('dash_offline', 'Timeout'), title: t('dash_offline_hint') };
     return { cls: '', text: '…', title: t('dash_checking_hint') };
   })();
 
-  // Per-type connection summary for the sub row (raw lowercase type names
-  // like "serial" tell the user nothing).
   const subLine = (() => {
     if (session.username && session.host) {
-      return `${session.username}@${session.host}${session.port ? `:${session.port}` : ''}`;
+      return `${session.username}@${session.host}${session.port && session.port !== 22 ? `:${session.port}` : ''}`;
     }
     if (session.host) return session.host;
     switch (session.session_type) {
@@ -233,31 +228,23 @@ export const HostDashCard: React.FC<Props> = ({
       onDoubleClick={() => (connected ? onFocus?.(session) : onConnect(session))}
       onContextMenu={(e) => onContextMenu?.(e, session)}
     >
-      {/* Left color stripe (visible when session has a color label) */}
       {session.color_label && <div className="dash-stripe" style={{ background: stripeColor }} />}
 
       <div className="dash-card-inner">
-        {/* Header row */}
-        <div className="dash-header">
-          <span
-            className={`dash-status-dot${connected ? ' online' : ''}`}
-            aria-label={connected ? 'Connected' : 'Disconnected'}
-          />
-          <span className="dash-name" title={nameTooltip}>
-            {session.name}
-          </span>
+        <div className="dash-card-top">
+          <div className={`dash-proto-tile ${protoInfo.cls}`} aria-hidden="true">
+            {protoInfo.icon}
+            {connected && <span className="dash-tile-live-dot" />}
+          </div>
+          <div className="dash-identity">
+            <span className="dash-name" title={nameTooltip}>
+              {session.name}
+            </span>
+            <span className="dash-sub" title={subLine}>
+              {subLine}
+            </span>
+          </div>
           <div className="dash-actions">
-            {connected && onFocus && (
-              <button
-                type="button"
-                className="dash-action-btn primary"
-                title={t('dash_open')}
-                onClick={() => onFocus(session)}
-                aria-label={t('dash_open')}
-              >
-                <ArrowUpRight size={14} />
-              </button>
-            )}
             <button
               type="button"
               className="dash-action-btn"
@@ -270,78 +257,88 @@ export const HostDashCard: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Sub row: connection summary */}
-        <div className="dash-sub">{subLine}</div>
-
-        {/* Body */}
         {hasSnapshot ? (
-          /* Connected: live metrics */
           <div className="dash-metrics">
-            {/* CPU ring */}
-            <div className="dash-metric-row">
-              <span className="dash-metric-label">CPU</span>
+            <div className="dash-metrics-main">
               <CpuRing percent={cpuPct} />
-            </div>
-
-            {/* MEM bar */}
-            <div className="dash-metric-row">
-              <span className="dash-metric-label">MEM</span>
-              <div className="dash-metric-bar-wrap">
-                <Bar percent={memPct} warn={memPct > 85} />
-                <span className="dash-metric-value">{memLabel}</span>
-              </div>
-            </div>
-
-            {/* DISK bar (only when disk data present) */}
-            {snapshot?.disk && (
-              <div className="dash-metric-row">
-                <span className="dash-metric-label">{t('dash_disk', 'DISK')}</span>
-                <div className="dash-metric-bar-wrap">
-                  <Bar percent={diskPct} warn={diskPct > 85} />
-                  <span className="dash-metric-value">
-                    {diskLabel} <span className="dash-metric-mount">{snapshot.disk.mount}</span>
-                  </span>
+              <div className="dash-metrics-bars">
+                <div className="dash-metric-row">
+                  <span className="dash-metric-label">MEM</span>
+                  <div className="dash-metric-bar-wrap">
+                    <Bar percent={memPct} warn={memPct > 85} />
+                    <span className="dash-metric-value">{memLabel}</span>
+                  </div>
                 </div>
+                {snapshot?.disk && (
+                  <div className="dash-metric-row">
+                    <span className="dash-metric-label">{t('dash_disk', 'DISK')}</span>
+                    <div className="dash-metric-bar-wrap">
+                      <Bar percent={diskPct} warn={diskPct > 85} />
+                      <span className="dash-metric-value">
+                        {diskLabel} <span className="dash-metric-mount">{snapshot.disk.mount}</span>
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
-            {/* LOAD chip */}
-            {loadavg !== null && (
-              <div className="dash-metric-row">
-                <span className="dash-metric-label">{t('dash_load', 'LOAD')}</span>
-                <span
-                  className="dash-load-chip"
-                  style={{ color: loadHigh ? 'var(--warning)' : 'var(--text-secondary)' }}
+            <div className="dash-metrics-footer">
+              <div className="dash-metrics-meta">
+                {osShort && (
+                  <span className="dash-os-chip" title={osPretty ?? ''}>
+                    <OsDistroIcon osPretty={osPretty} size={13} />
+                    <span>{osShort}</span>
+                  </span>
+                )}
+                {loadavg !== null && (
+                  <span
+                    className="dash-load-chip"
+                    style={{ color: loadHigh ? 'var(--warning)' : 'var(--text-secondary)' }}
+                  >
+                    {t('dash_load', 'LOAD')} {loadavg.toFixed(2)}
+                  </span>
+                )}
+                <Sparkline values={cpuHistory} />
+              </div>
+              {onFocus && (
+                <button
+                  type="button"
+                  className="dash-connect-btn dash-connect-btn--open"
+                  onClick={() => onFocus(session)}
                 >
-                  {loadavg.toFixed(2)}
-                </span>
-              </div>
-            )}
-
-            {/* CPU sparkline (network rx label is optional — use cpuHistory as the series) */}
-            <div className="dash-sparkline-wrap">
-              <Sparkline values={cpuHistory} />
+                  <span>{t('dash_open')}</span>
+                  <ArrowUpRight size={13} />
+                </button>
+              )}
             </div>
           </div>
         ) : (
-          /* Disconnected: type badge (+ latency for SSH) + connect, one row */
           <div className="dash-offline">
             <div className="dash-badges">
-              <div className="dash-type-badge">
-                {typeBadge.icon}
-                {typeBadge.label}
-              </div>
+              <span className={`dash-type-badge ${protoInfo.cls}`}>{protoInfo.label}</span>
               {pingBadge && (
-                <div className={`dash-ping-badge${pingBadge.cls}`} title={pingBadge.title}>
+                <span className={`dash-ping-badge${pingBadge.cls}`} title={pingBadge.title}>
                   {pingBadge.text}
-                </div>
+                </span>
               )}
             </div>
 
-            <button className="dash-connect-btn" onClick={() => onConnect(session)}>
-              <Play size={12} />
-              {t('dash_connect', 'Connect')}
-            </button>
+            {connected && onFocus ? (
+              <button
+                type="button"
+                className="dash-connect-btn dash-connect-btn--open"
+                onClick={() => onFocus(session)}
+              >
+                <span>{t('dash_open')}</span>
+                <ArrowUpRight size={13} />
+              </button>
+            ) : (
+              <button type="button" className="dash-connect-btn" onClick={() => onConnect(session)}>
+                <Play size={11} />
+                <span>{t('dash_connect', 'Connect')}</span>
+              </button>
+            )}
           </div>
         )}
       </div>

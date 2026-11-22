@@ -1,8 +1,7 @@
 import React, { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { File, Folder, FolderUp } from 'lucide-react';
-import { fileIconFor } from '../../lib/fileIcons';
+import { SftpEntryIcon } from './SftpEntryIcon';
 import {
   formatPermissions,
   formatSize,
@@ -71,7 +70,7 @@ export const SftpFileList: React.FC<SftpFileListProps> = ({
   const rowVirtualizer = useVirtualizer({
     count: entries.length,
     getScrollElement: () => listScrollRef.current,
-    estimateSize: () => 32,
+    estimateSize: () => 34,
     overscan: 8,
   });
   const virtualRows = rowVirtualizer.getVirtualItems();
@@ -96,7 +95,7 @@ export const SftpFileList: React.FC<SftpFileListProps> = ({
 
         {newFolderMode && (
           <div className="sftp-file-item sftp-new-folder-item">
-            <Folder size={17} className="sftp-icon sftp-icon-folder" />
+            <SftpEntryIcon kind="folder" name={newFolderName || 'folder'} />
             <input
               className="sftp-rename-input"
               value={newFolderName}
@@ -114,7 +113,7 @@ export const SftpFileList: React.FC<SftpFileListProps> = ({
 
         {newFileMode && (
           <div className="sftp-file-item sftp-new-folder-item">
-            <File size={16} className="sftp-icon sftp-icon-file" />
+            <SftpEntryIcon kind="file" name={newFileName || 'file'} />
             <input
               className="sftp-rename-input"
               value={newFileName}
@@ -132,7 +131,7 @@ export const SftpFileList: React.FC<SftpFileListProps> = ({
 
         {currentPath !== '/' && (
           <div
-            className="sftp-file-item sftp-file-dir"
+            className="sftp-file-item sftp-file-dir sftp-file-parent"
             role="button"
             tabIndex={0}
             aria-label=".."
@@ -144,7 +143,7 @@ export const SftpFileList: React.FC<SftpFileListProps> = ({
               }
             }}
           >
-            <FolderUp size={17} className="sftp-icon sftp-icon-folder" />
+            <SftpEntryIcon kind="parent" name=".." />
             <span className="sftp-file-name">..</span>
             <span className="sftp-file-size">-</span>
             <span className="sftp-file-perm" />
@@ -173,14 +172,10 @@ export const SftpFileList: React.FC<SftpFileListProps> = ({
                 }}
                 onContextMenu={(e) => onContextMenu(e, entry)}
               >
-                {entry.is_dir ? (
-                  <Folder size={17} className="sftp-icon sftp-icon-folder" />
-                ) : (
-                  (() => {
-                    const { Icon, cls } = fileIconFor(entry.name);
-                    return <Icon size={16} className={`sftp-icon ${cls}`} />;
-                  })()
-                )}
+                <SftpEntryIcon
+                  kind={entry.is_dir ? 'folder' : 'file'}
+                  name={renamingEntry === entry.path ? renameValue || entry.name : entry.name}
+                />
                 {renamingEntry === entry.path ? (
                   <input
                     className="sftp-rename-input"

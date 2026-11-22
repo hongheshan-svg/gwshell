@@ -1,5 +1,14 @@
 import React from 'react';
-import { Minus, Square, X, Activity, Search, Bot } from 'lucide-react';
+import {
+  Minus,
+  Square,
+  X,
+  Activity,
+  Search,
+  Bot,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTranslation } from 'react-i18next';
@@ -7,7 +16,8 @@ import { useAppStore } from '../../stores/appStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { IS_MACOS, isTauriRuntime } from '../../lib/platform';
 import { KEY_ACTIONS } from '../../keymap/actions';
-import { formatStep, parseBinding } from '../../keymap/match';
+import { formatBindingDisplay } from '../../keymap/match';
+import { TabBar } from '../TabBar/TabBar';
 
 const getAppWindow = () => (isTauriRuntime() ? getCurrentWindow() : null);
 
@@ -18,6 +28,8 @@ export const TitleBar: React.FC = () => {
   const agentPanelOpen = useAppStore((s) => s.agentPanelOpen);
   const toggleAgentPanel = useAppStore((s) => s.toggleAgentPanel);
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
+  const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
+  const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const keymapOverrides = useSettingsStore((s) => s.settings.keymapOverrides);
 
   const paletteBadge = (() => {
@@ -25,8 +37,7 @@ export const TitleBar: React.FC = () => {
     const ov = keymapOverrides['palette.open'];
     const binding = ov === undefined ? def : ov;
     if (!binding) return '';
-    const chord = parseBinding(binding);
-    return chord ? chord.map(formatStep).join(' ') : binding;
+    return formatBindingDisplay(binding, IS_MACOS);
   })();
 
   const handleMinimize = () => {
@@ -52,42 +63,59 @@ export const TitleBar: React.FC = () => {
   };
 
   return (
-    // Double-click-to-maximize is handled natively by Tauri via the
-    // `data-tauri-drag-region` elements below — do NOT add a manual
-    // onDoubleClick toggleMaximize here, or it fires twice and cancels out.
     <div className={`titlebar${IS_MACOS ? ' titlebar--macos' : ''}`}>
-      <div className="titlebar-title" data-tauri-drag-region>
-        <span className="titlebar-brand-mark" aria-hidden="true">
-          &gt;_
-        </span>
-        <span>GWShell</span>
+      <div className="titlebar-left">
+        <button
+          type="button"
+          className="titlebar-icon-btn"
+          onClick={toggleSidebar}
+          title={t('nav_toggle_sidebar')}
+        >
+          {sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+        </button>
+        <div className="titlebar-title" data-tauri-drag-region>
+          <span className="titlebar-brand-mark" aria-hidden="true">
+            &gt;_
+          </span>
+          <span className="titlebar-brand-name">GWShell</span>
+        </div>
       </div>
-      <div className="titlebar-center" data-tauri-drag-region>
-        <button type="button" className="titlebar-cmdk" onClick={() => setShowCommandPalette(true)}>
+
+      {/* Unified single-bar tabs + flexible drag strip */}
+      <div className="titlebar-tabs" data-tauri-drag-region>
+        <TabBar />
+      </div>
+
+      <div className="titlebar-controls">
+        <button
+          type="button"
+          className="titlebar-cmdk-pill"
+          onClick={() => setShowCommandPalette(true)}
+          title={t('palette_entry', '搜索或输入命令')}
+        >
           <Search size={12} />
-          <span>{t('palette_entry', '搜索或输入命令')}</span>
+          <span className="titlebar-cmdk-label">{t('palette_entry', '搜索或输入命令')}</span>
           {paletteBadge && <kbd>{paletteBadge}</kbd>}
         </button>
-      </div>
-      <div className="titlebar-controls">
         <div className="titlebar-tools">
           <button
             type="button"
-            className={`titlebar-tool-btn${agentPanelOpen ? ' titlebar-btn--active' : ''}`}
+            className={`titlebar-pill-btn${agentPanelOpen ? ' titlebar-btn--active' : ''}`}
             onClick={toggleAgentPanel}
             title={t('agent_panel_title')}
             data-gw-action="toggle_agent_panel"
           >
-            <Bot size={15} />
+            <Bot size={14} />
+            <span>AI</span>
           </button>
           <button
             type="button"
-            className={`titlebar-tool-btn${serverPanelOpen ? ' titlebar-btn--active' : ''}`}
+            className={`titlebar-icon-btn${serverPanelOpen ? ' titlebar-btn--active' : ''}`}
             onClick={toggleServerPanel}
             title={t('serverPanel_toggle_title')}
             data-gw-action="toggle_server_panel"
           >
-            <Activity size={15} />
+            <Activity size={14} />
           </button>
         </div>
         {!IS_MACOS && (

@@ -151,6 +151,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
           onClosePanel={toggleSftpPanel}
           onGoHome={nav.goHome}
           onGoUp={nav.goUp}
+          onNavigate={nav.navigateTo}
           onRefresh={() => {
             void nav.loadDir(nav.currentPath);
           }}

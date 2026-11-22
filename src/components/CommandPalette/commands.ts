@@ -12,9 +12,12 @@ import {
   X,
   ArrowLeftRight,
   Bot,
+  RefreshCw,
 } from 'lucide-react';
 import { KEY_ACTIONS } from '../../keymap/actions';
-import { parseBinding, formatStep } from '../../keymap/match';
+import { formatBindingDisplay } from '../../keymap/match';
+import { IS_MACOS } from '../../lib/platform';
+import { useUpdaterStore } from '../../stores/updaterStore';
 import type { SessionConfig, TabInfo } from '../../types';
 
 export interface Command {
@@ -30,8 +33,7 @@ export interface Command {
 
 function fmtBinding(binding?: string): string | undefined {
   if (!binding) return undefined;
-  const chord = parseBinding(binding);
-  return chord ? chord.map(formatStep).join(' ') : undefined;
+  return formatBindingDisplay(binding, IS_MACOS);
 }
 
 export interface CommandCtx {
@@ -111,6 +113,16 @@ export function buildCommands(ctx: CommandCtx): Command[] {
       label: ctx.t('cmd_toggle_sidebar', 'Toggle sidebar'),
       icon: PanelLeft,
       run: ctx.toggleSidebar,
+    },
+    {
+      id: 'app:check-update',
+      group: 'action',
+      label: ctx.t('update_check_menu', 'Check for updates'),
+      keywords: 'ota update upgrade version',
+      icon: RefreshCw,
+      run: () => {
+        void useUpdaterStore.getState().checkForUpdate({ manual: true });
+      },
     },
   );
 

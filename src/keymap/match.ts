@@ -93,3 +93,34 @@ export function formatStep(st: Step): string {
 export function stepToBinding(st: Step): string {
   return formatStep(st);
 }
+
+const DISPLAY_KEYS: Record<string, string> = {
+  Comma: ',',
+  Escape: 'Esc',
+  Space: 'Space',
+  Delete: 'Del',
+};
+
+/** Human-friendly shortcut badge formatting (e.g. `⌘K` on macOS, `Ctrl+,` on Windows/Linux). */
+export function formatStepDisplay(st: Step, isMac: boolean): string {
+  const key = DISPLAY_KEYS[st.key] ?? st.key;
+  if (isMac) {
+    const mods: string[] = [];
+    if (st.ctrl) mods.push('⌃');
+    if (st.alt) mods.push('⌥');
+    if (st.shift) mods.push('⇧');
+    if (st.meta) mods.push('⌘');
+    return `${mods.join('')}${key}`;
+  }
+  const mods: string[] = [];
+  if (st.ctrl) mods.push('Ctrl');
+  if (st.shift) mods.push('Shift');
+  if (st.alt) mods.push('Alt');
+  if (st.meta) mods.push('Win');
+  return [...mods, key].join('+');
+}
+
+export function formatBindingDisplay(binding: string, isMac: boolean): string {
+  const chord = parseBinding(binding);
+  return chord ? chord.map((step) => formatStepDisplay(step, isMac)).join(' ') : binding;
+}

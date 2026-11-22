@@ -4,7 +4,7 @@
   width: 380px;
   min-width: 300px;
   max-width: 45vw;
-  border-left: 1px solid var(--border-color);
+  border-left: 1px solid var(--border-subtle);
   background: var(--bg-secondary);
   color: var(--text-primary);
   display: flex;
@@ -14,14 +14,15 @@
 }
 
 .agent-panel-header {
-  height: var(--tabbar-height, 38px);
+  height: var(--tabbar-height, 42px);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border-subtle);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 .agent-panel-header-actions {

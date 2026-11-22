@@ -1,15 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  X,
-  Plus,
-  FolderOpen,
-  Columns2,
-  PanelLeftOpen,
-  Square,
-  Grid2x2,
-  LayoutGrid,
-} from 'lucide-react';
+import { X, Plus, FolderOpen, Columns2, Square, Grid2x2, LayoutGrid } from 'lucide-react';
 import {
   DndContext,
   PointerSensor,
@@ -27,11 +18,14 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { openNewAssetModal } from '../../lib/newAssetAction';
 import { destroyTerminal } from '../../lib/terminalLifecycle';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
+import { ProtocolIcon, type ProtocolIconType } from '../Icons/BrandIcons';
 import type { TabInfo } from '../../types';
 
-// One draggable terminal tab. Sorting is pointer-driven with a small
-// activation distance so plain clicks (select) and middle clicks (close)
-// keep working without starting a drag.
+function tabProtoType(type: TabInfo['type']): ProtocolIconType {
+  if (type === 'docker' || type === 'serial' || type === 'localshell') return type;
+  return 'ssh';
+}
+
 const SortableTab: React.FC<{
   tab: TabInfo;
   active: boolean;
@@ -60,9 +54,13 @@ const SortableTab: React.FC<{
       onClick={onSelect}
       onMouseDown={onMiddleClick}
     >
-      <span className={`tab-dot ${tab.connected ? 'connected' : 'disconnected'}`} />
+      <span className="tab-proto-wrap">
+        <ProtocolIcon type={tabProtoType(tab.type)} size={14} />
+        <span className={`tab-live-dot ${tab.connected ? 'connected' : 'disconnected'}`} />
+      </span>
       <span className="tab-title">{tab.title}</span>
       <button
+        type="button"
         className="tab-close"
         onClick={(e) => {
           e.stopPropagation();
@@ -86,8 +84,6 @@ export const TabBar: React.FC = () => {
     toggleSftpPanel,
     splitCount,
     setSplitCount,
-    sidebarCollapsed,
-    toggleSidebar,
   } = useAppStore(
     useShallow((s) => ({
       tabs: s.tabs,
@@ -99,8 +95,6 @@ export const TabBar: React.FC = () => {
       toggleSftpPanel: s.toggleSftpPanel,
       splitCount: s.splitCount,
       setSplitCount: s.setSplitCount,
-      sidebarCollapsed: s.sidebarCollapsed,
-      toggleSidebar: s.toggleSidebar,
     })),
   );
   const { t } = useTranslation();
@@ -111,8 +105,7 @@ export const TabBar: React.FC = () => {
 
   const isConnectedInteractiveTab = (tabId: string) => {
     const tab = tabs.find((tb) => tb.id === tabId);
-    if (!tab) return false;
-    if (tab.type === 'asset-list') return false;
+    if (!tab || tab.type === 'asset-list') return false;
     return !!tab.connected;
   };
 
@@ -148,9 +141,8 @@ export const TabBar: React.FC = () => {
   };
 
   const terminalTabs = tabs.filter((tab) => tab.type !== 'asset-list');
+  const activeTab = tabs.find((tab) => tab.id === activeTabId);
 
-  // Drag starts only after the pointer moves a few pixels, so clicks still
-  // select and middle clicks still close.
   const dndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
@@ -162,115 +154,119 @@ export const TabBar: React.FC = () => {
   };
 
   return (
-    <div className="tab-bar" role="tablist">
-      {sidebarCollapsed && (
-        <button className="tab-add-btn" onClick={toggleSidebar} title={t('nav_toggle_sidebar')}>
-          <PanelLeftOpen size={14} />
-        </button>
-      )}
-      {/* The asset-list home tab is pinned first and not draggable. */}
-      {tabs
-        .filter((tab) => tab.type === 'asset-list')
-        .map((tab) => (
-          <div
-            key={tab.id}
-            className={`tab-item asset-list-tab ${tab.id === activeTabId ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            <LayoutGrid size={13} />
-            <span>{t('tab_list')}</span>
-          </div>
-        ))}
-      <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext
-          items={terminalTabs.map((tab) => tab.id)}
-          strategy={horizontalListSortingStrategy}
-        >
-          {terminalTabs.map((tab) => (
-            <SortableTab
+    <div className="tab-bar tab-bar--unified" role="tablist">
+      <div className="tab-bar-strip">
+        {tabs
+          .filter((tab) => tab.type === 'asset-list')
+          .map((tab) => (
+            <div
               key={tab.id}
-              tab={tab}
-              active={tab.id === activeTabId}
-              onSelect={() => setActiveTab(tab.id)}
-              onMiddleClick={(e) => handleMiddleClick(e, tab.id)}
-              onClose={() => handleCloseTab(tab.id)}
-            />
+              className={`tab-item asset-list-tab ${tab.id === activeTabId ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              <LayoutGrid size={13} />
+              <span>{t('tab_list')}</span>
+            </div>
           ))}
-        </SortableContext>
-      </DndContext>
-      <button
-        ref={addBtnRef}
-        className="tab-add-btn"
-        onClick={() => setShowNewAssetMenu(true)}
-        title={t('tab_new')}
-      >
-        <Plus size={14} />
-      </button>
-      {showNewAssetMenu && (
-        <NewAssetMenu
-          anchorRef={addBtnRef}
-          onClose={() => setShowNewAssetMenu(false)}
-          onSelect={openNewAssetModal}
-        />
-      )}
-      {/* Split count selector - only show when there are >=2 terminal tabs */}
-      {terminalTabs.length >= 2 && (
-        <div className="split-selector" style={{ marginLeft: 'auto', position: 'relative' }}>
-          <button
-            className={`tab-add-btn ${splitCount > 1 ? 'tab-btn-active' : ''}`}
-            onClick={() => setSplitMenuOpen((v) => !v)}
-            title={t('split_layout')}
+        <DndContext
+          sensors={dndSensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={terminalTabs.map((tab) => tab.id)}
+            strategy={horizontalListSortingStrategy}
           >
-            <Columns2 size={14} />
-          </button>
-          {splitMenuOpen && (
-            <>
-              <div className="split-menu-backdrop" onClick={() => setSplitMenuOpen(false)} />
-              <div className="split-menu">
-                {/* eslint-disable-next-line no-restricted-syntax */}
-                {([1, 2, 4, 6, 8] as const).map((n) => (
-                  <button
-                    key={n}
-                    className={`split-menu-item${splitCount === n ? ' active' : ''}`}
-                    onClick={() => {
-                      setSplitCount(n);
-                      setSplitMenuOpen(false);
-                    }}
-                  >
-                    {n === 1 ? (
-                      <Square size={14} />
-                    ) : n === 2 ? (
-                      <Columns2 size={14} />
-                    ) : n === 4 ? (
-                      <Grid2x2 size={14} />
-                    ) : (
-                      <LayoutGrid size={14} />
-                    )}
-                    <span>{n === 1 ? t('split_single') : `${n}`}</span>
-                  </button>
-                ))}
-              </div>
-            </>
+            {terminalTabs.map((tab) => (
+              <SortableTab
+                key={tab.id}
+                tab={tab}
+                active={tab.id === activeTabId}
+                onSelect={() => setActiveTab(tab.id)}
+                onMiddleClick={(e) => handleMiddleClick(e, tab.id)}
+                onClose={() => handleCloseTab(tab.id)}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
+        <button
+          type="button"
+          ref={addBtnRef}
+          className="tab-add-btn"
+          onClick={() => setShowNewAssetMenu(true)}
+          title={t('tab_new')}
+        >
+          <Plus size={14} />
+        </button>
+        {showNewAssetMenu && (
+          <NewAssetMenu
+            anchorRef={addBtnRef}
+            onClose={() => setShowNewAssetMenu(false)}
+            onSelect={openNewAssetModal}
+          />
+        )}
+      </div>
+
+      {/* Drag spacer keeps the unified titlebar natively draggable */}
+      <div className="tab-bar-drag-spacer" data-tauri-drag-region />
+
+      {(terminalTabs.length >= 2 || activeTab?.type === 'ssh') && (
+        <div className="tab-bar-right">
+          {terminalTabs.length >= 2 && (
+            <div className="split-selector">
+              <button
+                type="button"
+                className={`tab-add-btn ${splitCount > 1 ? 'tab-btn-active' : ''}`}
+                onClick={() => setSplitMenuOpen((v) => !v)}
+                title={t('split_layout')}
+              >
+                <Columns2 size={14} />
+              </button>
+              {splitMenuOpen && (
+                <>
+                  <div className="split-menu-backdrop" onClick={() => setSplitMenuOpen(false)} />
+                  <div className="split-menu">
+                    {/* eslint-disable-next-line no-restricted-syntax */}
+                    {([1, 2, 4, 6, 8] as const).map((n) => (
+                      <button
+                        type="button"
+                        key={n}
+                        className={`split-menu-item${splitCount === n ? ' active' : ''}`}
+                        onClick={() => {
+                          setSplitCount(n);
+                          setSplitMenuOpen(false);
+                        }}
+                      >
+                        {n === 1 ? (
+                          <Square size={14} />
+                        ) : n === 2 ? (
+                          <Columns2 size={14} />
+                        ) : n === 4 ? (
+                          <Grid2x2 size={14} />
+                        ) : (
+                          <LayoutGrid size={14} />
+                        )}
+                        <span>{n === 1 ? t('split_single') : `${n}`}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+          {activeTab?.type === 'ssh' && (
+            <button
+              type="button"
+              className={`tab-action-pill ${sftpPanelOpen ? 'titlebar-btn--active' : ''}`}
+              onClick={toggleSftpPanel}
+              title={t('sftp_title')}
+            >
+              <FolderOpen size={13} />
+              <span>SFTP</span>
+            </button>
           )}
         </div>
       )}
-      {/* SFTP toggle - only show when active tab is SSH */}
-      {(() => {
-        const activeTab = tabs.find((t) => t.id === activeTabId);
-        return activeTab?.type === 'ssh' ? (
-          <button
-            className={`tab-add-btn ${sftpPanelOpen ? 'tab-btn-active' : ''}`}
-            onClick={toggleSftpPanel}
-            title={t('sftp_title')}
-            // The split selector (shown when >=2 terminal tabs) already carries
-            // marginLeft:auto to push the right-aligned group over; avoid a
-            // second auto-margin that would split them apart.
-            style={terminalTabs.length >= 2 ? undefined : { marginLeft: 'auto' }}
-          >
-            <FolderOpen size={14} />
-          </button>
-        ) : null;
-      })()}
     </div>
   );
 };

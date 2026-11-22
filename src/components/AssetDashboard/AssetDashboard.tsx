@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
-import { Server, Plus, Zap, FileInput, Search } from 'lucide-react';
+import { Server, Zap, FileInput, Search, ArrowRight } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import { parseQuickConnect } from '../../lib/quickConnect';
 import type { SessionConfig } from '../../types';
 import type { MetricsSnapshot } from '../../types/serverMetrics';
+import { ProtocolIcon } from '../Icons/BrandIcons';
 import { HostDashCard } from './HostDashCard';
 import './AssetDashboard.css';
 
@@ -282,13 +284,43 @@ export const AssetDashboard: React.FC<Props> = ({
   );
 };
 
-/** First-run guidance: three CTA cards covering the main ways to get assets. */
+/** First-run Wave/Warp Quick Launch Hero: instant command bar + 3 action cards. */
 export const EmptyStateCtas: React.FC = () => {
   const { t } = useTranslation('gwshell');
   const setShowNewSession = useAppStore((s) => s.setShowNewSession);
-  const setShowQuickConnect = useAppStore((s) => s.setShowQuickConnect);
+  const setShowLocalTerminalModal = useAppStore((s) => s.setShowLocalTerminalModal);
   const setSessions = useAppStore((s) => s.setSessions);
+  const addTemporarySession = useAppStore((s) => s.addTemporarySession);
+  const addTab = useAppStore((s) => s.addTab);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [quickInput, setQuickInput] = useState('');
+
+  const handleQuickLaunch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleaned = quickInput.trim().replace(/^ssh\s+/i, '');
+    const parsed = parseQuickConnect(cleaned);
+    if (!parsed) return;
+    const sessionId = crypto.randomUUID();
+    const label = parsed.username ? `${parsed.username}@${parsed.host}` : parsed.host;
+    addTemporarySession({
+      id: sessionId,
+      name: label,
+      session_type: 'ssh',
+      host: parsed.host,
+      port: parsed.port,
+      username: parsed.username ?? 'root',
+      auth_method: 'agent',
+      _temporary: true,
+    });
+    addTab({
+      id: crypto.randomUUID(),
+      sessionId,
+      title: label,
+      type: 'ssh',
+      connected: false,
+    });
+    setQuickInput('');
+  };
 
   const handleImportSshConfig = async () => {
     setImportMsg(null);
@@ -309,10 +341,31 @@ export const EmptyStateCtas: React.FC = () => {
         </div>
         <h3 className="empty-hero-title">{t('table_empty', 'No sessions yet')}</h3>
         <p className="empty-hero-subtitle">{t('empty_cta_subtitle')}</p>
+
+        {/* Wave / Warp inline command-first quick connect bar */}
+        <form className="empty-quick-bar" onSubmit={handleQuickLaunch}>
+          <span className="empty-quick-prompt" aria-hidden="true">
+            $
+          </span>
+          <input
+            type="text"
+            className="empty-quick-input"
+            value={quickInput}
+            onChange={(e) => setQuickInput(e.target.value)}
+            placeholder="ssh root@192.168.1.10:22"
+            spellCheck={false}
+          />
+          <button type="submit" className="empty-quick-btn" disabled={!quickInput.trim()}>
+            <Zap size={13} />
+            <span>{t('dash_connect')}</span>
+            <ArrowRight size={13} />
+          </button>
+        </form>
+
         <div className="empty-cta-row">
           <button type="button" className="empty-cta-card" onClick={() => setShowNewSession(true)}>
             <span className="empty-cta-icon">
-              <Plus size={16} />
+              <ProtocolIcon type="ssh" size={20} />
             </span>
             <span>{t('newasset_ssh')}</span>
             <span className="empty-cta-desc">{t('empty_cta_ssh_desc')}</span>
@@ -320,13 +373,13 @@ export const EmptyStateCtas: React.FC = () => {
           <button
             type="button"
             className="empty-cta-card"
-            onClick={() => setShowQuickConnect(true)}
+            onClick={() => setShowLocalTerminalModal(true)}
           >
-            <span className="empty-cta-icon">
-              <Zap size={16} />
+            <span className="empty-cta-icon empty-cta-icon--local">
+              <ProtocolIcon type="localshell" size={20} />
             </span>
-            <span>{t('newasset_quickconnect')}</span>
-            <span className="empty-cta-desc">{t('empty_cta_quick_desc')}</span>
+            <span>{t('newasset_localshell')}</span>
+            <span className="empty-cta-desc">{t('empty_cta_local_desc')}</span>
           </button>
           <button
             type="button"
@@ -335,7 +388,7 @@ export const EmptyStateCtas: React.FC = () => {
               void handleImportSshConfig();
             }}
           >
-            <span className="empty-cta-icon">
+            <span className="empty-cta-icon empty-cta-icon--import">
               <FileInput size={16} />
             </span>
             <span>{t('empty_cta_import')}</span>

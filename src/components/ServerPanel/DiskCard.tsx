@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { HardDrive } from 'lucide-react';
 import type { DiskStats } from '../../types/serverMetrics';
 
 interface Props {
@@ -30,7 +31,12 @@ export const DiskCard: React.FC<Props> = ({ disk }) => {
   if (!disk) {
     return (
       <div className="sp-card sp-card--disk">
-        <div className="sp-card__title">{t('serverPanel_disk_title')}</div>
+        <div className="sp-card__title">
+          <span className="sp-card__icon sp-card__icon--disk">
+            <HardDrive size={12} />
+          </span>
+          <span>{t('serverPanel_disk_title')}</span>
+        </div>
         <div className="sp-empty">—</div>
       </div>
     );
@@ -40,6 +46,12 @@ export const DiskCard: React.FC<Props> = ({ disk }) => {
 
   return (
     <div className="sp-card sp-card--disk">
+      <div className="sp-card__title">
+        <span className="sp-card__icon sp-card__icon--disk">
+          <HardDrive size={12} />
+        </span>
+        <span>{t('serverPanel_disk_title')}</span>
+      </div>
       <div className="sp-membar">
         <div className="sp-membar__head">
           <span>{disk.mount || '/'}</span>

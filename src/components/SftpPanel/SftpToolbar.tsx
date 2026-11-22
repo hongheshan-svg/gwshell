@@ -1,6 +1,18 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronUp, Download, FolderPlus, Home, RefreshCw, Trash2, Upload, X } from 'lucide-react';
+import {
+  ChevronRight,
+  ChevronUp,
+  Download,
+  FolderPlus,
+  HardDrive,
+  Home,
+  Pencil,
+  RefreshCw,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react';
 
 interface SftpToolbarProps {
   currentPath: string;
@@ -14,6 +26,7 @@ interface SftpToolbarProps {
   onClosePanel: () => void;
   onGoHome: () => void;
   onGoUp: () => void;
+  onNavigate: (path: string) => void;
   onRefresh: () => void;
   onStartNewFolder: () => void;
   onUpload: () => void;
@@ -38,6 +51,7 @@ export const SftpToolbar: React.FC<SftpToolbarProps> = ({
   onClosePanel,
   onGoHome,
   onGoUp,
+  onNavigate,
   onRefresh,
   onStartNewFolder,
   onUpload,
@@ -51,11 +65,31 @@ export const SftpToolbar: React.FC<SftpToolbarProps> = ({
 }) => {
   const { t } = useTranslation();
 
+  const breadcrumbs = useMemo(() => {
+    const clean = currentPath.replace(/\/+$/, '') || '/';
+    if (clean === '/') return [];
+    const parts = clean.split('/').filter(Boolean);
+    return parts.map((label, idx) => ({
+      label,
+      path: '/' + parts.slice(0, idx + 1).join('/'),
+    }));
+  }, [currentPath]);
+
   return (
     <>
       <div className="sftp-header">
-        <span className="sftp-title">{t('sftp_title')}</span>
-        <button className="sftp-header-btn" onClick={onClosePanel} title={t('sftp_close')}>
+        <div className="sftp-header-left">
+          <span className="sftp-title">{t('sftp_title')}</span>
+          <span className="sftp-count-pill">
+            {t('sftp_info', { files: fileCount, folders: folderCount })}
+          </span>
+        </div>
+        <button
+          type="button"
+          className="sftp-header-btn"
+          onClick={onClosePanel}
+          title={t('sftp_close')}
+        >
           <X size={14} />
         </button>
       </div>
@@ -115,20 +149,54 @@ export const SftpToolbar: React.FC<SftpToolbarProps> = ({
             autoFocus
           />
         ) : (
-          <div className="sftp-path-display" onClick={onStartEditPath} title={currentPath}>
-            {currentPath}
+          <div className="sftp-breadcrumb-bar" title={currentPath} onDoubleClick={onStartEditPath}>
+            <div className="sftp-breadcrumb-scroll">
+              <button
+                type="button"
+                className={`sftp-crumb sftp-crumb--root${breadcrumbs.length === 0 ? ' is-current' : ''}`}
+                onClick={() => onNavigate('/')}
+                title="/"
+              >
+                <HardDrive size={11} />
+                <span>/</span>
+              </button>
+              {breadcrumbs.map((crumb, idx) => {
+                const isLast = idx === breadcrumbs.length - 1;
+                return (
+                  <React.Fragment key={crumb.path}>
+                    <ChevronRight size={11} className="sftp-crumb-sep" aria-hidden="true" />
+                    <button
+                      type="button"
+                      className={`sftp-crumb${isLast ? ' is-current' : ''}`}
+                      onClick={() => {
+                        if (!isLast) onNavigate(crumb.path);
+                      }}
+                      title={crumb.path}
+                    >
+                      {crumb.label}
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+              <span className="sftp-crumb-spacer" onClick={onStartEditPath} aria-hidden="true" />
+            </div>
+            <button
+              type="button"
+              className="sftp-path-edit-btn"
+              onClick={onStartEditPath}
+              title={currentPath}
+              aria-label={currentPath}
+            >
+              <Pencil size={11} />
+            </button>
           </div>
         )}
-      </div>
-
-      <div className="sftp-infobar">
-        {t('sftp_info', { files: fileCount, folders: folderCount })}
       </div>
 
       {error && (
         <div className="sftp-error">
           {error}
-          <button className="sftp-error-close" onClick={onDismissError}>
+          <button type="button" className="sftp-error-close" onClick={onDismissError}>
             <X size={12} />
           </button>
         </div>

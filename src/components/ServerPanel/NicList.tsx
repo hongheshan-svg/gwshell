@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { Network } from 'lucide-react';
 import type { NicInfo } from '../../types/serverMetrics';
 
 interface Props {
@@ -10,7 +11,12 @@ export const NicList: React.FC<Props> = ({ nics }) => {
   const { t } = useTranslation();
   return (
     <div className="sp-card sp-card--nics">
-      <div className="sp-card__title">{t('serverPanel_nic_title')}</div>
+      <div className="sp-card__title">
+        <span className="sp-card__icon sp-card__icon--nic">
+          <Network size={12} />
+        </span>
+        <span>{t('serverPanel_nic_title')}</span>
+      </div>
       {!nics || nics.length === 0 ? (
         <div className="sp-empty">—</div>
       ) : (

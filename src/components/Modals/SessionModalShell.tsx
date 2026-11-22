@@ -1,5 +1,6 @@
 import React from 'react';
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export interface ModalTabItem {
   id: string;
@@ -24,36 +25,51 @@ export const SessionModalShell: React.FC<SessionModalShellProps> = ({
   onClose,
   footer,
   children,
-}) => (
-  <div
-    className="modal-overlay"
-    onMouseDown={(e) => {
-      if (e.target === e.currentTarget) onClose();
-    }}
-  >
-    <div className="ssh-modal" onClick={(e) => e.stopPropagation()}>
-      <div className="ssh-modal-header">
-        <h2>{title}</h2>
-        <button className="modal-close" onClick={onClose}>
-          <X size={16} />
-        </button>
-      </div>
-
-      <div className="ssh-modal-tabs">
-        {tabs.map((tab) => (
+}) => {
+  const { t } = useTranslation();
+  return (
+    <div
+      className="modal-overlay"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="ssh-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="ssh-modal-header">
+          <h2>{title}</h2>
           <button
-            key={tab.id}
-            className={`ssh-tab ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => onSelectTab(tab.id)}
+            type="button"
+            className="modal-close"
+            onClick={onClose}
+            aria-label={t('common.dismiss')}
           >
-            {tab.label}
+            <X size={16} />
           </button>
-        ))}
+        </div>
+
+        <div className="ssh-modal-tabs">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`ssh-tab ${activeTab === tab.id ? 'active' : ''}`}
+              onClick={() => onSelectTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="ssh-modal-body">{children}</div>
+
+        <div className="ssh-modal-footer">{footer}</div>
       </div>
-
-      <div className="ssh-modal-body">{children}</div>
-
-      <div className="ssh-modal-footer">{footer}</div>
     </div>
-  </div>
-);
+  );
+};

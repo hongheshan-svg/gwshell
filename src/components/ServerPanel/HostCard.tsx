@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HostInfo } from '../../types/serverMetrics';
+import { OsDistroIcon } from '../Icons/BrandIcons';
 
 interface Props {
   host: HostInfo | null;
@@ -24,6 +25,20 @@ export const HostCard: React.FC<Props> = ({ host, hostIp }) => {
 
   return (
     <div className="sp-card sp-card--host">
+      <div className="sp-host-banner">
+        <div className="sp-host-os-icon">
+          <OsDistroIcon osPretty={host?.os_pretty} size={26} />
+        </div>
+        <div className="sp-host-meta">
+          <div className="sp-host-os-name" title={host?.os_pretty ?? ''}>
+            {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing */}
+            {host?.os_pretty || placeholder}
+          </div>
+          <div className="sp-host-sub" title={hostIp}>
+            {host?.user ? `${host.user}@${hostIp}` : hostIp || placeholder}
+          </div>
+        </div>
+      </div>
       <div className="sp-grid-2">
         <div className="sp-kv">
           <span className="sp-kv__k">{t('serverPanel_host_user')}</span>

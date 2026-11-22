@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { Cpu } from 'lucide-react';
 import type { CpuStats } from '../../types/serverMetrics';
 
 interface Props {
@@ -16,7 +17,12 @@ export const CpuCard: React.FC<Props> = ({ cpu }) => {
   if (!cpu) {
     return (
       <div className="sp-card sp-card--cpu">
-        <div className="sp-card__title">{t('serverPanel_cpu_title')}</div>
+        <div className="sp-card__title">
+          <span className="sp-card__icon sp-card__icon--cpu">
+            <Cpu size={12} />
+          </span>
+          <span>{t('serverPanel_cpu_title')}</span>
+        </div>
         <div className="sp-empty">—</div>
       </div>
     );
@@ -24,6 +30,12 @@ export const CpuCard: React.FC<Props> = ({ cpu }) => {
 
   return (
     <div className="sp-card sp-card--cpu">
+      <div className="sp-card__title">
+        <span className="sp-card__icon sp-card__icon--cpu">
+          <Cpu size={12} />
+        </span>
+        <span>{t('serverPanel_cpu_title')}</span>
+      </div>
       <div className="sp-grid-4">
         <div className="sp-stat">
           <span className="sp-stat__label">{t('serverPanel_cpu_avg')}</span>

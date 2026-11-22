@@ -1,11 +1,14 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../stores/appStore';
 import { TerminalView } from './TerminalView';
 import { TerminalAiDock } from './TerminalAiDock';
 import { AssetTable } from '../AssetTable/AssetTable';
+import { EmptyIllustration } from '../Icons/BrandIcons';
 
 export const TerminalContainer: React.FC = () => {
+  const { t } = useTranslation();
   const { tabs, activeTabId, mainView, splitCount, splitPanes, setActiveTab } = useAppStore(
     useShallow((s) => ({
       tabs: s.tabs,
@@ -51,11 +54,21 @@ export const TerminalContainer: React.FC = () => {
         <>
           {splitPanes.map((id, slot) => {
             if (id == null) {
-              return <div key={`empty-${slot}`} className="terminal-pane-empty" />;
+              return (
+                <div key={`empty-${slot}`} className="terminal-pane-empty">
+                  <EmptyIllustration variant="split" size={52} />
+                  <span>{t('split_empty_slot_hint')}</span>
+                </div>
+              );
             }
             const tab = terminalTabs.find((t) => t.id === id);
             if (!tab) {
-              return <div key={`gone-${slot}`} className="terminal-pane-empty" />;
+              return (
+                <div key={`gone-${slot}`} className="terminal-pane-empty">
+                  <EmptyIllustration variant="split" size={52} />
+                  <span>{t('split_empty_slot_hint')}</span>
+                </div>
+              );
             }
             const isActive = tab.id === activeTabId;
             return (

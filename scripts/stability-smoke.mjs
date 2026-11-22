@@ -314,6 +314,7 @@ function checkCapabilitiesAllowlist() {
     'clipboard-manager:allow-read-text',
     'clipboard-manager:allow-write-text',
     'process:allow-exit',
+    'process:allow-restart',
     'global-shortcut:default',
   ]);
   const errors = [];

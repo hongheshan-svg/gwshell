@@ -1,28 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Play, Edit, Trash2, Check, X } from 'lucide-react';
+import { Plus, Play, Edit, Trash2, Check, X, Server, ScrollText } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { useSnippetStore } from '../../stores/snippetStore';
 import { useConfirm } from '../../hooks/useConfirm';
 import { runScript } from '../../lib/sendScript';
 import { sendInputToTab } from '../../lib/terminalLifecycle';
+import { EmptyIllustration } from '../Icons/BrandIcons';
 import type { Snippet } from '../../types';
 
-// Only interactive terminal tabs can receive snippet input. SFTP tabs render
-// SftpPanel (not TerminalView), so tabInputSenders has no entry for them —
-// sending would silently fail even though connected=true. Allowlist the four
-// types that are backed by a live terminal instance.
 const INTERACTIVE_TERMINAL_TYPES = new Set(['ssh', 'localshell', 'serial', 'docker']);
 
 export const SnippetPanel: React.FC = () => {
   const { t } = useTranslation();
   const confirm = useConfirm();
   const { snippets, loaded, load, add, update, remove } = useSnippetStore();
-  // Per-field selectors: snippet list/actions come from snippetStore; only the
-  // active tab id + tab list are needed from appStore, selected individually so
-  // an unrelated store change (latency, modal toggle) doesn't re-render the list.
   const activeTabId = useAppStore((s) => s.activeTabId);
   const tabs = useAppStore((s) => s.tabs);
+  const setActiveNavItem = useAppStore((s) => s.setActiveNavItem);
   const [editing, setEditing] = useState<Snippet | null>(null);
   const [draftName, setDraftName] = useState('');
   const [draftCmd, setDraftCmd] = useState('');
@@ -73,11 +68,40 @@ export const SnippetPanel: React.FC = () => {
 
   return (
     <div className="snippet-panel">
-      <div className="snippet-panel-header">
-        <span>{t('snippet_title')}</span>
-        <button className="snippet-icon-btn" onClick={startCreate} title={t('snippet_add')}>
-          <Plus size={16} />
-        </button>
+      <div className="sidebar-top">
+        <div className="sidebar-seg" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={false}
+            className="sidebar-seg__btn"
+            onClick={() => setActiveNavItem('sessions')}
+          >
+            <Server size={12} />
+            <span>{t('sidebar_tab_hosts')}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={true}
+            className="sidebar-seg__btn active"
+            onClick={() => setActiveNavItem('snippets')}
+          >
+            <ScrollText size={12} />
+            <span>{t('sidebar_tab_snippets')}</span>
+          </button>
+        </div>
+        <div className="snippet-subbar">
+          <span className="snippet-subbar-label">{t('snippet_title')}</span>
+          <button
+            type="button"
+            className="sidebar-action-btn sidebar-add-btn"
+            onClick={startCreate}
+            title={t('snippet_add')}
+          >
+            <Plus size={14} />
+          </button>
+        </div>
       </div>
 
       {error && <div className="snippet-error">{error}</div>}
@@ -89,6 +113,7 @@ export const SnippetPanel: React.FC = () => {
             placeholder={t('snippet_name')}
             value={draftName}
             onChange={(e) => setDraftName(e.target.value)}
+            autoFocus
           />
           <textarea
             className="snippet-input snippet-textarea"
@@ -99,14 +124,20 @@ export const SnippetPanel: React.FC = () => {
           />
           <div className="snippet-form-actions">
             <button
+              type="button"
               className="snippet-icon-btn"
+              onClick={cancel}
+              title={t('snippet_cancel')}
+            >
+              <X size={15} />
+            </button>
+            <button
+              type="button"
+              className="snippet-icon-btn snippet-icon-btn--primary"
               onClick={() => void submit()}
               title={t('snippet_save')}
             >
-              <Check size={16} />
-            </button>
-            <button className="snippet-icon-btn" onClick={cancel} title={t('snippet_cancel')}>
-              <X size={16} />
+              <Check size={15} />
             </button>
           </div>
         </div>
@@ -114,7 +145,10 @@ export const SnippetPanel: React.FC = () => {
 
       <div className="snippet-list">
         {snippets.length === 0 && !creating && (
-          <div className="snippet-empty">{t('snippet_empty')}</div>
+          <div className="snippet-empty">
+            <EmptyIllustration variant="snippets" size={48} />
+            <span>{t('snippet_empty')}</span>
+          </div>
         )}
         {snippets.map((s) => (
           <div className="snippet-item" key={s.id}>
@@ -124,21 +158,24 @@ export const SnippetPanel: React.FC = () => {
             </div>
             <div className="snippet-item-actions">
               <button
+                type="button"
                 className="snippet-icon-btn"
                 onClick={() => send(s)}
                 disabled={!canSend}
                 title={t('snippet_send')}
               >
-                <Play size={14} />
+                <Play size={13} />
               </button>
               <button
+                type="button"
                 className="snippet-icon-btn"
                 onClick={() => startEdit(s)}
                 title={t('snippet_edit')}
               >
-                <Edit size={14} />
+                <Edit size={13} />
               </button>
               <button
+                type="button"
                 className="snippet-icon-btn"
                 onClick={() =>
                   void (async () => {
@@ -154,7 +191,7 @@ export const SnippetPanel: React.FC = () => {
                 }
                 title={t('snippet_delete')}
               >
-                <Trash2 size={14} />
+                <Trash2 size={13} />
               </button>
             </div>
           </div>

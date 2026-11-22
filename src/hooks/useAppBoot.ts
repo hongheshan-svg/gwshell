@@ -11,7 +11,7 @@ import type { SessionConfig } from '../types';
 
 /**
  * Orchestrates app startup and workspace-level side effects:
- * settings/snippets load, boot splash crossfade, vault lock check,
+ * settings/snippets load, vault lock check, ready-gated window reveal,
  * session hydration fallback, tab-session persistence/restore, and global keymap.
  */
 export function useAppBoot() {
@@ -69,33 +69,33 @@ export function useAppBoot() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsLoaded]);
 
-  // Boot splash crossfade
-  useEffect(() => {
-    const MIN_SPLASH_MS = 2000;
+  // Reveal the native Tauri window (created with `.visible(false)` in Rust) only
+  // after settings (theme/locale/font/zoom) and vault lock status have settled
+  // and React has painted its first real frame — zero artificial splash delay
+  // and zero uninitialized UI flash.
+  const appReadySentRef = useRef(false);
+  const sendAppReady = () => {
+    if (appReadySentRef.current) return;
+    appReadySentRef.current = true;
     invoke('app_ready').catch(() => {});
+  };
 
-    const t0 =
-      // eslint-disable-next-line no-restricted-syntax
-      (window as unknown as { __GWSHELL_BOOT_T0__?: number }).__GWSHELL_BOOT_T0__ ??
-      performance.now();
-    const remaining = Math.max(0, MIN_SPLASH_MS - (performance.now() - t0));
-
-    const timer = setTimeout(() => {
-      document.getElementById('root')?.classList.add('ready');
-      const splash = document.getElementById('boot-splash');
-      if (splash) {
-        splash.classList.add('fade-out');
-        splash.addEventListener('transitionend', () => splash.remove(), { once: true });
-        setTimeout(() => {
-          try {
-            splash.remove();
-          } catch {}
-        }, 600);
-      }
-    }, remaining);
-
-    return () => clearTimeout(timer);
+  useEffect(() => {
+    const fallback = setTimeout(sendAppReady, 1500);
+    return () => clearTimeout(fallback);
   }, []);
+
+  useEffect(() => {
+    if (!settingsLoaded || !vaultChecked || appReadySentRef.current) return;
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(sendAppReady);
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
+  }, [settingsLoaded, vaultChecked]);
 
   // Vault lock gate
   useEffect(() => {

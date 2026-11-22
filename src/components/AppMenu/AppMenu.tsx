@@ -3,13 +3,14 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { exit } from '@tauri-apps/plugin-process';
 import { useTranslation } from 'react-i18next';
-import { Globe, Settings, Search, LogOut } from 'lucide-react';
+import { Globe, Settings, Search, LogOut, RefreshCw } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useUpdaterStore } from '../../stores/updaterStore';
 import { useEscapeClose } from '../../lib/useEscapeClose';
 import { IS_MACOS, isTauriRuntime } from '../../lib/platform';
 import { KEY_ACTIONS } from '../../keymap/actions';
-import { formatStep, parseBinding } from '../../keymap/match';
+import { formatBindingDisplay } from '../../keymap/match';
 
 const getAppWindow = () => (isTauriRuntime() ? getCurrentWindow() : null);
 
@@ -18,8 +19,7 @@ function formatPaletteShortcut(overrides: Record<string, string | null>): string
   const ov = overrides['palette.open'];
   const binding = ov === undefined ? def : ov;
   if (!binding) return '';
-  const chord = parseBinding(binding);
-  return chord ? chord.map(formatStep).join(' ') : binding;
+  return formatBindingDisplay(binding, IS_MACOS);
 }
 
 export const AppMenu: React.FC = () => {
@@ -106,6 +106,16 @@ export const AppMenu: React.FC = () => {
           <Search size={14} />
           <span>{t('menu_quick_search')}</span>
           {paletteShortcut && <span className="app-menu-shortcut">{paletteShortcut}</span>}
+        </div>
+        <div
+          className="app-menu-item"
+          onClick={() => {
+            setShowAppMenu(false);
+            void useUpdaterStore.getState().checkForUpdate({ manual: true });
+          }}
+        >
+          <RefreshCw size={14} />
+          <span>{t('update_check_menu')}</span>
         </div>
         <div className="app-menu-divider" />
         <div className="app-menu-item danger" onClick={handleQuit}>

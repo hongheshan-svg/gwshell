@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { MemoryStick } from 'lucide-react';
 import type { MemStats } from '../../types/serverMetrics';
 
 interface Props {
@@ -30,7 +31,12 @@ export const MemCard: React.FC<Props> = ({ mem }) => {
   if (!mem) {
     return (
       <div className="sp-card sp-card--mem">
-        <div className="sp-card__title">{t('serverPanel_mem_title')}</div>
+        <div className="sp-card__title">
+          <span className="sp-card__icon sp-card__icon--mem">
+            <MemoryStick size={12} />
+          </span>
+          <span>{t('serverPanel_mem_title')}</span>
+        </div>
         <div className="sp-empty">—</div>
       </div>
     );
@@ -41,6 +47,12 @@ export const MemCard: React.FC<Props> = ({ mem }) => {
 
   return (
     <div className="sp-card sp-card--mem">
+      <div className="sp-card__title">
+        <span className="sp-card__icon sp-card__icon--mem">
+          <MemoryStick size={12} />
+        </span>
+        <span>{t('serverPanel_mem_title')}</span>
+      </div>
       <div className="sp-membar">
         <div className="sp-membar__head">
           <span>{t('serverPanel_mem_physical')}</span>

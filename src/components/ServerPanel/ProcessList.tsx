@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { X } from 'lucide-react';
+import { ListTree, X } from 'lucide-react';
 import type { ProcInfo } from '../../types/serverMetrics';
 
 interface Props {
@@ -61,7 +61,12 @@ export const ProcessList: React.FC<Props> = ({ sessionId, procs }) => {
 
   return (
     <div className="sp-card sp-card--procs">
-      <div className="sp-card__title">{t('serverPanel_proc_title')}</div>
+      <div className="sp-card__title">
+        <span className="sp-card__icon sp-card__icon--procs">
+          <ListTree size={12} />
+        </span>
+        <span>{t('serverPanel_proc_title')}</span>
+      </div>
       {!procs || procs.length === 0 ? (
         <div className="sp-empty">—</div>
       ) : (

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Wifi, Clock, Monitor, Radio } from 'lucide-react';
-import { getVersion } from '@tauri-apps/api/app';
+import { Wifi, Clock, Monitor, Radio, ArrowUpCircle, Download, RotateCcw } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import { useUpdaterStore } from '../../stores/updaterStore';
 
 export const StatusBar: React.FC = () => {
   // Fine-grained selectors: avoid re-rendering on every ping latency update
@@ -22,14 +22,11 @@ export const StatusBar: React.FC = () => {
   const broadcastInput = useAppStore((s) => s.broadcastInput);
   const toggleBroadcastInput = useAppStore((s) => s.toggleBroadcastInput);
   const { t } = useTranslation();
-  const [version, setVersion] = useState('0.1.0');
+  const version = useUpdaterStore((s) => s.currentVersion);
+  const updaterStatus = useUpdaterStore((s) => s.status);
+  const availableVersion = useUpdaterStore((s) => s.availableVersion);
+  const updateProgress = useUpdaterStore((s) => s.progress);
   const [now, setNow] = useState(() => new Date());
-
-  useEffect(() => {
-    getVersion()
-      .then(setVersion)
-      .catch(() => {});
-  }, []);
 
   // Align the clock tick to the next minute boundary so HH:MM never lags by
   // up to 30s (a fixed 30s interval could show 10:59 until 11:00:29).
@@ -59,12 +56,68 @@ export const StatusBar: React.FC = () => {
     return target;
   }, [activeSession]);
 
+  const handleUpdateClick = () => {
+    const store = useUpdaterStore.getState();
+    if (
+      updaterStatus === 'available' ||
+      updaterStatus === 'downloading' ||
+      updaterStatus === 'ready'
+    ) {
+      store.openModal();
+    } else {
+      void store.checkForUpdate({ manual: true });
+    }
+  };
+
   return (
     <div className="status-bar">
-      <div className="status-item">
+      <button
+        type="button"
+        className="status-item status-version-btn"
+        onClick={handleUpdateClick}
+        title={t('update_check_menu')}
+      >
         <Monitor size={11} />
         <span>GWShell v{version}</span>
-      </div>
+      </button>
+
+      {updaterStatus === 'available' && availableVersion && (
+        <button
+          type="button"
+          className="status-item status-update-pill"
+          onClick={handleUpdateClick}
+          title={t('update_new_version', { version: availableVersion })}
+        >
+          <ArrowUpCircle size={11} />
+          <span>v{availableVersion}</span>
+        </button>
+      )}
+
+      {updaterStatus === 'downloading' && (
+        <button
+          type="button"
+          className="status-item status-update-pill"
+          onClick={handleUpdateClick}
+          title={t('update_downloading')}
+        >
+          <Download size={11} />
+          <span>
+            {updateProgress !== null ? `${updateProgress}%` : t('update_downloading_short')}
+          </span>
+        </button>
+      )}
+
+      {updaterStatus === 'ready' && (
+        <button
+          type="button"
+          className="status-item status-update-pill status-update-pill--ready"
+          onClick={handleUpdateClick}
+          title={t('update_restart')}
+        >
+          <RotateCcw size={11} />
+          <span>{t('update_restart_now')}</span>
+        </button>
+      )}
 
       {activeTab && activeTab.type !== 'asset-list' && (
         <>

@@ -1,74 +1,123 @@
-/* ========== Custom TitleBar ========== */
+/* ========== Unified Single Top Bar (Wave / Warp Chrome) ========== */
 
 .titlebar {
   display: flex;
   align-items: center;
-  height: var(--titlebar-height, 38px);
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
+  height: var(--titlebar-height, 44px);
+  background: var(--bg-shell);
   flex-shrink: 0;
   user-select: none;
-  padding-right: 6px;
+  padding: 0 10px 0 10px;
+  gap: 8px;
+}
+
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .titlebar-title {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding-left: 12px;
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
   color: var(--text-primary);
-  pointer-events: none;
   flex-shrink: 0;
+  padding-right: 4px;
+}
+
+.titlebar-brand-name {
+  pointer-events: none;
 }
 
 .titlebar-brand-mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  background: linear-gradient(135deg, var(--accent-primary) 0%, #7c5cff 100%);
-  color: #fff;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--accent-gradient);
+  color: var(--accent-fg);
   font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  box-shadow: 0 1px 4px rgba(var(--accent-primary-rgb), 0.35);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  box-shadow:
+    0 2px 10px rgba(var(--accent-primary-rgb), 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  pointer-events: none;
 }
 
-.titlebar-center {
+/* Integrated tab strip inside TitleBar */
+.titlebar-tabs {
   flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
   min-width: 0;
-  padding: 0 12px;
+  height: 100%;
+  display: flex;
+  align-items: center;
 }
 
 .titlebar-controls {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   height: 100%;
-  gap: 4px;
+  gap: 6px;
+  flex-shrink: 0;
   -webkit-app-region: no-drag;
   app-region: no-drag;
+}
+
+.titlebar-cmdk-pill {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  height: 28px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.titlebar-cmdk-pill:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-light);
+  color: var(--text-primary);
+}
+
+.titlebar-cmdk-pill kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
 }
 
 .titlebar-tools {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding-right: 4px;
 }
 
-.titlebar-tool-btn {
+.titlebar-icon-btn {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
   width: 28px;
   height: 28px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
@@ -78,19 +127,45 @@
   cursor: pointer;
 }
 
-.titlebar-tool-btn:hover {
+.titlebar-icon-btn:hover {
   background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.titlebar-pill-btn {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  height: 28px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.titlebar-pill-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-subtle);
   color: var(--text-primary);
 }
 
 .titlebar-window-controls {
   display: flex;
   height: 100%;
-  margin-right: -6px;
+  margin-right: -10px;
+  margin-left: 2px;
 }
 
 .titlebar-btn {
-  width: 44px;
+  width: 42px;
   height: 100%;
   display: flex;
   align-items: center;
@@ -113,43 +188,52 @@
 
 .titlebar-btn--active {
   background: var(--accent-bg);
-  border-color: rgba(var(--accent-primary-rgb), 0.28);
+  border-color: rgba(var(--accent-primary-rgb), 0.35);
   color: var(--accent-primary);
 }
 
 .titlebar-btn--active:hover {
-  background: rgba(var(--accent-primary-rgb), 0.2);
+  background: rgba(var(--accent-primary-rgb), 0.22);
+  border-color: rgba(var(--accent-primary-rgb), 0.5);
   color: var(--accent-primary);
 }
 
 .titlebar-btn:disabled,
-.titlebar-tool-btn:disabled {
+.titlebar-icon-btn:disabled,
+.titlebar-pill-btn:disabled {
   opacity: 0.4;
   cursor: default;
 }
 
-/* macOS native title bar: traffic lights occupy the top-left ~72px. */
+/* macOS native title bar: traffic lights occupy the top-left ~76px. */
 .titlebar--macos {
   padding-left: 78px;
   padding-right: 10px;
 }
-.titlebar--macos .titlebar-title {
-  padding-left: 4px;
+
+@media (max-width: 900px) {
+  .titlebar-cmdk-label {
+    display: none;
+  }
 }
 
-/* ========== Icon Navbar / Sidebar Footer Buttons ========== */
+/* ========== Sidebar Footer Buttons ========== */
 
 .nav-icon-btn {
-  width: 26px;
-  height: 26px;
-  display: flex;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 7px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   background: transparent;
   border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 500;
   position: relative;
 }
 

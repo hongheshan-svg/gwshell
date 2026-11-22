@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Activity } from 'lucide-react';
 import type { NetStats } from '../../types/serverMetrics';
 import { Sparkline, type SparkSeries } from './Sparkline';
 
@@ -45,6 +46,14 @@ export const NetCard: React.FC<Props> = ({ net, cpuHistory, memHistory, rxHistor
 
   return (
     <div className="sp-card sp-card--net">
+      <div className="sp-card__title">
+        <span className="sp-card__icon sp-card__icon--net">
+          <Activity size={12} />
+        </span>
+        <span>
+          {t('serverPanel_net_legend_rx')} / {t('serverPanel_net_legend_tx')}
+        </span>
+      </div>
       <div className="sp-grid-2">
         <div className="sp-kv">
           <span className="sp-kv__k">{t('serverPanel_net_total_tx')}</span>

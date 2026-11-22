@@ -5,7 +5,6 @@ import { TitleBar } from './components/TitleBar/TitleBar';
 import { SidebarFooter } from './components/Sidebar/SidebarFooter';
 import { SessionPanel } from './components/Sidebar/SessionPanel';
 import { SnippetPanel } from './components/Sidebar/SnippetPanel';
-import { TabBar } from './components/TabBar/TabBar';
 import { AssetTable } from './components/AssetTable/AssetTable';
 import { StatusBar } from './components/StatusBar/StatusBar';
 import { UnlockScreen } from './components/UnlockScreen';
@@ -146,7 +145,7 @@ function App() {
       {vaultLocked && <UnlockScreen />}
       <div className="app-root">
         <TitleBar />
-        <div className="app-layout">
+        <div className={`app-layout${sidebarCollapsed ? ' app-layout--sidebar-collapsed' : ''}`}>
           {!sidebarCollapsed && (
             <div className="sidebar-column">
               {activeNavItem === 'snippets' ? <SnippetPanel /> : <SessionPanel />}
@@ -154,7 +153,6 @@ function App() {
             </div>
           )}
           <div className="main-content">
-            <TabBar />
             <div className="terminal-sftp-wrapper">
               {showAssetTable && (
                 <div className="terminal-container">
