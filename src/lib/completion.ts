@@ -1,4 +1,4 @@
-import { lookupCommands } from './commandDictionary';
+import { lookupCommands, POSIX_SHELL_BUILTINS } from './commandDictionary';
 import { commandUsage, getSuggestions, type SuggestCtx } from './commandHistory';
 import { commandWordAt } from './commandLine';
 
@@ -13,6 +13,18 @@ export interface Completion {
 // A one-letter command prefix matches dozens of dictionary entries that are
 // mostly noise; history (which is personal) is still offered from one letter.
 const DICT_MIN_CHARS = 2;
+
+/**
+ * Check whether a saved history command's leading executable is usable on a
+ * POSIX host whose `$PATH` binaries were probed. Allows shell builtins,
+ * explicit paths (`./script`, `/etc/init.d/network`), and env assignments.
+ */
+function isHistoryCommandSupported(cmdLine: string, available: ReadonlySet<string>): boolean {
+  const first = cmdLine.trim().split(/\s+/)[0] ?? '';
+  if (!first) return false;
+  if (first.includes('/') || first.includes('=')) return true;
+  return available.has(first) || POSIX_SHELL_BUILTINS.has(first);
+}
 
 /**
  * Merge history suggestions (ranked, full-line) with dictionary commands.
@@ -31,17 +43,29 @@ export function buildCompletions(
   max = 8,
 ): Completion[] {
   if (!line) return [];
-  const ci = ctx.table === 'cmd' || ctx.table === 'powershell';
+  const table = ctx.table ?? 'unix';
+  const ci = table === 'cmd' || table === 'powershell';
   const key = (s: string) => (ci ? s.toLowerCase() : s);
+  const avail =
+    table === 'unix' && ctx.availableCommands && ctx.availableCommands.size > 0
+      ? ctx.availableCommands
+      : undefined;
 
   let dict: Completion[] = [];
   const word = commandWordAt(line);
   if (word && word.word.length >= DICT_MIN_CHARS) {
     const usage = commandUsage();
     const head = line.slice(0, word.start);
-    dict = lookupCommands(word.word, locale, ctx.table ?? 'unix')
+    dict = lookupCommands(word.word, locale, table, avail)
       .map((d, i) => ({ d, i, uses: usage.get(d.cmd.toLowerCase()) ?? 0 }))
-      .sort((a, b) => b.uses - a.uses || a.d.cmd.length - b.d.cmd.length || a.i - b.i)
+      .sort(
+        (a, b) =>
+          b.uses - a.uses ||
+          // Prefer documented commands over undocumented $PATH binaries on ties
+          Number(Boolean(b.d.desc)) - Number(Boolean(a.d.desc)) ||
+          a.d.cmd.length - b.d.cmd.length ||
+          a.i - b.i,
+      )
       .map(({ d }): Completion => ({ text: head + d.cmd, kind: 'command', desc: d.desc }));
   }
 
@@ -55,6 +79,7 @@ export function buildCompletions(
   const seen = new Set<string>();
   for (const cmd of getSuggestions(line, ctx)) {
     if (out.length >= historyBudget) break;
+    if (avail && !isHistoryCommandSupported(cmd, avail)) continue;
     if (seen.has(key(cmd))) continue;
     seen.add(key(cmd));
     out.push({ text: cmd, kind: 'history' });

@@ -45,6 +45,14 @@ pub async fn detect_remote_os(
     state.ssh_manager.detect_command_table(&session_id).await
 }
 
+#[tauri::command]
+pub async fn probe_remote_env(
+    session_id: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<crate::ssh::probe::RemoteEnvProbe, String> {
+    state.ssh_manager.probe_remote_env(&session_id).await
+}
+
 // ---- Ping Command ----
 
 #[tauri::command]

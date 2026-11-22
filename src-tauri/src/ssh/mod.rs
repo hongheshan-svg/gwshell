@@ -7,7 +7,7 @@ mod forward;
 mod handler;
 mod known_hosts;
 pub(crate) mod params;
-mod probe;
+pub(crate) mod probe;
 mod session;
 mod sftp;
 mod transport;
@@ -242,6 +242,35 @@ impl SshManager {
             .await
             .unwrap_or_default();
         Ok(probe::classify_command_table(&uname, &comspec).to_string())
+    }
+
+    /// Probe both the remote shell table ("unix" | "cmd" | "powershell") and,
+    /// on POSIX hosts (Linux/OpenWrt/Alpine/macOS/BSD), the actual executable
+    /// names available in `$PATH` so completion never suggests commands that do
+    /// not exist on the target host.
+    pub async fn probe_remote_env(
+        &self,
+        session_id: &str,
+    ) -> Result<probe::RemoteEnvProbe, String> {
+        let raw = self
+            .ssh_exec(session_id, probe::POSIX_ENV_PROBE_CMD)
+            .await
+            .unwrap_or_default();
+        let (is_posix, commands) = probe::parse_posix_env_probe(&raw);
+        if is_posix {
+            return Ok(probe::RemoteEnvProbe {
+                table: "unix".to_string(),
+                commands,
+            });
+        }
+        let comspec = self
+            .ssh_exec(session_id, "echo %COMSPEC%")
+            .await
+            .unwrap_or_default();
+        Ok(probe::RemoteEnvProbe {
+            table: probe::classify_command_table(&raw, &comspec).to_string(),
+            commands: Vec::new(),
+        })
     }
 
     // --- Local port forwarding ---

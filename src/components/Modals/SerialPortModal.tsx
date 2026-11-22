@@ -342,7 +342,7 @@ export const SerialPortModal: React.FC = () => {
 
         <div className="ssh-modal-footer">
           <button type="button" className="ssh-footer-link" onClick={handleTest}>
-            {t('ssh_test_connect')}
+            {t('ssh_save_and_connect')}
           </button>
           <button type="button" className="btn btn-primary" onClick={handleSave}>
             {t('ssh_save')}

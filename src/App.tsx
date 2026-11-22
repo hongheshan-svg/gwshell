@@ -140,6 +140,22 @@ function App() {
     }
   }, [agentPanelOpen, agentPanelMounted]);
 
+  // Suppress native WebView browser context menu ("Reload", "Inspect Element",
+  // macOS text services) on desktop app chrome while keeping native editing
+  // menus inside text inputs/textareas and active selections in AI replies.
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      if (e.defaultPrevented) return;
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+      const selection = window.getSelection()?.toString().trim();
+      if (selection && target?.closest('.agent-panel')) return;
+      e.preventDefault();
+    };
+    document.addEventListener('contextmenu', handleContextMenu);
+    return () => document.removeEventListener('contextmenu', handleContextMenu);
+  }, []);
+
   return (
     <I18nextProvider i18n={i18n}>
       {vaultLocked && <UnlockScreen />}

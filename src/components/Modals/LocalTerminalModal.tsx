@@ -369,8 +369,8 @@ export const LocalTerminalModal: React.FC = () => {
 
         {/* Footer */}
         <div className="ssh-modal-footer">
-          <button className="ssh-footer-link" onClick={handleTestConnect}>
-            {t('ssh_test_connect')}
+          <button type="button" className="ssh-footer-link" onClick={handleTestConnect}>
+            {t('ssh_save_and_connect')}
           </button>
           <button className="btn btn-primary" onClick={handleSave}>
             {t('ssh_save')}

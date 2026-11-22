@@ -317,6 +317,7 @@
   position: sticky;
   top: 0;
   z-index: 1;
+  user-select: none;
 }
 
 .sftp-file-header-icon {
@@ -351,6 +352,7 @@
   cursor: pointer;
   border-bottom: 1px solid transparent;
   min-height: 34px;
+  user-select: none;
 }
 
 /* Zebra striping for readability in large directories. Odd rows (1st, 3rd, …)
@@ -456,6 +458,7 @@
   padding: 2px 4px;
   outline: none;
   min-width: 0;
+  user-select: text;
 }
 
 .sftp-loading,

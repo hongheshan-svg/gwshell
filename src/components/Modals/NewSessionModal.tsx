@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { invoke } from '@tauri-apps/api/core';
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
+import { CheckCircle2, AlertTriangle, Loader2, ShieldAlert } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { useEscapeClose } from '../../lib/useEscapeClose';
+import { parseHostKeyError, type HostKeyError } from '../../lib/hostKeyError';
 import type { SessionConfig } from '../../types';
 import type { TranslationKeys } from '../../i18n';
 import { SessionModalShell } from './SessionModalShell';
@@ -11,6 +14,13 @@ import { SshTunnelTab } from './sshTabs/SshTunnelTab';
 import { SshProxyTab } from './sshTabs/SshProxyTab';
 import { SshEnvTab } from './sshTabs/SshEnvTab';
 import { SshAdvancedTab } from './sshTabs/SshAdvancedTab';
+
+type TestStatus =
+  | { kind: 'idle' }
+  | { kind: 'testing' }
+  | { kind: 'ok'; ms: number }
+  | { kind: 'hostkey'; info: HostKeyError }
+  | { kind: 'error'; message: string };
 
 const configTabKeys: { id: string; labelKey: TranslationKeys }[] = [
   { id: 'standard', labelKey: 'ssh_tab_standard' },
@@ -44,7 +54,6 @@ export const NewSessionModal: React.FC = () => {
   const showNewSession = useAppStore((s) => s.showNewSession);
   const setShowNewSession = useAppStore((s) => s.setShowNewSession);
   const addSession = useAppStore((s) => s.addSession);
-  const addTab = useAppStore((s) => s.addTab);
   const editingSession = useAppStore((s) => s.editingSession);
   const setEditingSession = useAppStore((s) => s.setEditingSession);
   const { t } = useTranslation();
@@ -55,6 +64,7 @@ export const NewSessionModal: React.FC = () => {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [dirtySecrets, setDirtySecrets] = useState<ReadonlySet<SecretField>>(new Set());
   const [form, setForm] = useState<Partial<SessionConfig>>(INITIAL_FORM);
+  const [testStatus, setTestStatus] = useState<TestStatus>({ kind: 'idle' });
 
   React.useEffect(() => {
     if (!showNewSession) return;
@@ -63,6 +73,7 @@ export const NewSessionModal: React.FC = () => {
     setActiveTab('standard');
     setShowPassword(false);
     setShowJumpPassword(false);
+    setTestStatus({ kind: 'idle' });
     setForm(editingSession ?? INITIAL_FORM);
   }, [editingSession, showNewSession]);
 
@@ -168,27 +179,67 @@ export const NewSessionModal: React.FC = () => {
     handleClose();
   };
 
-  const handleTestConnect = () => {
-    setTouched({ name: true, host: true });
-    if (!form.name || !form.host) return;
+  const handleTestConnect = async () => {
+    setTouched((prev) => ({ ...prev, host: true }));
+    if (!form.host?.trim()) return;
+    if (testStatus.kind === 'testing') return;
 
-    const sessionId = editingSession?.id ?? crypto.randomUUID();
-    const config = buildConfig(sessionId);
-    addSession(config);
-
-    const existingTab = useAppStore.getState().tabs.find((tb) => tb.sessionId === sessionId);
-    if (existingTab) {
-      useAppStore.getState().setActiveTab(existingTab.id);
-    } else {
-      addTab({
-        id: crypto.randomUUID(),
-        sessionId,
-        title: config.name,
-        type: config.session_type,
-        connected: false,
+    setTestStatus({ kind: 'testing' });
+    const nonEmpty = (v?: string): string | null => {
+      const trimmed = v?.trim();
+      return trimmed !== undefined && trimmed.length > 0 ? trimmed : null;
+    };
+    try {
+      const elapsedMs = await invoke<number>('ssh_test_connection', {
+        sessionId: editingSession?.id ?? null,
+        host: form.host.trim(),
+        port: form.port ?? 22,
+        username: nonEmpty(form.username) ?? 'root',
+        password: secretValue('password') ?? null,
+        privateKeyPath: nonEmpty(form.private_key_path),
+        authMethod: nonEmpty(form.auth_method) ?? 'password',
+        totpCode: secretValue('totp_code') ?? null,
+        jumpHost: nonEmpty(form.jump_host),
+        jumpPort: form.jump_port ?? null,
+        jumpUsername: nonEmpty(form.jump_username),
+        jumpPassword: secretValue('jump_password') ?? null,
+        jumpPrivateKeyPath: nonEmpty(form.jump_private_key_path),
+        proxyType: form.proxy_type && form.proxy_type !== 'none' ? form.proxy_type : null,
+        proxyHost: nonEmpty(form.proxy_host),
+        proxyPort: form.proxy_port ?? null,
+        proxyUsername: nonEmpty(form.proxy_username),
+        proxyPassword: secretValue('proxy_password') ?? null,
+        connectionTimeout: form.connection_timeout ?? 15,
+        compression: form.compression ?? false,
       });
+      setTestStatus({ kind: 'ok', ms: elapsedMs });
+    } catch (err) {
+      const raw = typeof err === 'string' ? err : err instanceof Error ? err.message : String(err);
+      const hostKey = parseHostKeyError(raw);
+      if (hostKey) {
+        setTestStatus({ kind: 'hostkey', info: hostKey });
+      } else {
+        setTestStatus({ kind: 'error', message: raw });
+      }
     }
-    handleClose();
+  };
+
+  const handleTrustAndRetry = async (info: HostKeyError) => {
+    const targetHost = info.host ?? form.host?.trim() ?? '';
+    const targetPort = info.port ?? form.port ?? 22;
+    if (!targetHost) return;
+    try {
+      await invoke('ssh_trust_host', {
+        host: targetHost,
+        port: targetPort,
+        fingerprint: info.fingerprint,
+        keyType: info.keyType,
+      });
+      await handleTestConnect();
+    } catch (err) {
+      const msg = typeof err === 'string' ? err : err instanceof Error ? err.message : String(err);
+      setTestStatus({ kind: 'error', message: msg });
+    }
   };
 
   const pickKeyFile = async (field: 'private_key_path' | 'jump_private_key_path') => {
@@ -217,20 +268,81 @@ export const NewSessionModal: React.FC = () => {
       onClose={handleClose}
       footer={
         <>
-          <button className="ssh-footer-link" onClick={handleTestConnect}>
-            {t('ssh_test_connect')}
+          <button
+            type="button"
+            className="ssh-footer-link ssh-test-btn"
+            disabled={testStatus.kind === 'testing'}
+            onClick={() => {
+              void handleTestConnect();
+            }}
+          >
+            {testStatus.kind === 'testing' && <Loader2 size={13} className="ssh-test-spin" />}
+            <span>{testStatus.kind === 'testing' ? t('ssh_testing') : t('ssh_test_connect')}</span>
           </button>
           <div className="ssh-footer-actions">
-            <button className="ssh-footer-link" onClick={handleClose}>
+            <button type="button" className="ssh-footer-link" onClick={handleClose}>
               {t('common_cancel')}
             </button>
-            <button className="ssh-footer-link ssh-footer-primary" onClick={handleSave}>
+            <button
+              type="button"
+              className="ssh-footer-link ssh-footer-primary"
+              onClick={handleSave}
+            >
               {t('ssh_save')}
             </button>
           </div>
         </>
       }
     >
+      {testStatus.kind !== 'idle' && (
+        <div className={`ssh-test-banner ssh-test-banner--${testStatus.kind}`} role="status">
+          {testStatus.kind === 'testing' && (
+            <>
+              <Loader2 size={14} className="ssh-test-spin" />
+              <span>{t('ssh_testing')}</span>
+            </>
+          )}
+          {testStatus.kind === 'ok' && (
+            <>
+              <CheckCircle2 size={14} />
+              <span>{t('ssh_test_success', { ms: testStatus.ms })}</span>
+            </>
+          )}
+          {testStatus.kind === 'hostkey' && (
+            <>
+              <ShieldAlert size={14} />
+              <div className="ssh-test-banner-body">
+                <div>
+                  {testStatus.info.kind === 'mismatch'
+                    ? t('ssh_test_hostkey_mismatch')
+                    : t('ssh_test_hostkey_unknown')}
+                </div>
+                <div className="ssh-test-fingerprint">
+                  {testStatus.info.keyType} · {testStatus.info.fingerprint}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="ssh-test-trust-btn"
+                onClick={() => {
+                  void handleTrustAndRetry(testStatus.info);
+                }}
+              >
+                {t('ssh_test_trust_retry')}
+              </button>
+            </>
+          )}
+          {testStatus.kind === 'error' && (
+            <>
+              <AlertTriangle size={14} />
+              <div className="ssh-test-banner-body">
+                <div>{t('ssh_test_failed')}</div>
+                <div className="ssh-test-error-detail">{testStatus.message}</div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
       {activeTab === 'standard' && (
         <SshStandardTab
           form={form}

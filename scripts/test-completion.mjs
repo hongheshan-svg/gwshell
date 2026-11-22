@@ -210,9 +210,12 @@ const entry = (command, scope, count = 1, extra = {}) => ({
 console.log('commandHistory tests passed');
 
 // ---- buildCompletions ----
-function loadCompletion({ dict = () => [], history = () => [], usage = new Map() } = {}) {
+function loadCompletion({ dict: dictFn = () => [], history = () => [], usage = new Map() } = {}) {
   return loadTs('src/lib/completion.ts', {
-    './commandDictionary': { lookupCommands: dict },
+    './commandDictionary': {
+      lookupCommands: dictFn,
+      POSIX_SHELL_BUILTINS: dict.POSIX_SHELL_BUILTINS,
+    },
     './commandHistory': { getSuggestions: history, commandUsage: () => usage },
     './commandLine': cl,
   });
@@ -338,6 +341,82 @@ function loadCompletion({ dict = () => [], history = () => [], usage = new Map()
   assert.ok(
     r.some((x) => x.kind === 'command' && x.text === 'dir'),
     'cmd dictionary result surfaces',
+  );
+}
+
+{
+  // OpenWrt / BusyBox host filtering: only installed commands & POSIX builtins are offered
+  const openwrtBins = new Set([
+    'uci',
+    'opkg',
+    'ubus',
+    'logread',
+    'uhttpd',
+    'ls',
+    'cat',
+    'ip',
+    'vi',
+  ]);
+  const dictHits = dict.lookupCommands('sy', 'zh', 'unix', openwrtBins);
+  assert.equal(
+    dictHits.length,
+    0,
+    'systemctl/sysctl/sync suppressed when not installed on OpenWrt',
+  );
+
+  const uciHits = dict.lookupCommands('uc', 'zh', 'unix', openwrtBins);
+  assert.ok(
+    uciHits.some((x) => x.cmd === 'uci' && x.desc.includes('OpenWrt')),
+    'installed OpenWrt command uci is suggested with description',
+  );
+
+  const customHits = dict.lookupCommands('uh', 'zh', 'unix', openwrtBins);
+  assert.ok(
+    customHits.some((x) => x.cmd === 'uhttpd'),
+    'undocumented binary discovered in host $PATH (uhttpd) is still completable',
+  );
+
+  const builtinHits = dict.lookupCommands('ex', 'en', 'unix', openwrtBins);
+  assert.ok(
+    builtinHits.some((x) => x.cmd === 'exit') && builtinHits.some((x) => x.cmd === 'export'),
+    'POSIX shell builtins stay available even when not in $PATH',
+  );
+
+  const allHist = ['systemctl restart nginx', 'uci show network', '/etc/init.d/network restart'];
+  const c = loadCompletion({
+    dict: (prefix, locale, table, avail) => dict.lookupCommands(prefix, locale, table, avail),
+    history: (p) => allHist.filter((item) => item.startsWith(p)),
+  });
+  const histFiltered = c.buildCompletions(
+    'sys',
+    { table: 'unix', availableCommands: openwrtBins },
+    'zh',
+    8,
+  );
+  assert.deepEqual(
+    histFiltered,
+    [],
+    'incompatible global history command (systemctl) is suppressed on OpenWrt',
+  );
+  const histKept = c.buildCompletions(
+    'uc',
+    { table: 'unix', availableCommands: openwrtBins },
+    'zh',
+    8,
+  );
+  assert.ok(
+    histKept.some((x) => x.kind === 'history' && x.text === 'uci show network'),
+    'supported history command (uci) is preserved',
+  );
+  const initKept = c.buildCompletions(
+    '/etc',
+    { table: 'unix', availableCommands: openwrtBins },
+    'zh',
+    8,
+  );
+  assert.ok(
+    initKept.some((x) => x.kind === 'history' && x.text === '/etc/init.d/network restart'),
+    'explicit path history commands (/etc/init.d/...) are preserved',
   );
 }
 

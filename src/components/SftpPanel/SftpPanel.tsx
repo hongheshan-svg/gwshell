@@ -104,6 +104,7 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
   }, [contextMenu]);
 
   const handleEntryDoubleClick = (entry: SftpEntry) => {
+    if (nav.loading || ops.busy) return;
     nav.setSelectedEntry(entry);
     if (entry.is_dir) {
       nav.navigateTo(entry.path);

@@ -131,7 +131,103 @@ export const UNIX_DEFS: CommandDef[] = [
   { cmd: 'crontab', en: 'Maintain cron schedules', zh: '管理定时任务' },
   { cmd: 'docker', en: 'Manage Docker containers', zh: '管理 Docker 容器' },
   { cmd: 'kubectl', en: 'Control Kubernetes clusters', zh: '管理 Kubernetes 集群' },
+  // OpenWrt / BusyBox / Embedded Linux & Networking
+  { cmd: 'uci', en: 'OpenWrt Unified Configuration Interface', zh: 'OpenWrt 统一配置接口' },
+  { cmd: 'opkg', en: 'OpenWrt package manager', zh: 'OpenWrt 软件包管理器' },
+  { cmd: 'ubus', en: 'OpenWrt micro-bus RPC tool', zh: 'OpenWrt ubus 服务调用工具' },
+  { cmd: 'logread', en: 'Read OpenWrt/BusyBox system log', zh: '查看 OpenWrt 系统日志' },
+  { cmd: 'iwinfo', en: 'Query wireless interface info', zh: '查看无线网卡信息' },
+  { cmd: 'iw', en: 'Configure nl80211 wireless devices', zh: '配置无线网络设备' },
+  { cmd: 'wifi', en: 'Control OpenWrt wireless radios', zh: '管理 OpenWrt 无线开关' },
+  { cmd: 'sysupgrade', en: 'Upgrade OpenWrt firmware', zh: '升级 OpenWrt 固件' },
+  { cmd: 'firstboot', en: 'Reset OpenWrt overlay to defaults', zh: '恢复 OpenWrt 出厂配置' },
+  { cmd: 'vi', en: 'Visual text editor', zh: 'Vi 文本编辑器' },
+  { cmd: 'nft', en: 'Manage nftables firewall rules', zh: '管理 nftables 防火墙规则' },
+  { cmd: 'iptables', en: 'Manage IPv4 firewall rules', zh: '管理 IPv4 防火墙规则' },
+  { cmd: 'ip6tables', en: 'Manage IPv6 firewall rules', zh: '管理 IPv6 防火墙规则' },
+  { cmd: 'dnsmasq', en: 'Lightweight DNS/DHCP server', zh: '轻量 DNS/DHCP 服务' },
+  { cmd: 'reboot', en: 'Reboot the system', zh: '重启系统' },
+  { cmd: 'poweroff', en: 'Power off the system', zh: '关闭系统电源' },
+  { cmd: 'passwd', en: 'Change user password', zh: '修改用户密码' },
+  { cmd: 'brctl', en: 'Manage Ethernet bridges', zh: '管理以太网网桥' },
+  { cmd: 'swconfig', en: 'Configure managed network switch', zh: '配置交换机芯片' },
+  { cmd: 'ethtool', en: 'Query/control NIC driver settings', zh: '查看与配置网卡参数' },
+  { cmd: 'tcpdump', en: 'Capture network packets', zh: '抓包分析网络流量' },
+  { cmd: 'arp', en: 'Show or modify ARP cache', zh: '查看或修改 ARP 缓存' },
+  { cmd: 'route', en: 'Show or manipulate IP routing table', zh: '查看或配置路由表' },
+  { cmd: 'traceroute', en: 'Trace packet route to host', zh: '跟踪网络路由路径' },
+  { cmd: 'md5sum', en: 'Compute MD5 checksums', zh: '计算 MD5 校验和' },
+  { cmd: 'sha256sum', en: 'Compute SHA-256 checksums', zh: '计算 SHA-256 校验和' },
+  { cmd: 'base64', en: 'Base64 encode or decode data', zh: 'Base64 编解码' },
+  { cmd: 'dd', en: 'Convert and copy raw data blocks', zh: '按块复制与转换数据' },
+  { cmd: 'sync', en: 'Flush filesystem buffers to disk', zh: '将缓存数据同步写入磁盘' },
+  { cmd: 'lsmod', en: 'Show loaded kernel modules', zh: '列出已加载的内核模块' },
+  { cmd: 'modprobe', en: 'Add or remove kernel modules', zh: '加载或卸载内核模块' },
+  { cmd: 'insmod', en: 'Insert a kernel module', zh: '加载内核模块' },
+  { cmd: 'rmmod', en: 'Remove a kernel module', zh: '卸载内核模块' },
+  { cmd: 'sysctl', en: 'Configure kernel parameters at runtime', zh: '运行时读写内核参数' },
+  // Other distros & server tooling
+  { cmd: 'apk', en: 'Alpine Linux package manager', zh: 'Alpine Linux 包管理器' },
+  { cmd: 'pacman', en: 'Arch Linux package manager', zh: 'Arch Linux 包管理器' },
+  { cmd: 'brew', en: 'Homebrew package manager', zh: 'Homebrew 包管理器' },
+  { cmd: 'nginx', en: 'Nginx web/proxy server', zh: 'Nginx 代理/Web 服务器' },
+  { cmd: 'redis-cli', en: 'Redis command-line client', zh: 'Redis 命令行客户端' },
+  { cmd: 'mysql', en: 'MySQL/MariaDB client', zh: 'MySQL/MariaDB 客户端' },
+  { cmd: 'psql', en: 'PostgreSQL interactive terminal', zh: 'PostgreSQL 交互终端' },
+  { cmd: 'sqlite3', en: 'SQLite command-line tool', zh: 'SQLite 命令行工具' },
+  { cmd: 'tmux', en: 'Terminal multiplexer', zh: '终端复用器' },
+  { cmd: 'screen', en: 'Terminal session manager', zh: '终端会话管理器' },
+  { cmd: 'jq', en: 'Command-line JSON processor', zh: '命令行 JSON 处理工具' },
+  { cmd: 'python3', en: 'Python 3 interpreter', zh: 'Python 3 解释器' },
+  { cmd: 'node', en: 'Node.js runtime', zh: 'Node.js 运行时' },
+  { cmd: 'npm', en: 'Node package manager', zh: 'Node 包管理器' },
+  { cmd: 'go', en: 'Go toolchain', zh: 'Go 工具链' },
+  { cmd: 'cargo', en: 'Rust package manager', zh: 'Rust 包管理器' },
+  { cmd: 'make', en: 'GNU Make build tool', zh: 'Make 构建工具' },
+  { cmd: 'ufw', en: 'Uncomplicated Firewall CLI', zh: 'UFW 防火墙管理' },
+  { cmd: 'firewall-cmd', en: 'firewalld CLI', zh: 'firewalld 防火墙管理' },
+  { cmd: 'podman', en: 'Daemonless container engine', zh: 'Podman 容器管理工具' },
+  { cmd: 'helm', en: 'Kubernetes package manager', zh: 'Kubernetes 包管理器' },
 ];
+
+/**
+ * Shell builtins that exist inside POSIX shells (ash/sh/dash/bash/zsh) rather
+ * than as executable files in `$PATH`. Always kept when filtering against a
+ * host's probed `$PATH` command set.
+ */
+export const POSIX_SHELL_BUILTINS: ReadonlySet<string> = new Set([
+  'alias',
+  'bg',
+  'builtin',
+  'cd',
+  'command',
+  'echo',
+  'eval',
+  'exec',
+  'exit',
+  'export',
+  'false',
+  'fg',
+  'hash',
+  'history',
+  'jobs',
+  'kill',
+  'printf',
+  'pwd',
+  'read',
+  'set',
+  'source',
+  'test',
+  'times',
+  'trap',
+  'true',
+  'type',
+  'ulimit',
+  'umask',
+  'unalias',
+  'unset',
+  'wait',
+]);
 
 // Windows CMD builtins and common console utilities.
 export const CMD_DEFS: CommandDef[] = [
@@ -331,16 +427,38 @@ export function lookupCommands(
   prefix: string,
   locale: 'en' | 'zh',
   table: CommandTable = 'unix',
+  availableCommands?: ReadonlySet<string>,
 ): { cmd: string; desc: string }[] {
   if (!prefix || /\s/.test(prefix)) return [];
   const ci = table !== 'unix';
   const p = ci ? prefix.toLowerCase() : prefix;
+  const filterByHost =
+    table === 'unix' && availableCommands !== undefined && availableCommands.size > 0;
   const out: { cmd: string; desc: string }[] = [];
+  const seen = new Set<string>();
+
   for (const d of SORTED[table]) {
     if (d.cmd.length <= prefix.length) continue;
+    if (filterByHost && !availableCommands.has(d.cmd) && !POSIX_SHELL_BUILTINS.has(d.cmd)) {
+      continue;
+    }
     if ((ci ? d.cmd.toLowerCase() : d.cmd).startsWith(p)) {
       out.push({ cmd: d.cmd, desc: locale === 'zh' ? d.zh : d.en });
+      seen.add(d.cmd);
     }
   }
+
+  // Also surface real installed binaries discovered on this host that are not
+  // in the curated dictionary (e.g. OpenWrt's uhttpd/odhcpd/dropbear or custom tools).
+  if (filterByHost) {
+    for (const cmd of availableCommands) {
+      if (cmd.length <= prefix.length || seen.has(cmd)) continue;
+      if (cmd.startsWith(p)) {
+        out.push({ cmd, desc: '' });
+        seen.add(cmd);
+      }
+    }
+  }
+
   return out;
 }

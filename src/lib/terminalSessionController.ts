@@ -34,6 +34,7 @@ import {
   REMOTE_OS_TTL_MS,
   remoteOsCache,
   syncTable,
+  tabAvailableCommands,
   tabCommandTable,
   tabCompletionIdx,
   tabCompletions,
@@ -502,7 +503,12 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
             if ((tabCompletions.get(tab.id)?.length ?? 0) > 0) hideCompletions(tab.id);
           } else if (result.effect === 'show') {
             const locale = i18n.language?.startsWith('zh') ? 'zh' : 'en';
-            const items = buildCompletions(tracker.buf, { scope, cwd, sessionType, table }, locale);
+            const availableCommands = tabAvailableCommands.get(tab.id);
+            const items = buildCompletions(
+              tracker.buf,
+              { scope, cwd, sessionType, table, availableCommands },
+              locale,
+            );
             tabCompletions.set(tab.id, items);
             tabCompletionIdx.set(tab.id, 0);
             completionNav.set(tab.id, false);
@@ -721,18 +727,35 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
       };
 
       const probeRemoteOs = (sess: NonNullable<typeof session>) => {
-        if (tableForRemoteShell(sess.remote_shell ?? null) !== null) return;
-        const host = sess.host ?? '';
-        const cached = host ? remoteOsCache.get(host) : undefined;
+        const override = tableForRemoteShell(sess.remote_shell ?? null);
+        // Skip probing only when the user explicitly forced Windows CMD/PowerShell.
+        // For 'auto' and 'linux', probe `$PATH` so OpenWrt/Alpine/BusyBox hosts
+        // only offer commands that actually exist on that machine.
+        if (override === 'cmd' || override === 'powershell') return;
+
+        const cacheKey = sess.host ? `${sess.host}:${sess.port ?? 22}` : '';
+        const cached = cacheKey ? remoteOsCache.get(cacheKey) : undefined;
         if (cached && Date.now() - cached.at < REMOTE_OS_TTL_MS) {
-          tabCommandTable.set(tab.id, cached.table);
+          tabCommandTable.set(tab.id, override ?? cached.table);
+          if (cached.commands && cached.commands.size > 0) {
+            tabAvailableCommands.set(tab.id, cached.commands);
+          }
           return;
         }
-        invoke<string>('detect_remote_os', { sessionId: tab.sessionId })
-          .then((tbl) => {
-            const norm = normalizeTable(tbl);
+        invoke<{ table: string; commands: string[] }>('probe_remote_env', {
+          sessionId: tab.sessionId,
+        })
+          .then((res) => {
+            const norm = override ?? normalizeTable(res.table);
+            const cmdSet =
+              res.commands && res.commands.length > 0 ? new Set(res.commands) : undefined;
             tabCommandTable.set(tab.id, norm);
-            if (host) remoteOsCache.set(host, { table: norm, at: Date.now() });
+            if (cmdSet) {
+              tabAvailableCommands.set(tab.id, cmdSet);
+            }
+            if (cacheKey) {
+              remoteOsCache.set(cacheKey, { table: norm, commands: cmdSet, at: Date.now() });
+            }
           })
           .catch(() => {});
       };
@@ -785,6 +808,7 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
       const reconnect = async (): Promise<void> => {
         instance?.terminal.write(`\r\n\x1b[90m${t('term_reconnecting')}\x1b[0m\r\n`);
         tabCommandTable.delete(tab.id);
+        tabAvailableCommands.delete(tab.id);
         tabCwd.delete(tab.id);
         tabCompletions.delete(tab.id);
         tabCompletionIdx.delete(tab.id);

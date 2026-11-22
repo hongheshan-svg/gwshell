@@ -37,12 +37,15 @@ export const completionSetters = new Map<string, (view: CompletionView) => void>
 export const completionAccept = new Map<string, (suffix: string) => void>();
 
 export const tabCwd = new Map<string, string>();
-// Cache of remote-OS probe results keyed by host, so opening multiple SSH
-// tabs to the same host doesn't re-run `uname`/`%COMSPEC%` exec probes each
-// time. Entries expire after 5 minutes (a host's OS doesn't change often,
-// but a re-provisioned box should eventually be re-detected).
-export const remoteOsCache = new Map<string, { table: CommandTable; at: number }>();
+// Cache of remote-OS + installed-command probe results keyed by host:port, so
+// opening multiple SSH tabs to the same host doesn't re-run exec probes each
+// time. Entries expire after 5 minutes.
+export const remoteOsCache = new Map<
+  string,
+  { table: CommandTable; commands?: ReadonlySet<string>; at: number }
+>();
 export const REMOTE_OS_TTL_MS = 5 * 60 * 1000;
+export const tabAvailableCommands = new Map<string, ReadonlySet<string>>();
 export const tabCompletions = new Map<string, Completion[]>();
 export const tabCompletionIdx = new Map<string, number>();
 export const completionNav = new Map<string, boolean>(); // user moved selection with ↑/↓
@@ -102,6 +105,7 @@ export function estimateDropdownRows(items: Completion[]): number {
 export function resetCompletionState(tabId: string): void {
   lineTrackers.delete(tabId);
   tabCommandTable.delete(tabId);
+  tabAvailableCommands.delete(tabId);
   completionSetters.delete(tabId);
   completionAccept.delete(tabId);
   tabCwd.delete(tabId);

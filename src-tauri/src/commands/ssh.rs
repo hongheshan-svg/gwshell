@@ -213,6 +213,91 @@ pub async fn ssh_connect_saved(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn ssh_test_connection(
+    session_id: Option<String>,
+    host: String,
+    port: u16,
+    username: String,
+    password: Option<String>,
+    private_key_path: Option<String>,
+    auth_method: Option<String>,
+    totp_code: Option<String>,
+    jump_host: Option<String>,
+    jump_port: Option<u16>,
+    jump_username: Option<String>,
+    jump_password: Option<String>,
+    jump_private_key_path: Option<String>,
+    proxy_type: Option<String>,
+    proxy_host: Option<String>,
+    proxy_port: Option<u16>,
+    proxy_username: Option<String>,
+    proxy_password: Option<String>,
+    connection_timeout: Option<u32>,
+    compression: Option<bool>,
+    state: State<'_, Arc<AppState>>,
+) -> Result<u64, String> {
+    if host.trim().is_empty() {
+        return Err("SSH host is empty".to_string());
+    }
+
+    // When testing an existing saved session whose secret inputs were left
+    // untouched (`None`), reuse the decrypted saved secrets from AppState.
+    let saved = session_id.and_then(|id| {
+        let sessions = state.sessions.lock();
+        sessions.iter().find(|s| s.id == id).cloned()
+    });
+    let resolve_secret = |incoming: Option<String>, fallback: Option<String>| -> Option<String> {
+        match incoming {
+            Some(s) if s.is_empty() => None,
+            Some(s) => Some(s),
+            None => fallback,
+        }
+    };
+
+    let params = ssh::ConnectParams {
+        host: host.trim().to_string(),
+        port,
+        username: username.trim().to_string(),
+        password: resolve_secret(password, saved.as_ref().and_then(|s| s.password.clone())),
+        private_key_path,
+        auth_method: auth_method.unwrap_or_else(|| "password".to_string()),
+        totp_code: resolve_secret(totp_code, saved.as_ref().and_then(|s| s.totp_code.clone())),
+        jump_host,
+        jump_port: jump_port.unwrap_or(22),
+        jump_username,
+        jump_password: resolve_secret(
+            jump_password,
+            saved.as_ref().and_then(|s| s.jump_password.clone()),
+        ),
+        jump_private_key_path,
+        proxy_type,
+        proxy_host,
+        proxy_port: proxy_port.unwrap_or(1080),
+        proxy_username,
+        proxy_password: resolve_secret(
+            proxy_password,
+            saved.as_ref().and_then(|s| s.proxy_password.clone()),
+        ),
+        connection_timeout: connection_timeout.unwrap_or(15),
+        idle_disconnect_minutes: 0,
+        agent_forward: false,
+        keepalive_interval: Some(0),
+        server_alive_count_max: None,
+        compression: compression.unwrap_or(false),
+        env_vars: None,
+    };
+
+    let started = std::time::Instant::now();
+    let (handle, _forwarded) = ssh::connect::establish(&params).await?;
+    let elapsed_ms = started.elapsed().as_millis() as u64;
+    let _ = handle
+        .disconnect(russh::Disconnect::ByApplication, "", "en")
+        .await;
+    Ok(elapsed_ms)
+}
+
+#[tauri::command]
 pub async fn ssh_trust_host(
     host: String,
     port: u16,

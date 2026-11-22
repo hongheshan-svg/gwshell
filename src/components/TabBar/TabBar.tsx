@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { X, Plus, FolderOpen, Columns2, Square, Grid2x2, LayoutGrid } from 'lucide-react';
 import {
@@ -31,8 +32,9 @@ const SortableTab: React.FC<{
   active: boolean;
   onSelect: () => void;
   onMiddleClick: (e: React.MouseEvent) => void;
+  onContextMenu: (e: React.MouseEvent) => void;
   onClose: () => void;
-}> = ({ tab, active, onSelect, onMiddleClick, onClose }) => {
+}> = ({ tab, active, onSelect, onMiddleClick, onContextMenu, onClose }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: tab.id,
   });
@@ -53,6 +55,7 @@ const SortableTab: React.FC<{
       tabIndex={active ? 0 : -1}
       onClick={onSelect}
       onMouseDown={onMiddleClick}
+      onContextMenu={onContextMenu}
     >
       <span className="tab-proto-wrap">
         <ProtocolIcon type={tabProtoType(tab.type)} size={14} />
@@ -101,7 +104,38 @@ export const TabBar: React.FC = () => {
   const confirm = useConfirm();
   const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
   const [splitMenuOpen, setSplitMenuOpen] = useState(false);
+  const [tabContextMenu, setTabContextMenu] = useState<{
+    x: number;
+    y: number;
+    tabId: string;
+    isAssetList: boolean;
+  } | null>(null);
   const addBtnRef = useRef<HTMLButtonElement>(null);
+  const tabMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!tabContextMenu) return;
+    const handlePointerDown = (e: MouseEvent) => {
+      if (
+        tabMenuRef.current &&
+        (!(e.target instanceof Node) || !tabMenuRef.current.contains(e.target))
+      ) {
+        setTabContextMenu(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTabContextMenu(null);
+    };
+    const handleBlur = () => setTabContextMenu(null);
+    window.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('blur', handleBlur);
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [tabContextMenu]);
 
   const isConnectedInteractiveTab = (tabId: string) => {
     const tab = tabs.find((tb) => tb.id === tabId);
@@ -114,21 +148,48 @@ export const TabBar: React.FC = () => {
     removeTab(tabId);
   };
 
-  const handleCloseTab = (tabId: string) => {
+  const handleCloseTabs = (tabIds: string[]) => {
+    if (tabIds.length === 0) return;
     const { tabCloseConfirm } = useSettingsStore.getState().settings;
-    if (tabCloseConfirm && isConnectedInteractiveTab(tabId)) {
+    const connectedCount = tabIds.filter((id) => isConnectedInteractiveTab(id)).length;
+    if (tabCloseConfirm && connectedCount > 0) {
+      const message =
+        connectedCount === 1
+          ? t('tab_close_confirm_msg')
+          : t('tab_ctx_close_multi_confirm_msg', { count: connectedCount });
       void confirm({
         title: t('tab_close_confirm_btn'),
-        message: t('tab_close_confirm_msg'),
+        message,
         confirmLabel: t('tab_close_confirm_btn'),
         cancelLabel: t('common_cancel'),
         danger: true,
       }).then((ok) => {
-        if (ok) doCloseTab(tabId);
+        if (ok) {
+          tabIds.forEach(doCloseTab);
+        }
       });
       return;
     }
-    doCloseTab(tabId);
+    tabIds.forEach(doCloseTab);
+  };
+
+  const handleCloseTab = (tabId: string) => {
+    handleCloseTabs([tabId]);
+  };
+
+  const openTabContextMenu = (e: React.MouseEvent, tab: TabInfo) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const menuWidth = 176;
+    const menuHeight = tab.type === 'asset-list' ? 44 : 156;
+    const x = Math.min(e.clientX, Math.max(8, window.innerWidth - menuWidth - 8));
+    const y = Math.min(e.clientY, Math.max(8, window.innerHeight - menuHeight - 8));
+    setTabContextMenu({
+      x,
+      y,
+      tabId: tab.id,
+      isAssetList: tab.type === 'asset-list',
+    });
   };
 
   const handleMiddleClick = (e: React.MouseEvent, tabId: string) => {
@@ -163,6 +224,7 @@ export const TabBar: React.FC = () => {
               key={tab.id}
               className={`tab-item asset-list-tab ${tab.id === activeTabId ? 'active' : ''}`}
               onClick={() => setActiveTab(tab.id)}
+              onContextMenu={(e) => openTabContextMenu(e, tab)}
             >
               <LayoutGrid size={13} />
               <span>{t('tab_list')}</span>
@@ -184,6 +246,7 @@ export const TabBar: React.FC = () => {
                 active={tab.id === activeTabId}
                 onSelect={() => setActiveTab(tab.id)}
                 onMiddleClick={(e) => handleMiddleClick(e, tab.id)}
+                onContextMenu={(e) => openTabContextMenu(e, tab)}
                 onClose={() => handleCloseTab(tab.id)}
               />
             ))}
@@ -267,6 +330,82 @@ export const TabBar: React.FC = () => {
           )}
         </div>
       )}
+
+      {tabContextMenu &&
+        createPortal(
+          (() => {
+            const targetIdx = terminalTabs.findIndex((tb) => tb.id === tabContextMenu.tabId);
+            const otherIds = terminalTabs
+              .filter((tb) => tb.id !== tabContextMenu.tabId)
+              .map((tb) => tb.id);
+            const rightIds =
+              targetIdx >= 0 ? terminalTabs.slice(targetIdx + 1).map((tb) => tb.id) : [];
+            const allIds = terminalTabs.map((tb) => tb.id);
+            return (
+              <div
+                ref={tabMenuRef}
+                className="context-menu"
+                role="menu"
+                style={{ top: tabContextMenu.y, left: tabContextMenu.x }}
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                {!tabContextMenu.isAssetList && (
+                  <>
+                    <button
+                      type="button"
+                      className="context-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setTabContextMenu(null);
+                        handleCloseTab(tabContextMenu.tabId);
+                      }}
+                    >
+                      {t('tab_ctx_close')}
+                    </button>
+                    <button
+                      type="button"
+                      className="context-menu-item"
+                      role="menuitem"
+                      disabled={otherIds.length === 0}
+                      onClick={() => {
+                        setTabContextMenu(null);
+                        handleCloseTabs(otherIds);
+                      }}
+                    >
+                      {t('tab_ctx_close_others')}
+                    </button>
+                    <button
+                      type="button"
+                      className="context-menu-item"
+                      role="menuitem"
+                      disabled={rightIds.length === 0}
+                      onClick={() => {
+                        setTabContextMenu(null);
+                        handleCloseTabs(rightIds);
+                      }}
+                    >
+                      {t('tab_ctx_close_right')}
+                    </button>
+                    <div className="context-menu-divider" />
+                  </>
+                )}
+                <button
+                  type="button"
+                  className="context-menu-item"
+                  role="menuitem"
+                  disabled={allIds.length === 0}
+                  onClick={() => {
+                    setTabContextMenu(null);
+                    handleCloseTabs(allIds);
+                  }}
+                >
+                  {t('tab_ctx_close_all')}
+                </button>
+              </div>
+            );
+          })(),
+          document.body,
+        )}
     </div>
   );
 };

@@ -16,6 +16,8 @@ export interface SuggestCtx {
   cwd?: string;
   sessionType?: string;
   table?: CommandTable;
+  /** Probed executables present in `$PATH` on this host (POSIX SSH sessions). */
+  availableCommands?: ReadonlySet<string>;
 }
 
 // Aggregated entries loaded from the backend, plus in-session appends.
