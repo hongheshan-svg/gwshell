@@ -2,14 +2,15 @@
 // Shape mirrors the Rust `MetricsSnapshot` serialized by serde.
 
 export interface HostInfo {
+  platform?: string;
   hostname: string;
   host_ip: string; // filled in client-side from the session config (backend returns "")
-  user: string; // from `whoami`
+  user: string; // from `whoami` / `$env:USERNAME`
   uptime_seconds: number;
-  kernel: string; // `uname -sr` output
-  os_pretty: string; // PRETTY_NAME from /etc/os-release
-  cpu_model: string; // first "model name" from /proc/cpuinfo
-  cpu_cores: number; // `nproc`
+  kernel: string; // `uname -sr` / Windows version
+  os_pretty: string; // PRETTY_NAME / macOS version / Windows Caption
+  cpu_model: string;
+  cpu_cores: number;
 }
 
 export interface CpuStats {

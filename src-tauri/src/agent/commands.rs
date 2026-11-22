@@ -115,36 +115,66 @@ pub async fn list_agent_audits(
     .map_err(|e| format!("task join: {}", e))?
 }
 
+async fn resolve_provider_api_key_for_request(
+    settings: &crate::agent::types::AiProviderSettings,
+    inline_api_key: Option<String>,
+    state: &Arc<AppState>,
+) -> Result<String, String> {
+    let has_inline_key = inline_api_key
+        .as_deref()
+        .is_some_and(|k| !k.trim().is_empty());
+    if has_inline_key {
+        return Ok(inline_api_key.unwrap_or_default().trim().to_string());
+    }
+    if !crate::agent::provider::provider_requires_api_key(settings) {
+        return Ok(String::new());
+    }
+
+    let state_clone = state.clone();
+    let saved_settings =
+        tokio::task::spawn_blocking(move || crate::agent::provider::load_settings(&state_clone.db))
+            .await
+            .map_err(|e| format!("task join: {}", e))??;
+
+    let matches_saved = same_ai_provider_endpoint(settings, &saved_settings);
+    if !matches_saved {
+        return Err(
+            "Enter the API key to test this endpoint: the saved key is only sent to the saved provider URL"
+                .to_string(),
+        );
+    }
+
+    let state_clone = state.clone();
+    let stored_api_key =
+        tokio::task::spawn_blocking(move || crate::agent::provider::load_api_key(&state_clone.db))
+            .await
+            .map_err(|e| format!("task join: {}", e))??;
+
+    let api_key = resolve_ai_provider_test_api_key(None, stored_api_key, true);
+    if api_key.trim().is_empty() {
+        return Err("AI API key is not configured".to_string());
+    }
+    Ok(api_key)
+}
+
 #[tauri::command]
 pub async fn test_ai_provider_with_settings(
     settings: crate::agent::types::AiProviderSettings,
     api_key: Option<String>,
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
-    let state = state.inner().clone();
-    let (saved_settings, stored_api_key) =
-        tokio::task::spawn_blocking(move || -> Result<_, String> {
-            Ok((
-                crate::agent::provider::load_settings(&state.db)?,
-                crate::agent::provider::load_api_key(&state.db)?,
-            ))
-        })
-        .await
-        .map_err(|e| format!("task join: {}", e))??;
-    let matches_saved = same_ai_provider_endpoint(&settings, &saved_settings);
-    let has_inline_key = api_key.as_deref().is_some_and(|k| !k.trim().is_empty());
-    let api_key = resolve_ai_provider_test_api_key(api_key, stored_api_key, matches_saved);
-    if crate::agent::provider::provider_requires_api_key(&settings) && api_key.trim().is_empty() {
-        if !matches_saved && !has_inline_key {
-            return Err(
-                "Enter the API key to test this endpoint: the saved key is only sent to the saved provider URL"
-                    .to_string(),
-            );
-        }
-        return Err("AI API key is not configured".to_string());
-    }
-
+    let api_key = resolve_provider_api_key_for_request(&settings, api_key, state.inner()).await?;
     crate::agent::provider::test_provider_connectivity(settings, api_key).await
+}
+
+#[tauri::command]
+pub async fn list_ai_models(
+    settings: crate::agent::types::AiProviderSettings,
+    api_key: Option<String>,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<String>, String> {
+    let api_key = resolve_provider_api_key_for_request(&settings, api_key, state.inner()).await?;
+    crate::agent::provider::list_provider_models(settings, api_key).await
 }
 
 #[tauri::command]

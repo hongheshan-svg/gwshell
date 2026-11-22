@@ -1,9 +1,14 @@
 // src-tauri/src/metrics.rs
 //
-// Remote-server metrics collector. Runs a 2s polling task per SSH session,
-// reusing the existing SshManager auxiliary-exec primitive to read /proc
-// and ps/ip output. Parsers are pure (unit-tested); the polling loop is
-// in the lower half of this file.
+// Cross-platform remote-server metrics collector (Linux, macOS, BSD, Windows
+// OpenSSH). Runs a 2s polling task per SSH session, reusing the existing
+// SshManager auxiliary-exec primitive. Parsers are pure (unit-tested); the
+// polling loop is in the lower half of this file.
+
+#[path = "metrics_platforms.rs"]
+mod platforms;
+
+pub use platforms::RemotePlatform;
 
 use serde::Serialize;
 use std::collections::HashMap;
@@ -12,6 +17,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Clone, Default)]
 pub struct HostInfo {
+    pub platform: String,
     pub hostname: String,
     pub host_ip: String,
     pub user: String,
@@ -167,9 +173,14 @@ pub fn parse_proc_stat(text: &str) -> Option<(CpuTimes, Vec<CpuTimes>)> {
 }
 
 /// Parse /proc/meminfo into MemStats.
+/// Falls back to `MemFree + Buffers + Cached` on minimal kernels (e.g. OpenWrt)
+/// that omit `MemAvailable`.
 pub fn parse_meminfo(text: &str) -> MemStats {
     let mut total_kb = 0u64;
-    let mut avail_kb = 0u64;
+    let mut avail_kb: Option<u64> = None;
+    let mut free_kb = 0u64;
+    let mut buffers_kb = 0u64;
+    let mut cached_kb = 0u64;
     let mut swap_total_kb = 0u64;
     let mut swap_free_kb = 0u64;
     for line in text.lines() {
@@ -178,15 +189,21 @@ pub fn parse_meminfo(text: &str) -> MemStats {
         let val: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
         match key {
             "MemTotal:" => total_kb = val,
-            "MemAvailable:" => avail_kb = val,
+            "MemAvailable:" => avail_kb = Some(val),
+            "MemFree:" => free_kb = val,
+            "Buffers:" => buffers_kb = val,
+            "Cached:" => cached_kb = val,
             "SwapTotal:" => swap_total_kb = val,
             "SwapFree:" => swap_free_kb = val,
             _ => {}
         }
     }
+    let effective_avail = avail_kb
+        .unwrap_or_else(|| free_kb.saturating_add(buffers_kb).saturating_add(cached_kb))
+        .min(total_kb);
     MemStats {
         mem_total_bytes: total_kb * 1024,
-        mem_used_bytes: total_kb.saturating_sub(avail_kb) * 1024,
+        mem_used_bytes: total_kb.saturating_sub(effective_avail) * 1024,
         swap_total_bytes: swap_total_kb * 1024,
         swap_used_bytes: swap_total_kb.saturating_sub(swap_free_kb) * 1024,
     }
@@ -357,7 +374,7 @@ use crate::ssh::SshManager;
 use parking_lot::Mutex;
 use std::collections::HashMap as StdHashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
@@ -375,6 +392,7 @@ pub struct MetricsManager {
     refs: Mutex<StdHashMap<String, usize>>,
     last: Arc<Mutex<StdHashMap<String, LastSample>>>,
     static_host: Arc<Mutex<StdHashMap<String, HostInfo>>>,
+    platforms: Arc<Mutex<StdHashMap<String, RemotePlatform>>>,
 }
 
 impl MetricsManager {
@@ -384,7 +402,12 @@ impl MetricsManager {
             refs: Mutex::new(StdHashMap::new()),
             last: Arc::new(Mutex::new(StdHashMap::new())),
             static_host: Arc::new(Mutex::new(StdHashMap::new())),
+            platforms: Arc::new(Mutex::new(StdHashMap::new())),
         }
+    }
+
+    pub fn platform_for(&self, session_id: &str) -> Option<RemotePlatform> {
+        self.platforms.lock().get(session_id).copied()
     }
 
     /// Start (or share) a metrics poller for `session_id`.
@@ -440,77 +463,95 @@ impl MetricsManager {
         }
         let last = self.last.clone();
         let static_host = self.static_host.clone();
+        let platforms = self.platforms.clone();
         let sid = session_id.clone();
 
         let handle = tokio::spawn(async move {
-            let static_cmd = r#"
-echo '---HOST---'
-whoami
-hostname
-uname -sr
-cat /etc/os-release 2>/dev/null
-nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 1
-grep '^model name' /proc/cpuinfo | head -1
-echo '---HOSTEND---'
-"#;
-            // Bound the very first probe too. Without this, an early half-open
-            // connection hangs the poller forever — the per-tick timeout in the
-            // loop below never gets a chance to run, and the Server panel shows
-            // neither data nor an error.
-            let static_out =
-                match timeout(Duration::from_secs(8), ssh.metrics_exec(&sid, static_cmd)).await {
-                    Ok(result) => result,
-                    Err(_) => {
-                        let _ = app.emit(
-                            &format!("server-metrics-error-{}", sid),
-                            serde_json::json!({ "reason": "timeout" }),
-                        );
-                        return;
-                    }
-                };
-
-            match static_out {
-                Ok(text) => {
-                    let host = parse_static_host(&text);
-                    // Metrics read from /proc, which only exists on Linux. Detect a
-                    // genuinely unsupported host from the kernel string rather than
-                    // cpu_cores==0 — the latter wrongly rejected minimal Linux boxes
-                    // that lack the `nproc` binary.
-                    if !host.kernel.to_lowercase().contains("linux") {
-                        let _ = app.emit(
-                            &format!("server-metrics-error-{}", sid),
-                            serde_json::json!({ "reason": "unsupported" }),
-                        );
-                        return;
-                    }
-                    static_host.lock().insert(sid.clone(), host);
+            // Bound the initial platform & static host probe so an early
+            // half-open SSH channel never hangs the Server panel forever.
+            let unix_out = match timeout(
+                Duration::from_secs(8),
+                ssh.metrics_exec(&sid, platforms::UNIX_DETECT_STATIC_CMD),
+            )
+            .await
+            {
+                Ok(result) => result,
+                Err(_) => {
+                    let _ = app.emit(
+                        &format!("server-metrics-error-{}", sid),
+                        serde_json::json!({ "reason": "timeout" }),
+                    );
+                    return;
                 }
-                _ => {
+            };
+
+            let (platform, host) = match unix_out {
+                Ok(text) => match platforms::detect_platform_from_text(&text) {
+                    Some(
+                        p @ (RemotePlatform::Linux | RemotePlatform::MacOs | RemotePlatform::Bsd),
+                    ) => (p, platforms::parse_static_host_sections(&text, p)),
+                    Some(RemotePlatform::Windows) | None => {
+                        // Either Git Bash/MSYS reported Windows or `sh` isn't
+                        // available (Windows OpenSSH cmd.exe / PowerShell).
+                        let win_out = match timeout(
+                            Duration::from_secs(8),
+                            ssh.metrics_exec(&sid, platforms::WINDOWS_STATIC_CMD),
+                        )
+                        .await
+                        {
+                            Ok(Ok(wtext)) => wtext,
+                            Ok(Err(_)) => {
+                                let _ = app.emit(
+                                    &format!("server-metrics-error-{}", sid),
+                                    serde_json::json!({ "reason": "unsupported" }),
+                                );
+                                return;
+                            }
+                            Err(_) => {
+                                let _ = app.emit(
+                                    &format!("server-metrics-error-{}", sid),
+                                    serde_json::json!({ "reason": "timeout" }),
+                                );
+                                return;
+                            }
+                        };
+                        if platforms::detect_platform_from_text(&win_out)
+                            == Some(RemotePlatform::Windows)
+                        {
+                            (
+                                RemotePlatform::Windows,
+                                platforms::parse_static_host_sections(
+                                    &win_out,
+                                    RemotePlatform::Windows,
+                                ),
+                            )
+                        } else {
+                            let _ = app.emit(
+                                &format!("server-metrics-error-{}", sid),
+                                serde_json::json!({ "reason": "unsupported" }),
+                            );
+                            return;
+                        }
+                    }
+                },
+                Err(_) => {
                     let _ = app.emit(
                         &format!("server-metrics-error-{}", sid),
                         serde_json::json!({ "reason": "disconnected" }),
                     );
                     return;
                 }
-            }
+            };
 
+            static_host.lock().insert(sid.clone(), host);
+            platforms.lock().insert(sid.clone(), platform);
+
+            let probe = platforms::probe_cmd_for(platform);
             let mut consecutive_timeouts: u32 = 0;
             let mut last_policy_check: Option<Instant> = None;
             let mut cached_policy = crate::agent::types::AgentPolicySettings::default();
             let mut last_alert_auto_start: Option<Instant> = None;
             loop {
-                let probe = r#"
-echo '---STAT---';   cat /proc/stat
-echo '---MEM---';    cat /proc/meminfo
-echo '---NET---';    cat /proc/net/dev
-echo '---UPT---';    cat /proc/uptime
-echo '---LOAD---';   cat /proc/loadavg
-echo '---DISK---';   df -kP / 2>/dev/null
-echo '---PROC---';   ps -eo pid,%cpu,%mem,rss,comm --sort=-%cpu 2>/dev/null | head -21
-echo '---NIC4---';   ip -o -4 addr show 2>/dev/null
-echo '---NICLINK---';ip -o link show 2>/dev/null
-echo '---END---'
-"#;
                 let out = match timeout(Duration::from_secs(5), ssh.metrics_exec(&sid, probe)).await
                 {
                     Ok(Ok(text)) => {
@@ -538,7 +579,8 @@ echo '---END---'
                     }
                 };
 
-                let snapshot = build_snapshot(&out, &sid, &last, &static_host);
+                let snapshot =
+                    platforms::build_platform_snapshot(platform, &out, &sid, &last, &static_host);
                 let _ = app.emit(&format!("server-metrics-{}", sid), &snapshot);
 
                 if let Some(ref state) = app_state {
@@ -595,6 +637,7 @@ echo '---END---'
 
             last.lock().remove(&sid);
             static_host.lock().remove(&sid);
+            platforms.lock().remove(&sid);
         });
 
         tasks.insert(session_id, handle);
@@ -627,6 +670,7 @@ echo '---END---'
             }
             self.last.lock().remove(session_id);
             self.static_host.lock().remove(session_id);
+            self.platforms.lock().remove(session_id);
         }
     }
 
@@ -639,6 +683,7 @@ echo '---END---'
         }
         self.last.lock().remove(session_id);
         self.static_host.lock().remove(session_id);
+        self.platforms.lock().remove(session_id);
     }
 
     /// Abort all pollers unconditionally (used on app shutdown).
@@ -658,6 +703,7 @@ echo '---END---'
         }
         self.last.lock().clear();
         self.static_host.lock().clear();
+        self.platforms.lock().clear();
     }
 }
 
@@ -667,247 +713,14 @@ impl Default for MetricsManager {
     }
 }
 
-fn parse_static_host(text: &str) -> HostInfo {
-    let mut iter = text.lines();
-    let mut host = HostInfo::default();
-
-    for line in &mut iter {
-        if line.trim() == "---HOST---" {
-            break;
-        }
-    }
-
-    host.user = iter.next().unwrap_or("").trim().to_string();
-    host.hostname = iter.next().unwrap_or("").trim().to_string();
-    host.kernel = iter.next().unwrap_or("").trim().to_string();
-
-    let mut os_lines: Vec<String> = Vec::new();
-    let mut cores: u32 = 0;
-    for line in &mut iter {
-        let trimmed = line.trim();
-        if trimmed.chars().all(|c| c.is_ascii_digit()) && !trimmed.is_empty() {
-            cores = trimmed.parse().unwrap_or(0);
-            break;
-        }
-        if trimmed == "---HOSTEND---" {
-            break;
-        }
-        os_lines.push(line.to_string());
-    }
-    host.os_pretty = parse_os_pretty(&os_lines.join("\n"));
-    // Floor to 1 so downstream per-core math never divides by zero, even if the
-    // remote couldn't report a core count.
-    host.cpu_cores = cores.max(1);
-
-    if let Some(line) = iter.next() {
-        if let Some(after) = line.split_once(':') {
-            host.cpu_model = after.1.trim().to_string();
-        }
-    }
-
-    host
-}
-
+#[cfg(test)]
 pub fn build_snapshot(
     text: &str,
     session_id: &str,
     last: &Arc<Mutex<StdHashMap<String, LastSample>>>,
     static_host: &Arc<Mutex<StdHashMap<String, HostInfo>>>,
 ) -> MetricsSnapshot {
-    let mut sections: StdHashMap<&str, String> = StdHashMap::new();
-    let mut current: Option<&str> = None;
-    let mut buf = String::new();
-    for line in text.lines() {
-        if let Some(tag) = line.strip_prefix("---").and_then(|s| s.strip_suffix("---")) {
-            if let Some(prev) = current.take() {
-                sections.insert(prev, std::mem::take(&mut buf));
-            }
-            if tag != "END" {
-                current = Some(match tag {
-                    "STAT" => "STAT",
-                    "MEM" => "MEM",
-                    "NET" => "NET",
-                    "UPT" => "UPT",
-                    "LOAD" => "LOAD",
-                    "DISK" => "DISK",
-                    "PROC" => "PROC",
-                    "NIC4" => "NIC4",
-                    "NICLINK" => "NICLINK",
-                    _ => "",
-                });
-            }
-            continue;
-        }
-        if current.is_some() {
-            buf.push_str(line);
-            buf.push('\n');
-        }
-    }
-
-    let now = Instant::now();
-    let mut prev_lock = last.lock();
-    let prev = prev_lock.remove(session_id);
-
-    let (cpu_stats, new_cpu_total, new_cpu_per_core) = match sections.get("STAT") {
-        Some(stat_text) => match parse_proc_stat(stat_text) {
-            Some((total, per_core)) => {
-                let (cpu_pct, user_pct, sys_pct, iowait_pct, per_core_pct) = match &prev {
-                    Some(p) => {
-                        let t = cpu_percent(p.cpu_total, total);
-                        let (u, s, w) = cpu_breakdown(p.cpu_total, total);
-                        let core_pcts: Vec<f64> = per_core
-                            .iter()
-                            .enumerate()
-                            .map(|(i, cur)| {
-                                p.cpu_per_core
-                                    .get(i)
-                                    .map(|prev_c| cpu_percent(*prev_c, *cur))
-                                    .unwrap_or(0.0)
-                            })
-                            .collect();
-                        (t, u, s, w, core_pcts)
-                    }
-                    None => (0.0, 0.0, 0.0, 0.0, vec![0.0; per_core.len()]),
-                };
-                let (l1, l5, l15) = sections
-                    .get("LOAD")
-                    .map(|s| parse_loadavg(s))
-                    .unwrap_or((0.0, 0.0, 0.0));
-                (
-                    Some(CpuStats {
-                        total_percent: cpu_pct,
-                        user_percent: user_pct,
-                        system_percent: sys_pct,
-                        iowait_percent: iowait_pct,
-                        per_core: per_core_pct,
-                        loadavg_1m: l1,
-                        loadavg_5m: l5,
-                        loadavg_15m: l15,
-                    }),
-                    total,
-                    per_core,
-                )
-            }
-            None => (None, CpuTimes::default(), Vec::new()),
-        },
-        None => (None, CpuTimes::default(), Vec::new()),
-    };
-
-    let mem_stats = sections.get("MEM").map(|t| parse_meminfo(t));
-
-    let new_net = sections
-        .get("NET")
-        .map(|t| parse_net_dev(t))
-        .unwrap_or_default();
-    let net_stats = {
-        let mut total_rx: u64 = 0;
-        let mut total_tx: u64 = 0;
-        for (rx, tx) in new_net.values() {
-            total_rx += rx;
-            total_tx += tx;
-        }
-        let (rx_rate, tx_rate) = match &prev {
-            Some(p) => {
-                let dt = now
-                    .saturating_duration_since(p.taken_at)
-                    .as_secs_f64()
-                    .max(0.001);
-                let mut prx: u64 = 0;
-                let mut ptx: u64 = 0;
-                for (rx, tx) in p.net_bytes.values() {
-                    prx += rx;
-                    ptx += tx;
-                }
-                let rx_d = total_rx.saturating_sub(prx) as f64 / dt;
-                let tx_d = total_tx.saturating_sub(ptx) as f64 / dt;
-                (rx_d.max(0.0), tx_d.max(0.0))
-            }
-            None => (0.0, 0.0),
-        };
-        if new_net.is_empty() {
-            None
-        } else {
-            Some(NetStats {
-                total_rx_bytes: total_rx,
-                total_tx_bytes: total_tx,
-                rx_bytes_per_sec: rx_rate,
-                tx_bytes_per_sec: tx_rate,
-            })
-        }
-    };
-
-    let disk_stats = sections.get("DISK").and_then(|t| parse_df(t));
-
-    let procs = sections.get("PROC").map(|t| parse_ps(t));
-
-    let nics = {
-        let ipv4 = sections
-            .get("NIC4")
-            .map(|t| parse_ip_addr(t))
-            .unwrap_or_default();
-        let macs = sections
-            .get("NICLINK")
-            .map(|t| parse_ip_link(t))
-            .unwrap_or_default();
-        if ipv4.is_empty() && macs.is_empty() {
-            None
-        } else {
-            let mut names: std::collections::BTreeSet<String> = Default::default();
-            for n in ipv4.keys() {
-                names.insert(n.clone());
-            }
-            for n in macs.keys() {
-                if n != "lo" {
-                    names.insert(n.clone());
-                }
-            }
-            Some(
-                names
-                    .into_iter()
-                    .map(|name| NicInfo {
-                        ipv4: ipv4.get(&name).cloned(),
-                        mac: macs.get(&name).cloned(),
-                        name,
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        }
-    };
-
-    let host = static_host.lock().get(session_id).cloned().map(|mut h| {
-        if let Some(upt) = sections.get("UPT") {
-            if let Some(first) = upt.split_ascii_whitespace().next() {
-                if let Ok(s) = first.parse::<f64>() {
-                    h.uptime_seconds = s as u64;
-                }
-            }
-        }
-        h
-    });
-
-    prev_lock.insert(
-        session_id.to_string(),
-        LastSample {
-            cpu_total: new_cpu_total,
-            cpu_per_core: new_cpu_per_core,
-            net_bytes: new_net,
-            taken_at: now,
-        },
-    );
-
-    MetricsSnapshot {
-        host,
-        cpu: cpu_stats,
-        mem: mem_stats,
-        net: net_stats,
-        disk: disk_stats,
-        procs,
-        nics,
-        collected_at: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as i64)
-            .unwrap_or(0),
-    }
+    platforms::build_platform_snapshot(RemotePlatform::Linux, text, session_id, last, static_host)
 }
 
 // ---- Tests ----

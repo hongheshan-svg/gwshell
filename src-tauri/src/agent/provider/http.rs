@@ -1,13 +1,15 @@
 use super::anthropic::stream_anthropic_messages_once;
 use super::openai::stream_openai_chat_completion_url;
-use crate::agent::types::AiProviderSettings;
+use crate::agent::types::{AiProviderSettings, ChatMessage};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 pub(super) const ANTHROPIC_FALLBACK_MAX_TOKENS: [u32; 3] = [16_000, 8_192, 4_096];
-pub(super) const RAW_RESPONSE_SAMPLE_LIMIT: usize = 4096;
+/// Keep enough of a non-streaming JSON body to parse real answers (>4KB)
+/// without letting an unbounded error body grow memory indefinitely.
+pub(super) const RAW_RESPONSE_SAMPLE_LIMIT: usize = 256 * 1024;
 const CONNECT_TIMEOUT_SECS: u64 = 20;
 /// Floor for the idle timeout: reasoning models can be silent for a while
 /// before their first token.
@@ -18,14 +20,33 @@ pub(super) const CANCELLED: &str = "AI analysis cancelled";
 pub(super) const TRUNCATED_NOTICE: &str =
     "\n\n[Response cut off: the model reached its output limit.]";
 
-static CLIENT_CACHE: OnceLock<Mutex<HashMap<u64, reqwest::Client>>> = OnceLock::new();
+static CLIENT_CACHE: OnceLock<Mutex<HashMap<(u64, bool), reqwest::Client>>> = OnceLock::new();
 
 /// Everything one chat request needs, shared by every attempt.
 pub(super) struct ChatRequest<'a> {
     pub(super) settings: &'a AiProviderSettings,
     pub(super) api_key: &'a str,
     pub(super) system_prompt: &'a str,
-    pub(super) user_prompt: String,
+    pub(super) messages: Vec<ChatMessage>,
+    pub(super) response_model: std::sync::Mutex<Option<String>>,
+}
+
+impl<'a> ChatRequest<'a> {
+    pub(super) fn record_response_model(&self, model: &str) {
+        let trimmed = model.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        if let Ok(mut guard) = self.response_model.lock() {
+            if guard.is_none() {
+                *guard = Some(trimmed.to_string());
+            }
+        }
+    }
+
+    pub(super) fn take_response_model(&self) -> Option<String> {
+        self.response_model.lock().ok().and_then(|mut g| g.take())
+    }
 }
 
 /// Request parameters adjusted between attempts when a provider rejects one.
@@ -61,28 +82,49 @@ impl AttemptError {
     }
 }
 
+fn is_loopback_base_url(base_url: &str) -> bool {
+    let trimmed = base_url.trim().to_ascii_lowercase();
+    let without_scheme = trimmed
+        .split_once("://")
+        .map(|(_, rest)| rest)
+        .unwrap_or(&trimmed);
+    let authority = without_scheme.split('/').next().unwrap_or("");
+    let host = if let Some(rest) = authority.strip_prefix('[') {
+        rest.split(']').next().unwrap_or("")
+    } else {
+        authority.split(':').next().unwrap_or("")
+    };
+    matches!(host, "localhost" | "127.0.0.1" | "::1" | "0.0.0.0")
+}
+
 /// Connection setup gets a short timeout; the response gets an idle timeout
 /// (the longest silence allowed between two chunks) instead of a total one.
-/// Clients are cached per idle-timeout bucket so connection pools and TLS
-/// sessions are reused across requests.
+/// Loopback endpoints (Ollama, LM Studio, local gateways) bypass system HTTP
+/// proxies so VPN/Clash proxies never hijack localhost calls with 400/502.
 pub(super) fn build_client(settings: &AiProviderSettings) -> Result<reqwest::Client, String> {
     let read_timeout_secs = idle_timeout_secs(settings);
+    let bypass_proxy = is_loopback_base_url(&settings.base_url);
+    let cache_key = (read_timeout_secs, bypass_proxy);
     let cache = CLIENT_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     if let Ok(guard) = cache.lock() {
-        if let Some(existing) = guard.get(&read_timeout_secs) {
+        if let Some(existing) = guard.get(&cache_key) {
             return Ok(existing.clone());
         }
     }
-    let client = reqwest::Client::builder()
+    let mut builder = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS))
-        .read_timeout(Duration::from_secs(read_timeout_secs))
+        .read_timeout(Duration::from_secs(read_timeout_secs));
+    if bypass_proxy {
+        builder = builder.no_proxy();
+    }
+    let client = builder
         .build()
         .map_err(|e| format!("AI client setup failed: {}", e))?;
     if let Ok(mut guard) = cache.lock() {
         if guard.len() > 16 {
             guard.clear();
         }
-        guard.insert(read_timeout_secs, client.clone());
+        guard.insert(cache_key, client.clone());
     }
     Ok(client)
 }
@@ -154,7 +196,7 @@ fn retry_tuning(
     tuning: RequestTuning,
     anthropic: bool,
 ) -> Option<RequestTuning> {
-    if error.streamed || error.status != Some(400) {
+    if error.streamed || !matches!(error.status, Some(400 | 422)) {
         return None;
     }
     let body = error.body.to_ascii_lowercase();
@@ -202,17 +244,20 @@ pub(super) enum Protocol {
 
 /// Run attempts against one URL: adapt the request when the provider rejects
 /// a parameter, back off and retry transient failures, otherwise give up.
-pub(super) async fn run_attempts<F, S>(
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn run_attempts<F, T, S>(
     client: &reqwest::Client,
     request: &ChatRequest<'_>,
     url: &str,
     protocol: Protocol,
     mut tuning: RequestTuning,
     on_delta: &mut F,
+    on_thinking: &mut T,
     should_stop: &S,
 ) -> Result<String, AttemptError>
 where
     F: FnMut(&str) + Send,
+    T: FnMut(&str) + Send,
     S: Fn() -> bool + Send + Sync,
 {
     let anthropic = protocol == Protocol::Anthropic;
@@ -227,13 +272,22 @@ where
                     request,
                     tuning,
                     on_delta,
+                    on_thinking,
                     should_stop,
                 )
                 .await
             }
             Protocol::Anthropic => {
-                stream_anthropic_messages_once(client, url, request, tuning, on_delta, should_stop)
-                    .await
+                stream_anthropic_messages_once(
+                    client,
+                    url,
+                    request,
+                    tuning,
+                    on_delta,
+                    on_thinking,
+                    should_stop,
+                )
+                .await
             }
         };
         let error = match result {
@@ -339,6 +393,57 @@ pub(super) fn truncate_middle(input: &str, max_chars: usize) -> String {
         "{}\n\n[...{} chars omitted by GWShell before sending to the model...]\n\n{}",
         head, omitted, tail
     )
+}
+
+/// Keep the latest user message intact (truncated in the middle if over budget)
+/// and include as many recent prior turns as fit within `max_chars`.
+pub(super) fn trim_conversation_messages(
+    messages: Vec<ChatMessage>,
+    max_chars: usize,
+) -> Vec<ChatMessage> {
+    let mut cleaned: Vec<ChatMessage> = messages
+        .into_iter()
+        .filter(|m| !m.content.trim().is_empty())
+        .map(|m| ChatMessage {
+            role: match m.role.as_str() {
+                "assistant" => "assistant".to_string(),
+                "system" => "system".to_string(),
+                _ => "user".to_string(),
+            },
+            content: m.content,
+        })
+        .collect();
+    if cleaned.is_empty() {
+        return cleaned;
+    }
+
+    let last = cleaned.pop().unwrap();
+    let last_content = truncate_middle(&last.content, max_chars);
+    let mut remaining = max_chars.saturating_sub(last_content.chars().count());
+    let mut kept_history = Vec::new();
+
+    for msg in cleaned.into_iter().rev() {
+        let len = msg.content.chars().count();
+        if len <= remaining {
+            remaining -= len;
+            kept_history.push(msg);
+        } else if remaining >= 800 {
+            let trimmed = truncate_middle(&msg.content, remaining);
+            kept_history.push(ChatMessage {
+                role: msg.role,
+                content: trimmed,
+            });
+            break;
+        } else {
+            break;
+        }
+    }
+    kept_history.reverse();
+    kept_history.push(ChatMessage {
+        role: last.role,
+        content: last_content,
+    });
+    kept_history
 }
 
 pub(super) fn truncate_error_body(input: &str, max_chars: usize) -> String {

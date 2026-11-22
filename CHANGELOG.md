@@ -8,6 +8,22 @@
 
 ## [未发布]
 
+## v0.7.0 - 2026-11-22
+
+### ✨ 新增
+
+- **AI 助手 / Agent 模块全面重构**：
+  - 统一侧边 AI 面板（支持 320–680px 拖拽调宽、Chat / Agent 双模式切换、多轮上下文记忆、流式思考过程折叠、安全 Markdown 与可交互命令卡片、风险分级一键执行/插入/SSH 执行并回传分析）。
+  - 支持 **OpenAI 兼容 / Anthropic 兼容 / 本地 Ollama** 全协议，内置最新官方模型预设（GPT-6.2、Claude 5.5、DeepSeek V4.1、Qwen4、GLM-5.3、Kimi K3.1、MiniMax M3.1、Doubao Seed 2.1 等），支持一键「拉取模型」、带耗时与真实返回模型映射透出的「测试连接」、本地回环地址自动绕过系统代理。
+  - 全面重构「设置 → AI」为单列状态卡片 + 连接凭据 + 三列预设模型库，并新增「未保存」状态提示；精简终端右下角悬浮 AI 胶囊入口。
+- **全平台 SSH 服务器面板与 UI 重构**：
+  - 突破原仅限 Linux 的限制，自动识别并支持 **Linux（含 Alpine / OpenWrt / BusyBox 回退）**、**macOS (Darwin)**、**FreeBSD / OpenBSD / NetBSD** 与 **Windows OpenSSH (PowerShell)** 远端指标采集，进程结束命令自动适配 Unix `kill` 与 Windows `taskkill`。
+  - 全面重构服务器面板为可调宽浮窗抽屉：新增 Hero 主机卡（含平台徽章与 BSD / OpenWrt 图标）、概览 / 进程 / 网络三标签分段导航、2×2 环形 KPI 仪表盘、独立 0–100% CPU/内存面积趋势图、可折叠单核热力图、进程搜索与 CPU/内存排序、独立实时网络吞吐面积图、IPv4 一键复制、暂停/恢复采集与「用 AI 诊断当前状态」联动入口。
+- **Wave / Warp 浮岛视觉与终端体验升级**：
+  - 全新深浅双色浮岛式 UI、彩色 OS 发行版与协议图标、移除启动遮罩秒开界面、本地化自定义标签右键菜单并屏蔽原生 WebView 菜单。
+  - **真实 SSH 测试连接**（直连远端握手校验，支持未保存表单即时测试）、**远端 `$PATH` 真实命令补全**（适配 OpenWrt / BusyBox / Alpine）、macOS 默认登录 Shell `zsh -l` 与 UTF-8 环境保留、终端异步挂载自动聚焦、SFTP 单双击防误触保护与图标面包屑增强。
+  - **TOTP 自动生成**：会话的 TOTP 字段可填写 Base32 密钥，连接时按 RFC 6238 自动生成验证码；填写 6 位动态码则仅用于本次连接、不落盘。键盘交互认证按提示文本区分密码与验证码（修复「Password」与「Verification code」分两轮询问时第二轮仍发送密码的问题）。
+
 ### 🔒 安全
 
 - **编辑会话不再清空已保存密码**：前端只持有脱敏会话，编辑 / 重命名 / 改分组后保存会把密码、跳板密码、代理密码、TOTP 一并覆盖为空。现后端合并：未填写 = 保持原值，显式清空 = 删除；导入备份覆盖同 ID 会话时同样保留原有凭据。
@@ -19,16 +35,13 @@
 - **主机密钥类型变化单独告警**：已固定主机出示另一种密钥类型时，不再显示为普通「首次连接」，而是醒目的类型变化警告；握手时优先协商已固定的密钥类型。跳板机的主机指纹现按跳板机自身的 `host:port` 固定。
 - **代理连接**：SOCKS5 / HTTP CONNECT 改为异步实现，受连接超时约束；HTTP 代理按状态行判定 2xx，且不再吞掉紧随其后的 SSH banner。
 - **SFTP**：Windows 上目录下载拒绝 `C:xxx`、`file:stream`、`CON`/`NUL` 等会逃出下载目录或指向设备的文件名；双击打开的远程文件改存到用户私有缓存目录并在启动时清理，打开可执行类型文件（`.exe/.bat/.vbs/.app/.sh` 等）前需确认；前端不再需要 `opener:allow-open-path` 权限。
+- **OTA 更新加固**：补全更新校验流程与错误提示细节。
 - **其他**：测试 AI 连接时，已保存的 API Key 只会发往已保存的地址；启用主口令锁后，只能经校验旧口令的「修改」流程替换口令；终端 OSC 7 畸形编码不再抛异常；移除未使用的 deep-link 插件与 `gwshell://` 协议注册。
 - **依赖**：russh 0.61 → 0.65（RUSTSEC-2026-0492/0495）、rusqlite 0.33 → 0.41（内置 SQLite 安全修复）、refinery 0.8 → 0.10，并 `cargo update` 修复 rustls、quinn-proto、zip、tokio、webpki 等公告；`npm audit fix` 修复 vite / postcss 等开发依赖公告。`cargo audit` 与 `npm audit` 均为 0 漏洞。
 
-### ✨ 新增
-
-- **TOTP 自动生成**：会话的 TOTP 字段可填写 Base32 密钥，连接时按 RFC 6238 自动生成验证码；填写 6 位动态码则仅用于本次连接、不落盘。键盘交互认证按提示文本区分密码与验证码（修复「Password」与「Verification code」分两轮询问时第二轮仍发送密码的问题）。
-
 ### 🔧 工程
 
-- CI 的 clippy 改为 `--all-targets`，覆盖测试代码；更新 `cargo audit` 忽略清单（移除已修复项，补充新的传递依赖 unmaintained 公告）。
+- **CI / Release / Security 工作流优化**：抽离公共 `.github/actions/setup-node-ci` 复合 Action，PR 路径过滤精准按需触发前后端任务，优化 Rust 缓存键与并发策略，CI clippy 覆盖 `--all-targets`。
 
 ## v0.6.0 - 2026-09-13
 

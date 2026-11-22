@@ -81,7 +81,45 @@ pub fn build_continuation_prompt(
     )
 }
 
+pub fn build_terminal_ai_system_prompt(request: &TerminalAiChatRequest) -> String {
+    let session_kind = request
+        .session_type
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or("terminal");
+    let shell_note = request
+        .shell_hint
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| format!("Target shell/environment: {}.", s.trim()))
+        .unwrap_or_default();
+
+    if request.mode == "agent" {
+        format!(
+            "You are GWShell's Terminal Agent assistant working alongside the user on a {} session. {}\n\
+Follow a structured, human-in-the-loop troubleshooting workflow:\n\
+1. Briefly state your diagnosis or hypothesis based on the terminal context and prior tool output.\n\
+2. Propose concrete, minimal, safe next command(s) in fenced ```bash code blocks (one command per block when possible) so GWShell renders one-click Run / Insert / Run & Analyze cards.\n\
+3. Prefer read-only inspection commands first before suggesting any state-changing commands, and clearly warn before risky operations.\n\
+4. Never claim you executed a command yourself — the user approves and runs commands and sends back output.\n\
+5. Always reply in the user's language. Be concise, direct, and practical.",
+            session_kind, shell_note
+        )
+    } else {
+        format!(
+            "You are GWShell's terminal AI assistant helping on a {} session. {}\n\
+Answer concisely and practically in the user's language.\n\
+Whenever you suggest runnable shell commands, place them in fenced ```bash code blocks so GWShell can offer one-click Run, Insert, and Copy buttons.\n\
+Never claim you executed commands yourself, and warn clearly if a command modifies or deletes data.",
+            session_kind, shell_note
+        )
+    }
+}
+
 pub fn build_terminal_ai_chat_prompt(request: &TerminalAiChatRequest) -> String {
+    if !request.include_context {
+        return request.question.trim().to_string();
+    }
     // Everything captured from the terminal (output, selection, prompt, cwd)
     // goes through the same secret redaction as agent evidence before it is
     // sent to a third-party model provider. The user's typed question is
@@ -311,6 +349,11 @@ mod tests {
             prompt: Some("root@gw-link:~#".into()),
             selected_text: Some("systemctl status nginx\nfailed".into()),
             recent_output: Some("nginx.service failed with exit-code".into()),
+            history: vec![],
+            mode: "chat".into(),
+            session_type: Some("ssh".into()),
+            shell_hint: None,
+            include_context: true,
         };
 
         let prompt = build_terminal_ai_chat_prompt(&request);
@@ -339,6 +382,11 @@ mod tests {
                 "Authorization: Bearer sk-live-123\n-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n-----END OPENSSH PRIVATE KEY-----"
                     .into(),
             ),
+            history: vec![],
+            mode: "chat".into(),
+            session_type: Some("ssh".into()),
+            shell_hint: None,
+            include_context: true,
         };
 
         let prompt = build_terminal_ai_chat_prompt(&request);

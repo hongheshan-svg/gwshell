@@ -94,6 +94,14 @@ export interface AgentContinuationRequest {
   results: AgentToolResult[];
 }
 
+export type AiAssistantMode = 'chat' | 'agent';
+export type CommandRiskLevel = 'safe' | 'low' | 'medium' | 'high';
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface TerminalAiChatRequest {
   request_id: string;
   tab_id: string;
@@ -104,6 +112,11 @@ export interface TerminalAiChatRequest {
   prompt?: string | null;
   selected_text?: string | null;
   recent_output?: string | null;
+  history?: ChatMessage[];
+  mode?: AiAssistantMode;
+  session_type?: string | null;
+  shell_hint?: string | null;
+  include_context?: boolean;
 }
 
 export interface AgentAuditRecord {

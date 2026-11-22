@@ -29,7 +29,10 @@ pub async fn kill_remote_process(
     pid: u32,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let cmd = format!("kill {}", pid);
+    let cmd = match state.metrics.platform_for(&session_id) {
+        Some(crate::metrics::RemotePlatform::Windows) => format!("taskkill /PID {} /F", pid),
+        _ => format!("kill {}", pid),
+    };
     state
         .ssh_manager
         .ssh_exec(&session_id, &cmd)

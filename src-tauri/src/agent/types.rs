@@ -110,6 +110,12 @@ pub struct AgentContinuationRequest {
     pub results: Vec<AgentToolResult>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalAiChatRequest {
     pub request_id: String,
@@ -121,6 +127,20 @@ pub struct TerminalAiChatRequest {
     pub prompt: Option<String>,
     pub selected_text: Option<String>,
     pub recent_output: Option<String>,
+    #[serde(default)]
+    pub history: Vec<ChatMessage>,
+    #[serde(default = "default_chat_mode")]
+    pub mode: String,
+    #[serde(default)]
+    pub session_type: Option<String>,
+    #[serde(default)]
+    pub shell_hint: Option<String>,
+    #[serde(default = "default_true")]
+    pub include_context: bool,
+}
+
+fn default_chat_mode() -> String {
+    "chat".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -252,7 +272,7 @@ impl Default for AiProviderSettings {
             enabled: false,
             provider: "openai_compatible".to_string(),
             base_url: "https://api.openai.com/v1".to_string(),
-            model: "gpt-5.5".to_string(),
+            model: "gpt-6.2-sol".to_string(),
             api_key_configured: false,
             temperature: 0.2,
             max_input_chars: 24_000,

@@ -13,6 +13,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../stores/appStore';
+import { useAiChatStore } from '../../stores/aiChatStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { IS_MACOS, isTauriRuntime } from '../../lib/platform';
 import { KEY_ACTIONS } from '../../keymap/actions';
@@ -27,6 +28,7 @@ export const TitleBar: React.FC = () => {
   const toggleServerPanel = useAppStore((s) => s.toggleServerPanel);
   const agentPanelOpen = useAppStore((s) => s.agentPanelOpen);
   const toggleAgentPanel = useAppStore((s) => s.toggleAgentPanel);
+  const aiStreaming = useAiChatStore((s) => s.streamingKey !== null);
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
@@ -107,6 +109,7 @@ export const TitleBar: React.FC = () => {
           >
             <Bot size={14} />
             <span>AI</span>
+            {aiStreaming && <span className="ai-live-pulse" aria-hidden="true" />}
           </button>
           <button
             type="button"

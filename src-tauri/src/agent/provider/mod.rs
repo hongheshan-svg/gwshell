@@ -3,36 +3,85 @@ mod http;
 mod openai;
 mod storage;
 
-use super::types::AiProviderSettings;
+use super::types::{AiProviderSettings, ChatMessage};
 use http::{
-    build_client, effective_max_input_chars, truncate_error_body, truncate_middle, ChatRequest,
+    build_client, effective_max_input_chars, trim_conversation_messages, truncate_error_body,
+    ChatRequest,
 };
 
 pub use storage::{clear_api_key, load_api_key, load_settings, save_settings, set_api_key};
+
+pub async fn list_provider_models(
+    settings: AiProviderSettings,
+    api_key: String,
+) -> Result<Vec<String>, String> {
+    if !matches!(
+        settings.provider.as_str(),
+        "openai_compatible" | "anthropic_compatible" | "ollama"
+    ) {
+        return Err(format!("Unsupported AI provider: {}", settings.provider));
+    }
+    if settings.base_url.trim().is_empty() {
+        return Err("AI provider base URL is required".into());
+    }
+    if provider_requires_api_key(&settings) && api_key.trim().is_empty() {
+        return Err("AI API key is not configured".into());
+    }
+    let client = build_client(&settings)?;
+    if settings.provider == "anthropic_compatible" {
+        anthropic::list_anthropic_models(&client, &settings.base_url, api_key.trim()).await
+    } else {
+        openai::list_openai_models(
+            &client,
+            &settings.base_url,
+            api_key.trim(),
+            settings.provider == "ollama",
+        )
+        .await
+    }
+}
+
+pub struct ChatCompletionOutcome {
+    pub text: String,
+    pub response_model: Option<String>,
+}
 
 pub async fn test_provider_connectivity(
     settings: AiProviderSettings,
     api_key: String,
 ) -> Result<String, String> {
-    let model = settings.model.clone();
+    let started = std::time::Instant::now();
+    let requested_model = settings.model.trim().to_string();
     let mut preview = String::new();
-    stream_chat_completion(
+    let outcome = stream_chat_messages_with_meta(
         settings,
         api_key,
         "You are a connectivity probe. Reply with a short OK response.".to_string(),
-        "Return only: OK".to_string(),
+        vec![ChatMessage {
+            role: "user".to_string(),
+            content: "Return only: OK".to_string(),
+        }],
         |delta| preview.push_str(delta),
+        |_| {},
         || false,
     )
     .await?;
 
+    let elapsed_ms = started.elapsed().as_millis();
+    let model_note = match outcome.response_model.as_deref() {
+        Some(actual) if actual != requested_model => {
+            format!("{} → {}", requested_model, actual)
+        }
+        _ => requested_model,
+    };
     Ok(format!(
-        "AI provider responded: {}{}",
-        model,
+        "AI provider responded: {} ({} ms){}",
+        model_note,
+        elapsed_ms,
         if preview.trim().is_empty() {
             String::new()
         } else {
-            format!(" ({})", truncate_error_body(preview.trim(), 80))
+            format!(" — {}", truncate_error_body(preview.trim(), 80))
         }
     ))
 }
@@ -42,11 +91,41 @@ pub async fn stream_chat_completion<F, S>(
     api_key: String,
     system_prompt: String,
     user_prompt: String,
-    mut on_delta: F,
+    on_delta: F,
     should_stop: S,
 ) -> Result<String, String>
 where
     F: FnMut(&str) + Send,
+    S: Fn() -> bool + Send + Sync,
+{
+    stream_chat_messages_with_meta(
+        settings,
+        api_key,
+        system_prompt,
+        vec![ChatMessage {
+            role: "user".to_string(),
+            content: user_prompt,
+        }],
+        on_delta,
+        |_| {},
+        should_stop,
+    )
+    .await
+    .map(|o| o.text)
+}
+
+pub async fn stream_chat_messages_with_meta<F, T, S>(
+    settings: AiProviderSettings,
+    api_key: String,
+    system_prompt: String,
+    messages: Vec<ChatMessage>,
+    mut on_delta: F,
+    mut on_thinking: T,
+    should_stop: S,
+) -> Result<ChatCompletionOutcome, String>
+where
+    F: FnMut(&str) + Send,
+    T: FnMut(&str) + Send,
     S: Fn() -> bool + Send + Sync,
 {
     validate_provider_settings(&settings)?;
@@ -54,24 +133,53 @@ where
         return Err("AI API key is not configured".into());
     }
 
+    let trimmed_messages =
+        trim_conversation_messages(messages, effective_max_input_chars(&settings));
+    if trimmed_messages.is_empty() {
+        return Err("Message content is required".into());
+    }
+
     let client = build_client(&settings)?;
     let request = ChatRequest {
         settings: &settings,
         api_key: api_key.trim(),
         system_prompt: &system_prompt,
-        user_prompt: truncate_middle(&user_prompt, effective_max_input_chars(&settings)),
+        messages: trimmed_messages,
+        response_model: std::sync::Mutex::new(None),
     };
 
-    if settings.provider == "anthropic_compatible" {
-        return anthropic::stream_anthropic_messages(
+    let text = if settings.provider == "anthropic_compatible" {
+        anthropic::stream_anthropic_messages(
             &client,
             &request,
             &mut on_delta,
+            &mut on_thinking,
             &should_stop,
         )
-        .await;
-    }
-    openai::stream_openai_chat_completion(&client, &request, &mut on_delta, &should_stop).await
+        .await?
+    } else {
+        openai::stream_openai_chat_completion(
+            &client,
+            &request,
+            &mut on_delta,
+            &mut on_thinking,
+            &should_stop,
+        )
+        .await?
+    };
+
+    let response_model = request.take_response_model();
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "[gwshell-ai] DONE requested_model={} response_model={}",
+        settings.model.trim(),
+        response_model.as_deref().unwrap_or("<none>")
+    );
+
+    Ok(ChatCompletionOutcome {
+        text,
+        response_model,
+    })
 }
 
 pub(crate) fn validate_provider_settings(settings: &AiProviderSettings) -> Result<(), String> {

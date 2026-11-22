@@ -7,14 +7,16 @@ use futures_util::StreamExt;
 use reqwest::header::CONTENT_TYPE;
 use serde_json::{json, Value};
 
-pub(super) async fn stream_openai_chat_completion<F, S>(
+pub(super) async fn stream_openai_chat_completion<F, T, S>(
     client: &reqwest::Client,
     request: &ChatRequest<'_>,
     on_delta: &mut F,
+    on_thinking: &mut T,
     should_stop: &S,
 ) -> Result<String, String>
 where
     F: FnMut(&str) + Send,
+    T: FnMut(&str) + Send,
     S: Fn() -> bool + Send + Sync,
 {
     let urls = chat_completions_urls(&request.settings.base_url)?;
@@ -32,6 +34,7 @@ where
             Protocol::OpenAi,
             initial,
             on_delta,
+            on_thinking,
             should_stop,
         )
         .await;
@@ -53,29 +56,44 @@ where
     }))
 }
 
-pub(super) async fn stream_openai_chat_completion_url<F, S>(
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn stream_openai_chat_completion_url<F, T, S>(
     client: &reqwest::Client,
     url: &str,
     request: &ChatRequest<'_>,
     tuning: RequestTuning,
     on_delta: &mut F,
+    on_thinking: &mut T,
     should_stop: &S,
 ) -> Result<String, AttemptError>
 where
     F: FnMut(&str) + Send,
+    T: FnMut(&str) + Send,
     S: Fn() -> bool + Send + Sync,
 {
+    let mut messages = Vec::with_capacity(request.messages.len() + 1);
+    if !request.system_prompt.trim().is_empty() {
+        messages.push(json!({ "role": "system", "content": request.system_prompt }));
+    }
+    for msg in &request.messages {
+        messages.push(json!({ "role": msg.role, "content": msg.content }));
+    }
     let mut body = json!({
         "model": request.settings.model.trim(),
         "stream": true,
-        "messages": [
-            { "role": "system", "content": request.system_prompt },
-            { "role": "user", "content": request.user_prompt }
-        ]
+        "messages": messages
     });
     if tuning.send_temperature {
         body["temperature"] = json!(request.settings.temperature);
     }
+
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "[gwshell-ai] POST {} model={} messages={}",
+        url,
+        request.settings.model.trim(),
+        messages.len()
+    );
 
     let mut builder = client.post(url).json(&body);
     if !request.api_key.is_empty() {
@@ -129,6 +147,15 @@ where
             if let Some(reason) = parse_openai_sse_line_finish_reason(&line) {
                 finish_reason = Some(reason);
             }
+            if let Some(model) = parse_openai_sse_line_model(&line) {
+                request.record_response_model(&model);
+            }
+            if let Some(thinking) = parse_openai_sse_line_thinking_delta(&line) {
+                if should_stop() {
+                    return Err(AttemptError::new(CANCELLED).streamed(!full_text.is_empty()));
+                }
+                on_thinking(&thinking);
+            }
             if let Some(delta) = parse_openai_sse_line_text_delta(&line) {
                 if should_stop() {
                     return Err(AttemptError::new(CANCELLED).streamed(!full_text.is_empty()));
@@ -146,6 +173,9 @@ where
             if let Some(error) = parse_openai_sse_line_error(&tail) {
                 return Err(AttemptError::new(error).streamed(!full_text.is_empty()));
             }
+            if let Some(model) = parse_openai_sse_line_model(&tail) {
+                request.record_response_model(&model);
+            }
             for delta in parse_openai_sse_text_delta(&tail) {
                 on_delta(&delta);
                 full_text.push_str(&delta);
@@ -158,6 +188,11 @@ where
             return Err(AttemptError::new(error));
         }
         if let Some(text) = parse_openai_json_text(&raw_response) {
+            if let Ok(value) = serde_json::from_str::<Value>(raw_response.trim()) {
+                if let Some(model) = value.get("model").and_then(|v| v.as_str()) {
+                    request.record_response_model(model);
+                }
+            }
             on_delta(&text);
             return Ok(text);
         }
@@ -245,11 +280,15 @@ pub fn parse_openai_sse_text_delta(chunk: &str) -> Vec<String> {
 }
 
 fn should_try_v1_chat_completions(base_url: &str) -> bool {
-    let without_scheme = base_url
-        .split_once("://")
-        .map(|(_, rest)| rest)
-        .unwrap_or(base_url);
-    !without_scheme.contains('/')
+    let lower = base_url.to_ascii_lowercase();
+    !(lower.ends_with("/v1")
+        || lower.ends_with("/v2")
+        || lower.ends_with("/v3")
+        || lower.ends_with("/v4")
+        || lower.contains("/v1/")
+        || lower.contains("/v2/")
+        || lower.contains("/v3/")
+        || lower.contains("/v4/"))
 }
 
 pub(super) fn is_retryable_openai_endpoint_error(error: &str) -> bool {
@@ -267,12 +306,142 @@ pub(super) fn parse_openai_sse_line_text_delta(line: &str) -> Option<String> {
         return None;
     }
     let json = serde_json::from_str::<serde_json::Value>(data).ok()?;
-    json.get("choices")
+    let content = json
+        .get("choices")
         .and_then(|v| v.get(0))
         .and_then(|v| v.get("delta"))
-        .and_then(|v| v.get("content"))
+        .and_then(|v| v.get("content"))?;
+    if let Some(s) = content.as_str() {
+        return Some(s.to_string());
+    }
+    openai_content_value_to_text(content)
+}
+
+pub(super) fn parse_openai_sse_line_model(line: &str) -> Option<String> {
+    let data = sse_data(line)?;
+    let json = serde_json::from_str::<Value>(data).ok()?;
+    json.get("model")
         .and_then(|v| v.as_str())
+        .filter(|s| !s.trim().is_empty())
         .map(ToString::to_string)
+}
+
+pub(super) fn parse_openai_sse_line_thinking_delta(line: &str) -> Option<String> {
+    let data = sse_data(line)?;
+    let json = serde_json::from_str::<Value>(data).ok()?;
+    let delta = json.get("choices")?.get(0)?.get("delta")?;
+    delta
+        .get("reasoning_content")
+        .or_else(|| delta.get("reasoning"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+}
+
+pub(super) async fn list_openai_models(
+    client: &reqwest::Client,
+    base_url: &str,
+    api_key: &str,
+    is_ollama: bool,
+) -> Result<Vec<String>, String> {
+    let trimmed = base_url.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return Err("AI provider base URL is required".into());
+    }
+    let base = trimmed
+        .strip_suffix("/chat/completions")
+        .unwrap_or(trimmed)
+        .trim_end_matches('/');
+
+    let mut candidates = vec![format!("{}/models", base)];
+    if should_try_v1_chat_completions(base) {
+        candidates.push(format!("{}/v1/models", base));
+    }
+
+    let mut last_err = String::new();
+    for url in candidates {
+        let mut req = client.get(&url);
+        if !api_key.is_empty() {
+            req = req.bearer_auth(api_key);
+        }
+        match req.send().await {
+            Ok(resp) if resp.status().is_success() => {
+                if let Ok(text) = resp.text().await {
+                    if let Ok(json) = serde_json::from_str::<Value>(&text) {
+                        if let Some(models) = extract_model_ids_from_json(&json) {
+                            return Ok(models);
+                        }
+                    }
+                }
+            }
+            Ok(resp) => {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                last_err = format!("{} ({}): {}", url, status, describe_error_body(&body));
+            }
+            Err(e) => {
+                last_err = format!("{} failed: {}", url, e);
+            }
+        }
+    }
+
+    if is_ollama {
+        let root = base
+            .strip_suffix("/v1")
+            .unwrap_or(base)
+            .trim_end_matches('/');
+        let tags_url = format!("{}/api/tags", root);
+        if let Ok(resp) = client.get(&tags_url).send().await {
+            if resp.status().is_success() {
+                if let Ok(text) = resp.text().await {
+                    if let Ok(json) = serde_json::from_str::<Value>(&text) {
+                        if let Some(models) = extract_model_ids_from_json(&json) {
+                            return Ok(models);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Err(if last_err.is_empty() {
+        "Failed to list models from provider".to_string()
+    } else {
+        last_err
+    })
+}
+
+pub(super) fn extract_model_ids_from_json(json: &Value) -> Option<Vec<String>> {
+    let mut ids: Vec<String> = Vec::new();
+    if let Some(arr) = json.get("data").and_then(|v| v.as_array()) {
+        for item in arr {
+            if let Some(id) = item.get("id").and_then(|v| v.as_str()) {
+                let id = id.trim();
+                if !id.is_empty() {
+                    ids.push(id.to_string());
+                }
+            }
+        }
+    } else if let Some(arr) = json.get("models").and_then(|v| v.as_array()) {
+        for item in arr {
+            if let Some(name) = item
+                .get("name")
+                .or_else(|| item.get("id"))
+                .and_then(|v| v.as_str())
+            {
+                let name = name.trim();
+                if !name.is_empty() {
+                    ids.push(name.to_string());
+                }
+            }
+        }
+    }
+    if ids.is_empty() {
+        return None;
+    }
+    ids.sort();
+    ids.dedup();
+    Some(ids)
 }
 
 fn parse_openai_response_error(raw: &str) -> Option<String> {

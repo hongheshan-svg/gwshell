@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
-import { useAgentPolicyStore } from '../../stores/agentPolicyStore';
 import {
   aiModelPresets,
   findAiModelPreset,
@@ -9,10 +8,9 @@ import {
   providerDefaults,
   type AiModelGroup,
 } from '../../lib/aiModels';
-import type { AgentPolicySettings, AiProviderSettings } from '../../types/agent';
+import type { AiProviderSettings } from '../../types/agent';
 import { AiModelPicker } from './AiModelPicker';
 import { AiConnectionConfig } from './AiConnectionConfig';
-import { AgentPolicySection } from './AgentPolicySection';
 
 type ModelTab = AiModelGroup | 'all';
 
@@ -20,7 +18,7 @@ const defaults: AiProviderSettings = {
   enabled: false,
   provider: 'openai_compatible',
   base_url: 'https://api.openai.com/v1',
-  model: 'gpt-5.5',
+  model: 'gpt-6.2-sol',
   api_key_configured: false,
   temperature: 0.2,
   max_input_chars: 24000,
@@ -33,43 +31,60 @@ const emitAiSettingsChanged = () =>
 export const AiSettingsSection: React.FC = () => {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<AiProviderSettings>(defaults);
-  const policy = useAgentPolicyStore((s) => s.policy);
-  const loadPolicy = useAgentPolicyStore((s) => s.load);
-  const savePolicy = useAgentPolicyStore((s) => s.save);
-  const [policyDraft, setPolicyDraft] = useState<AgentPolicySettings>(policy);
+  const [savedSettings, setSavedSettings] = useState<AiProviderSettings | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [aiMessage, setAiMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-  const [policyMessage, setPolicyMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(
-    null,
-  );
   const [busy, setBusy] = useState(false);
-  const [activeModelTab, setActiveModelTab] = useState<ModelTab>('china');
+  const [testing, setTesting] = useState(false);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
+  const [activeModelTab, setActiveModelTab] = useState<ModelTab>('all');
+  const [explicitlyDisabled, setExplicitlyDisabled] = useState(false);
 
   useEffect(() => {
     invoke<AiProviderSettings>('load_ai_provider_settings')
-      .then((loaded) => setSettings({ ...defaults, ...loaded }))
+      .then((loaded) => {
+        const merged = { ...defaults, ...loaded };
+        setSettings(merged);
+        setSavedSettings(merged);
+      })
       .catch((err) => setAiMessage({ kind: 'err', text: String(err) }));
-    loadPolicy()
-      .then(() => setPolicyDraft(useAgentPolicyStore.getState().policy))
-      .catch((err) => setPolicyMessage({ kind: 'err', text: String(err) }));
-  }, [loadPolicy]);
+  }, []);
+
+  const isDirty = useMemo(() => {
+    if (apiKey.trim().length > 0) return true;
+    if (!savedSettings) return false;
+    return (
+      settings.enabled !== savedSettings.enabled ||
+      settings.provider !== savedSettings.provider ||
+      settings.base_url.trim() !== savedSettings.base_url.trim() ||
+      settings.model.trim() !== savedSettings.model.trim() ||
+      settings.temperature !== savedSettings.temperature ||
+      settings.max_input_chars !== savedSettings.max_input_chars ||
+      settings.request_timeout_secs !== savedSettings.request_timeout_secs
+    );
+  }, [apiKey, savedSettings, settings]);
 
   const selectedPreset = useMemo(() => findAiModelPreset(settings), [settings]);
+  const hasUsableCredentials =
+    settings.provider === 'ollama' || settings.api_key_configured || Boolean(apiKey.trim());
   const usable =
     isAiProviderUsable(settings) ||
     (settings.enabled &&
       Boolean(settings.base_url.trim()) &&
       Boolean(settings.model.trim()) &&
-      Boolean(apiKey.trim()));
+      hasUsableCredentials);
+
   const status = useMemo(() => {
     if (!settings.enabled) return { kind: 'off' as const, label: t('agent_ai_status_disabled') }; // eslint-disable-line no-restricted-syntax -- literal type narrowing for discriminated union
     if (!settings.model.trim() || !settings.base_url.trim())
       return { kind: 'warn' as const, label: t('agent_ai_status_incomplete') }; // eslint-disable-line no-restricted-syntax -- literal type narrowing for discriminated union
-    if (settings.provider !== 'ollama' && !settings.api_key_configured && !apiKey.trim()) {
+    if (!hasUsableCredentials) {
       return { kind: 'warn' as const, label: t('agent_ai_status_key_missing') }; // eslint-disable-line no-restricted-syntax -- literal type narrowing for discriminated union
     }
     return { kind: 'ok' as const, label: t('agent_ai_status_ready') }; // eslint-disable-line no-restricted-syntax -- literal type narrowing for discriminated union
-  }, [apiKey, settings, t]);
+  }, [hasUsableCredentials, settings, t]);
+
   const keyPlaceholder =
     settings.provider === 'ollama'
       ? ''
@@ -78,49 +93,63 @@ export const AiSettingsSection: React.FC = () => {
         (settings.provider === 'anthropic_compatible' ? 'sk-ant-...' : 'sk-...');
 
   const onSettingsChange = (partial: Partial<AiProviderSettings>) => {
+    if (partial.enabled === false) {
+      setExplicitlyDisabled(true);
+    } else if (partial.enabled === true) {
+      setExplicitlyDisabled(false);
+    }
+    if (partial.base_url !== undefined || partial.provider !== undefined) {
+      setFetchedModels([]);
+    }
     setSettings((s) => ({ ...s, ...partial }));
     setAiMessage(null);
   };
-  const onPolicyChange = (partial: Partial<AgentPolicySettings>) => {
-    setPolicyDraft((prev) => ({ ...prev, ...partial }));
-    setPolicyMessage(null);
-  };
 
-  const normalizedSettings = (): AiProviderSettings => ({
-    ...settings,
-    base_url: settings.base_url.trim(),
-    model: settings.model.trim(),
-    // Seconds without data from the provider; the backend never waits less
-    // than 120 (reasoning models can think that long before the first token).
-    request_timeout_secs: Math.max(
-      defaults.request_timeout_secs,
-      settings.request_timeout_secs || defaults.request_timeout_secs,
-    ),
-    max_input_chars: Math.max(2000, settings.max_input_chars || defaults.max_input_chars),
-    temperature: Number.isFinite(settings.temperature)
-      ? settings.temperature
-      : defaults.temperature,
-  });
+  const normalizedSettings = (autoEnable = false): AiProviderSettings => {
+    const baseUrl = settings.base_url.trim();
+    const model = settings.model.trim();
+    const shouldAutoEnable =
+      autoEnable &&
+      !explicitlyDisabled &&
+      Boolean(baseUrl) &&
+      Boolean(model) &&
+      hasUsableCredentials;
+    return {
+      ...settings,
+      enabled: settings.enabled || shouldAutoEnable,
+      base_url: baseUrl,
+      model,
+      request_timeout_secs: Math.max(
+        defaults.request_timeout_secs,
+        settings.request_timeout_secs || defaults.request_timeout_secs,
+      ),
+      max_input_chars: Math.max(2000, settings.max_input_chars || defaults.max_input_chars),
+      temperature: Number.isFinite(settings.temperature)
+        ? settings.temperature
+        : defaults.temperature,
+    };
+  };
 
   const reloadSettings = async () => {
     const loaded = await invoke<AiProviderSettings>('load_ai_provider_settings');
-    setSettings({ ...defaults, ...loaded });
-  };
-
-  const persistAiSettings = async () => {
-    const trimmedKey = apiKey.trim();
-    if (trimmedKey) await invoke('set_ai_provider_api_key', { apiKey: trimmedKey });
-    await invoke('save_ai_provider_settings', { settings: normalizedSettings() });
-    await reloadSettings();
-    if (trimmedKey) setApiKey('');
-    emitAiSettingsChanged();
+    const merged = { ...defaults, ...loaded };
+    setSettings(merged);
+    setSavedSettings(merged);
   };
 
   const save = async () => {
     setAiMessage(null);
     try {
       setBusy(true);
-      await persistAiSettings();
+      const trimmedKey = apiKey.trim();
+      if (trimmedKey) {
+        await invoke('set_ai_provider_api_key', { apiKey: trimmedKey });
+      }
+      await invoke('save_ai_provider_settings', { settings: normalizedSettings(true) });
+      await reloadSettings();
+      if (trimmedKey) setApiKey('');
+      setExplicitlyDisabled(false);
+      emitAiSettingsChanged();
       setAiMessage({ kind: 'ok', text: t('agent_ai_saved') });
     } catch (err) {
       setAiMessage({ kind: 'err', text: String(err) });
@@ -132,34 +161,37 @@ export const AiSettingsSection: React.FC = () => {
   const testProvider = async () => {
     setAiMessage(null);
     try {
-      setBusy(true);
+      setTesting(true);
       const result = await invoke<string>('test_ai_provider_with_settings', {
-        settings: normalizedSettings(),
+        settings: normalizedSettings(false),
         apiKey: apiKey.trim() || null,
       });
       setAiMessage({ kind: 'ok', text: result });
     } catch (err) {
       setAiMessage({ kind: 'err', text: String(err) });
     } finally {
-      setBusy(false);
+      setTesting(false);
     }
   };
 
-  const savePolicySettings = async () => {
-    setPolicyMessage(null);
+  const fetchModels = async () => {
+    setAiMessage(null);
     try {
-      setBusy(true);
-      const ok = await savePolicy(policyDraft);
-      if (ok) {
-        setPolicyMessage({ kind: 'ok', text: t('agent_policy_saved') });
-      } else {
-        setPolicyDraft(useAgentPolicyStore.getState().policy);
-        setPolicyMessage({ kind: 'err', text: t('toast.agentPolicySaveFailed') });
+      setFetchingModels(true);
+      const list = await invoke<string[]>('list_ai_models', {
+        settings: normalizedSettings(false),
+        apiKey: apiKey.trim() || null,
+      });
+      setFetchedModels(list);
+      if (list.length > 0 && !list.includes(settings.model.trim())) {
+        setSettings((s) => ({ ...s, model: list[0] }));
       }
+      setAiMessage({ kind: 'ok', text: t('ai_models_fetched', { count: list.length }) });
     } catch (err) {
-      setPolicyMessage({ kind: 'err', text: String(err) });
+      setFetchedModels([]);
+      setAiMessage({ kind: 'err', text: String(err) });
     } finally {
-      setBusy(false);
+      setFetchingModels(false);
     }
   };
 
@@ -182,6 +214,8 @@ export const AiSettingsSection: React.FC = () => {
   const applyModelPreset = (presetId: string) => {
     const preset = aiModelPresets.find((item) => item.id === presetId);
     if (!preset) return;
+    setExplicitlyDisabled(false);
+    setFetchedModels([]);
     setSettings((s) => ({
       ...s,
       enabled: true,
@@ -193,52 +227,50 @@ export const AiSettingsSection: React.FC = () => {
   };
 
   const selectCompatibleProvider = (provider: AiProviderSettings['provider']) => {
+    setExplicitlyDisabled(false);
+    setFetchedModels([]);
     setSettings((s) => ({ ...s, enabled: true, provider, ...providerDefaults[provider] }));
     setAiMessage(null);
   };
 
   return (
-    <>
+    <div className="ai-settings-page">
       <div className="settings-section-title">{t('agent_ai_title')}</div>
-      <div className="ai-settings-shell ai-settings-dual">
-        <AiModelPicker
-          activePresetId={selectedPreset?.id}
-          activeTab={activeModelTab}
-          busy={busy}
-          onApply={applyModelPreset}
-          onTabChange={setActiveModelTab}
-        />
-        <AiConnectionConfig
-          settings={settings}
-          apiKey={apiKey}
-          status={status}
-          keyPlaceholder={keyPlaceholder}
-          usable={usable}
-          busy={busy}
-          message={aiMessage}
-          onSettingsChange={onSettingsChange}
-          onApiKeyChange={setApiKey}
-          onSelectProvider={selectCompatibleProvider}
-          onClearKey={() => {
-            void clearKey();
-          }}
-          onTest={() => {
-            void testProvider();
-          }}
-          onSave={() => {
-            void save();
-          }}
-        />
-      </div>
-      <AgentPolicySection
-        policy={policyDraft}
+      <AiConnectionConfig
+        settings={settings}
+        apiKey={apiKey}
+        status={status}
+        keyPlaceholder={keyPlaceholder}
+        usable={usable}
+        isDirty={isDirty}
         busy={busy}
-        onChange={onPolicyChange}
-        onSave={() => {
-          void savePolicySettings();
+        testing={testing}
+        fetchingModels={fetchingModels}
+        fetchedModels={fetchedModels}
+        message={aiMessage}
+        onSettingsChange={onSettingsChange}
+        onApiKeyChange={setApiKey}
+        onSelectProvider={selectCompatibleProvider}
+        onFetchModels={() => {
+          void fetchModels();
         }}
-        message={policyMessage}
+        onClearKey={() => {
+          void clearKey();
+        }}
+        onTest={() => {
+          void testProvider();
+        }}
+        onSave={() => {
+          void save();
+        }}
       />
-    </>
+      <AiModelPicker
+        activePresetId={selectedPreset?.id}
+        activeTab={activeModelTab}
+        busy={busy}
+        onApply={applyModelPreset}
+        onTabChange={setActiveModelTab}
+      />
+    </div>
   );
 };

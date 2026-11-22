@@ -114,6 +114,28 @@ export const OsDistroIcon: React.FC<{ osPretty?: string | null; size?: number }>
             />
           </svg>
         );
+      case 'openwrt':
+        return (
+          <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="10.5" fill="#00b5e2" />
+            <path
+              d="M7.4 10.6a6.4 6.4 0 0 1 9.2 0M9.5 13a3.6 3.6 0 0 1 5 0"
+              fill="none"
+              stroke="#fff"
+              strokeWidth="1.9"
+              strokeLinecap="round"
+            />
+            <circle cx="12" cy="15.8" r="1.4" fill="#fff" />
+          </svg>
+        );
+      case 'bsd':
+        return (
+          <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="10.5" fill="#b91c1c" />
+            <circle cx="12" cy="12.6" r="5" fill="#fff" />
+            <path d="M7.6 9.1 5.9 6.3l3.6 1.2Zm8.8 0 1.7-2.8-3.6 1.2Z" fill="#fff" />
+          </svg>
+        );
       case 'windows':
         return (
           <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
