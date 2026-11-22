@@ -1,5 +1,6 @@
 import { useEffect, type RefObject } from 'react';
 import type { TabInfo, ThemeMode } from '../types';
+import { useAppStore } from '../stores/appStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { terminalInstances } from '../components/Terminal/terminalRegistry';
 import { resolveTerminalTheme } from '../lib/terminalThemes';
@@ -12,11 +13,40 @@ import {
   settleTimerIds,
 } from '../lib/terminalLifecycle';
 
+function canAutoFocusTerminal(tabId: string): boolean {
+  const st = useAppStore.getState();
+  if (st.activeTabId !== tabId || st.mainView === 'asset-list') return false;
+  if (
+    st.vaultLocked ||
+    st.showNewSession ||
+    st.showQuickConnect ||
+    st.showDockerModal ||
+    st.showLocalTerminalModal ||
+    st.showSerialModal ||
+    st.showSettings ||
+    st.showCommandPalette ||
+    st.showTerminalSearch
+  ) {
+    return false;
+  }
+  const active = document.activeElement;
+  if (
+    active instanceof Element &&
+    !active.classList.contains('xterm-helper-textarea') &&
+    active.closest('input, textarea, [contenteditable="true"]') &&
+    active.closest('.sftp-panel, .agent-panel, .terminal-ai-dock, .terminal-search-bar')
+  ) {
+    return false;
+  }
+  return true;
+}
+
 interface UseTerminalViewportOptions {
   containerRef: RefObject<HTMLDivElement | null>;
   tab: TabInfo;
   theme: ThemeMode;
   isActive: boolean;
+  terminalReady: boolean;
   isSshBacked: () => boolean;
 }
 
@@ -29,6 +59,7 @@ export function useTerminalViewport({
   tab,
   theme,
   isActive,
+  terminalReady,
   isSshBacked,
 }: UseTerminalViewportOptions): void {
   // Update terminal theme when app theme changes
@@ -52,26 +83,34 @@ export function useTerminalViewport({
     });
   }, [theme, tab.id]);
 
-  // Focus/blur and force redraw when a tab becomes active
+  // Focus/blur and force redraw when a tab becomes active or finishes mounting
   useEffect(() => {
     const inst = terminalInstances.get(tab.id);
     if (!inst) return;
 
     if (isActive) {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
+      let raf1 = 0;
+      let raf2 = 0;
+      raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => {
           forceTerminalRedraw(tab.id, tab.sessionId, tab.type, isSshBacked());
-          try {
-            inst.terminal.focus();
-          } catch {}
+          if (canAutoFocusTerminal(tab.id)) {
+            try {
+              inst.terminal.focus();
+            } catch {}
+          }
         });
       });
+      return () => {
+        cancelAnimationFrame(raf1);
+        cancelAnimationFrame(raf2);
+      };
     } else {
       try {
         inst.terminal.blur();
       } catch {}
     }
-  }, [isActive, isSshBacked, tab.id, tab.sessionId, tab.type]);
+  }, [isActive, terminalReady, isSshBacked, tab.id, tab.sessionId, tab.type]);
 
   // ResizeObserver + cell-size CSS vars + devicePixelRatio zoom listener
   useEffect(() => {

@@ -170,7 +170,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
     return attachTerminalDragDrop(tab, container, isVisibleRef, setDragOver);
   }, [tab]);
 
-  useTerminalViewport({ containerRef, tab, theme, isActive, isSshBacked });
+  useTerminalViewport({ containerRef, tab, theme, isActive, terminalReady, isSshBacked });
 
   return (
     <>

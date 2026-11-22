@@ -1,0 +1,49 @@
+name: Setup Node.js and install dependencies
+description: Set up Node.js with npm caching, guard against mirror lockfiles, and run npm ci with retries.
+
+inputs:
+  node-version:
+    description: Node.js version to install
+    required: false
+    default: '22'
+  verify-cmd:
+    description: Shell command that must succeed after npm ci to verify the install is complete
+    required: false
+    default: '[ -x node_modules/.bin/tsc ]'
+
+runs:
+  using: composite
+  steps:
+    - name: Install Node.js
+      uses: actions/setup-node@v5
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+
+    # `npm ci` can be flaky on CI (npm/cli#4769 "Exit handler never called!"
+    # exits 0 with an incomplete install, or skips optional native binaries
+    # like @tauri-apps/cli). Retry up to 3 times and verify the install works.
+    # Also guard against a CN-mirror lockfile regression: the committed
+    # lockfile must resolve tarballs from registry.npmjs.org.
+    - name: Install npm dependencies (retry, mirror-guard)
+      shell: bash
+      run: |
+        set +e
+        if grep -q 'registry\.npmmirror\.com' package-lock.json; then
+          echo "::error::package-lock.json resolves tarballs from registry.npmmirror.com; regenerate it against registry.npmjs.org"
+          exit 1
+        fi
+        for attempt in 1 2 3; do
+          echo "::group::npm ci (attempt $attempt)"
+          npm ci --no-audit --no-fund
+          status=$?
+          echo "::endgroup::"
+          if [ $status -eq 0 ] && bash -c "${{ inputs.verify-cmd }}"; then
+            exit 0
+          fi
+          echo "::warning::npm ci attempt $attempt failed (exit $status) or verification failed; cleaning and retrying"
+          rm -rf node_modules
+          sleep 5
+        done
+        echo "::error::npm ci failed after 3 attempts"
+        exit 1

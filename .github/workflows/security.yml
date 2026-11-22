@@ -1,7 +1,7 @@
 name: Security audit
 
 # Runs cargo audit + npm audit on every PR (strict — fails on warnings) and
-# weekly on schedule (warning-only — opens an issue but doesn't fail).
+# weekly on schedule (warning-only — informational without blocking).
 on:
   pull_request:
   schedule:
@@ -11,17 +11,24 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   audit:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-
+      # Prebuilt cargo-audit binary (seconds) instead of `cargo install`
+      # compiling it from source (~3-4 min). cargo-audit only reads
+      # Cargo.lock, so no Rust toolchain setup is needed.
       - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
 
       # On PRs: fail hard on any advisory NOT in the ignore list (below).
       # On schedule: warn but don't fail (weekly run is informational).
@@ -68,21 +75,17 @@ jobs:
           fi
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
-          cache: npm
+          node-version: 22
 
-      - name: Install npm dependencies
-        run: npm ci
-
-      # npm audit for production deps only, high+ severity. Strict on PRs
-      # (fails the check, mirroring the cargo-audit policy above); warning-only
-      # on the weekly schedule so drift is surfaced without blocking.
+      # Audit directly from package-lock.json (--package-lock-only) without
+      # downloading node_modules via `npm ci`. Production deps only, high+
+      # severity: strict on PRs, warning-only on weekly schedule.
       - name: npm audit (high+ only)
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            npm audit --omit=dev --audit-level=high
+            npm audit --package-lock-only --omit=dev --audit-level=high
           else
-            npm audit --omit=dev --audit-level=high || true
+            npm audit --package-lock-only --omit=dev --audit-level=high || true
           fi

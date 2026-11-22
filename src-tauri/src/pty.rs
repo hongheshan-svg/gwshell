@@ -115,26 +115,115 @@ fn resolve_shell(name: Option<&str>) -> CommandBuilder {
 }
 
 #[cfg(not(target_os = "windows"))]
+fn preferred_unix_shell_id(shell_env: Option<&str>) -> Option<&'static str> {
+    let raw = shell_env?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let base = std::path::Path::new(raw)
+        .file_name()
+        .and_then(|s| s.to_str())?;
+    match base {
+        "zsh" => Some("zsh"),
+        "bash" => Some("bash"),
+        "fish" => Some("fish"),
+        "pwsh" => Some("powershell7"),
+        _ => None,
+    }
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn unix_shell_supports_login_flag(program: &str) -> bool {
+    let base = std::path::Path::new(program)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(program);
+    matches!(base, "zsh" | "bash" | "fish")
+}
+
+#[cfg(not(target_os = "windows"))]
+fn find_unix_shell_binary(shell_name: &str) -> Option<String> {
+    if let Ok(env_shell) = std::env::var("SHELL") {
+        let trimmed = env_shell.trim();
+        if std::path::Path::new(trimmed)
+            .file_name()
+            .and_then(|s| s.to_str())
+            == Some(shell_name)
+            && std::path::Path::new(trimmed).exists()
+        {
+            return Some(trimmed.to_string());
+        }
+    }
+
+    if let Ok(output) = std::process::Command::new("which").arg(shell_name).output() {
+        if output.status.success() {
+            let found = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !found.is_empty() && std::path::Path::new(&found).exists() {
+                return Some(found);
+            }
+        }
+    }
+
+    for dir in ["/opt/homebrew/bin", "/usr/local/bin", "/bin", "/usr/bin"] {
+        let candidate = format!("{}/{}", dir, shell_name);
+        if std::path::Path::new(&candidate).exists() {
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
+#[cfg(not(target_os = "windows"))]
+fn build_unix_shell_command(program: &str) -> CommandBuilder {
+    let mut c = CommandBuilder::new(program);
+    // On macOS, terminal emulators (Terminal.app, iTerm2, Warp, VS Code) spawn
+    // login shells (`-l`) so `/etc/zprofile`, `~/.zprofile`, and `~/.bash_profile`
+    // are sourced even when launched from Finder/Dock with a minimal launchd env.
+    #[cfg(target_os = "macos")]
+    if unix_shell_supports_login_flag(program) {
+        c.arg("-l");
+    }
+    c
+}
+
+#[cfg(not(target_os = "windows"))]
 fn resolve_shell(name: Option<&str>) -> CommandBuilder {
     match name {
         Some("powershell7") | Some("powershell") => {
-            let mut c = CommandBuilder::new("pwsh");
+            let bin = find_unix_shell_binary("pwsh").unwrap_or_else(|| "pwsh".to_string());
+            let mut c = CommandBuilder::new(bin);
             c.arg("-NoLogo");
             c
         }
-        Some("zsh") => CommandBuilder::new("zsh"),
-        Some("fish") => CommandBuilder::new("fish"),
-        Some("bash") => CommandBuilder::new("bash"),
+        Some("zsh") => {
+            let bin = find_unix_shell_binary("zsh").unwrap_or_else(|| "zsh".to_string());
+            build_unix_shell_command(&bin)
+        }
+        Some("fish") => {
+            let bin = find_unix_shell_binary("fish").unwrap_or_else(|| "fish".to_string());
+            build_unix_shell_command(&bin)
+        }
+        Some("bash") => {
+            let bin = find_unix_shell_binary("bash").unwrap_or_else(|| "bash".to_string());
+            build_unix_shell_command(&bin)
+        }
         Some("cmd") => CommandBuilder::new("sh"),
         Some(path) if path.starts_with('/') && std::path::Path::new(path).exists() => {
-            CommandBuilder::new(path)
+            build_unix_shell_command(path)
         }
         _ => {
+            let fallback = if cfg!(target_os = "macos") {
+                "zsh"
+            } else {
+                "bash"
+            };
             let default_shell = std::env::var("SHELL")
                 .ok()
                 .filter(|s| !s.trim().is_empty())
-                .unwrap_or_else(|| "bash".to_string());
-            CommandBuilder::new(default_shell)
+                .or_else(|| find_unix_shell_binary(fallback))
+                .unwrap_or_else(|| fallback.to_string());
+            build_unix_shell_command(&default_shell)
         }
     }
 }
@@ -220,24 +309,38 @@ pub fn list_available_shells() -> Vec<ShellEntry> {
 
     #[cfg(not(target_os = "windows"))]
     {
-        shells.push(ShellEntry {
-            id: "bash".into(),
-            label: "bash".into(),
-        });
-        shells.push(ShellEntry {
-            id: "zsh".into(),
-            label: "zsh".into(),
-        });
-        shells.push(ShellEntry {
-            id: "fish".into(),
-            label: "fish".into(),
-        });
-        if std::process::Command::new("which")
-            .arg("pwsh")
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
-        {
+        let mut ordered: Vec<&'static str> = if cfg!(target_os = "macos") {
+            vec!["zsh", "bash", "fish"]
+        } else {
+            vec!["bash", "zsh", "fish"]
+        };
+        let env_shell = std::env::var("SHELL").ok();
+        if let Some(preferred) = preferred_unix_shell_id(env_shell.as_deref()) {
+            if let Some(pos) = ordered.iter().position(|&id| id == preferred) {
+                ordered.remove(pos);
+                ordered.insert(0, preferred);
+            }
+        }
+        for id in ordered {
+            if find_unix_shell_binary(id).is_some() {
+                shells.push(ShellEntry {
+                    id: id.into(),
+                    label: id.into(),
+                });
+            }
+        }
+        if shells.is_empty() {
+            let fallback = if cfg!(target_os = "macos") {
+                "zsh"
+            } else {
+                "bash"
+            };
+            shells.push(ShellEntry {
+                id: fallback.into(),
+                label: fallback.into(),
+            });
+        }
+        if find_unix_shell_binary("pwsh").is_some() {
             shells.push(ShellEntry {
                 id: "powershell7".into(),
                 label: "powershell7".into(),
@@ -481,17 +584,30 @@ impl PtyManager {
         cmd.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
         #[cfg(not(target_os = "windows"))]
         {
-            let locale = match charset_str.to_lowercase().as_str() {
-                "gbk" | "gb2312" => "zh_CN.GBK",
-                "gb18030" => "zh_CN.GB18030",
-                "big5" => "zh_TW.Big5",
-                "shift-jis" | "shift_jis" => "ja_JP.SJIS",
-                "euc-jp" => "ja_JP.EUC-JP",
-                "euc-kr" => "ko_KR.EUC-KR",
-                "koi8-r" => "ru_RU.KOI8-R",
-                _ => "en_US.UTF-8",
+            let explicit_locale = match charset_str.to_lowercase().as_str() {
+                "gbk" | "gb2312" => Some("zh_CN.GBK"),
+                "gb18030" => Some("zh_CN.GB18030"),
+                "big5" => Some("zh_TW.Big5"),
+                "shift-jis" | "shift_jis" => Some("ja_JP.SJIS"),
+                "euc-jp" => Some("ja_JP.EUC-JP"),
+                "euc-kr" => Some("ko_KR.EUC-KR"),
+                "koi8-r" => Some("ru_RU.KOI8-R"),
+                _ => None,
             };
-            cmd.env("LANG", locale);
+            if let Some(locale) = explicit_locale {
+                cmd.env("LANG", locale);
+            } else {
+                let inherited_is_utf8 = std::env::var("LANG")
+                    .ok()
+                    .map(|v| {
+                        let lower = v.to_ascii_lowercase();
+                        lower.contains("utf-8") || lower.contains("utf8")
+                    })
+                    .unwrap_or(false);
+                if !inherited_is_utf8 {
+                    cmd.env("LANG", "en_US.UTF-8");
+                }
+            }
         }
         if let Some(ref raw_env) = env_vars {
             for (k, v) in crate::ssh::parse_env_vars(raw_env) {
@@ -722,6 +838,50 @@ mod tests {
         assert!(
             manager.sessions.lock().get("test-session").is_none(),
             "session should be removed from the map"
+        );
+    }
+
+    #[test]
+    fn preferred_unix_shell_id_extracts_basename() {
+        assert_eq!(preferred_unix_shell_id(Some("/bin/zsh")), Some("zsh"));
+        assert_eq!(
+            preferred_unix_shell_id(Some("/opt/homebrew/bin/fish")),
+            Some("fish")
+        );
+        assert_eq!(
+            preferred_unix_shell_id(Some("/usr/local/bin/bash")),
+            Some("bash")
+        );
+        assert_eq!(
+            preferred_unix_shell_id(Some("/usr/local/bin/pwsh")),
+            Some("powershell7")
+        );
+        assert_eq!(preferred_unix_shell_id(Some("")), None);
+        assert_eq!(preferred_unix_shell_id(None), None);
+    }
+
+    #[test]
+    fn login_flag_supported_for_interactive_unix_shells() {
+        assert!(unix_shell_supports_login_flag("/bin/zsh"));
+        assert!(unix_shell_supports_login_flag("/opt/homebrew/bin/bash"));
+        assert!(unix_shell_supports_login_flag("fish"));
+        assert!(!unix_shell_supports_login_flag("sh"));
+        assert!(!unix_shell_supports_login_flag("/usr/local/bin/pwsh"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_resolve_shell_adds_login_flag() {
+        let cmd = resolve_shell(Some("zsh"));
+        let args: Vec<String> = cmd
+            .get_argv()
+            .iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            args.iter().any(|a| a == "-l"),
+            "expected -l login flag in macOS zsh argv, got: {:?}",
+            args
         );
     }
 }

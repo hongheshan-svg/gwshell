@@ -10,6 +10,16 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  # Never cancel an in-flight tag release; allow cancelling superseded manual runs.
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: 10
+  NODE_VERSION: 22
+
 jobs:
   build:
     strategy:
@@ -20,16 +30,17 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             label: windows-x64
-          # Linux x86_64
+          # Linux x86_64 (ubuntu-22.04 keeps glibc compatible with older distros)
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             label: linux-x64
           # macOS ARM64 (Apple Silicon)
-          - os: macos-latest
+          - os: macos-15
             target: aarch64-apple-darwin
             label: macos-arm64
 
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     name: Build (${{ matrix.label }})
 
     steps:
@@ -40,69 +51,32 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install Node.js
-        uses: actions/setup-node@v5
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          node-version: 20
+          workspaces: src-tauri
+          shared-key: release-${{ matrix.label }}
 
-      # `npm ci` on the macOS runner has produced flaky/incomplete installs:
-      #   * The committed lockfile must resolve tarballs from registry.npmjs.org
-      #     (a prior lockfile pinned everything to a distant mirror, which made
-      #     the US-based runners' fetches slow and unreliable). Guard against a
-      #     regression of that.
-      #   * npm 10.x can abort mid-install with "Exit handler never called!"
-      #     (npm/cli#4769) yet still exit 0, leaving an INCOMPLETE install, and
-      #     it can silently skip the platform-specific @tauri-apps/cli native
-      #     binary (an OPTIONAL dep) while still linking the `tauri` .bin shim.
-      #     Either way the build later dies with `tauri: command not found`
-      #     (exit 127) or "Failed to load native binding".
-      # So: retry `npm ci`, and gate success on the tauri CLI actually RUNNING
-      # (which loads the native binary), not merely on the shim file existing.
-      - name: Install npm dependencies
-        shell: bash
-        run: |
-          set +e
-          if grep -q 'registry\.npmmirror\.com' package-lock.json; then
-            echo "::error::package-lock.json resolves tarballs from registry.npmmirror.com; regenerate it against registry.npmjs.org"
-            exit 1
-          fi
-          for attempt in 1 2 3; do
-            echo "::group::npm ci (attempt $attempt)"
-            npm ci
-            status=$?
-            echo "::endgroup::"
-            if [ $status -eq 0 ] && node_modules/.bin/tauri --version >/dev/null 2>&1; then
-              echo "npm ci succeeded and the tauri CLI is runnable."
-              exit 0
-            fi
-            echo "::warning::npm ci attempt $attempt failed (exit $status) or produced an unrunnable tauri CLI; cleaning and retrying"
-            rm -rf node_modules
-            sleep 5
-          done
-          echo "::error::npm ci failed to produce a runnable tauri CLI after 3 attempts"
-          exit 1
+      - name: Setup Node.js & install dependencies
+        uses: ./.github/actions/setup-node-ci
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          verify-cmd: 'node_modules/.bin/tauri --version >/dev/null 2>&1'
 
-      # Linux-specific system dependencies
+      # Linux-specific system dependencies (patchelf needed by AppImage bundler;
+      # no OpenSSL or libssh2 needed since russh + rustls are pure Rust).
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
             libwebkit2gtk-4.1-dev \
             libappindicator3-dev \
             librsvg2-dev \
             patchelf \
-            libssl-dev \
             pkg-config \
-            libssh2-1-dev \
             libudev-dev \
             libdbus-1-dev
-
-      # macOS: install dependencies for native compilation
-      - name: Install macOS dependencies
-        if: runner.os == 'macOS'
-        run: |
-          brew install openssl libssh2 pkg-config
 
       # Extract this version's section from CHANGELOG.md so the GitHub Release
       # body is version-specific (matched by the pushed tag, e.g. v0.2.0 ->
@@ -131,14 +105,18 @@ jobs:
             echo "CHANGELOG_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # Generate a CycloneDX SBOM for the Rust crate graph and attach it to
-      # the GitHub Release. Supplies a machine-readable dependency inventory
-      # for downstream vulnerability scanning / compliance.
+      # Generate a CycloneDX SBOM once (Linux tag builds only) using a prebuilt
+      # binary instead of compiling cargo-cyclonedx from source on all 3 OSes.
+      - name: Install cargo-cyclonedx
+        if: runner.os == 'Linux' && startsWith(github.ref, 'refs/tags/')
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-cyclonedx
+
       - name: Generate CycloneDX SBOM
+        if: runner.os == 'Linux' && startsWith(github.ref, 'refs/tags/')
         working-directory: src-tauri
-        run: |
-          cargo install cargo-cyclonedx --locked
-          cargo cyclonedx --format json
+        run: cargo cyclonedx --format json
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -191,11 +169,10 @@ jobs:
             src-tauri/target/${{ matrix.target }}/release/GWShell-portable-*.zip
           if-no-files-found: warn
 
-      # Upload the CycloneDX SBOM to the GitHub Release (on tag pushes only).
-      # Generated earlier by cargo-cyclonedx; attached for supply-chain
-      # transparency / vulnerability scanning downstream.
+      # Upload the CycloneDX SBOM to the GitHub Release (Linux tag pushes only,
+      # avoiding a 3-way race uploading the same filename from all OS runners).
       - name: Upload SBOM to release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: runner.os == 'Linux' && startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: src-tauri/*.cdx.json

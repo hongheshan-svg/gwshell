@@ -170,7 +170,6 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
     }
 
     if (cancelled) return;
-    setTerminalReady(true);
 
     const currentParent = instance.terminal.element?.parentElement;
     const wasReparented = !!existingInstance && currentParent !== container;
@@ -182,6 +181,7 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
         instance.terminal.open(container);
       }
     }
+    setTerminalReady(true);
 
     attachTerminalInteractions({
       tab,
