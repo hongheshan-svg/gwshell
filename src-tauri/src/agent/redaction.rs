@@ -12,6 +12,14 @@ pub fn cap_text(input: &str, max_chars: usize) -> String {
 }
 
 pub fn redact_secrets(input: &str) -> String {
+    cap_text(&redact_secrets_uncapped(input), MAX_EVIDENCE_BODY)
+}
+
+/// `redact_secrets` without the evidence-size cap (which keeps the HEAD of the
+/// text). For terminal context the most recent output is at the END, and the
+/// provider layer applies its own middle-truncation, so callers there must not
+/// lose the tail to the cap.
+pub fn redact_secrets_uncapped(input: &str) -> String {
     let mut out = Vec::new();
     let mut in_private_key = false;
 
@@ -30,13 +38,45 @@ pub fn redact_secrets(input: &str) -> String {
         out.push(redact_sensitive_line(line));
     }
 
-    cap_text(&out.join("\n"), MAX_EVIDENCE_BODY)
+    out.join("\n")
 }
 
 fn redact_sensitive_line(line: &str) -> String {
     let redacted_authorization = redact_authorization_line(line);
     let redacted_assignment = redact_assignment_line(&redacted_authorization);
-    redact_standalone_bearer_tokens(&redacted_assignment)
+    let redacted_bearer = redact_standalone_bearer_tokens(&redacted_assignment);
+    redact_crypt_hashes(&redacted_bearer)
+}
+
+/// Replace crypt(3)-style password hashes (`/etc/shadow` fields such as
+/// `$6$salt$hash`, bcrypt `$2b$…`, yescrypt `$y$…`, `$argon2id$…`). A marker
+/// only counts when followed by a long run of hash-alphabet characters, so
+/// shell text like `$1$2` is left alone.
+fn redact_crypt_hashes(line: &str) -> String {
+    const MARKERS: [&str; 10] = [
+        "$1$", "$2a$", "$2b$", "$2y$", "$5$", "$6$", "$7$", "$y$", "$gy$", "$argon2",
+    ];
+    const MIN_HASH_LEN: usize = 20;
+    let is_hash_char =
+        |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '/' | '$' | '=' | '+' | ',' | '-');
+
+    let mut out = String::with_capacity(line.len());
+    let mut rest = line;
+    while let Some(start) = MARKERS.iter().filter_map(|m| rest.find(m)).min() {
+        out.push_str(&rest[..start]);
+        let tail = &rest[start..];
+        let end = tail.find(|c: char| !is_hash_char(c)).unwrap_or(tail.len());
+        if end >= MIN_HASH_LEN {
+            out.push_str("[redacted hash]");
+            rest = &tail[end..];
+        } else {
+            // Not a hash: keep the `$` and continue scanning after it.
+            out.push('$');
+            rest = &tail[1..];
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 fn redact_authorization_line(line: &str) -> String {
@@ -563,6 +603,20 @@ mod tests {
             redacted,
             "token=[redacted]&token=[redacted]&password=[redacted]"
         );
+    }
+
+    #[test]
+    fn redacts_crypt_password_hashes() {
+        let text = "root:$6$saltsalt$7h3H4shV4lu3xxxxxxxxxxxxxxxxxxxx.yyy/zz:19000:0:99999:7:::\n\
+                    app:$y$j9T$abcdefghijkl$mnopqrstuvwxyz0123456789ABC:19000::\n\
+                    echo $1$2 and $HOME";
+        let redacted = redact_secrets(text);
+        assert!(
+            redacted.starts_with("root:[redacted hash]:19000"),
+            "{redacted}"
+        );
+        assert!(redacted.contains("app:[redacted hash]:19000"), "{redacted}");
+        assert!(redacted.contains("echo $1$2 and $HOME"), "{redacted}");
     }
 
     #[test]

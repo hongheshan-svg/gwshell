@@ -85,6 +85,7 @@ import {
 } from '../../lib/terminalLifecycle';
 import { buildVscodeTerminalOptions } from '../../lib/terminalVscodeOptions';
 import { attachShellIntegration } from '../../lib/shellIntegration';
+import { parseHostKeyError } from '../../lib/hostKeyError';
 import { CompletionDropdown } from './CompletionDropdown';
 import { StickyScrollOverlay } from './StickyScrollOverlay';
 import { TerminalContextMenu } from './TerminalContextMenu';
@@ -1072,7 +1073,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           // payload like file://host/abs/path
           const m = /^file:\/\/[^/]*(\/.*)$/.exec(payload);
           if (m) {
-            const cwd = decodeURIComponent(m[1]);
+            // The payload comes from the remote side: a malformed %-escape
+            // makes decodeURIComponent throw inside xterm's parser, so ignore
+            // the sequence instead of breaking output processing.
+            let cwd: string;
+            try {
+              cwd = decodeURIComponent(m[1]);
+            } catch {
+              return false;
+            }
             tabCwd.set(tab.id, cwd);
             setTerminalCwd(tab.id, cwd);
           }
@@ -1480,20 +1489,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             await invokeSshConnect(sess);
           } catch (rawErr) {
             const errStr = String(rawErr);
-            if (
-              errStr.startsWith('FINGERPRINT_UNKNOWN:') ||
-              errStr.startsWith('FINGERPRINT_MISMATCH:')
-            ) {
-              const parts = errStr.split(':');
-              const isMismatch = parts[0] === 'FINGERPRINT_MISMATCH';
-              const fingerprint = `${parts[1]}:${parts[2]}`;
-              const keyType = parts.slice(3).join(':') || 'unknown';
-              const host = sess?.host ?? '';
-              const port = sess?.port ?? 22;
+            const hostKeyError = parseHostKeyError(errStr);
+            if (hostKeyError) {
+              const isMismatch = hostKeyError.kind === 'mismatch';
+              // Pin under the host:port the key belongs to. With a jump host the
+              // rejected key may be the jump hop's, not the target's.
+              const { fingerprint, keyType, knownKeyType } = hostKeyError;
+              const host = hostKeyError.host ?? sess?.host ?? '';
+              const port = hostKeyError.port ?? sess?.port ?? 22;
 
               const accepted = await new Promise<boolean>((resolve) => {
                 fingerprintResolveRef.current = resolve;
-                setFingerprintInfo({ fingerprint, keyType, host, port });
+                setFingerprintInfo({ fingerprint, keyType, host, port, knownKeyType });
               });
               // Reset to a no-op so a later teardown can't re-resolve this promise.
               fingerprintResolveRef.current = () => {};
@@ -1511,7 +1518,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                   instance?.terminal.write(`\r\n\x1b[31m[SECURITY] ${String(trustErr)}\x1b[0m\r\n`);
                   return;
                 }
-                await invokeSshConnect(sess);
+                // Retry through the same handler: with a jump host, trusting
+                // the jump hop's key can surface the TARGET's unknown key next.
+                await doSshConnect(sess);
               } else if (isMismatch) {
                 instance?.terminal.write(
                   `\r\n\x1b[31m[SECURITY] ${t('fp_mismatch_warning')}\x1b[0m\r\n` +

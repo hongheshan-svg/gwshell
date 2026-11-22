@@ -162,3 +162,87 @@ impl Default for SessionConfig {
         }
     }
 }
+
+impl SessionConfig {
+    /// Reconcile the secret fields of an incoming save with the stored copy.
+    ///
+    /// The WebView only ever receives REDACTED sessions (secrets are `None`), so
+    /// an edit/rename/regroup round-trips with every secret unset. Treating that
+    /// as "clear" silently wiped saved credentials. Semantics per field:
+    ///   - `None`      → keep the existing stored value (field left untouched)
+    ///   - `Some("")`  → explicitly clear the stored value
+    ///   - `Some(v)`   → replace with `v`
+    pub fn merge_secrets_from(&mut self, existing: Option<&SessionConfig>) {
+        fn merge(incoming: &mut Option<String>, existing: Option<&Option<String>>) {
+            match incoming {
+                None => *incoming = existing.and_then(Clone::clone),
+                Some(v) if v.is_empty() => *incoming = None,
+                Some(_) => {}
+            }
+        }
+        merge(&mut self.password, existing.map(|e| &e.password));
+        merge(&mut self.jump_password, existing.map(|e| &e.jump_password));
+        merge(
+            &mut self.proxy_password,
+            existing.map(|e| &e.proxy_password),
+        );
+        merge(&mut self.totp_code, existing.map(|e| &e.totp_code));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stored() -> SessionConfig {
+        SessionConfig {
+            id: "s1".into(),
+            password: Some("pw".into()),
+            jump_password: Some("jpw".into()),
+            proxy_password: Some("ppw".into()),
+            totp_code: Some("JBSWY3DPEHPK3PXP".into()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn redacted_edit_keeps_every_stored_secret() {
+        let mut edit = SessionConfig {
+            id: "s1".into(),
+            name: "renamed".into(),
+            ..Default::default()
+        };
+        edit.merge_secrets_from(Some(&stored()));
+        assert_eq!(edit.password.as_deref(), Some("pw"));
+        assert_eq!(edit.jump_password.as_deref(), Some("jpw"));
+        assert_eq!(edit.proxy_password.as_deref(), Some("ppw"));
+        assert_eq!(edit.totp_code.as_deref(), Some("JBSWY3DPEHPK3PXP"));
+        assert_eq!(edit.name, "renamed");
+    }
+
+    #[test]
+    fn empty_string_clears_and_value_replaces() {
+        let mut edit = SessionConfig {
+            id: "s1".into(),
+            password: Some(String::new()),
+            jump_password: Some("new".into()),
+            ..Default::default()
+        };
+        edit.merge_secrets_from(Some(&stored()));
+        assert_eq!(edit.password, None);
+        assert_eq!(edit.jump_password.as_deref(), Some("new"));
+        assert_eq!(edit.proxy_password.as_deref(), Some("ppw"));
+    }
+
+    #[test]
+    fn new_session_without_existing_stays_unset() {
+        let mut fresh = SessionConfig {
+            id: "new".into(),
+            password: Some(String::new()),
+            ..Default::default()
+        };
+        fresh.merge_secrets_from(None);
+        assert_eq!(fresh.password, None);
+        assert_eq!(fresh.totp_code, None);
+    }
+}

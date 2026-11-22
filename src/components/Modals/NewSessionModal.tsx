@@ -30,6 +30,7 @@ const configTabKeys: { id: string; labelKey: TranslationKeys }[] = [
 ];
 
 type AuthType = 'password' | 'publickey' | 'keyboardinteractive' | 'agent' | 'none';
+type SecretField = 'password' | 'totp_code' | 'jump_password' | 'proxy_password';
 
 // All five methods on a single row (labels are kept short so they fit) —
 // the old two-row split read as ragged and implied a hierarchy that isn't there.
@@ -56,6 +57,11 @@ export const NewSessionModal: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showJumpPassword, setShowJumpPassword] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  // Secret fields the user actually edited in this modal session. The store
+  // only holds REDACTED sessions, so when editing, an untouched empty secret
+  // must be sent as `undefined` ("keep the saved value" — the backend merges
+  // it), while a field the user deliberately cleared is sent as '' ("clear").
+  const [dirtySecrets, setDirtySecrets] = useState<ReadonlySet<SecretField>>(new Set());
   const [form, setForm] = useState<Partial<SessionConfig>>({
     name: '',
     session_type: 'ssh',
@@ -74,6 +80,7 @@ export const NewSessionModal: React.FC = () => {
   });
 
   React.useEffect(() => {
+    setDirtySecrets(new Set());
     if (editingSession) {
       setForm(editingSession);
       setTouched({});
@@ -114,6 +121,21 @@ export const NewSessionModal: React.FC = () => {
     setTouched((prev) => ({ ...prev, [field]: true }));
   };
 
+  const setSecret = (field: SecretField, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    setDirtySecrets((prev) => new Set(prev).add(field));
+  };
+
+  /** Placeholder for a secret input: when editing, explain blank = unchanged. */
+  const secretPlaceholder = (fallback = '') =>
+    editingSession ? t('secret_keep_placeholder') : fallback;
+
+  const secretValue = (field: SecretField): string | undefined => {
+    const value = form[field];
+    if (value) return value;
+    return editingSession && dirtySecrets.has(field) ? '' : undefined;
+  };
+
   const buildConfig = (sessionId: string): SessionConfig => {
     const now = new Date().toISOString().slice(0, 10);
     return {
@@ -133,12 +155,10 @@ export const NewSessionModal: React.FC = () => {
       username: form.username || undefined,
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       auth_method: form.auth_method || 'password',
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-      password: form.password || undefined,
+      password: secretValue('password'),
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       private_key_path: form.private_key_path || undefined,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-      totp_code: form.totp_code || undefined,
+      totp_code: secretValue('totp_code'),
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       remark: form.remark || undefined,
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
@@ -151,8 +171,7 @@ export const NewSessionModal: React.FC = () => {
       jump_port: form.jump_port ?? undefined,
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       jump_username: form.jump_username || undefined,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-      jump_password: form.jump_password || undefined,
+      jump_password: secretValue('jump_password'),
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       jump_private_key_path: form.jump_private_key_path || undefined,
       // Proxy
@@ -162,8 +181,7 @@ export const NewSessionModal: React.FC = () => {
       proxy_port: form.proxy_port ?? undefined,
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       proxy_username: form.proxy_username || undefined,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-      proxy_password: form.proxy_password || undefined,
+      proxy_password: secretValue('proxy_password'),
       // Tunnel
       // ?? preserves explicit false (user disabled the option); || would coerce it to undefined.
       tunnel_enabled: form.tunnel_enabled ?? undefined,
@@ -368,7 +386,12 @@ export const NewSessionModal: React.FC = () => {
                     <button
                       key={btn.id}
                       className={`ssh-auth-btn ${form.auth_method === btn.id ? 'active' : ''}`}
-                      onClick={() => setForm({ ...form, auth_method: btn.id, password: '' })}
+                      onClick={() => {
+                        // A password and a key passphrase are different secrets:
+                        // switching method clears the stored one too.
+                        setForm({ ...form, auth_method: btn.id, password: '' });
+                        setDirtySecrets((prev) => new Set(prev).add('password'));
+                      }}
                     >
                       {t(btn.labelKey)}
                     </button>
@@ -384,8 +407,9 @@ export const NewSessionModal: React.FC = () => {
                     <input
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="off"
+                      placeholder={secretPlaceholder()}
                       value={form.password ?? ''}
-                      onChange={(e) => setForm({ ...form, password: e.target.value })}
+                      onChange={(e) => setSecret('password', e.target.value)}
                     />
                     <button
                       className="ssh-password-toggle"
@@ -428,9 +452,9 @@ export const NewSessionModal: React.FC = () => {
                       <input
                         type={showPassword ? 'text' : 'password'}
                         autoComplete="off"
-                        placeholder=""
+                        placeholder={secretPlaceholder()}
                         value={form.password ?? ''}
-                        onChange={(e) => setForm({ ...form, password: e.target.value })}
+                        onChange={(e) => setSecret('password', e.target.value)}
                       />
                       <button
                         className="ssh-password-toggle"
@@ -456,9 +480,9 @@ export const NewSessionModal: React.FC = () => {
                       <input
                         type={showPassword ? 'text' : 'password'}
                         autoComplete="off"
-                        placeholder={t('ssh_mfa_password_placeholder')}
+                        placeholder={secretPlaceholder(t('ssh_mfa_password_placeholder'))}
                         value={form.password ?? ''}
-                        onChange={(e) => setForm({ ...form, password: e.target.value })}
+                        onChange={(e) => setSecret('password', e.target.value)}
                       />
                       <button
                         className="ssh-password-toggle"
@@ -472,10 +496,11 @@ export const NewSessionModal: React.FC = () => {
                   <div className="ssh-form-group">
                     <label>{t('ssh_mfa_totp_label')}</label>
                     <input
-                      type="text"
-                      placeholder={t('ssh_mfa_totp_placeholder')}
+                      type="password"
+                      autoComplete="off"
+                      placeholder={secretPlaceholder(t('ssh_mfa_totp_placeholder'))}
                       value={form.totp_code ?? ''}
-                      onChange={(e) => setForm({ ...form, totp_code: e.target.value })}
+                      onChange={(e) => setSecret('totp_code', e.target.value)}
                     />
                   </div>
                   <div className="ssh-tab-desc">{t('ssh_mfa_desc')}</div>
@@ -665,8 +690,10 @@ export const NewSessionModal: React.FC = () => {
                       <label>{t('ssh_proxy_password')}</label>
                       <input
                         type="password"
+                        autoComplete="off"
+                        placeholder={secretPlaceholder()}
                         value={form.proxy_password ?? ''}
-                        onChange={(e) => setForm({ ...form, proxy_password: e.target.value })}
+                        onChange={(e) => setSecret('proxy_password', e.target.value)}
                       />
                     </div>
                   </div>
@@ -853,8 +880,10 @@ export const NewSessionModal: React.FC = () => {
                       <div className="ssh-password-wrap">
                         <input
                           type={showJumpPassword ? 'text' : 'password'}
+                          autoComplete="off"
+                          placeholder={secretPlaceholder()}
                           value={form.jump_password ?? ''}
-                          onChange={(e) => setForm({ ...form, jump_password: e.target.value })}
+                          onChange={(e) => setSecret('jump_password', e.target.value)}
                         />
                         <button
                           className="ssh-password-toggle"

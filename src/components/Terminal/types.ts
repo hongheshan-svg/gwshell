@@ -6,6 +6,8 @@ export interface FingerprintInfo {
   keyType: string;
   host: string;
   port: number;
+  /** Set when the host was pinned under a different key type (possible MITM). */
+  knownKeyType?: string | null;
 }
 
 export interface TerminalContextMenuState {

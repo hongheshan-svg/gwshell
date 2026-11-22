@@ -8,18 +8,22 @@
 # ignored advisory. Review quarterly: remove entries when the upstream
 # advisory is fixed (transitive dep upgraded) or the advisory is withdrawn.
 
-# === Re-triage: 2026-10-31 ===
+# === Re-triage: 2026-11-22 ===
+#
+# Dropped (fixed by `cargo update` / dependency bumps in this re-triage):
+# quick-xml RUSTSEC-2026-0194/0195 (now 0.41+), quinn-proto RUSTSEC-2026-0185
+# (now 0.11.19), and the stale 2026-0190 / 2026-0097 / 2025-0098 / 2025-0100 /
+# 2025-0080 entries, none of which match the lockfile any more.
 
-# quick-xml 0.38.4 / 0.39.2: DoS via namespace allocation + quadratic attribute check.
-# Transitive via tauri -> tauri-codegen. Cannot bump independently without
-# forking Tauri. Tracked upstream: tauri-apps/tauri.
-RUSTSEC-2026-0195  # quick-xml unbounded namespace allocation (DoS)
-RUSTSEC-2026-0194  # quick-xml quadratic duplicate-attribute check (DoS)
+# glib 0.18 unsound (GTK3, transitive via tauri -> webkit2gtk on Linux).
+RUSTSEC-2024-0429  # glib unsound
 
-# quinn-proto 0.11.14: remote memory exhaustion.
-# Transitive via reqwest/h3. Fix: upgrade reqwest when a patched quinn-proto
-# is available upstream.
-RUSTSEC-2026-0185  # quinn-proto remote memory exhaustion
+# Newly unmaintained transitive crates (no direct use in GWShell):
+RUSTSEC-2026-0543  # chrono — pulled in by russh-sftp; we use jiff ourselves
+RUSTSEC-2026-0441  # pin-utils — pulled in by futures-util
+RUSTSEC-2026-0370  # zvariant — merged into zbus 6; transitive via zbus 5 (tauri plugins)
+RUSTSEC-2026-0371  # zbus_names — same zbus 5 family
+RUSTSEC-2026-0372  # zvariant_derive — same zbus 5 family
 
 # GTK3 unmaintained crate family (transitive via tauri -> webkit2gtk on Linux).
 # Ecosystem-wide: webkit2gtk-4.1 pulls the gtk3 crate family, unmaintained as

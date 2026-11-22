@@ -67,24 +67,57 @@ fn warn_secret_dropped_once() {
     }
 }
 
+/// What reading the keyring entry produced, decided without side effects so
+/// the "create a new key" decision is unit-testable.
+#[derive(Debug, PartialEq)]
+enum StoredKey {
+    /// A well-formed 32-byte key.
+    Valid([u8; 32]),
+    /// No entry exists yet — the ONLY case in which a new key may be created.
+    Missing,
+    /// An entry exists but could not be read (access denied, keychain locked,
+    /// backend error) or does not decode to 32 bytes. Overwriting it would
+    /// permanently destroy every secret encrypted under the real key.
+    Unusable,
+}
+
+fn classify_stored_key(read: Result<String, keyring::Error>) -> StoredKey {
+    match read {
+        Ok(stored) => match BASE64.decode(stored.trim().as_bytes()) {
+            Ok(bytes) if bytes.len() == 32 => {
+                let mut k = [0u8; 32];
+                k.copy_from_slice(&bytes);
+                StoredKey::Valid(k)
+            }
+            _ => StoredKey::Unusable,
+        },
+        Err(keyring::Error::NoEntry) => StoredKey::Missing,
+        Err(_) => StoredKey::Unusable,
+    }
+}
+
 fn load_or_create_key() -> Option<[u8; 32]> {
     let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER).ok()?;
 
-    // Reuse an existing key if present and well-formed.
-    if let Ok(stored) = entry.get_password() {
-        if let Ok(bytes) = BASE64.decode(stored.as_bytes()) {
-            if bytes.len() == 32 {
-                let mut k = [0u8; 32];
-                k.copy_from_slice(&bytes);
-                return Some(k);
-            }
+    match classify_stored_key(entry.get_password()) {
+        StoredKey::Valid(key) => Some(key),
+        StoredKey::Missing => {
+            let key = random_bytes::<32>()?;
+            entry.set_password(&BASE64.encode(key)).ok()?;
+            Some(key)
+        }
+        StoredKey::Unusable => {
+            // Degrade to "secrets not persisted" for this run instead of
+            // replacing the key: a transient denial (user clicked "Deny" on
+            // the keychain prompt, locked Secret Service collection) must not
+            // turn into permanent loss of all saved credentials.
+            eprintln!(
+                "[gwshell] WARNING: the keyring master key exists but could not be read; \
+                 leaving it untouched. Saved credentials are unavailable this session."
+            );
+            None
         }
     }
-
-    // Otherwise generate and persist a fresh key.
-    let key = random_bytes::<32>()?;
-    entry.set_password(&BASE64.encode(key)).ok()?;
-    Some(key)
 }
 
 /// Encrypt a secret for at-rest storage. Empty input stays empty; an
@@ -216,6 +249,36 @@ mod tests {
         // be handed back for persistence.
         let enc = encrypt_secret("hunter2");
         assert!(enc.is_empty() || enc.starts_with(ENC_PREFIX));
+    }
+
+    #[test]
+    fn only_a_missing_entry_allows_creating_a_new_key() {
+        let key = [7u8; 32];
+        assert_eq!(
+            classify_stored_key(Ok(BASE64.encode(key))),
+            StoredKey::Valid(key)
+        );
+        assert_eq!(
+            classify_stored_key(Err(keyring::Error::NoEntry)),
+            StoredKey::Missing
+        );
+        // Read failures and malformed entries must never trigger regeneration.
+        assert_eq!(
+            classify_stored_key(Err(keyring::Error::PlatformFailure("denied".into()))),
+            StoredKey::Unusable
+        );
+        assert_eq!(
+            classify_stored_key(Err(keyring::Error::NoStorageAccess("locked".into()))),
+            StoredKey::Unusable
+        );
+        assert_eq!(
+            classify_stored_key(Ok("not-a-key".into())),
+            StoredKey::Unusable
+        );
+        assert_eq!(
+            classify_stored_key(Ok(BASE64.encode([1u8; 16]))),
+            StoredKey::Unusable
+        );
     }
 
     #[test]

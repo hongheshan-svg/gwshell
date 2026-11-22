@@ -9,6 +9,7 @@ mod serial;
 mod session;
 mod ssh;
 mod ssh_config;
+mod totp;
 mod vault;
 
 use database::Database;
@@ -129,19 +130,140 @@ mod tests {
         ));
     }
 
+    fn run_command_action(
+        command: &str,
+        risk: agent::types::AgentRisk,
+    ) -> agent::types::AgentToolCall {
+        agent::types::AgentToolCall {
+            id: "a".into(),
+            tool: agent::types::AgentToolName::RunCommand,
+            target_session_id: "ssh-1".into(),
+            payload: serde_json::json!({ "command": command }),
+            risk,
+            reason: "test".into(),
+            expected_result: None,
+            verify: None,
+        }
+    }
+
+    fn auto_info() -> AgentSessionInfo {
+        AgentSessionInfo {
+            id: "agent-1".into(),
+            target_session_id: "ssh-1".into(),
+            objective: "maintain".into(),
+            autonomy: AgentAutonomyLevel::PolicyAutoMaintain,
+            started_at: 1,
+            status: agent::types::AgentSessionStatus::Running,
+        }
+    }
+
+    #[test]
+    fn command_allowlist_uses_word_prefix_not_substring() {
+        let policy = agent::types::AgentPolicySettings {
+            auto_execute_command_allowlist: vec!["df".into(), "systemctl status".into()],
+            ..Default::default()
+        };
+        let info = auto_info();
+        let ro = agent::types::AgentRisk::ReadOnly;
+        assert!(should_auto_execute_agent_action_with_policy(
+            &info,
+            &run_command_action("df -hP /", ro),
+            &policy
+        ));
+        assert!(should_auto_execute_agent_action_with_policy(
+            &info,
+            &run_command_action("systemctl status nginx", ro),
+            &policy
+        ));
+        // Merely containing an allowed word is not enough.
+        assert!(!should_auto_execute_agent_action_with_policy(
+            &info,
+            &run_command_action("journalctl -u pdf-render", ro),
+            &policy
+        ));
+    }
+
+    #[test]
+    fn service_denylist_also_covers_systemctl_run_commands() {
+        let policy = agent::types::AgentPolicySettings {
+            auto_execute_service_denylist: vec!["nginx".into()],
+            ..Default::default()
+        };
+        let info = auto_info();
+        let low = agent::types::AgentRisk::Low;
+        assert!(!should_auto_execute_agent_action_with_policy(
+            &info,
+            &run_command_action("systemctl reload nginx.service", low),
+            &policy
+        ));
+        assert!(should_auto_execute_agent_action_with_policy(
+            &info,
+            &run_command_action("systemctl reload postfix", low),
+            &policy
+        ));
+    }
+
+    #[test]
+    fn maintenance_window_wraps_midnight() {
+        assert!(is_minute_in_maintenance_window(
+            23 * 60 + 30,
+            "23:00",
+            "02:00"
+        ));
+        assert!(is_minute_in_maintenance_window(60, "23:00", "02:00"));
+        assert!(!is_minute_in_maintenance_window(12 * 60, "23:00", "02:00"));
+        assert!(is_minute_in_maintenance_window(3 * 60, "02:00", "04:00"));
+        assert!(!is_minute_in_maintenance_window(5 * 60, "02:00", "04:00"));
+        // The live local-clock path works (tz lookup must not fail/panic).
+        let all_day = agent::types::AgentPolicySettings {
+            maintenance_window_enabled: true,
+            maintenance_window_start: "00:00".into(),
+            maintenance_window_end: "23:59".into(),
+            ..Default::default()
+        };
+        assert!(is_current_maintenance_window(&all_day));
+    }
+
     #[test]
     fn ai_provider_test_uses_inline_key_before_saved_key() {
         assert_eq!(
             resolve_ai_provider_test_api_key(
                 Some("  sk-inline  ".to_string()),
-                Some("sk-saved".to_string())
+                Some("sk-saved".to_string()),
+                true
             ),
             "sk-inline"
         );
         assert_eq!(
-            resolve_ai_provider_test_api_key(Some("  ".to_string()), Some("sk-saved".to_string())),
+            resolve_ai_provider_test_api_key(
+                Some("  ".to_string()),
+                Some("sk-saved".to_string()),
+                true
+            ),
             "sk-saved"
         );
+    }
+
+    #[test]
+    fn ai_provider_test_never_sends_saved_key_to_another_endpoint() {
+        assert_eq!(
+            resolve_ai_provider_test_api_key(None, Some("sk-saved".to_string()), false),
+            ""
+        );
+        let saved = agent::types::AiProviderSettings {
+            base_url: "https://api.example.com/v1/".into(),
+            ..Default::default()
+        };
+        let same = agent::types::AiProviderSettings {
+            base_url: " HTTPS://api.example.com/v1".into(),
+            ..saved.clone()
+        };
+        let other = agent::types::AiProviderSettings {
+            base_url: "https://attacker.example/v1".into(),
+            ..saved.clone()
+        };
+        assert!(same_ai_provider_endpoint(&saved, &same));
+        assert!(!same_ai_provider_endpoint(&saved, &other));
     }
 
     #[test]
@@ -397,13 +519,24 @@ async fn ssh_connect_saved(
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    let config = state
-        .sessions
-        .lock()
-        .iter()
-        .find(|session| session.id == session_id)
-        .cloned()
-        .ok_or_else(|| "Session not found".to_string())?;
+    let config = {
+        let mut sessions = state.sessions.lock();
+        let session = sessions
+            .iter_mut()
+            .find(|session| session.id == session_id)
+            .ok_or_else(|| "Session not found".to_string())?;
+        let config = session.clone();
+        // A one-time MFA code is single-use: consume it so a later reconnect
+        // doesn't replay an expired code (Base32 TOTP secrets are kept).
+        if session
+            .totp_code
+            .as_deref()
+            .is_some_and(totp::is_one_time_code)
+        {
+            session.totp_code = None;
+        }
+        config
+    };
     let params = docker::connect_params_from_session(&config);
     if params.host.trim().is_empty() {
         return Err("SSH host is empty".to_string());
@@ -678,13 +811,127 @@ async fn sftp_upload_dir(
         .await
 }
 
+/// File extensions the OS would *execute* (or install/mount/run as a script)
+/// rather than display when handed to the default handler. Opening a remote
+/// file of one of these types requires an explicit confirmation first.
+const EXECUTABLE_LIKE_EXTENSIONS: &[&str] = &[
+    // Windows
+    "exe",
+    "com",
+    "bat",
+    "cmd",
+    "ps1",
+    "psm1",
+    "psd1",
+    "vbs",
+    "vbe",
+    "js",
+    "jse",
+    "wsf",
+    "wsh",
+    "hta",
+    "msi",
+    "msp",
+    "mst",
+    "scr",
+    "pif",
+    "lnk",
+    "reg",
+    "cpl",
+    "msc",
+    "jar",
+    "application",
+    "appref-ms",
+    "gadget",
+    "inf",
+    "scf",
+    "url",
+    "chm",
+    "appx",
+    "msix",
+    "library-ms",
+    // macOS
+    "app",
+    "command",
+    "tool",
+    "pkg",
+    "mpkg",
+    "terminal",
+    "workflow",
+    "scpt",
+    "applescript",
+    "webloc",
+    "fileloc",
+    "inetloc",
+    "dmg",
+    // Linux / generic
+    "desktop",
+    "sh",
+    "bash",
+    "zsh",
+    "run",
+    "bin",
+    "appimage",
+    "deb",
+    "rpm",
+    "py",
+    "pl",
+    "rb",
+];
+
+/// The lower-cased extension of `file_name` when it is executable-like.
+fn executable_like_extension(file_name: &str) -> Option<String> {
+    let (_, ext) = file_name.rsplit_once('.')?;
+    let ext = ext.trim().to_ascii_lowercase();
+    EXECUTABLE_LIKE_EXTENSIONS
+        .contains(&ext.as_str())
+        .then_some(ext)
+}
+
+/// Per-user, non-shared directory for files opened from the SFTP panel. Lives
+/// under the user cache dir (not the shared `/tmp`), is `0700` on Unix, and is
+/// wiped at startup (`cleanup_sftp_open_cache`).
+fn sftp_open_cache_dir() -> Result<std::path::PathBuf, String> {
+    let dir = dirs::cache_dir()
+        .or_else(dirs::data_local_dir)
+        .ok_or("Cannot determine cache directory")?
+        .join("gwshell")
+        .join("sftp-open");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Create cache dir failed: {}", e))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))
+            .map_err(|e| format!("Secure cache dir failed: {}", e))?;
+    }
+    Ok(dir)
+}
+
+/// Best-effort removal of files opened in previous runs, including the legacy
+/// shared `{temp}/gwshell_sftp` location used before v0.6.1. `remove_dir_all`
+/// does not follow symlinks, so a planted link is unlinked, never traversed.
+fn cleanup_sftp_open_cache() {
+    if let Some(cache) = dirs::cache_dir().or_else(dirs::data_local_dir) {
+        let _ = std::fs::remove_dir_all(cache.join("gwshell").join("sftp-open"));
+    }
+    let _ = std::fs::remove_dir_all(std::env::temp_dir().join("gwshell_sftp"));
+}
+
+/// Download a remote file to the private cache dir and open it with the OS
+/// default handler. Executable-like files are refused with
+/// `OPEN_EXECUTABLE_CONFIRM:<ext>` unless `allow_executable` is set (the UI
+/// asks the user first). Opening happens here rather than in the WebView so the
+/// frontend needs no blanket `opener:allow-open-path` permission.
 #[tauri::command]
 async fn sftp_open_file(
     session_id: String,
     remote_path: String,
+    allow_executable: Option<bool>,
     state: State<'_, Arc<AppState>>,
+    app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     use std::hash::{Hash, Hasher};
+    use tauri_plugin_opener::OpenerExt;
     // Remote paths are POSIX; derive the basename by splitting on '/' rather
     // than std::path::Path, which would apply Windows separator rules on a
     // Windows host (a backslash is a legal char in a Linux filename).
@@ -692,21 +939,34 @@ async fn sftp_open_file(
         .rsplit('/')
         .find(|s| !s.is_empty())
         .unwrap_or("file");
+    if !ssh::is_safe_local_file_name(file_name) {
+        return Err(format!(
+            "Remote file name {:?} cannot be used as a local file name",
+            file_name
+        ));
+    }
+    if let Some(ext) = executable_like_extension(file_name) {
+        if !allow_executable.unwrap_or(false) {
+            return Err(format!("OPEN_EXECUTABLE_CONFIRM:{}", ext));
+        }
+    }
     // Namespace by a hash of session + full remote path so two different
-    // remote files that share a basename don't clobber the same temp file.
+    // remote files that share a basename don't clobber the same local file.
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     session_id.hash(&mut hasher);
     remote_path.hash(&mut hasher);
-    let temp_dir = std::env::temp_dir()
-        .join("gwshell_sftp")
-        .join(format!("{:016x}", hasher.finish()));
-    std::fs::create_dir_all(&temp_dir).map_err(|e| format!("Create temp dir failed: {}", e))?;
-    let local_path = temp_dir.join(file_name);
+    let dir = sftp_open_cache_dir()?.join(format!("{:016x}", hasher.finish()));
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Create cache dir failed: {}", e))?;
+    let local_path = dir.join(file_name);
     let local_str = local_path.to_string_lossy().to_string();
     state
         .ssh_manager
         .sftp_download(&session_id, &remote_path, &local_str, None)
         .await?;
+    app_handle
+        .opener()
+        .open_path(local_str.clone(), None::<&str>)
+        .map_err(|e| format!("Open file failed: {}", e))?;
     Ok(local_str)
 }
 
@@ -959,15 +1219,31 @@ async fn clear_ai_provider_api_key(state: State<'_, Arc<AppState>>) -> Result<()
         .map_err(|e| format!("task join: {}", e))?
 }
 
+/// Pick the key for a "test connection" run with (possibly unsaved) settings.
+/// The SAVED key is only ever sent to the SAVED endpoint: otherwise any caller
+/// of `test_ai_provider_with_settings` could point `base_url` at an arbitrary
+/// server and receive the stored key in the Authorization header, defeating
+/// "the API key never leaves the backend except to the configured provider".
 fn resolve_ai_provider_test_api_key(
     inline_api_key: Option<String>,
     stored_api_key: Option<String>,
+    stored_key_matches_endpoint: bool,
 ) -> String {
     inline_api_key
         .filter(|key| !key.trim().is_empty())
         .map(|key| key.trim().to_string())
-        .or(stored_api_key)
+        .or(stored_api_key.filter(|_| stored_key_matches_endpoint))
         .unwrap_or_default()
+}
+
+/// Whether two provider configs address the same endpoint (provider kind +
+/// base URL, ignoring surrounding whitespace, trailing slashes and case).
+fn same_ai_provider_endpoint(
+    a: &agent::types::AiProviderSettings,
+    b: &agent::types::AiProviderSettings,
+) -> bool {
+    let norm = |url: &str| url.trim().trim_end_matches('/').to_ascii_lowercase();
+    a.provider == b.provider && norm(&a.base_url) == norm(&b.base_url)
 }
 
 #[tauri::command]
@@ -1014,12 +1290,25 @@ async fn test_ai_provider_with_settings(
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
     let state = state.inner().clone();
-    let stored_api_key =
-        tokio::task::spawn_blocking(move || agent::provider::load_api_key(&state.db))
-            .await
-            .map_err(|e| format!("task join: {}", e))??;
-    let api_key = resolve_ai_provider_test_api_key(api_key, stored_api_key);
+    let (saved_settings, stored_api_key) =
+        tokio::task::spawn_blocking(move || -> Result<_, String> {
+            Ok((
+                agent::provider::load_settings(&state.db)?,
+                agent::provider::load_api_key(&state.db)?,
+            ))
+        })
+        .await
+        .map_err(|e| format!("task join: {}", e))??;
+    let matches_saved = same_ai_provider_endpoint(&settings, &saved_settings);
+    let has_inline_key = api_key.as_deref().is_some_and(|k| !k.trim().is_empty());
+    let api_key = resolve_ai_provider_test_api_key(api_key, stored_api_key, matches_saved);
     if agent::provider::provider_requires_api_key(&settings) && api_key.trim().is_empty() {
+        if !matches_saved && !has_inline_key {
+            return Err(
+                "Enter the API key to test this endpoint: the saved key is only sent to the saved provider URL"
+                    .to_string(),
+            );
+        }
         return Err("AI API key is not configured".to_string());
     }
 
@@ -1818,33 +2107,56 @@ fn should_auto_execute_agent_action_with_policy(
     if policy.maintenance_window_enabled && !is_current_maintenance_window(policy) {
         return false;
     }
-    if !policy.auto_execute_service_denylist.is_empty()
-        && action.tool == agent::types::AgentToolName::RestartService
-        && action
-            .payload
-            .get("service")
-            .and_then(|value| value.as_str())
-            .is_some_and(|service| {
-                policy
-                    .auto_execute_service_denylist
-                    .iter()
-                    .any(|blocked| !blocked.trim().is_empty() && service.contains(blocked.trim()))
-            })
-    {
-        return false;
+    let command = action
+        .payload
+        .get("command")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    if !policy.auto_execute_service_denylist.is_empty() {
+        // The denylist protects a service from being touched automatically by
+        // ANY route: the RestartService tool, or a RunCommand that reloads /
+        // restarts it via systemctl (`systemctl reload x` is Low risk and
+        // would otherwise auto-execute regardless of the denylist).
+        let service = match action.tool {
+            agent::types::AgentToolName::RestartService => action
+                .payload
+                .get("service")
+                .and_then(|value| value.as_str())
+                .map(str::to_string),
+            agent::types::AgentToolName::RunCommand => agent::risk::systemctl_unit(
+                command,
+                &[
+                    "reload",
+                    "restart",
+                    "try-restart",
+                    "reload-or-restart",
+                    "try-reload-or-restart",
+                    "stop",
+                    "kill",
+                ],
+            ),
+            _ => None,
+        };
+        if let Some(service) = service {
+            let service = service.to_ascii_lowercase();
+            if policy.auto_execute_service_denylist.iter().any(|blocked| {
+                let blocked = blocked.trim().to_ascii_lowercase();
+                !blocked.is_empty() && service.contains(&blocked)
+            }) {
+                return false;
+            }
+        }
     }
     if !policy.auto_execute_command_allowlist.is_empty()
         && action.tool == agent::types::AgentToolName::RunCommand
     {
-        let command = action
-            .payload
-            .get("command")
-            .and_then(|value| value.as_str())
-            .unwrap_or("");
+        // Word-prefix match after sudo/env stripping: allowing `systemctl
+        // status` admits `systemctl status nginx`, not any command that merely
+        // contains those words somewhere.
         if !policy
             .auto_execute_command_allowlist
             .iter()
-            .any(|allowed| !allowed.trim().is_empty() && command.contains(allowed.trim()))
+            .any(|allowed| agent::risk::command_matches_prefix(command, allowed))
         {
             return false;
         }
@@ -1858,10 +2170,11 @@ fn should_auto_execute_agent_action_with_policy(
 }
 
 fn is_current_maintenance_window(policy: &agent::types::AgentPolicySettings) -> bool {
-    let now_minutes = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
-        Ok(duration) => ((duration.as_secs() / 60) % 1440) as u16,
-        Err(_) => return false,
-    };
+    // The settings UI takes the window as local wall-clock HH:MM, so compare
+    // against LOCAL time (previously UTC, shifting the window by the user's
+    // UTC offset — 8 hours for UTC+8).
+    let now = jiff::ZonedDateTime::now();
+    let now_minutes = (now.hour() as u16) * 60 + now.minute() as u16;
     is_minute_in_maintenance_window(
         now_minutes,
         &policy.maintenance_window_start,
@@ -2192,10 +2505,12 @@ async fn import_sessions_data(
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || -> Result<usize, String> {
         let json = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let count = state.db.import_sessions_json(&json)?;
+        let mut sessions = state.sessions.lock();
+        // Exports never contain secrets, so re-importing a backup over existing
+        // sessions must keep their stored credentials (see merge_secrets_from).
+        let count = state.db.import_sessions_json(&json, &sessions)?;
         // Reload sessions into memory
-        let sessions = state.db.get_sessions()?;
-        *state.sessions.lock() = sessions;
+        *sessions = state.db.get_sessions()?;
         Ok(count)
     })
     .await
@@ -2299,13 +2614,17 @@ async fn clear_local_data(state: State<'_, Arc<AppState>>) -> Result<(), String>
 
 #[tauri::command]
 async fn save_session(
-    config: SessionConfig,
+    mut config: SessionConfig,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || -> Result<(), String> {
-        state.db.save_session(&config)?;
+        // Hold the cache lock across merge + persist so a concurrent save of
+        // the same session can't interleave and resurrect/lose a secret.
         let mut sessions = state.sessions.lock();
+        // The WebView only has redacted copies: unset secrets mean "unchanged".
+        config.merge_secrets_from(sessions.iter().find(|s| s.id == config.id));
+        state.db.save_session(&config)?;
         if let Some(existing) = sessions.iter_mut().find(|s| s.id == config.id) {
             *existing = config;
         } else {
@@ -2353,14 +2672,15 @@ fn secret_storage_available() -> bool {
 // stay encrypted by the keyring master key in crypto.rs. Forgetting the
 // passphrase therefore never loses data (the vault can simply be reset).
 
-/// Set or change the vault passphrase (stores a fresh Argon2id verifier).
+/// Enable the vault (stores a fresh Argon2id verifier). Fails if the vault is
+/// already enabled — changing the passphrase requires `vault_change_passphrase`.
 #[tauri::command]
 async fn vault_set_passphrase(
     passphrase: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
     let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || vault::set_passphrase(&state.db, &passphrase))
+    tokio::task::spawn_blocking(move || vault::enable(&state.db, &passphrase))
         .await
         .map_err(|e| format!("task join: {}", e))?
 }
@@ -2428,6 +2748,8 @@ pub fn run() {
     std::thread::spawn(|| {
         let _ = crypto::secret_storage_available();
     });
+    // Files opened from the SFTP panel in earlier runs are throwaway copies.
+    std::thread::spawn(cleanup_sftp_open_cache);
 
     let db = Database::new().expect("Failed to initialize database");
     let initial_sessions = db.get_sessions().unwrap_or_default();
@@ -2456,7 +2778,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(app_state)

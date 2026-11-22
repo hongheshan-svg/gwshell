@@ -152,15 +152,22 @@ async fn try_keyboard_interactive(
                         "Keyboard-interactive auth exceeded the prompt-round limit".to_string()
                     );
                 }
-                // Auto-fill password for the first prompt, TOTP for any extra prompt.
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
                 let answers: Vec<String> = prompts
                     .iter()
                     .enumerate()
-                    .map(|(i, _)| {
-                        if i == 0 {
-                            p.password.clone().unwrap_or_default()
-                        } else {
-                            p.totp_code.clone().unwrap_or_default()
+                    .map(|(i, prompt)| {
+                        let first_prompt_overall = rounds == 1 && i == 0;
+                        match classify_prompt(&prompt.prompt, first_prompt_overall) {
+                            PromptKind::Password => p.password.clone().unwrap_or_default(),
+                            PromptKind::Otp => p
+                                .totp_code
+                                .as_deref()
+                                .map(|v| crate::totp::answer_for(v, now))
+                                .unwrap_or_default(),
                         }
                     })
                     .collect();
@@ -170,5 +177,81 @@ async fn try_keyboard_interactive(
                     .map_err(|e| format!("Keyboard-interactive response failed: {}", e))?;
             }
         }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum PromptKind {
+    Password,
+    Otp,
+}
+
+/// Decide what a keyboard-interactive prompt is asking for from its text.
+/// Servers commonly ask in SEPARATE rounds ("Password:" then "Verification
+/// code:"), each a prompt at index 0 — so a purely positional rule sent the
+/// password again where the one-time code was expected. Unrecognized prompts
+/// fall back to: very first prompt = password, anything later = OTP.
+fn classify_prompt(prompt: &str, first_prompt_overall: bool) -> PromptKind {
+    let text = prompt.to_lowercase();
+    if ["password", "passphrase", "密码", "口令"]
+        .iter()
+        .any(|k| text.contains(k))
+    {
+        return PromptKind::Password;
+    }
+    if [
+        "verification",
+        "code",
+        "otp",
+        "token",
+        "authenticator",
+        "one-time",
+        "2fa",
+        "mfa",
+        "totp",
+        "验证码",
+        "动态",
+    ]
+    .iter()
+    .any(|k| text.contains(k))
+    {
+        return PromptKind::Otp;
+    }
+    if first_prompt_overall {
+        PromptKind::Password
+    } else {
+        PromptKind::Otp
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prompts_are_matched_by_text_across_rounds() {
+        assert_eq!(classify_prompt("Password: ", true), PromptKind::Password);
+        // Second round, index 0 again: must get the OTP, not the password.
+        assert_eq!(
+            classify_prompt("Verification code: ", false),
+            PromptKind::Otp
+        );
+        assert_eq!(
+            classify_prompt("Verification code: ", true),
+            PromptKind::Otp
+        );
+        assert_eq!(classify_prompt("请输入验证码：", false), PromptKind::Otp);
+        assert_eq!(
+            classify_prompt("root@host's password:", false),
+            PromptKind::Password
+        );
+        // RSA SecurID-style PASSCODE (PIN + token code) is a dynamic code.
+        assert_eq!(
+            classify_prompt("Enter PASSCODE for alice", true),
+            PromptKind::Otp
+        );
+        // Unknown prompt text falls back to position.
+        assert_eq!(classify_prompt("> ", true), PromptKind::Password);
+        assert_eq!(classify_prompt("> ", false), PromptKind::Otp);
     }
 }

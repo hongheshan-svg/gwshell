@@ -26,11 +26,58 @@ enum EntryName {
 fn classify_entry_name(name: &str) -> EntryName {
     if name.is_empty() || name == "." || name == ".." {
         EntryName::Skip
-    } else if name.contains('/') || name.contains('\\') || name.contains('\0') {
+    } else if name.contains('/')
+        || name.contains('\\')
+        || name.contains('\0')
+        || !is_single_normal_component(name)
+        || (cfg!(windows) && is_unsafe_windows_name(name))
+    {
         EntryName::Unsafe
     } else {
         EntryName::Ok
     }
+}
+
+/// Whether a remote-supplied file name can be used verbatim as a single local
+/// path component (no traversal, drive prefixes, or Windows device names).
+pub fn is_safe_local_file_name(name: &str) -> bool {
+    classify_entry_name(name) == EntryName::Ok
+}
+
+/// Whether `name`, parsed with the HOST platform's path rules, is exactly one
+/// plain file-name component. Catches what separator checks alone miss — on
+/// Windows `C:evil.dll` parses as a drive prefix + name, and `Path::join`
+/// would then discard the download root entirely.
+fn is_single_normal_component(name: &str) -> bool {
+    use std::path::Component;
+    let mut components = Path::new(name).components();
+    matches!(
+        (components.next(), components.next()),
+        (Some(Component::Normal(_)), None)
+    )
+}
+
+/// Windows-only hazards in an otherwise single-component name: `:` (drive
+/// prefixes / NTFS alternate data streams), reserved device names (`CON`,
+/// `NUL`, `COM1`, … with or without an extension), and trailing dots/spaces
+/// (silently stripped by Win32, so the written name differs from the checked
+/// one).
+fn is_unsafe_windows_name(name: &str) -> bool {
+    if name.contains(':') || name.ends_with('.') || name.ends_with(' ') {
+        return true;
+    }
+    let stem = name
+        .split('.')
+        .next()
+        .unwrap_or(name)
+        .trim_end()
+        .to_ascii_uppercase();
+    matches!(
+        stem.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+    ) || ((stem.starts_with("COM") || stem.starts_with("LPT"))
+        && stem.len() == 4
+        && stem.as_bytes()[3].is_ascii_digit())
 }
 
 /// A single remote directory entry, in the exact shape the SFTP panel expects.
@@ -306,6 +353,13 @@ pub async fn download_dir(
     if base_name.is_empty() {
         return Err("Cannot download the filesystem root".into());
     }
+    // The remote folder's own name becomes a local path component too.
+    if classify_entry_name(base_name) != EntryName::Ok {
+        return Err(format!(
+            "Remote folder name {:?} cannot be used as a local folder name",
+            base_name
+        ));
+    }
     let local_root = Path::new(local_parent).join(base_name);
 
     // Walk the remote tree first (creating local dirs as we go) so the
@@ -448,6 +502,46 @@ mod tests {
     fn dot_entries_are_skipped_not_fatal() {
         for name in [".", "..", ""] {
             assert_eq!(classify_entry_name(name), EntryName::Skip, "{:?}", name);
+        }
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn windows_prefix_ads_and_device_names_are_unsafe() {
+        for name in [
+            "C:evil.dll",
+            "file.txt:stream",
+            "CON",
+            "nul.txt",
+            "COM1",
+            "lpt9.log",
+            "trail.",
+            "trail ",
+        ] {
+            assert_eq!(classify_entry_name(name), EntryName::Unsafe, "{:?}", name);
+        }
+        for name in ["COM10", "console.log", "LPT", "a.con"] {
+            assert_eq!(classify_entry_name(name), EntryName::Ok, "{:?}", name);
+        }
+    }
+
+    #[test]
+    fn windows_name_rules_are_correct_on_every_host() {
+        // The Windows checks are exercised everywhere so they stay tested on
+        // the Unix CI runners too (they only gate classification on Windows).
+        for name in [
+            "C:evil.dll",
+            "f.txt:ads",
+            "CON",
+            "nul.txt",
+            "COM1",
+            "x.",
+            "x ",
+        ] {
+            assert!(is_unsafe_windows_name(name), "{:?}", name);
+        }
+        for name in ["COM10", "console.log", "LPT", "a.con", "file.txt"] {
+            assert!(!is_unsafe_windows_name(name), "{:?}", name);
         }
     }
 

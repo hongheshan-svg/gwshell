@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { save, open } from '@tauri-apps/plugin-dialog';
-import { openPath } from '@tauri-apps/plugin-opener';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   Folder,
@@ -408,14 +407,37 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
 
   const handleOpenLocal = (entry: SftpEntry) =>
     runExclusive(async () => {
-      try {
-        const tempPath = await invoke<string>('sftp_open_file', {
+      // The backend downloads the file to a private cache dir and opens it
+      // with the OS default handler. Executable-like types (.exe/.bat/.vbs/
+      // .app/.sh …) are refused until the user explicitly confirms.
+      const open = (allowExecutable: boolean) =>
+        invoke<string>('sftp_open_file', {
           sessionId,
           remotePath: entry.path,
+          allowExecutable,
         });
-        await openPath(tempPath);
+      try {
+        await open(false);
       } catch (err) {
-        setError(String(err));
+        const message = String(err);
+        const marker = 'OPEN_EXECUTABLE_CONFIRM:';
+        if (!message.includes(marker)) {
+          setError(message);
+          return;
+        }
+        const ext = message.slice(message.indexOf(marker) + marker.length).trim();
+        const ok = await confirm({
+          title: t('sftp_open_executable_title'),
+          message: t('sftp_open_executable_body', { name: entry.name, ext }),
+          confirmLabel: t('sftp_open_executable_confirm'),
+          danger: true,
+        });
+        if (!ok) return;
+        try {
+          await open(true);
+        } catch (retryErr) {
+          setError(String(retryErr));
+        }
       }
     });
 
