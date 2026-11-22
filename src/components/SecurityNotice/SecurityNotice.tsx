@@ -4,11 +4,12 @@ import { invoke } from '@tauri-apps/api/core';
 import { useToast } from '../../hooks/useToast';
 
 /**
- * One-time warning shown when the OS keyring is unavailable, in which case the
- * backend stores SSH/proxy passwords and TOTP secrets UNENCRYPTED in the local
- * database. Without this the degradation is silent. Only triggers on hosts
- * without a keyring backend (e.g. headless/minimal Linux); macOS and Windows
- * have native backends and never see it.
+ * One-time warning shown when secrets cannot be encrypted at rest — no OS
+ * keyring backend (e.g. headless/minimal Linux), or the keyring master key
+ * exists but could not be read this run. In that case the backend does NOT
+ * save SSH/proxy passwords or TOTP secrets at all (they are stored empty;
+ * plaintext never reaches the database), so the user must re-enter them when
+ * connecting. Without this notice the degradation would be silent.
  */
 const DISMISSED_KEY = 'gwshell.securityNoticeDismissed';
 

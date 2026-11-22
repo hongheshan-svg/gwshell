@@ -20,7 +20,7 @@ import {
 
 // Heavy / interaction-only chunks: deferred until the user actually needs them.
 // On startup we only render the shell + asset list — every other resource (xterm,
-// SFTP editor, plugin-dialog, plugin-opener, deep-link, modals) loads on demand.
+// SFTP editor, plugin-dialog, modals) loads on demand.
 const TerminalContainer = lazy(() =>
   import('./components/Terminal/TerminalContainer').then((m) => ({ default: m.TerminalContainer })),
 );

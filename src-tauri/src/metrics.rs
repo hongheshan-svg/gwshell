@@ -351,186 +351,6 @@ pub fn cpu_breakdown(prev: CpuTimes, cur: CpuTimes) -> (f64, f64, f64) {
     )
 }
 
-// ---- Tests ----
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// End-to-end parse of the full Server-panel probe against REAL `/proc`
-    /// output captured from a Linux host (Debian bookworm, via Docker). Drives
-    /// two samples through `build_snapshot` so the CPU% and byte-rate deltas
-    /// are actually exercised — this is the data the Server panel renders.
-    #[test]
-    fn build_snapshot_parses_real_linux_proc_capture() {
-        let s1 = include_str!("testdata/proc_sample1.txt");
-        let s2 = include_str!("testdata/proc_sample2.txt");
-        let last = Arc::new(Mutex::new(StdHashMap::new()));
-        let static_host = Arc::new(Mutex::new(StdHashMap::new()));
-        let sid = "test-session";
-
-        // First sample primes the CPU-jiffie / net-byte baselines.
-        let _ = build_snapshot(s1, sid, &last, &static_host);
-        // Second sample (captured ~2s later) yields real deltas.
-        let snap = build_snapshot(s2, sid, &last, &static_host);
-
-        let cpu = snap.cpu.expect("CPU section parsed");
-        assert!(
-            (0.0..=100.0).contains(&cpu.total_percent),
-            "cpu total% in range, got {}",
-            cpu.total_percent
-        );
-        assert!(!cpu.per_core.is_empty(), "per-core CPU parsed");
-
-        let mem = snap.mem.expect("MEM section parsed");
-        assert!(mem.mem_total_bytes > 0, "mem total > 0");
-        assert!(
-            mem.mem_used_bytes > 0 && mem.mem_used_bytes <= mem.mem_total_bytes,
-            "mem used in (0, total]"
-        );
-
-        assert!(snap.net.is_some(), "NET section parsed");
-
-        let procs = snap.procs.expect("PROC section parsed");
-        assert!(!procs.is_empty(), "process list non-empty");
-
-        let nics = snap.nics.expect("NIC section parsed");
-        assert!(!nics.is_empty(), "NIC list non-empty");
-    }
-
-    #[test]
-    fn parses_cpu_line() {
-        let t = parse_cpu_line("cpu  100 10 50 800 5 2 3 1 0 0").unwrap();
-        assert_eq!(t.user, 100);
-        assert_eq!(t.idle, 800);
-        assert_eq!(t.iowait, 5);
-        assert_eq!(t.total(), 971);
-        assert_eq!(t.active(), 971 - 800 - 5);
-    }
-
-    #[test]
-    fn rejects_non_cpu_line() {
-        assert!(parse_cpu_line("ctxt 12345").is_none());
-    }
-
-    #[test]
-    fn parses_full_proc_stat() {
-        let text = "cpu  100 10 50 800 5 2 3 1\ncpu0 50 5 25 400 2 1 1 0\ncpu1 50 5 25 400 3 1 2 1\nctxt 9999\nbtime 1\n";
-        let (total, cores) = parse_proc_stat(text).unwrap();
-        assert_eq!(total.user, 100);
-        assert_eq!(cores.len(), 2);
-        assert_eq!(cores[0].user, 50);
-    }
-
-    #[test]
-    fn parses_meminfo_totals() {
-        let text = "MemTotal:        4000000 kB\nMemFree:         1000000 kB\nMemAvailable:    3000000 kB\nSwapTotal:       1000000 kB\nSwapFree:         900000 kB\n";
-        let m = parse_meminfo(text);
-        assert_eq!(m.mem_total_bytes, 4000000 * 1024);
-        assert_eq!(m.mem_used_bytes, (4000000 - 3000000) * 1024);
-        assert_eq!(m.swap_total_bytes, 1000000 * 1024);
-        assert_eq!(m.swap_used_bytes, (1000000 - 900000) * 1024);
-    }
-
-    #[test]
-    fn parses_net_dev_skipping_loopback() {
-        let text = "Inter-|   Receive                                                |  Transmit\n face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n    lo: 1000 10 0 0 0 0 0 0 1000 10 0 0 0 0 0 0\n  eth0: 5000 50 0 0 0 0 0 0 2500 25 0 0 0 0 0 0\n";
-        let out = parse_net_dev(text);
-        assert!(!out.contains_key("lo"));
-        assert_eq!(out.get("eth0"), Some(&(5000u64, 2500u64)));
-    }
-
-    #[test]
-    fn parses_ps_output() {
-        let text = "    PID %CPU %MEM   RSS COMMAND\n   1234  5.0  1.2 20480 bash\n   5678  2.0  0.5 10240 sshd\n";
-        let v = parse_ps(text);
-        assert_eq!(v.len(), 2);
-        assert_eq!(v[0].pid, 1234);
-        assert_eq!(v[0].comm, "bash");
-        assert!((v[0].cpu_percent - 5.0).abs() < 1e-6);
-    }
-
-    #[test]
-    fn parses_ps_comm_with_spaces() {
-        let text = "    PID %CPU %MEM   RSS COMMAND\n   42  1.0  0.1  2048 my worker\n";
-        let v = parse_ps(text);
-        assert_eq!(v.len(), 1);
-        assert_eq!(v[0].comm, "my worker");
-    }
-
-    #[test]
-    fn parses_os_pretty_name() {
-        let text = "NAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nPRETTY_NAME=\"Ubuntu 24.04.4 LTS\"\nID=ubuntu\n";
-        assert_eq!(parse_os_pretty(text), "Ubuntu 24.04.4 LTS");
-    }
-
-    #[test]
-    fn parses_loadavg_triple() {
-        assert_eq!(
-            parse_loadavg("0.12 0.34 0.56 1/123 4567\n"),
-            (0.12, 0.34, 0.56)
-        );
-    }
-
-    #[test]
-    fn parses_df_output() {
-        let text = "Filesystem     1024-blocks     Used Available Capacity Mounted on\n/dev/sda1         41251136 12345678  26800000      32% /\n";
-        let d = parse_df(text).expect("parse_df should succeed");
-        assert_eq!(d.total_bytes, 41251136u64 * 1024);
-        assert_eq!(d.used_bytes, 12345678u64 * 1024);
-        assert_eq!(d.mount, "/");
-    }
-
-    #[test]
-    fn parse_df_returns_none_on_header_only() {
-        let text = "Filesystem     1024-blocks     Used Available Capacity Mounted on\n";
-        assert!(parse_df(text).is_none());
-    }
-
-    #[test]
-    fn parses_ip_addr_lines() {
-        let text = "1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever preferred_lft forever\n2: eth0    inet 10.0.0.5/24 scope global eth0\\       valid_lft forever preferred_lft forever\n";
-        let out = parse_ip_addr(text);
-        assert!(!out.contains_key("lo"));
-        assert_eq!(out.get("eth0"), Some(&"10.0.0.5".to_string()));
-    }
-
-    #[test]
-    fn parses_ip_link_lines() {
-        let text = "2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000\\    link/ether aa:bb:cc:dd:ee:ff brd ff:ff:ff:ff:ff:ff\n";
-        let out = parse_ip_link(text);
-        assert_eq!(out.get("eth0"), Some(&"aa:bb:cc:dd:ee:ff".to_string()));
-    }
-
-    #[test]
-    fn cpu_percent_is_zero_on_idle() {
-        let prev = CpuTimes {
-            idle: 100,
-            ..Default::default()
-        };
-        let cur = CpuTimes {
-            idle: 200,
-            ..Default::default()
-        };
-        assert_eq!(cpu_percent(prev, cur), 0.0);
-    }
-
-    #[test]
-    fn cpu_percent_is_hundred_on_full_load() {
-        let prev = CpuTimes {
-            user: 0,
-            idle: 100,
-            ..Default::default()
-        };
-        let cur = CpuTimes {
-            user: 100,
-            idle: 100,
-            ..Default::default()
-        };
-        assert_eq!(cpu_percent(prev, cur), 100.0);
-    }
-}
-
 // ---- MetricsManager (live polling against a remote SSH session) ----
 
 use crate::ssh::SshManager;
@@ -1004,5 +824,185 @@ pub fn build_snapshot(
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis() as i64)
             .unwrap_or(0),
+    }
+}
+
+// ---- Tests ----
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// End-to-end parse of the full Server-panel probe against REAL `/proc`
+    /// output captured from a Linux host (Debian bookworm, via Docker). Drives
+    /// two samples through `build_snapshot` so the CPU% and byte-rate deltas
+    /// are actually exercised — this is the data the Server panel renders.
+    #[test]
+    fn build_snapshot_parses_real_linux_proc_capture() {
+        let s1 = include_str!("testdata/proc_sample1.txt");
+        let s2 = include_str!("testdata/proc_sample2.txt");
+        let last = Arc::new(Mutex::new(StdHashMap::new()));
+        let static_host = Arc::new(Mutex::new(StdHashMap::new()));
+        let sid = "test-session";
+
+        // First sample primes the CPU-jiffie / net-byte baselines.
+        let _ = build_snapshot(s1, sid, &last, &static_host);
+        // Second sample (captured ~2s later) yields real deltas.
+        let snap = build_snapshot(s2, sid, &last, &static_host);
+
+        let cpu = snap.cpu.expect("CPU section parsed");
+        assert!(
+            (0.0..=100.0).contains(&cpu.total_percent),
+            "cpu total% in range, got {}",
+            cpu.total_percent
+        );
+        assert!(!cpu.per_core.is_empty(), "per-core CPU parsed");
+
+        let mem = snap.mem.expect("MEM section parsed");
+        assert!(mem.mem_total_bytes > 0, "mem total > 0");
+        assert!(
+            mem.mem_used_bytes > 0 && mem.mem_used_bytes <= mem.mem_total_bytes,
+            "mem used in (0, total]"
+        );
+
+        assert!(snap.net.is_some(), "NET section parsed");
+
+        let procs = snap.procs.expect("PROC section parsed");
+        assert!(!procs.is_empty(), "process list non-empty");
+
+        let nics = snap.nics.expect("NIC section parsed");
+        assert!(!nics.is_empty(), "NIC list non-empty");
+    }
+
+    #[test]
+    fn parses_cpu_line() {
+        let t = parse_cpu_line("cpu  100 10 50 800 5 2 3 1 0 0").unwrap();
+        assert_eq!(t.user, 100);
+        assert_eq!(t.idle, 800);
+        assert_eq!(t.iowait, 5);
+        assert_eq!(t.total(), 971);
+        assert_eq!(t.active(), 971 - 800 - 5);
+    }
+
+    #[test]
+    fn rejects_non_cpu_line() {
+        assert!(parse_cpu_line("ctxt 12345").is_none());
+    }
+
+    #[test]
+    fn parses_full_proc_stat() {
+        let text = "cpu  100 10 50 800 5 2 3 1\ncpu0 50 5 25 400 2 1 1 0\ncpu1 50 5 25 400 3 1 2 1\nctxt 9999\nbtime 1\n";
+        let (total, cores) = parse_proc_stat(text).unwrap();
+        assert_eq!(total.user, 100);
+        assert_eq!(cores.len(), 2);
+        assert_eq!(cores[0].user, 50);
+    }
+
+    #[test]
+    fn parses_meminfo_totals() {
+        let text = "MemTotal:        4000000 kB\nMemFree:         1000000 kB\nMemAvailable:    3000000 kB\nSwapTotal:       1000000 kB\nSwapFree:         900000 kB\n";
+        let m = parse_meminfo(text);
+        assert_eq!(m.mem_total_bytes, 4000000 * 1024);
+        assert_eq!(m.mem_used_bytes, (4000000 - 3000000) * 1024);
+        assert_eq!(m.swap_total_bytes, 1000000 * 1024);
+        assert_eq!(m.swap_used_bytes, (1000000 - 900000) * 1024);
+    }
+
+    #[test]
+    fn parses_net_dev_skipping_loopback() {
+        let text = "Inter-|   Receive                                                |  Transmit\n face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n    lo: 1000 10 0 0 0 0 0 0 1000 10 0 0 0 0 0 0\n  eth0: 5000 50 0 0 0 0 0 0 2500 25 0 0 0 0 0 0\n";
+        let out = parse_net_dev(text);
+        assert!(!out.contains_key("lo"));
+        assert_eq!(out.get("eth0"), Some(&(5000u64, 2500u64)));
+    }
+
+    #[test]
+    fn parses_ps_output() {
+        let text = "    PID %CPU %MEM   RSS COMMAND\n   1234  5.0  1.2 20480 bash\n   5678  2.0  0.5 10240 sshd\n";
+        let v = parse_ps(text);
+        assert_eq!(v.len(), 2);
+        assert_eq!(v[0].pid, 1234);
+        assert_eq!(v[0].comm, "bash");
+        assert!((v[0].cpu_percent - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn parses_ps_comm_with_spaces() {
+        let text = "    PID %CPU %MEM   RSS COMMAND\n   42  1.0  0.1  2048 my worker\n";
+        let v = parse_ps(text);
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].comm, "my worker");
+    }
+
+    #[test]
+    fn parses_os_pretty_name() {
+        let text = "NAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nPRETTY_NAME=\"Ubuntu 24.04.4 LTS\"\nID=ubuntu\n";
+        assert_eq!(parse_os_pretty(text), "Ubuntu 24.04.4 LTS");
+    }
+
+    #[test]
+    fn parses_loadavg_triple() {
+        assert_eq!(
+            parse_loadavg("0.12 0.34 0.56 1/123 4567\n"),
+            (0.12, 0.34, 0.56)
+        );
+    }
+
+    #[test]
+    fn parses_df_output() {
+        let text = "Filesystem     1024-blocks     Used Available Capacity Mounted on\n/dev/sda1         41251136 12345678  26800000      32% /\n";
+        let d = parse_df(text).expect("parse_df should succeed");
+        assert_eq!(d.total_bytes, 41251136u64 * 1024);
+        assert_eq!(d.used_bytes, 12345678u64 * 1024);
+        assert_eq!(d.mount, "/");
+    }
+
+    #[test]
+    fn parse_df_returns_none_on_header_only() {
+        let text = "Filesystem     1024-blocks     Used Available Capacity Mounted on\n";
+        assert!(parse_df(text).is_none());
+    }
+
+    #[test]
+    fn parses_ip_addr_lines() {
+        let text = "1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever preferred_lft forever\n2: eth0    inet 10.0.0.5/24 scope global eth0\\       valid_lft forever preferred_lft forever\n";
+        let out = parse_ip_addr(text);
+        assert!(!out.contains_key("lo"));
+        assert_eq!(out.get("eth0"), Some(&"10.0.0.5".to_string()));
+    }
+
+    #[test]
+    fn parses_ip_link_lines() {
+        let text = "2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000\\    link/ether aa:bb:cc:dd:ee:ff brd ff:ff:ff:ff:ff:ff\n";
+        let out = parse_ip_link(text);
+        assert_eq!(out.get("eth0"), Some(&"aa:bb:cc:dd:ee:ff".to_string()));
+    }
+
+    #[test]
+    fn cpu_percent_is_zero_on_idle() {
+        let prev = CpuTimes {
+            idle: 100,
+            ..Default::default()
+        };
+        let cur = CpuTimes {
+            idle: 200,
+            ..Default::default()
+        };
+        assert_eq!(cpu_percent(prev, cur), 0.0);
+    }
+
+    #[test]
+    fn cpu_percent_is_hundred_on_full_load() {
+        let prev = CpuTimes {
+            user: 0,
+            idle: 100,
+            ..Default::default()
+        };
+        let cur = CpuTimes {
+            user: 100,
+            idle: 100,
+            ..Default::default()
+        };
+        assert_eq!(cpu_percent(prev, cur), 100.0);
     }
 }

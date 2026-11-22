@@ -19,7 +19,7 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
-russh = { version = "0.61", default-features = false, features = ["ring"] }
+russh = { version = "0.65", default-features = false, features = ["ring"] }
 russh-sftp = "2.3"
 uuid = { version = "1", features = ["v4"] }
 portable-pty = "0.8"
@@ -29,12 +29,10 @@ serialport = "4"
 tauri-plugin-dialog = "2"
 tauri-plugin-updater = "2"
 encoding_rs = "0.8"
-socks = "0.3"
 base64 = "0.22"
-rusqlite = { version = "0.33", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "stream", "json"] }
 futures-util = "0.3"
-tauri-plugin-deep-link = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-process = "2"
@@ -49,10 +47,16 @@ getrandom = "0.2"
 argon2 = "0.5"
 # Schema migrations: refinery embeds SQL files in src-tauri/migrations/ and
 # tracks applied versions in the schema_migrations table.
-refinery = { version = "0.8", features = ["rusqlite"] }
+refinery = { version = "0.10", features = ["rusqlite"] }
 # Used by database.rs to format refinery bootstrap timestamps as RFC3339.
 # Pinned to match refinery-core's version to avoid pulling a duplicate.
 time = { version = "0.3", default-features = false }
+# Local wall-clock time for the agent maintenance window (system tz database,
+# thread-safe unlike `time`'s local-offset). Already in the tree; chrono is
+# avoided because it is flagged unmaintained (RUSTSEC-2026-0543).
+jiff = "1"
+# HMAC-SHA1 for RFC 6238 TOTP generation. Already in the tree via russh/rustls.
+ring = "0.17"
 
 [dev-dependencies]
 tempfile = "3"

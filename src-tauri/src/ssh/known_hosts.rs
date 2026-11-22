@@ -20,6 +20,15 @@ pub enum HostKeyVerdict {
         fingerprint: String,
         key_type: String,
     },
+    /// The host is pinned, but under a different key-type family than the one
+    /// it just presented. Not proof of tampering (servers do add/rotate key
+    /// types), but a MITM can exploit it to dodge the `Mismatch` warning, so
+    /// the UI shows a distinct, stronger prompt instead of the first-contact one.
+    KeyTypeChanged {
+        fingerprint: String,
+        key_type: String,
+        known_key_type: String,
+    },
 }
 
 /// Normalize a `SHA256:<base64>` fingerprint for comparison by dropping any
@@ -36,7 +45,7 @@ fn normalize_fingerprint(fp: &str) -> &str {
 /// by different SSH stacks compare equal. The legacy libssh2 `ssh.rs` stored
 /// Debug-style names ("Ecdsa256", "Ed25519", "Rsa"); the russh handler stores
 /// ssh-key's wire names ("ecdsa-sha2-nistp256", "ssh-ed25519", "ssh-rsa").
-fn key_family(key_type: &str) -> &'static str {
+pub(crate) fn key_family(key_type: &str) -> &'static str {
     let k = key_type.to_ascii_lowercase();
     if k.contains("ed25519") {
         "ed25519"
@@ -69,14 +78,17 @@ pub fn verify(
             fingerprint: fingerprint.to_string(),
             key_type: key_type.to_string(),
         },
-        // Different algorithm family: the server simply offered another host-key
-        // type (e.g. the old libssh2 backend negotiated ECDSA, russh negotiates
-        // Ed25519). This is NOT evidence of MITM — OpenSSH treats an unseen key
-        // type as new rather than "identification changed" — so prompt to accept
-        // like a first connection instead of the dead-end mismatch warning.
-        Some(_) => HostKeyVerdict::Unknown {
+        // Different algorithm family: the server offered another host-key type
+        // (e.g. the old libssh2 backend negotiated ECDSA, russh negotiates
+        // Ed25519). Not conclusive evidence of MITM, so the user may still
+        // accept — but it must NOT look like a harmless first contact, since a
+        // MITM can pick a different key type precisely to avoid `Mismatch`.
+        // (`connect::make_config` also prefers the pinned family during KEX, so
+        // a legitimate server normally never reaches this branch.)
+        Some(e) => HostKeyVerdict::KeyTypeChanged {
             fingerprint: fingerprint.to_string(),
             key_type: key_type.to_string(),
+            known_key_type: e.key_type.clone(),
         },
         None => HostKeyVerdict::Unknown {
             fingerprint: fingerprint.to_string(),
@@ -96,19 +108,35 @@ pub fn load() -> HashMap<String, KnownHostEntry> {
         .unwrap_or_default()
 }
 
+/// The key-type label pinned for `host:port`, if any. Used to steer host-key
+/// negotiation toward the already-trusted algorithm family.
+pub fn pinned_key_type(host: &str, port: u16) -> Option<String> {
+    load()
+        .get(&format!("{}:{}", host, port))
+        .map(|e| e.key_type.clone())
+}
+
 fn save(hosts: &HashMap<String, KnownHostEntry>) {
     if let Some(path) = known_hosts_path() {
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
         if let Ok(json) = serde_json::to_string_pretty(hosts) {
-            let _ = fs::write(&path, json);
-            // The trust store decides which servers we'll talk to — keep it
-            // out of reach of other local users.
+            // Write to a sibling temp file, lock its permissions down, then
+            // rename over the real file: a crash mid-write must never leave a
+            // truncated store (which `load` would read as "no hosts trusted"),
+            // and the trust store must never be readable by other local users.
+            let tmp = path.with_extension("json.tmp");
+            if fs::write(&tmp, json).is_err() {
+                return;
+            }
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+                let _ = fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600));
+            }
+            if fs::rename(&tmp, &path).is_err() {
+                let _ = fs::remove_file(&tmp);
             }
         }
     }
@@ -121,8 +149,9 @@ fn save(hosts: &HashMap<String, KnownHostEntry>) {
 /// `Mismatch`, and the UI deliberately offers no "trust anyway" path for it
 /// (the user must delete the stale entry by hand). Enforcing it here too means
 /// a compromised WebView cannot silently re-pin a hostile key through the
-/// `ssh_trust_host` IPC command. First-time hosts and cross-family additions
-/// (verdict `Unknown`) are recorded as before.
+/// `ssh_trust_host` IPC command. First-time hosts (verdict `Unknown`) and
+/// cross-family replacements the user explicitly confirmed (verdict
+/// `KeyTypeChanged`) are recorded.
 pub fn trust_host(host: &str, port: u16, fingerprint: &str, key_type: &str) -> Result<(), String> {
     let mut hosts = load();
     let key = format!("{}:{}", host, port);
@@ -229,15 +258,15 @@ mod tests {
         assert!(check_overwrite(&store(), "new:22", "SHA256:X", "ssh-rsa").is_ok());
         // Idempotent re-pin of the identical fingerprint (padding-insensitive).
         assert!(check_overwrite(&store(), "h:22", "SHA256:AAA=", "ssh-ed25519").is_ok());
-        // Different key family = the Unknown verdict path, allowed after prompt.
+        // Different key family = the KeyTypeChanged path, allowed after prompt.
         assert!(check_overwrite(&store(), "h:22", "SHA256:Y", "ecdsa-sha2-nistp256").is_ok());
     }
 
     #[test]
-    fn verify_unknown_when_key_type_differs() {
+    fn verify_key_type_changed_when_family_differs() {
         // libssh2 stored an ECDSA key; russh now presents an Ed25519 key for the
-        // same host — a different algorithm, not tampering. Must prompt as
-        // Unknown (acceptable in the UI), not the dead-end Mismatch warning.
+        // same host. Acceptable in the UI, but must be flagged distinctly (not
+        // as a first contact) because a MITM can also choose another key type.
         let mut store = HashMap::new();
         store.insert(
             "h:22".to_string(),
@@ -248,7 +277,7 @@ mod tests {
         );
         assert!(matches!(
             verify(&store, "h", 22, "SHA256:NEW", "ssh-ed25519"),
-            HostKeyVerdict::Unknown { .. }
+            HostKeyVerdict::KeyTypeChanged { known_key_type, .. } if known_key_type == "Ecdsa256"
         ));
     }
 

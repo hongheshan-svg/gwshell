@@ -1,11 +1,36 @@
 use crate::ssh::auth;
-use crate::ssh::handler::{Client, ForwardTargets, HostKeyError};
+use crate::ssh::handler::{Client, ForwardTargets};
+use crate::ssh::known_hosts;
 use crate::ssh::params::ConnectParams;
-use crate::ssh::transport::{self, expand_tilde, SshStream};
+use crate::ssh::transport::{self, SshStream};
 use russh::client::{self, Handle};
+use russh::keys::Algorithm;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+/// Host-key algorithms in russh's default order, but with the family already
+/// pinned for this host moved to the front. A legitimate server that offers
+/// several host-key types then negotiates the one we trust (as OpenSSH does),
+/// so a `KeyTypeChanged` prompt only appears when the server genuinely stopped
+/// offering the pinned type — or a MITM is choosing a different one.
+fn host_key_preference(pinned_key_type: Option<&str>) -> Cow<'static, [Algorithm]> {
+    let default = russh::Preferred::DEFAULT.key;
+    let Some(pinned) = pinned_key_type else {
+        return default;
+    };
+    let family = known_hosts::key_family(pinned);
+    let (mut first, rest): (Vec<Algorithm>, Vec<Algorithm>) = default
+        .iter()
+        .cloned()
+        .partition(|alg| known_hosts::key_family(alg.as_ref()) == family);
+    if first.is_empty() {
+        return default;
+    }
+    first.extend(rest);
+    Cow::Owned(first)
+}
 
 fn make_config(p: &ConnectParams) -> Arc<client::Config> {
     // Keepalive interval: honour the user's setting when present; 0 disables
@@ -27,6 +52,10 @@ fn make_config(p: &ConnectParams) -> Arc<client::Config> {
         keepalive_interval,
         keepalive_max,
         nodelay: true,
+        preferred: russh::Preferred {
+            key: host_key_preference(known_hosts::pinned_key_type(&p.host, p.port).as_deref()),
+            ..russh::Preferred::DEFAULT
+        },
         ..Default::default()
     })
 }
@@ -49,7 +78,12 @@ async fn build_transport_stream(p: &ConnectParams) -> Result<SshStream, String> 
                 .jump_username
                 .clone()
                 .unwrap_or_else(|| p.username.clone()),
-            password: p.jump_password.clone().or_else(|| p.password.clone()),
+            // Never fall back to the TARGET's password/TOTP: the jump host is a
+            // separate machine (often another trust domain) and must not learn
+            // the target's credentials. An empty jump password simply fails
+            // password auth on the jump hop.
+            password: p.jump_password.clone(),
+            totp_code: None,
             private_key_path: p.jump_private_key_path.clone(),
             auth_method: if p
                 .jump_private_key_path
@@ -150,28 +184,64 @@ async fn connect_over(
     let mut session = match client::connect_stream(config, stream, handler).await {
         Ok(s) => s,
         Err(e) => {
-            // Host-key rejection surfaces as the exact frontend-parsed strings.
+            // Host-key rejection surfaces as the frontend-parsed
+            // `FINGERPRINT_*:{json}` string, tagged with THIS hop's host:port
+            // (the jump host's when the jump hop is the one rejected).
             if let Some(rej) = rejection.lock().unwrap().take() {
-                return Err(match rej {
-                    HostKeyError::Unknown {
-                        fingerprint,
-                        key_type,
-                    } => {
-                        format!("FINGERPRINT_UNKNOWN:{}:{}", fingerprint, key_type)
-                    }
-                    HostKeyError::Mismatch {
-                        fingerprint,
-                        key_type,
-                    } => {
-                        format!("FINGERPRINT_MISMATCH:{}:{}", fingerprint, key_type)
-                    }
-                });
+                return Err(rej.to_error_string(&p.host, p.port));
             }
             return Err(format!("Handshake failed: {}", e));
         }
     };
 
     auth::authenticate(&mut session, p).await?;
-    let _ = expand_tilde; // referenced for re-export consistency
     Ok((session, forwarded))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn families(algs: &[Algorithm]) -> Vec<&'static str> {
+        algs.iter()
+            .map(|a| known_hosts::key_family(a.as_ref()))
+            .collect()
+    }
+
+    #[test]
+    fn host_key_preference_defaults_without_pin() {
+        assert_eq!(
+            host_key_preference(None).as_ref(),
+            russh::Preferred::DEFAULT.key.as_ref()
+        );
+    }
+
+    #[test]
+    fn host_key_preference_moves_pinned_family_first() {
+        let prefs = host_key_preference(Some("ecdsa-sha2-nistp256"));
+        assert_eq!(families(&prefs)[0], "ecdsa");
+        // Nothing dropped, only reordered.
+        assert_eq!(prefs.len(), russh::Preferred::DEFAULT.key.len());
+        // Legacy libssh2 labels map to the same family.
+        assert_eq!(families(&host_key_preference(Some("Rsa")))[0], "rsa");
+    }
+
+    #[test]
+    fn host_key_error_string_carries_hop_host_and_json_payload() {
+        let err = crate::ssh::handler::HostKeyError::KeyTypeChanged {
+            fingerprint: "SHA256:abc".into(),
+            key_type: "ssh-rsa".into(),
+            known_key_type: "ssh-ed25519".into(),
+        }
+        .to_error_string("jump.example", 2222);
+        let payload = err
+            .strip_prefix("FINGERPRINT_KEYTYPE_CHANGED:")
+            .expect("prefix");
+        let v: serde_json::Value = serde_json::from_str(payload).unwrap();
+        assert_eq!(v["fingerprint"], "SHA256:abc");
+        assert_eq!(v["keyType"], "ssh-rsa");
+        assert_eq!(v["knownKeyType"], "ssh-ed25519");
+        assert_eq!(v["host"], "jump.example");
+        assert_eq!(v["port"], 2222);
+    }
 }

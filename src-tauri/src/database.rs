@@ -183,6 +183,16 @@ impl Database {
     pub fn save_session(&self, config: &SessionConfig) -> Result<(), String> {
         // Encrypt secret fields before they touch disk.
         let mut config = config.clone();
+        // A 6-8 digit one-time MFA code expires within seconds; persisting it
+        // only guarantees a failed login next time. Base32 TOTP secrets (which
+        // generate fresh codes) are kept, encrypted like passwords.
+        if config
+            .totp_code
+            .as_deref()
+            .is_some_and(crate::totp::is_one_time_code)
+        {
+            config.totp_code = None;
+        }
         crate::crypto::encrypt_session_secrets(&mut config);
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let data = serde_json::to_string(&config).map_err(|e| e.to_string())?;
@@ -330,11 +340,19 @@ impl Database {
         serde_json::to_string_pretty(&sessions).map_err(|e| e.to_string())
     }
 
-    pub fn import_sessions_json(&self, json: &str) -> Result<usize, String> {
+    /// Import sessions from an export file. Secret fields absent from the file
+    /// (exports strip them) keep the values of `existing` sessions with the
+    /// same id instead of being wiped.
+    pub fn import_sessions_json(
+        &self,
+        json: &str,
+        existing: &[SessionConfig],
+    ) -> Result<usize, String> {
         let sessions: Vec<SessionConfig> = serde_json::from_str(json).map_err(|e| e.to_string())?;
         let count = sessions.len();
-        for session in &sessions {
-            self.save_session(session)?;
+        for mut session in sessions {
+            session.merge_secrets_from(existing.iter().find(|s| s.id == session.id));
+            self.save_session(&session)?;
         }
         Ok(count)
     }

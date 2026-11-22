@@ -1,3 +1,4 @@
+use super::redaction::redact_secrets_uncapped as redact_secrets;
 use super::types::{
     AgentAnalysisUpdate, AgentEvidence, AgentFinding, AgentToolResult, TerminalAiChatRequest,
 };
@@ -59,10 +60,16 @@ pub fn build_continuation_prompt(
 }
 
 pub fn build_terminal_ai_chat_prompt(request: &TerminalAiChatRequest) -> String {
-    let cwd = request.cwd.as_deref().unwrap_or("unknown");
-    let prompt = request.prompt.as_deref().unwrap_or("unknown");
-    let selected_text = request.selected_text.as_deref().unwrap_or("").trim();
-    let recent_output = request.recent_output.as_deref().unwrap_or("").trim();
+    // Everything captured from the terminal (output, selection, prompt, cwd)
+    // goes through the same secret redaction as agent evidence before it is
+    // sent to a third-party model provider. The user's typed question is
+    // their own explicit input and is sent as written.
+    let cwd = redact_secrets(request.cwd.as_deref().unwrap_or("unknown"));
+    let prompt = redact_secrets(request.prompt.as_deref().unwrap_or("unknown"));
+    let selected_text = redact_secrets(request.selected_text.as_deref().unwrap_or("").trim());
+    let recent_output = redact_secrets(request.recent_output.as_deref().unwrap_or("").trim());
+    let selected_text = selected_text.trim();
+    let recent_output = recent_output.trim();
     format!(
         "You are helping a user troubleshoot a terminal session in GWShell.\n\
 Do not execute commands. Do not claim that you changed the server. Do not ask for secrets, private keys, tokens, or full shell history.\n\
@@ -293,5 +300,30 @@ mod tests {
         assert!(prompt.contains("nginx.service failed with exit-code"));
         assert!(prompt.contains("Do not execute commands"));
         assert!(prompt.contains("bash fenced code block"));
+    }
+
+    #[test]
+    fn terminal_ai_chat_prompt_redacts_terminal_secrets() {
+        let request = crate::agent::types::TerminalAiChatRequest {
+            request_id: "terminal-ai-2".into(),
+            tab_id: "tab-1".into(),
+            target_session_id: "ssh-1".into(),
+            tab_title: "prod-api".into(),
+            question: "what is wrong?".into(),
+            cwd: Some("/srv/app".into()),
+            prompt: Some("$".into()),
+            selected_text: Some("DATABASE_PASSWORD=hunter2".into()),
+            recent_output: Some(
+                "Authorization: Bearer sk-live-123\n-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n-----END OPENSSH PRIVATE KEY-----"
+                    .into(),
+            ),
+        };
+
+        let prompt = build_terminal_ai_chat_prompt(&request);
+
+        assert!(!prompt.contains("hunter2"), "{prompt}");
+        assert!(!prompt.contains("sk-live-123"), "{prompt}");
+        assert!(!prompt.contains("\nAAAA\n"), "{prompt}");
+        assert!(prompt.contains("DATABASE_PASSWORD=[redacted]"));
     }
 }

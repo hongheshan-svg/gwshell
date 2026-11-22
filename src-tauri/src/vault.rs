@@ -38,7 +38,7 @@ fn argon2id() -> Argon2<'static> {
 /// Hash `passphrase` with Argon2id (OWASP-recommended params, see `argon2id`)
 /// and store the resulting PHC string as the vault verifier. Overwrites any
 /// existing verifier.
-pub fn set_passphrase(db: &Database, passphrase: &str) -> Result<(), String> {
+fn set_passphrase(db: &Database, passphrase: &str) -> Result<(), String> {
     let salt = SaltString::generate(&mut OsRng);
     let hash = argon2id()
         .hash_password(passphrase.as_bytes(), &salt)
@@ -46,6 +46,20 @@ pub fn set_passphrase(db: &Database, passphrase: &str) -> Result<(), String> {
         .map_err(|_| "failed to hash passphrase".to_string())?
         .to_string();
     db.set_vault_verifier(&hash)
+}
+
+/// Enable the vault with `passphrase`. Refuses when a verifier already exists:
+/// replacing the passphrase must go through `change_passphrase`, which first
+/// verifies the current one — otherwise anyone able to reach this IPC command
+/// could silently take over (or lock the user out of) the app lock.
+pub fn enable(db: &Database, passphrase: &str) -> Result<(), String> {
+    if passphrase.is_empty() {
+        return Err("passphrase must not be empty".to_string());
+    }
+    if is_enabled(db) {
+        return Err("vault is already enabled; use change passphrase instead".to_string());
+    }
+    set_passphrase(db, passphrase)
 }
 
 /// Verify `passphrase` against the stored verifier. Returns `false` if no
@@ -78,7 +92,7 @@ pub fn is_enabled(db: &Database) -> bool {
 /// that a verify→set two-call sequence would expose. Returns `false` if
 /// `current` does not match the stored verifier (nothing is changed).
 pub fn change_passphrase(db: &Database, current: &str, new: &str) -> bool {
-    if !verify(db, current) {
+    if new.is_empty() || !verify(db, current) {
         return false;
     }
     set_passphrase(db, new).is_ok()
@@ -95,6 +109,20 @@ mod tests {
     /// are present. This guards against an accidental regression to
     /// `Argon2::default()` (which happens to be Argon2id v19 today, but the
     /// explicit params are what we want to lock in).
+    #[test]
+    fn enable_refuses_to_overwrite_an_existing_passphrase() {
+        let db = Database::new_in_memory_for_tests().unwrap();
+        assert!(enable(&db, "").is_err());
+        enable(&db, "first").unwrap();
+        assert!(enable(&db, "attacker").is_err());
+        assert!(verify(&db, "first"));
+        assert!(!verify(&db, "attacker"));
+        // The verified change path still works.
+        assert!(change_passphrase(&db, "first", "second"));
+        assert!(verify(&db, "second"));
+        assert!(!change_passphrase(&db, "second", ""));
+    }
+
     #[test]
     fn argon2id_helper_uses_correct_algorithm_and_version() {
         let db = Database::new_in_memory_for_tests().unwrap();

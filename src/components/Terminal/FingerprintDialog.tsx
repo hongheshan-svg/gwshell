@@ -1,6 +1,6 @@
 // src/components/Terminal/FingerprintDialog.tsx
 // SSH host-key fingerprint verification dialog overlay.
-// Extracted from TerminalView.tsx - pure JSX move, no logic changes.
+// Shows a distinct warning when the host presents a different key type than pinned.
 
 import { useTranslation } from 'react-i18next';
 import type { FingerprintInfo } from './types';
@@ -13,12 +13,21 @@ interface FingerprintDialogProps {
 
 export function FingerprintDialog({ info, onAccept, onReject }: FingerprintDialogProps) {
   const { t } = useTranslation();
+  const keyTypeChanged = !!info.knownKeyType;
   return (
     <div className="fingerprint-overlay">
       <div className="fingerprint-dialog">
-        <div className="fingerprint-dialog-title">🔒 {t('fp_title')}</div>
+        <div className="fingerprint-dialog-title">
+          {keyTypeChanged ? '⚠️' : '🔒'} {t(keyTypeChanged ? 'fp_keytype_title' : 'fp_title')}
+        </div>
         <div className="fingerprint-dialog-body">
-          <p>{t('fp_desc')}</p>
+          {keyTypeChanged ? (
+            <p className="fingerprint-warning">
+              {t('fp_keytype_desc', { known: info.knownKeyType, current: info.keyType })}
+            </p>
+          ) : (
+            <p>{t('fp_desc')}</p>
+          )}
           <div className="fingerprint-host">
             {info.host}:{info.port}
           </div>
@@ -33,7 +42,7 @@ export function FingerprintDialog({ info, onAccept, onReject }: FingerprintDialo
             {t('fp_reject')}
           </button>
           <button className="fingerprint-btn fingerprint-btn-accept" onClick={onAccept}>
-            {t('fp_accept')}
+            {t(keyTypeChanged ? 'fp_keytype_accept' : 'fp_accept')}
           </button>
         </div>
       </div>

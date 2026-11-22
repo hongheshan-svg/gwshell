@@ -14,7 +14,7 @@ mod transport;
 
 pub use known_hosts::trust_host;
 pub use params::ConnectParams;
-pub use sftp::{ProgressFn, SftpEntry};
+pub use sftp::{is_safe_local_file_name, ProgressFn, SftpEntry};
 
 use crate::ssh::handler::{Client, ForwardTargets};
 use russh::client::Handle;

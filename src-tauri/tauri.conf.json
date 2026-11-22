@@ -35,11 +35,6 @@
     }
   },
   "plugins": {
-    "deep-link": {
-      "desktop": {
-        "schemes": ["gwshell"]
-      }
-    },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDYzRTJGMUI3RTRBQjFEREUKUldUZUhhdmt0L0hpWStXeWVnRDBvMFBoRDZYUkY1VVY3eXE1YWFuelNQN09ldnQ4RVNuMHp6K0QK",
       "endpoints": [

@@ -27,23 +27,20 @@ jobs:
       # On schedule: warn but don't fail (weekly run is informational).
       #
       # The ignore list suppresses advisories on TRANSITIVE deps that GWShell
-      # cannot fix without forking upstream (Tauri's GTK3/quick-xml/quinn-proto
-      # transitive deps). Each ignored ID has a rationale + re-triage date in
+      # cannot fix without forking upstream (Tauri's GTK3/zbus transitive deps,
+      # russh-sftp's chrono). Each ignored ID has a rationale + re-triage date in
       # `src-tauri/audit.toml`. Review quarterly; remove entries when upstream
       # fixes land.
       - name: Cargo audit (strict on PR, warning-only on schedule)
         working-directory: src-tauri
         run: |
           IGNORES=(
-            --ignore RUSTSEC-2026-0195   # quick-xml DoS (transitive via tauri)
-            --ignore RUSTSEC-2026-0194   # quick-xml DoS (transitive via tauri)
-            --ignore RUSTSEC-2026-0185   # quinn-proto DoS (transitive via reqwest/h3)
-            --ignore RUSTSEC-2026-0190   # glib unsound (GTK3 transitive)
-            --ignore RUSTSEC-2026-0097   # rand unsound (transitive)
-            --ignore RUSTSEC-2025-0098   # anyhow unsound (transitive)
-            --ignore RUSTSEC-2025-0100   # unsound transitive
-            --ignore RUSTSEC-2025-0080   # unsound transitive
-            --ignore RUSTSEC-2024-0429   # rand unsound (transitive)
+            --ignore RUSTSEC-2024-0429   # glib unsound (GTK3 transitive via tauri)
+            --ignore RUSTSEC-2026-0543   # chrono unmaintained (transitive via russh-sftp)
+            --ignore RUSTSEC-2026-0441   # pin-utils unmaintained (transitive via futures-util)
+            --ignore RUSTSEC-2026-0370   # zvariant unmaintained (transitive via zbus <- tauri plugins)
+            --ignore RUSTSEC-2026-0371   # zbus_names unmaintained (transitive via zbus)
+            --ignore RUSTSEC-2026-0372   # zvariant_derive unmaintained (transitive via zbus)
             --ignore RUSTSEC-2024-0411   # gdkwayland-sys unmaintained (GTK3 via webkit2gtk)
             --ignore RUSTSEC-2024-0412   # gdk unmaintained (GTK3)
             --ignore RUSTSEC-2024-0413   # atk unmaintained (GTK3)

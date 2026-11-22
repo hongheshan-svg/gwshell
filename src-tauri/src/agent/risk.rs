@@ -56,7 +56,23 @@ pub fn classify_command(command: &str) -> AgentRisk {
     if has_shell_control_syntax(&c) {
         return AgentRisk::High;
     }
+    // Everything below is a token-level allowlist. Unquoted globs/brace or
+    // `$` expansion make the remote shell run a DIFFERENT argv than the one
+    // inspected here (`tail /etc/shado[w]` reads /etc/shadow), so such
+    // commands can never be classified read-only/low and auto-executed.
+    if has_unquoted_shell_expansion(&c) {
+        return AgentRisk::Medium;
+    }
+    // `env VAR=… cmd` can inject LD_PRELOAD/PATH/… into an otherwise harmless
+    // command; the classifier cannot reason about that.
+    if uses_env_assignment(&c) {
+        return AgentRisk::Medium;
+    }
     if is_mutating_journalctl_command(&c) {
+        return AgentRisk::Medium;
+    }
+    // Case-sensitive flags (`-K` kill vs `-k`), so inspect the original text.
+    if is_mutating_ss_command(command.trim()) {
         return AgentRisk::Medium;
     }
     if let Some(risk) = classify_sensitive_read_command(&c) {
@@ -110,6 +126,108 @@ fn has_shell_control_syntax(command: &str) -> bool {
         || command.contains('`')
         || command.contains('>')
         || command.contains('<')
+}
+
+/// Whether the shell would expand part of `command` before running it: `$`
+/// anywhere outside single quotes, glob/brace characters outside any quotes,
+/// or unbalanced quotes. Quoted literals such as `grep 'err.*' /var/log/syslog`
+/// are fine. (Backslashes are not flagged: they cannot expand to new paths,
+/// and `normalize_path_variants` already resolves `/etc/sha\dow`-style
+/// escapes when checking sensitive paths — while Windows paths need them.)
+fn has_unquoted_shell_expansion(command: &str) -> bool {
+    let mut in_single = false;
+    let mut in_double = false;
+    for ch in command.chars() {
+        match ch {
+            '\'' if !in_double => in_single = !in_single,
+            '"' if !in_single => in_double = !in_double,
+            _ if in_single => {}
+            '$' => return true,
+            '*' | '?' | '[' | ']' | '{' | '}' if !in_double => return true,
+            _ => {}
+        }
+    }
+    in_single || in_double
+}
+
+/// Whether the `sudo`/`command`/`env` prefix sets any environment variable.
+fn uses_env_assignment(command: &str) -> bool {
+    let tokens: Vec<&str> = command.split_whitespace().map(clean_token).collect();
+    let mut idx = 0;
+    while idx < tokens.len() {
+        match command_word_name(tokens[idx]).as_str() {
+            "sudo" => idx = skip_sudo_prefix(&tokens, idx + 1),
+            "command" => idx += 1,
+            "env" => {
+                let start = idx + 1;
+                idx = skip_env_prefix(&tokens, start);
+                if tokens[start..idx.min(tokens.len())]
+                    .iter()
+                    .any(|token| is_env_assignment(token))
+                {
+                    return true;
+                }
+            }
+            _ => break,
+        }
+    }
+    false
+}
+
+/// `ss -K`/`--kill` closes sockets and `-D`/`--diag=FILE` writes a file.
+fn is_mutating_ss_command(command: &str) -> bool {
+    normalized_command(command).is_some_and(|command| {
+        command.name == "ss"
+            && command.args.iter().any(|arg| {
+                arg.starts_with("--kill")
+                    || arg.starts_with("--diag")
+                    || (arg.starts_with('-')
+                        && !arg.starts_with("--")
+                        && arg.chars().skip(1).any(|ch| ch == 'K' || ch == 'D'))
+            })
+    })
+}
+
+/// Whether `command` starts with the words of `prefix` once `sudo`/`env`
+/// wrappers are stripped — e.g. prefix `systemctl status` matches
+/// `sudo systemctl status nginx` but NOT `echo systemctl status`. Used for the
+/// auto-execute command allowlist (a plain substring test let any command
+/// that merely *mentions* an allowed word through).
+pub fn command_matches_prefix(command: &str, prefix: &str) -> bool {
+    let words: Vec<String> = prefix
+        .split_whitespace()
+        .map(|w| w.to_ascii_lowercase())
+        .collect();
+    let Some((name, args)) = words.split_first() else {
+        return false;
+    };
+    let lowered = command.trim().to_ascii_lowercase();
+    let Some(command) = normalized_command(&lowered) else {
+        return false;
+    };
+    command.name == *name
+        && args
+            .iter()
+            .enumerate()
+            .all(|(idx, expected)| command.args.get(idx).is_some_and(|arg| arg == expected))
+}
+
+/// The unit argument of `systemctl <verb> <unit>` (first non-flag after the
+/// verb), for applying the service denylist to RunCommand actions.
+pub fn systemctl_unit(command: &str, verbs: &[&str]) -> Option<String> {
+    let lowered = command.trim().to_ascii_lowercase();
+    let command = normalized_command(&lowered)?;
+    if command.name != "systemctl" {
+        return None;
+    }
+    let verb_idx = command.args.iter().position(|arg| !arg.starts_with('-'))?;
+    if !verbs.contains(&command.args[verb_idx]) {
+        return None;
+    }
+    command.args[verb_idx + 1..]
+        .iter()
+        .find(|arg| !arg.starts_with('-'))
+        .map(|unit| unit.to_string())
 }
 
 struct NormalizedCommand<'a> {
@@ -441,9 +559,12 @@ fn is_mutating_journalctl_command(command: &str) -> bool {
             && command.args.iter().any(|part| {
                 *part == "--rotate"
                     || *part == "--flush"
-                    || part.starts_with("--vacuum-time")
-                    || part.starts_with("--vacuum-size")
-                    || part.starts_with("--vacuum-files")
+                    || *part == "--sync"
+                    || *part == "--relinquish-var"
+                    || *part == "--smart-relinquish-var"
+                    || *part == "--update-catalog"
+                    || part.starts_with("--setup-keys")
+                    || part.starts_with("--vacuum-")
             })
     })
 }
@@ -595,8 +716,39 @@ fn sensitive_normalized_path_risk(path: &str) -> Option<AgentRisk> {
         return Some(AgentRisk::Blocked);
     }
 
-    if matches!(path, "/etc/shadow" | "/etc/gshadow" | "/etc/sudoers") {
+    if matches!(
+        path,
+        "/etc/shadow" | "/etc/gshadow" | "/etc/sudoers" | "/etc/shadow-" | "/etc/gshadow-"
+    ) {
         return Some(AgentRisk::Blocked);
+    }
+
+    // TLS/private-key stores and credential files.
+    if path.starts_with("/etc/ssl/private")
+        || path.starts_with("/etc/pki/tls/private")
+        || path.starts_with("/etc/letsencrypt/")
+        || path.starts_with("/etc/sudoers.d")
+        || [".key", ".p12", ".pfx", ".jks", ".keystore", ".kdbx"]
+            .iter()
+            .any(|ext| file_name.ends_with(ext))
+        || matches!(
+            file_name,
+            ".git-credentials" | ".netrc" | "_netrc" | ".pgpass"
+        )
+    {
+        return Some(AgentRisk::Blocked);
+    }
+
+    // Config files that commonly embed passwords or tokens.
+    if file_name == ".env"
+        || file_name.starts_with(".env.")
+        || matches!(
+            file_name,
+            ".my.cnf" | "debian.cnf" | ".npmrc" | ".pypirc" | "admin.conf" | "kubeconfig"
+        )
+        || path.starts_with("/etc/kubernetes/")
+    {
+        return Some(AgentRisk::High);
     }
 
     if path.starts_with("/etc/security/") {
@@ -1369,5 +1521,124 @@ mod tests {
             expected_result: None,
             verify: None,
         }
+    }
+
+    #[test]
+    fn shell_expansion_cannot_smuggle_sensitive_paths_into_read_only() {
+        for command in [
+            "tail -n 50 /etc/shado[w]",
+            "tail -n 50 /etc/shad*",
+            "grep -h . /root/.ss?/id_*",
+            "tail /etc/{shadow,}",
+            "tail /etc/s${x}hadow",
+            "tail 'unterminated",
+        ] {
+            assert!(
+                !matches!(
+                    classify_command(command),
+                    AgentRisk::ReadOnly | AgentRisk::Low
+                ),
+                "{command} must not be auto-executable"
+            );
+        }
+        // Quoted literals stay read-only.
+        assert_eq!(
+            classify_command("grep 'err.*[0-9]' /var/log/syslog"),
+            AgentRisk::ReadOnly
+        );
+        assert_eq!(
+            classify_command("journalctl -u nginx --since \"1 hour ago\""),
+            AgentRisk::ReadOnly
+        );
+    }
+
+    #[test]
+    fn mutating_variants_of_read_only_tools_are_not_read_only() {
+        for command in [
+            "ss -K dst 10.0.0.5",
+            "ss -tK",
+            "ss --kill",
+            "ss -D /tmp/dump",
+            "ss --diag=/tmp/dump",
+            "env LD_PRELOAD=/tmp/x.so df",
+            "sudo env PATH=/tmp df -h",
+            "journalctl --setup-keys",
+            "journalctl --update-catalog",
+            "journalctl --vacuum-size=1M",
+            "journalctl --relinquish-var",
+        ] {
+            assert!(
+                !matches!(
+                    classify_command(command),
+                    AgentRisk::ReadOnly | AgentRisk::Low
+                ),
+                "{command} must not be auto-executable"
+            );
+        }
+        assert_eq!(classify_command("ss -tulpn"), AgentRisk::ReadOnly);
+        assert_eq!(classify_command("env -i df -h"), AgentRisk::ReadOnly);
+    }
+
+    #[test]
+    fn private_keys_and_credential_files_are_blocked() {
+        for path in [
+            "/etc/ssl/private/server.key",
+            "/etc/pki/tls/private/x",
+            "/root/.git-credentials",
+            "/home/a/.netrc",
+            "/var/lib/postgresql/.pgpass",
+            "/opt/app/cert.p12",
+        ] {
+            assert_eq!(
+                classify_command(&format!("tail -n 20 {path}")),
+                AgentRisk::Blocked,
+                "{path}"
+            );
+            assert_eq!(
+                classify_tool_call(&read_file_call(path)),
+                AgentRisk::Blocked
+            );
+        }
+        assert_eq!(classify_command("grep -r . /srv/app/.env"), AgentRisk::High);
+    }
+
+    #[test]
+    fn command_prefix_matching_is_word_based() {
+        assert!(command_matches_prefix(
+            "systemctl status nginx",
+            "systemctl status"
+        ));
+        assert!(command_matches_prefix(
+            "sudo systemctl status nginx",
+            "systemctl status"
+        ));
+        assert!(command_matches_prefix("df -h", "df"));
+        assert!(!command_matches_prefix(
+            "echo systemctl status",
+            "systemctl status"
+        ));
+        assert!(!command_matches_prefix("dfx", "df"));
+        assert!(!command_matches_prefix(
+            "systemctl stop x",
+            "systemctl status"
+        ));
+        assert!(!command_matches_prefix("df", ""));
+    }
+
+    #[test]
+    fn systemctl_unit_extraction() {
+        assert_eq!(
+            systemctl_unit("systemctl reload --no-block nginx", &["reload", "restart"]),
+            Some("nginx".into())
+        );
+        assert_eq!(
+            systemctl_unit(
+                "sudo systemctl restart sshd.service",
+                &["reload", "restart"]
+            ),
+            Some("sshd.service".into())
+        );
+        assert_eq!(systemctl_unit("systemctl status nginx", &["reload"]), None);
+        assert_eq!(systemctl_unit("df -h", &["reload"]), None);
     }
 }

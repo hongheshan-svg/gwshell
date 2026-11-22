@@ -1,6 +1,7 @@
 use crate::ssh::known_hosts::{self, HostKeyVerdict};
-use russh::client::{self, Msg, Session};
-use russh::Channel;
+use russh::client::{self, ChannelOpenHandle, Msg, Session};
+use russh::keys::PublicKeyOrCertificate;
+use russh::{Channel, ChannelOpenFailure};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -19,6 +20,51 @@ pub enum HostKeyError {
         fingerprint: String,
         key_type: String,
     },
+    /// The host is pinned under a different key-type family than the one it
+    /// presented. Either a legitimate key-type migration or a MITM trying to
+    /// dodge the mismatch warning — surfaced distinctly so the UI can warn.
+    KeyTypeChanged {
+        fingerprint: String,
+        key_type: String,
+        known_key_type: String,
+    },
+}
+
+impl HostKeyError {
+    /// Serialize as the `FINGERPRINT_*:` error string the frontend parses. The
+    /// payload is JSON and carries the host/port the key actually belongs to —
+    /// with a jump host, the rejected key may be the jump hop's, not the
+    /// target's, and the UI must pin it under the right `host:port`.
+    pub fn to_error_string(&self, host: &str, port: u16) -> String {
+        let (prefix, fingerprint, key_type, known_key_type) = match self {
+            HostKeyError::Unknown {
+                fingerprint,
+                key_type,
+            } => ("FINGERPRINT_UNKNOWN", fingerprint, key_type, None),
+            HostKeyError::Mismatch {
+                fingerprint,
+                key_type,
+            } => ("FINGERPRINT_MISMATCH", fingerprint, key_type, None),
+            HostKeyError::KeyTypeChanged {
+                fingerprint,
+                key_type,
+                known_key_type,
+            } => (
+                "FINGERPRINT_KEYTYPE_CHANGED",
+                fingerprint,
+                key_type,
+                Some(known_key_type),
+            ),
+        };
+        let payload = serde_json::json!({
+            "fingerprint": fingerprint,
+            "keyType": key_type,
+            "knownKeyType": known_key_type,
+            "host": host,
+            "port": port,
+        });
+        format!("{}:{}", prefix, payload)
+    }
 }
 
 /// Maps a remote-forwarded server port to the local `(host, port)` target that
@@ -46,8 +92,11 @@ impl client::Handler for Client {
 
     async fn check_server_key(
         &mut self,
-        server_public_key: &russh::keys::ssh_key::PublicKey,
+        server_key: &PublicKeyOrCertificate,
     ) -> Result<bool, Self::Error> {
+        // Host certificates are pinned by their embedded public key, exactly
+        // like a bare host key (we do not implement CA trust).
+        let server_public_key = server_key.public_key();
         // SHA-256 fingerprint string "SHA256:<base64-no-pad>". The ssh_key
         // `Fingerprint` Display impl emits the "SHA256:..." form with UNPADDED
         // base64 (`Base64Unpadded`), and `known_hosts::verify` normalizes away
@@ -80,6 +129,18 @@ impl client::Handler for Client {
                 });
                 Ok(false)
             }
+            HostKeyVerdict::KeyTypeChanged {
+                fingerprint,
+                key_type,
+                known_key_type,
+            } => {
+                *self.rejection.lock().unwrap() = Some(HostKeyError::KeyTypeChanged {
+                    fingerprint,
+                    key_type,
+                    known_key_type,
+                });
+                Ok(false)
+            }
         }
     }
 
@@ -88,9 +149,10 @@ impl client::Handler for Client {
     /// it to listen on. `connected_port` is that server-side listen port; we
     /// look up the registered local target, dial it, and bridge the two.
     ///
-    /// russh 0.61 signature CONFIRMED from
-    /// `~/.cargo/.../russh-0.61.1/src/client/mod.rs:2207` (Handler trait) and
-    /// the call site at `src/client/encrypted.rs:758`.
+    /// Since russh 0.65 the handler must explicitly `accept()` the channel
+    /// (dropping `reply` rejects it), so channels for unregistered ports are
+    /// refused instead of silently opened (RUSTSEC-2026-0492).
+    #[allow(clippy::too_many_arguments)] // signature fixed by russh's Handler trait
     async fn server_channel_open_forwarded_tcpip(
         &mut self,
         channel: Channel<Msg>,
@@ -98,6 +160,7 @@ impl client::Handler for Client {
         connected_port: u32,
         _originator_address: &str,
         _originator_port: u32,
+        reply: ChannelOpenHandle,
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
         // Resolve the local target for this forwarded port. Match on the exact
@@ -109,11 +172,15 @@ impl client::Handler for Client {
         };
         let Some((local_host, local_port)) = target else {
             eprintln!(
-                "[gwshell] forwarded-tcpip on {}:{} has no registered local target; dropping",
+                "[gwshell] forwarded-tcpip on {}:{} has no registered local target; rejecting",
                 connected_address, connected_port
             );
+            reply
+                .reject(ChannelOpenFailure::AdministrativelyProhibited)
+                .await;
             return Ok(());
         };
+        reply.accept().await;
 
         // Dial the local target and bridge it to the forwarded channel. Spawned
         // so the handler event loop is never blocked by the bridge.
@@ -149,22 +216,25 @@ impl client::Handler for Client {
     /// itself) — OpenSSH-style forwarding just relays frames to the user's real
     /// agent so onward hops can sign with keys the local agent never exports.
     ///
-    /// russh 0.61 signature CONFIRMED from the Handler trait at
-    /// `~/.cargo/.../russh-0.61.1/src/client/mod.rs:2232` and its call site at
-    /// `src/client/encrypted.rs:783` (`ChannelType::AgentForward`).
+    /// As with forwarded-tcpip, russh 0.65 requires an explicit `accept()`.
     async fn server_channel_open_agent_forward(
         &mut self,
         channel: Channel<Msg>,
+        reply: ChannelOpenHandle,
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
         // Defensive: only proxy when the user opted in. If forwarding was never
-        // requested, a server opening this channel is unexpected — drop it.
+        // requested, a server opening this channel is unexpected — reject it.
         if !self.agent_forward {
             eprintln!(
-                "[gwshell] received auth-agent channel without agent forwarding enabled; dropping"
+                "[gwshell] received auth-agent channel without agent forwarding enabled; rejecting"
             );
+            reply
+                .reject(ChannelOpenFailure::AdministrativelyProhibited)
+                .await;
             return Ok(());
         }
+        reply.accept().await;
 
         tokio::spawn(async move {
             // Connect to the local agent with the same OS-specific logic used for
@@ -220,8 +290,7 @@ impl client::Handler for Client {
 ///
 /// Mirrors the platform branches of `ssh/auth.rs::try_agent`: `$SSH_AUTH_SOCK`
 /// on Unix; the OpenSSH-for-Windows named pipe with a Pageant fallback on
-/// Windows. `AgentClient::into_inner()` (russh 0.61
-/// `src/keys/agent/client.rs:38`) yields the boxed underlying stream — a
+/// Windows. `AgentClient::into_inner()` yields the boxed underlying stream — a
 /// `UnixStream` / `NamedPipeClient` / `PageantStream`, all of which implement
 /// `AsyncRead + AsyncWrite`.
 #[cfg(any(unix, windows))]
