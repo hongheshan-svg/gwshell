@@ -132,7 +132,7 @@ fn preferred_unix_shell_id(shell_env: Option<&str>) -> Option<&'static str> {
     }
 }
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", all(test, not(target_os = "windows"))))]
 fn unix_shell_supports_login_flag(program: &str) -> bool {
     let base = std::path::Path::new(program)
         .file_name()
