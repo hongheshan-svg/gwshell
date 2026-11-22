@@ -24,7 +24,7 @@ const defaults: AiProviderSettings = {
   api_key_configured: false,
   temperature: 0.2,
   max_input_chars: 24000,
-  request_timeout_secs: 45,
+  request_timeout_secs: 120,
 };
 
 const emitAiSettingsChanged = () =>
@@ -86,8 +86,10 @@ export const AiSettingsSection: React.FC = () => {
     ...settings,
     base_url: settings.base_url.trim(),
     model: settings.model.trim(),
+    // Seconds without data from the provider; the backend never waits less
+    // than 120 (reasoning models can think that long before the first token).
     request_timeout_secs: Math.max(
-      1,
+      defaults.request_timeout_secs,
       settings.request_timeout_secs || defaults.request_timeout_secs,
     ),
     max_input_chars: Math.max(2000, settings.max_input_chars || defaults.max_input_chars),
