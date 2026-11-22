@@ -173,11 +173,11 @@ export const AiConnectionConfig: React.FC<Props> = ({
             <input
               className="settings-input"
               disabled={busy}
-              min={1}
+              min={120}
               type="number"
               value={settings.request_timeout_secs}
               onChange={(e) =>
-                onSettingsChange({ request_timeout_secs: parseInt(e.target.value, 10) || 45 })
+                onSettingsChange({ request_timeout_secs: parseInt(e.target.value, 10) || 120 })
               }
             />
           </label>

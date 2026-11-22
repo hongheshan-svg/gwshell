@@ -1,5 +1,5 @@
 use super::types::AiProviderSettings;
-use crate::{crypto, database::Database};
+use crate::database::Database;
 use futures_util::StreamExt;
 use reqwest::header::CONTENT_TYPE;
 use serde_json::{json, Value};
@@ -8,8 +8,23 @@ use std::time::Duration;
 const SETTINGS_KEY: &str = "agent_ai_provider_settings";
 const SECRET_KEY: &str = "agent_ai_provider_api_key";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
-const ANTHROPIC_MAX_TOKENS: u32 = 4096;
+// Room for the answer plus the thinking that current Claude models do by
+// default (Fable 5.x and Opus 5.5 always think, and thinking tokens count
+// against max_tokens; 4096 was often used up before any text). Stepped down
+// when a gateway or an older model rejects the value.
+const ANTHROPIC_MAX_TOKENS: u32 = 32_000;
+const ANTHROPIC_FALLBACK_MAX_TOKENS: [u32; 3] = [16_000, 8_192, 4_096];
 const RAW_RESPONSE_SAMPLE_LIMIT: usize = 4096;
+const CONNECT_TIMEOUT_SECS: u64 = 20;
+/// Floor for the idle timeout: reasoning models can be silent for a while
+/// before their first token.
+const MIN_IDLE_TIMEOUT_SECS: u64 = 120;
+const MAX_TRANSIENT_RETRIES: usize = 2;
+const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(200);
+const CANCELLED: &str = "AI analysis cancelled";
+const KEY_STORAGE_UNAVAILABLE: &str = "Could not save the API key: the system keychain is unavailable, so GWShell can't encrypt it. Unlock or allow keychain access for GWShell and save the key again.";
+const KEY_UNREADABLE: &str = "The saved AI API key can't be decrypted (the system keychain is locked, access was denied, or its key changed). Enter the API key again in Settings > AI.";
+const TRUNCATED_NOTICE: &str = "\n\n[Response cut off: the model reached its output limit.]";
 
 pub fn load_settings(db: &Database) -> Result<AiProviderSettings, String> {
     let mut settings = match db.load_app_setting_key(SETTINGS_KEY)? {
@@ -33,6 +48,12 @@ pub fn set_api_key(db: &Database, api_key: &str) -> Result<(), String> {
     }
 
     let encrypted = encrypt_api_key(api_key);
+    if encrypted.trim().is_empty() {
+        // encrypt_secret drops secrets it cannot encrypt rather than storing
+        // plaintext. Saving "" here used to look like success while the key
+        // silently vanished, so every AI request then failed with "not configured".
+        return Err(KEY_STORAGE_UNAVAILABLE.into());
+    }
     db.save_app_setting_key(SECRET_KEY, &encrypted)
 }
 
@@ -50,12 +71,16 @@ pub fn load_api_key(db: &Database) -> Result<Option<String>, String> {
     let Some(stored) = db.load_app_setting_key(SECRET_KEY)? else {
         return Ok(None);
     };
-    let decrypted = crypto::decrypt_secret(&stored);
-    if decrypted.trim().is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(decrypted))
+    if stored.trim().is_empty() {
+        return Ok(None);
     }
+    let decrypted = decrypt_api_key(&stored);
+    if decrypted.trim().is_empty() {
+        // A key is saved (the settings page says "configured") but can't be
+        // decrypted: the keychain master key is unreadable or was replaced.
+        return Err(KEY_UNREADABLE.into());
+    }
+    Ok(Some(decrypted.trim().to_string()))
 }
 
 pub async fn test_provider_connectivity(
@@ -90,79 +115,299 @@ pub async fn stream_chat_completion<F, S>(
     api_key: String,
     system_prompt: String,
     user_prompt: String,
-    on_delta: F,
+    mut on_delta: F,
     should_stop: S,
 ) -> Result<String, String>
 where
     F: FnMut(&str) + Send,
-    S: Fn() -> bool + Send,
+    S: Fn() -> bool + Send + Sync,
 {
     validate_provider_settings(&settings)?;
     if provider_requires_api_key(&settings) && api_key.trim().is_empty() {
         return Err("AI API key is not configured".into());
     }
 
+    let client = build_client(&settings)?;
+    let request = ChatRequest {
+        settings: &settings,
+        api_key: api_key.trim(),
+        system_prompt: &system_prompt,
+        user_prompt: truncate_middle(&user_prompt, effective_max_input_chars(&settings)),
+    };
+
     if settings.provider == "anthropic_compatible" {
-        return stream_anthropic_messages(
-            settings,
-            api_key,
-            system_prompt,
-            user_prompt,
+        return stream_anthropic_messages(&client, &request, &mut on_delta, &should_stop).await;
+    }
+    stream_openai_chat_completion(&client, &request, &mut on_delta, &should_stop).await
+}
+
+/// Everything one chat request needs, shared by every attempt.
+struct ChatRequest<'a> {
+    settings: &'a AiProviderSettings,
+    api_key: &'a str,
+    system_prompt: &'a str,
+    user_prompt: String,
+}
+
+/// Request parameters adjusted between attempts when a provider rejects one.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct RequestTuning {
+    send_temperature: bool,
+    max_tokens: u32,
+}
+
+/// Why an attempt failed. `streamed` means text already reached the caller,
+/// so the request must not be retried (the answer would be duplicated).
+#[derive(Debug)]
+struct AttemptError {
+    message: String,
+    status: Option<u16>,
+    body: String,
+    streamed: bool,
+}
+
+impl AttemptError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            status: None,
+            body: String::new(),
+            streamed: false,
+        }
+    }
+
+    fn streamed(mut self, streamed: bool) -> Self {
+        self.streamed = streamed;
+        self
+    }
+}
+
+/// Connection setup gets a short timeout; the response gets an idle timeout
+/// (the longest silence allowed between two chunks) instead of a total one.
+/// A total timeout cut off every answer that took longer than the setting to
+/// stream, and reasoning models routinely think for a while before the first
+/// token.
+fn build_client(settings: &AiProviderSettings) -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS))
+        .read_timeout(Duration::from_secs(idle_timeout_secs(settings)))
+        .build()
+        .map_err(|e| format!("AI client setup failed: {}", e))
+}
+
+/// Seconds of silence tolerated while waiting for the provider. The
+/// `request_timeout_secs` setting, but never below MIN_IDLE_TIMEOUT_SECS.
+fn idle_timeout_secs(settings: &AiProviderSettings) -> u64 {
+    settings.request_timeout_secs.max(MIN_IDLE_TIMEOUT_SECS)
+}
+
+/// Await `fut`, giving up as soon as `should_stop` turns true instead of
+/// waiting for the provider's next chunk.
+async fn until_cancelled<T>(
+    fut: impl std::future::Future<Output = T>,
+    should_stop: &(impl Fn() -> bool + Sync),
+) -> Result<T, AttemptError> {
+    tokio::pin!(fut);
+    loop {
+        tokio::select! {
+            out = &mut fut => return Ok(out),
+            _ = tokio::time::sleep(CANCEL_POLL_INTERVAL) => {
+                if should_stop() {
+                    return Err(AttemptError::new(CANCELLED));
+                }
+            }
+        }
+    }
+}
+
+/// Send the request; a non-2xx status becomes an AttemptError carrying the body.
+async fn send_request(
+    request: reqwest::RequestBuilder,
+    url: &str,
+    should_stop: &(impl Fn() -> bool + Sync),
+) -> Result<reqwest::Response, AttemptError> {
+    let response = until_cancelled(request.send(), should_stop)
+        .await?
+        .map_err(|e| {
+            AttemptError::new(if e.is_timeout() {
+                stream_error_message(&e)
+            } else {
+                format!("AI provider request failed: {}", e)
+            })
+        })?;
+    let status = response.status();
+    if status.is_success() {
+        return Ok(response);
+    }
+    let body = until_cancelled(response.text(), should_stop)
+        .await?
+        .unwrap_or_default();
+    Err(AttemptError {
+        message: format!(
+            "AI provider request failed ({}) at {}: {}",
+            status,
+            url,
+            describe_error_body(&body)
+        ),
+        status: Some(status.as_u16()),
+        body,
+        streamed: false,
+    })
+}
+
+/// Decide whether a failed attempt can be retried, and how. Only attempts
+/// that produced no output yet are retried.
+fn retry_tuning(
+    error: &AttemptError,
+    tuning: RequestTuning,
+    anthropic: bool,
+) -> Option<RequestTuning> {
+    if error.streamed || error.status != Some(400) {
+        return None;
+    }
+    let body = error.body.to_ascii_lowercase();
+    // Reasoning models (GPT-5 family, o-series, GPT-6, newer Claude models
+    // through some gateways) reject sampling parameters with a 400.
+    if tuning.send_temperature && body.contains("temperature") {
+        return Some(RequestTuning {
+            send_temperature: false,
+            ..tuning
+        });
+    }
+    // Some Anthropic-compatible gateways and older models cap max_tokens lower.
+    if anthropic && body.contains("max_tokens") {
+        let next = ANTHROPIC_FALLBACK_MAX_TOKENS
+            .iter()
+            .copied()
+            .find(|&n| n < tuning.max_tokens)?;
+        return Some(RequestTuning {
+            max_tokens: next,
+            ..tuning
+        });
+    }
+    None
+}
+
+/// Rate limits and gateway/server hiccups are worth another try, but only
+/// before any output has been streamed. Network errors and timeouts are
+/// reported straight away: retrying an unreachable host only multiplies the wait.
+fn is_transient(error: &AttemptError) -> bool {
+    !error.streamed
+        && matches!(
+            error.status,
+            Some(408 | 409 | 425 | 429 | 500 | 502 | 503 | 504 | 529)
+        )
+}
+
+async fn backoff(attempt: usize, should_stop: &(impl Fn() -> bool + Sync)) -> Result<(), String> {
+    let delay = Duration::from_millis(800 * (1 << attempt.min(3)) as u64);
+    until_cancelled(tokio::time::sleep(delay), should_stop)
+        .await
+        .map_err(|e| e.message)
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Protocol {
+    OpenAi,
+    Anthropic,
+}
+
+/// Run attempts against one URL: adapt the request when the provider rejects
+/// a parameter, back off and retry transient failures, otherwise give up.
+async fn run_attempts<F, S>(
+    client: &reqwest::Client,
+    request: &ChatRequest<'_>,
+    url: &str,
+    protocol: Protocol,
+    mut tuning: RequestTuning,
+    on_delta: &mut F,
+    should_stop: &S,
+) -> Result<String, AttemptError>
+where
+    F: FnMut(&str) + Send,
+    S: Fn() -> bool + Send + Sync,
+{
+    let anthropic = protocol == Protocol::Anthropic;
+    let mut transient_retries = 0;
+    let mut adaptations = 0;
+    loop {
+        let result = match protocol {
+            Protocol::OpenAi => {
+                stream_openai_chat_completion_url(
+                    client,
+                    url,
+                    request,
+                    tuning,
+                    on_delta,
+                    should_stop,
+                )
+                .await
+            }
+            Protocol::Anthropic => {
+                stream_anthropic_messages_once(client, url, request, tuning, on_delta, should_stop)
+                    .await
+            }
+        };
+        let error = match result {
+            Ok(text) => return Ok(text),
+            Err(error) => error,
+        };
+        if adaptations < 4 {
+            if let Some(next) = retry_tuning(&error, tuning, anthropic) {
+                tuning = next;
+                adaptations += 1;
+                continue;
+            }
+        }
+        if transient_retries < MAX_TRANSIENT_RETRIES && is_transient(&error) {
+            backoff(transient_retries, should_stop)
+                .await
+                .map_err(AttemptError::new)?;
+            transient_retries += 1;
+            continue;
+        }
+        return Err(error);
+    }
+}
+
+async fn stream_openai_chat_completion<F, S>(
+    client: &reqwest::Client,
+    request: &ChatRequest<'_>,
+    on_delta: &mut F,
+    should_stop: &S,
+) -> Result<String, String>
+where
+    F: FnMut(&str) + Send,
+    S: Fn() -> bool + Send + Sync,
+{
+    let urls = chat_completions_urls(&request.settings.base_url)?;
+    let initial = RequestTuning {
+        send_temperature: !model_rejects_sampling_params(&request.settings.model),
+        max_tokens: 0,
+    };
+    let mut last_retryable_error = None;
+
+    for (index, url) in urls.iter().enumerate() {
+        let result = run_attempts(
+            client,
+            request,
+            url,
+            Protocol::OpenAi,
+            initial,
             on_delta,
             should_stop,
         )
         .await;
-    }
-
-    stream_openai_chat_completion(
-        settings,
-        api_key,
-        system_prompt,
-        user_prompt,
-        on_delta,
-        should_stop,
-    )
-    .await
-}
-
-async fn stream_openai_chat_completion<F, S>(
-    settings: AiProviderSettings,
-    api_key: String,
-    system_prompt: String,
-    user_prompt: String,
-    mut on_delta: F,
-    should_stop: S,
-) -> Result<String, String>
-where
-    F: FnMut(&str) + Send,
-    S: Fn() -> bool + Send,
-{
-    let timeout_secs = settings.request_timeout_secs.max(1);
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(timeout_secs))
-        .build()
-        .map_err(|e| format!("AI client setup failed: {}", e))?;
-    let urls = chat_completions_urls(&settings.base_url)?;
-    let mut last_retryable_error = None;
-
-    for (index, url) in urls.iter().enumerate() {
-        match stream_openai_chat_completion_url(
-            &client,
-            url,
-            &settings,
-            &api_key,
-            &system_prompt,
-            &user_prompt,
-            &mut on_delta,
-            &should_stop,
-        )
-        .await
-        {
+        match result {
             Ok(full_text) => return Ok(full_text),
-            Err(error) if index + 1 < urls.len() && is_retryable_openai_endpoint_error(&error) => {
-                last_retryable_error = Some(error);
+            Err(error)
+                if index + 1 < urls.len()
+                    && !error.streamed
+                    && is_retryable_openai_endpoint_error(&error.message) =>
+            {
+                last_retryable_error = Some(error.message);
             }
-            Err(error) => return Err(error),
+            Err(error) => return Err(error.message),
         }
     }
 
@@ -171,52 +416,35 @@ where
     }))
 }
 
-// AI streaming setup genuinely needs 8 params (client, url, model, messages,
-// tools, key, signal, callback); splitting would harm readability.
-#[allow(clippy::too_many_arguments)]
 async fn stream_openai_chat_completion_url<F, S>(
     client: &reqwest::Client,
     url: &str,
-    settings: &AiProviderSettings,
-    api_key: &str,
-    system_prompt: &str,
-    user_prompt: &str,
+    request: &ChatRequest<'_>,
+    tuning: RequestTuning,
     on_delta: &mut F,
     should_stop: &S,
-) -> Result<String, String>
+) -> Result<String, AttemptError>
 where
     F: FnMut(&str) + Send,
-    S: Fn() -> bool + Send,
+    S: Fn() -> bool + Send + Sync,
 {
-    let request_body = json!({
-        "model": settings.model.trim(),
-        "temperature": settings.temperature,
+    let mut body = json!({
+        "model": request.settings.model.trim(),
         "stream": true,
         "messages": [
-            { "role": "system", "content": system_prompt },
-            { "role": "user", "content": truncate_middle(user_prompt, effective_max_input_chars(settings)) }
+            { "role": "system", "content": request.system_prompt },
+            { "role": "user", "content": request.user_prompt }
         ]
     });
-
-    let mut request = client.post(url).json(&request_body);
-    if !api_key.trim().is_empty() {
-        request = request.bearer_auth(api_key.trim());
+    if tuning.send_temperature {
+        body["temperature"] = json!(request.settings.temperature);
     }
-    let response = request
-        .send()
-        .await
-        .map_err(|e| format!("AI provider request failed: {}", e))?;
 
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!(
-            "AI provider request failed ({}) at {}: {}",
-            status,
-            url,
-            truncate_error_body(&body, 500)
-        ));
+    let mut builder = client.post(url).json(&body);
+    if !request.api_key.is_empty() {
+        builder = builder.bearer_auth(request.api_key);
     }
+    let response = send_request(builder, url, should_stop).await?;
 
     let content_type = response
         .headers()
@@ -225,32 +453,46 @@ where
         .unwrap_or_default()
         .to_ascii_lowercase();
     if content_type.contains("text/html") {
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!(
+        let body = until_cancelled(response.text(), should_stop)
+            .await?
+            .unwrap_or_default();
+        return Err(AttemptError::new(format!(
             "AI provider returned HTML at {}. Check Base URL; this endpoint may need /v1. Body: {}",
             url,
             truncate_error_body(&body, 300)
-        ));
+        )));
     }
 
     let mut full_text = String::new();
     let mut pending = String::new();
     let mut raw_response = String::new();
+    let mut finish_reason: Option<String> = None;
     let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        if should_stop() {
-            return Err("AI analysis cancelled".into());
-        }
-        let chunk = chunk.map_err(|e| format!("AI provider stream failed: {}", e))?;
+    loop {
+        let Some(chunk) = until_cancelled(stream.next(), should_stop)
+            .await
+            .map_err(|e| e.streamed(!full_text.is_empty()))?
+        else {
+            break;
+        };
+        let chunk = chunk.map_err(|e| {
+            AttemptError::new(stream_error_message(&e)).streamed(!full_text.is_empty())
+        })?;
         let chunk_text = String::from_utf8_lossy(&chunk);
         append_response_sample(&mut raw_response, &chunk_text);
         pending.push_str(&chunk_text);
 
         while let Some(line_end) = pending.find('\n') {
             let line: String = pending.drain(..=line_end).collect();
+            if let Some(error) = parse_openai_sse_line_error(&line) {
+                return Err(AttemptError::new(error).streamed(!full_text.is_empty()));
+            }
+            if let Some(reason) = parse_openai_sse_line_finish_reason(&line) {
+                finish_reason = Some(reason);
+            }
             if let Some(delta) = parse_openai_sse_line_text_delta(&line) {
                 if should_stop() {
-                    return Err("AI analysis cancelled".into());
+                    return Err(AttemptError::new(CANCELLED).streamed(!full_text.is_empty()));
                 }
                 on_delta(&delta);
                 full_text.push_str(&delta);
@@ -259,6 +501,9 @@ where
     }
 
     if !pending.trim().is_empty() {
+        if let Some(error) = parse_openai_sse_line_error(&pending) {
+            return Err(AttemptError::new(error).streamed(!full_text.is_empty()));
+        }
         for delta in parse_openai_sse_text_delta(&pending) {
             on_delta(&delta);
             full_text.push_str(&delta);
@@ -267,97 +512,130 @@ where
 
     if full_text.trim().is_empty() {
         if let Some(error) = parse_openai_response_error(&raw_response) {
-            return Err(error);
+            return Err(AttemptError::new(error));
         }
         if let Some(text) = parse_openai_json_text(&raw_response) {
             on_delta(&text);
             return Ok(text);
         }
         if looks_like_html(&raw_response) {
-            return Err(format!(
+            return Err(AttemptError::new(format!(
                 "AI provider returned HTML at {}. Check Base URL; this endpoint may need /v1. Body: {}",
                 url,
                 truncate_error_body(&raw_response, 300)
+            )));
+        }
+        if finish_reason.as_deref() == Some("length") {
+            return Err(AttemptError::new(
+                "The model used its whole output budget before writing an answer. Try a shorter question or less context.",
             ));
         }
-        return Err(format!(
+        if finish_reason.as_deref() == Some("content_filter") {
+            return Err(AttemptError::new(
+                "The provider's content filter blocked this response.",
+            ));
+        }
+        return Err(AttemptError::new(format!(
             "AI provider returned an empty or unsupported response at {}. Check Base URL, model, and streaming compatibility. Body: {}",
             url,
             truncate_error_body(&raw_response, 300)
-        ));
+        )));
     }
 
+    if finish_reason.as_deref() == Some("length") {
+        on_delta(TRUNCATED_NOTICE);
+        full_text.push_str(TRUNCATED_NOTICE);
+    }
     Ok(full_text)
 }
 
 async fn stream_anthropic_messages<F, S>(
-    settings: AiProviderSettings,
-    api_key: String,
-    system_prompt: String,
-    user_prompt: String,
-    mut on_delta: F,
-    should_stop: S,
+    client: &reqwest::Client,
+    request: &ChatRequest<'_>,
+    on_delta: &mut F,
+    should_stop: &S,
 ) -> Result<String, String>
 where
     F: FnMut(&str) + Send,
-    S: Fn() -> bool + Send,
+    S: Fn() -> bool + Send + Sync,
 {
-    let timeout_secs = settings.request_timeout_secs.max(1);
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(timeout_secs))
-        .build()
-        .map_err(|e| format!("AI client setup failed: {}", e))?;
-    let url = messages_url(&settings.base_url)?;
-    let request_body = json!({
-        "model": settings.model.trim(),
-        "max_tokens": ANTHROPIC_MAX_TOKENS,
+    let url = messages_url(&request.settings.base_url)?;
+    let initial = RequestTuning {
+        // Never sent: current Claude models reject sampling parameters.
+        send_temperature: false,
+        max_tokens: ANTHROPIC_MAX_TOKENS,
+    };
+    run_attempts(
+        client,
+        request,
+        &url,
+        Protocol::Anthropic,
+        initial,
+        on_delta,
+        should_stop,
+    )
+    .await
+    .map_err(|e| e.message)
+}
+
+async fn stream_anthropic_messages_once<F, S>(
+    client: &reqwest::Client,
+    url: &str,
+    request: &ChatRequest<'_>,
+    tuning: RequestTuning,
+    on_delta: &mut F,
+    should_stop: &S,
+) -> Result<String, AttemptError>
+where
+    F: FnMut(&str) + Send,
+    S: Fn() -> bool + Send + Sync,
+{
+    let body = json!({
+        "model": request.settings.model.trim(),
+        "max_tokens": tuning.max_tokens,
         "stream": true,
-        "system": system_prompt,
+        "system": request.system_prompt,
         "messages": [
-            { "role": "user", "content": truncate_middle(&user_prompt, effective_max_input_chars(&settings)) }
+            { "role": "user", "content": request.user_prompt }
         ]
     });
 
-    let mut request = client
+    let mut builder = client
         .post(url)
         .header("anthropic-version", ANTHROPIC_VERSION)
-        .json(&request_body);
-    if !api_key.trim().is_empty() {
-        request = request.header("x-api-key", api_key.trim());
+        .json(&body);
+    if !request.api_key.is_empty() {
+        builder = builder.header("x-api-key", request.api_key);
     }
-    let response = request
-        .send()
-        .await
-        .map_err(|e| format!("AI provider request failed: {}", e))?;
-
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!(
-            "AI provider request failed ({}): {}",
-            status,
-            truncate_error_body(&body, 500)
-        ));
-    }
+    let response = send_request(builder, url, should_stop).await?;
 
     let mut full_text = String::new();
     let mut pending = String::new();
+    let mut stop_reason: Option<String> = None;
     let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        if should_stop() {
-            return Err("AI analysis cancelled".into());
-        }
-        let chunk = chunk.map_err(|e| format!("AI provider stream failed: {}", e))?;
+    loop {
+        let Some(chunk) = until_cancelled(stream.next(), should_stop)
+            .await
+            .map_err(|e| e.streamed(!full_text.is_empty()))?
+        else {
+            break;
+        };
+        let chunk = chunk.map_err(|e| {
+            AttemptError::new(stream_error_message(&e)).streamed(!full_text.is_empty())
+        })?;
         pending.push_str(&String::from_utf8_lossy(&chunk));
 
         while let Some(line_end) = pending.find('\n') {
             let line: String = pending.drain(..=line_end).collect();
             if let Some(error) = parse_anthropic_sse_line_error(&line) {
-                return Err(error);
+                return Err(AttemptError::new(error).streamed(!full_text.is_empty()));
+            }
+            if let Some(reason) = parse_anthropic_sse_line_stop_reason(&line) {
+                stop_reason = Some(reason);
             }
             if let Some(delta) = parse_anthropic_sse_line_text_delta(&line) {
                 if should_stop() {
-                    return Err("AI analysis cancelled".into());
+                    return Err(AttemptError::new(CANCELLED).streamed(!full_text.is_empty()));
                 }
                 on_delta(&delta);
                 full_text.push_str(&delta);
@@ -367,7 +645,10 @@ where
 
     if !pending.trim().is_empty() {
         if let Some(error) = parse_anthropic_sse_line_error(&pending) {
-            return Err(error);
+            return Err(AttemptError::new(error).streamed(!full_text.is_empty()));
+        }
+        if let Some(reason) = parse_anthropic_sse_line_stop_reason(&pending) {
+            stop_reason = Some(reason);
         }
         for delta in parse_anthropic_sse_text_delta(&pending) {
             on_delta(&delta);
@@ -375,7 +656,77 @@ where
         }
     }
 
+    match stop_reason.as_deref() {
+        Some("refusal") => {
+            return Err(AttemptError::new(
+                "The model declined to answer this request (stop_reason: refusal).",
+            )
+            .streamed(!full_text.is_empty()))
+        }
+        Some("max_tokens") if full_text.trim().is_empty() => {
+            return Err(AttemptError::new(
+                "The model used its whole output budget before writing an answer. Try a shorter question or less context.",
+            ))
+        }
+        Some("max_tokens") => {
+            on_delta(TRUNCATED_NOTICE);
+            full_text.push_str(TRUNCATED_NOTICE);
+        }
+        _ => {}
+    }
+    if full_text.trim().is_empty() {
+        return Err(AttemptError::new(format!(
+            "AI provider returned an empty response at {}. Check the model name and that the endpoint speaks the Anthropic Messages API.",
+            url
+        )));
+    }
     Ok(full_text)
+}
+
+/// Read timeouts surface as a generic body error; say what actually happened.
+fn stream_error_message(error: &reqwest::Error) -> String {
+    if error.is_timeout() {
+        "AI provider stopped sending data (idle timeout). Increase the request timeout in AI settings if the model needs longer to think.".to_string()
+    } else {
+        format!("AI provider stream failed: {}", error)
+    }
+}
+
+/// GPT-5 family, GPT-6, and the o-series reasoning models reject
+/// `temperature` (only the default is accepted), so it isn't sent to them.
+/// Gateways may prefix the model with a vendor (`openai/gpt-5.4`).
+fn model_rejects_sampling_params(model: &str) -> bool {
+    let model = model.trim().to_ascii_lowercase();
+    let name = model.rsplit('/').next().unwrap_or(&model);
+    ["gpt-5", "gpt-6", "o1", "o3", "o4"].iter().any(|family| {
+        name == *family
+            || name.starts_with(&format!("{}-", family))
+            || name.starts_with(&format!("{}.", family))
+    })
+}
+
+/// Short, readable form of a provider error body: the error message when the
+/// body is JSON in one of the common shapes, otherwise the (truncated) body.
+fn describe_error_body(body: &str) -> String {
+    let Ok(json) = serde_json::from_str::<Value>(body.trim()) else {
+        return truncate_error_body(body, 500);
+    };
+    let error = json.get("error").unwrap_or(&json);
+    let message = error
+        .as_str()
+        .or_else(|| error.get("message").and_then(|v| v.as_str()))
+        .or_else(|| error.get("msg").and_then(|v| v.as_str()))
+        .or_else(|| json.get("message").and_then(|v| v.as_str()));
+    let code = error
+        .get("code")
+        .or_else(|| error.get("type"))
+        .or_else(|| json.get("code"))
+        .and_then(|v| v.as_str());
+    match (code, message) {
+        (Some(code), Some(message)) => truncate_error_body(&format!("{}: {}", code, message), 500),
+        (None, Some(message)) => truncate_error_body(message, 500),
+        _ => truncate_error_body(body, 500),
+    }
 }
 
 pub fn chat_completions_url(base_url: &str) -> Result<String, String> {
@@ -507,13 +858,61 @@ fn parse_openai_sse_line_text_delta(line: &str) -> Option<String> {
 
 fn parse_openai_response_error(raw: &str) -> Option<String> {
     let json = serde_json::from_str::<Value>(raw.trim()).ok()?;
-    let error = json.get("error")?;
-    let message = error
+    if json.get("choices").is_some() {
+        return None;
+    }
+    if json.get("error").map_or(true, Value::is_null)
+        && json.get("message").is_none()
+        && json.get("msg").is_none()
+    {
+        return None;
+    }
+    Some(format!(
+        "AI provider returned an error: {}",
+        describe_error_body(raw)
+    ))
+}
+
+/// `data: {"error": ...}` inside an OpenAI-compatible stream (gateways report
+/// upstream failures this way after a 200).
+fn parse_openai_sse_line_error(line: &str) -> Option<String> {
+    let data = sse_data(line)?;
+    let json = serde_json::from_str::<Value>(data).ok()?;
+    json.get("error").filter(|e| !e.is_null())?;
+    Some(format!(
+        "AI provider stream failed: {}",
+        describe_error_body(data)
+    ))
+}
+
+fn parse_openai_sse_line_finish_reason(line: &str) -> Option<String> {
+    let json = serde_json::from_str::<Value>(sse_data(line)?).ok()?;
+    json.get("choices")?
+        .get(0)?
+        .get("finish_reason")?
         .as_str()
-        .or_else(|| error.get("message").and_then(|v| v.as_str()))
-        .or_else(|| error.get("msg").and_then(|v| v.as_str()))
-        .unwrap_or("OpenAI-compatible provider returned an error");
-    Some(format!("AI provider returned an error: {}", message))
+        .map(ToString::to_string)
+}
+
+/// `stop_reason` from an Anthropic `message_delta` event.
+fn parse_anthropic_sse_line_stop_reason(line: &str) -> Option<String> {
+    let json = serde_json::from_str::<Value>(sse_data(line)?).ok()?;
+    if json.get("type").and_then(|v| v.as_str()) != Some("message_delta") {
+        return None;
+    }
+    json.get("delta")?
+        .get("stop_reason")?
+        .as_str()
+        .map(ToString::to_string)
+}
+
+/// The payload of an SSE `data:` line, if this is one with content.
+fn sse_data(line: &str) -> Option<&str> {
+    let data = line
+        .trim_end_matches(['\n', '\r'])
+        .strip_prefix("data:")?
+        .trim();
+    (!data.is_empty() && data != "[DONE]").then_some(data)
 }
 
 fn parse_openai_json_text(raw: &str) -> Option<String> {
@@ -582,11 +981,12 @@ fn parse_anthropic_sse_line_error(line: &str) -> Option<String> {
     if json.get("type").and_then(|v| v.as_str()) != Some("error") {
         return None;
     }
-    let message = json
-        .get("error")
-        .and_then(|v| v.get("message"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("Anthropic provider stream returned an error");
+    let message = describe_error_body(data);
+    let message = if message.trim().is_empty() || message == data.trim() {
+        "Anthropic provider stream returned an error".to_string()
+    } else {
+        message
+    };
     Some(format!("AI provider stream failed: {}", message))
 }
 
@@ -627,8 +1027,24 @@ fn truncate_error_body(input: &str, max_chars: usize) -> String {
 }
 
 #[cfg(not(test))]
+fn decrypt_api_key(stored: &str) -> String {
+    crate::crypto::decrypt_secret(stored)
+}
+
+#[cfg(test)]
+fn decrypt_api_key(stored: &str) -> String {
+    // Mirrors crypto::decrypt_secret when the keychain key is unusable: an
+    // encrypted value comes back empty.
+    if stored.starts_with("enc:v1:") {
+        String::new()
+    } else {
+        stored.to_string()
+    }
+}
+
+#[cfg(not(test))]
 fn encrypt_api_key(api_key: &str) -> String {
-    crypto::encrypt_secret(api_key)
+    crate::crypto::encrypt_secret(api_key)
 }
 
 #[cfg(test)]
@@ -686,7 +1102,10 @@ mod tests {
         let settings = load_settings(&db).unwrap();
 
         assert!(settings.api_key_configured);
-        assert_eq!(load_api_key(&db).unwrap(), None);
+        // An unreadable key must say so, not masquerade as "not configured"
+        // while the settings page shows it as configured.
+        let error = load_api_key(&db).unwrap_err();
+        assert!(error.contains("can't be decrypted"), "{error}");
     }
 
     #[test]
@@ -906,5 +1325,333 @@ data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text
         assert!(truncated.ends_with('c'));
         assert!(truncated.contains("chars omitted"));
         assert!(truncated.chars().count() < input.chars().count());
+    }
+}
+
+#[cfg(test)]
+mod request_tests {
+    use super::*;
+    use std::sync::{Arc, Mutex as StdMutex};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    /// One canned HTTP response from the mock provider.
+    struct Reply {
+        status: u16,
+        content_type: &'static str,
+        body: String,
+    }
+
+    fn sse(body: &str) -> Reply {
+        Reply {
+            status: 200,
+            content_type: "text/event-stream",
+            body: body.to_string(),
+        }
+    }
+
+    fn json_reply(status: u16, body: &str) -> Reply {
+        Reply {
+            status,
+            content_type: "application/json",
+            body: body.to_string(),
+        }
+    }
+
+    /// Serve `replies` in order, one per connection, recording each request
+    /// (path + JSON body). Returns the base URL.
+    async fn mock_provider(replies: Vec<Reply>) -> (String, Arc<StdMutex<Vec<(String, Value)>>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let seen = Arc::new(StdMutex::new(Vec::new()));
+        let log = seen.clone();
+        tokio::spawn(async move {
+            for reply in replies {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    return;
+                };
+                let mut raw = Vec::new();
+                let mut buf = [0u8; 8192];
+                let (head_end, content_length) = loop {
+                    let n = socket.read(&mut buf).await.unwrap();
+                    assert!(n > 0, "client closed before sending a request");
+                    raw.extend_from_slice(&buf[..n]);
+                    let text = String::from_utf8_lossy(&raw).to_string();
+                    if let Some(pos) = text.find("\r\n\r\n") {
+                        let length = text[..pos]
+                            .lines()
+                            .find_map(|l| {
+                                let (k, v) = l.split_once(':')?;
+                                k.eq_ignore_ascii_case("content-length")
+                                    .then(|| v.trim().parse::<usize>().ok())?
+                            })
+                            .unwrap_or(0);
+                        break (pos + 4, length);
+                    }
+                };
+                while raw.len() < head_end + content_length {
+                    let n = socket.read(&mut buf).await.unwrap();
+                    raw.extend_from_slice(&buf[..n]);
+                }
+                let text = String::from_utf8_lossy(&raw).to_string();
+                let path = text
+                    .lines()
+                    .next()
+                    .and_then(|l| l.split_whitespace().nth(1))
+                    .unwrap_or_default()
+                    .to_string();
+                let body = serde_json::from_str(&text[head_end..]).unwrap_or(Value::Null);
+                log.lock().unwrap().push((path, body));
+                let response = format!(
+                    "HTTP/1.1 {} X\r\ncontent-type: {}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                    reply.status,
+                    reply.content_type,
+                    reply.body.len(),
+                    reply.body
+                );
+                socket.write_all(response.as_bytes()).await.unwrap();
+                let _ = socket.shutdown().await;
+            }
+        });
+        (format!("http://{}/v1", addr), seen)
+    }
+
+    fn settings(provider: &str, base_url: &str, model: &str) -> AiProviderSettings {
+        AiProviderSettings {
+            enabled: true,
+            provider: provider.into(),
+            base_url: base_url.into(),
+            model: model.into(),
+            ..AiProviderSettings::default()
+        }
+    }
+
+    async fn run(settings: AiProviderSettings) -> (Result<String, String>, String) {
+        let mut streamed = String::new();
+        let result = stream_chat_completion(
+            settings,
+            "test-key".into(),
+            "system".into(),
+            "question".into(),
+            |delta| streamed.push_str(delta),
+            || false,
+        )
+        .await;
+        (result, streamed)
+    }
+
+    const OPENAI_OK: &str = "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
+
+    #[tokio::test]
+    async fn reasoning_models_are_sent_no_temperature() {
+        let (base, seen) = mock_provider(vec![sse(OPENAI_OK)]).await;
+        let (result, streamed) = run(settings("openai_compatible", &base, "gpt-5.5")).await;
+        assert_eq!(result.unwrap(), "Hello");
+        assert_eq!(streamed, "Hello");
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen[0].0, "/v1/chat/completions");
+        assert!(seen[0].1.get("temperature").is_none(), "{}", seen[0].1);
+    }
+
+    #[tokio::test]
+    async fn rejected_temperature_is_dropped_and_retried() {
+        let rejected = r#"{"error":{"message":"Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.","type":"invalid_request_error","param":"temperature","code":"unsupported_value"}}"#;
+        let (base, seen) = mock_provider(vec![json_reply(400, rejected), sse(OPENAI_OK)]).await;
+        let (result, _) = run(settings("openai_compatible", &base, "my-gateway-model")).await;
+        assert_eq!(result.unwrap(), "Hello");
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 2);
+        assert!(seen[0].1.get("temperature").is_some());
+        assert!(seen[1].1.get("temperature").is_none());
+    }
+
+    #[tokio::test]
+    async fn transient_errors_are_retried_before_any_output() {
+        let (base, seen) = mock_provider(vec![
+            json_reply(503, r#"{"error":{"message":"overloaded"}}"#),
+            sse(OPENAI_OK),
+        ])
+        .await;
+        let (result, _) = run(settings("openai_compatible", &base, "gpt-5.5")).await;
+        assert_eq!(result.unwrap(), "Hello");
+        assert_eq!(seen.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn auth_errors_are_reported_with_the_provider_message() {
+        let (base, seen) = mock_provider(vec![json_reply(
+            401,
+            r#"{"code":401,"message":"invalid api key"}"#,
+        )])
+        .await;
+        let (result, _) = run(settings("openai_compatible", &base, "gpt-5.5")).await;
+        let error = result.unwrap_err();
+        assert!(error.contains("401"), "{error}");
+        assert!(error.contains("invalid api key"), "{error}");
+        assert_eq!(seen.lock().unwrap().len(), 1, "a 401 is not retried");
+    }
+
+    #[tokio::test]
+    async fn stream_errors_after_a_200_are_surfaced() {
+        let (base, _) = mock_provider(vec![sse(
+            "data: {\"error\":{\"message\":\"upstream quota exceeded\",\"code\":\"quota\"}}\n\n",
+        )])
+        .await;
+        let (result, _) = run(settings("openai_compatible", &base, "gpt-5.5")).await;
+        let error = result.unwrap_err();
+        assert!(error.contains("upstream quota exceeded"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn output_cut_off_by_length_is_marked() {
+        let (base, _) = mock_provider(vec![sse(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"},\"finish_reason\":\"length\"}]}\n\ndata: [DONE]\n\n",
+        )])
+        .await;
+        let (result, streamed) = run(settings("openai_compatible", &base, "gpt-5.5")).await;
+        let text = result.unwrap();
+        assert!(text.starts_with("partial"));
+        assert!(text.contains("output limit"), "{text}");
+        assert_eq!(streamed, text);
+    }
+
+    const ANTHROPIC_OK: &str = "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"hmm\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"OK\"}}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n";
+
+    #[tokio::test]
+    async fn anthropic_requests_leave_room_for_thinking_and_skip_sampling() {
+        let (base, seen) = mock_provider(vec![sse(ANTHROPIC_OK)]).await;
+        let (result, streamed) =
+            run(settings("anthropic_compatible", &base, "claude-opus-5-5")).await;
+        assert_eq!(
+            result.unwrap(),
+            "OK",
+            "thinking deltas are not part of the answer"
+        );
+        assert_eq!(streamed, "OK");
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen[0].0, "/v1/messages");
+        assert_eq!(seen[0].1["max_tokens"], ANTHROPIC_MAX_TOKENS);
+        assert!(seen[0].1.get("temperature").is_none());
+        assert_eq!(seen[0].1["system"], "system");
+    }
+
+    #[tokio::test]
+    async fn anthropic_max_tokens_steps_down_when_rejected() {
+        let too_big = r#"{"type":"error","error":{"type":"invalid_request_error","message":"max_tokens: 32000 > 8192, which is the maximum allowed number of output tokens for claude-3-5-sonnet"}}"#;
+        let (base, seen) = mock_provider(vec![
+            json_reply(400, too_big),
+            json_reply(400, too_big),
+            sse(ANTHROPIC_OK),
+        ])
+        .await;
+        let (result, _) = run(settings("anthropic_compatible", &base, "claude-3-5-sonnet")).await;
+        assert_eq!(result.unwrap(), "OK");
+        let sent: Vec<_> = seen
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(_, body)| body["max_tokens"].as_u64().unwrap())
+            .collect();
+        assert_eq!(sent, vec![32_000, 16_000, 8_192]);
+    }
+
+    #[tokio::test]
+    async fn anthropic_refusal_is_an_error() {
+        let (base, _) = mock_provider(vec![sse(
+            "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"refusal\"}}\n\n",
+        )])
+        .await;
+        let (result, _) = run(settings("anthropic_compatible", &base, "claude-fable-5-2")).await;
+        assert!(result.unwrap_err().contains("refusal"));
+    }
+
+    #[tokio::test]
+    async fn anthropic_thinking_only_budget_exhaustion_is_explained() {
+        let (base, _) = mock_provider(vec![sse(
+            "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"...\"}}\n\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"max_tokens\"}}\n\n",
+        )])
+        .await;
+        let (result, _) = run(settings("anthropic_compatible", &base, "claude-fable-5-2")).await;
+        assert!(result.unwrap_err().contains("output budget"));
+    }
+
+    #[tokio::test]
+    async fn cancellation_stops_a_silent_provider_quickly() {
+        // Accepts the connection but never answers.
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}/v1", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            let _held = listener.accept().await;
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        });
+        let started = std::time::Instant::now();
+        let result = stream_chat_completion(
+            settings("openai_compatible", &base, "gpt-5.5"),
+            "test-key".into(),
+            "system".into(),
+            "question".into(),
+            |_| {},
+            move || started.elapsed() > Duration::from_millis(300),
+        )
+        .await;
+        assert_eq!(result.unwrap_err(), CANCELLED);
+        assert!(started.elapsed() < Duration::from_secs(3));
+    }
+
+    #[test]
+    fn sampling_params_are_skipped_for_reasoning_model_families() {
+        for model in [
+            "gpt-5",
+            "gpt-5.5",
+            "gpt-5-mini",
+            "GPT-5.4",
+            "openai/gpt-5.2",
+            "gpt-6.2-sol",
+            "o3",
+            "o4-mini",
+            "o1",
+        ] {
+            assert!(model_rejects_sampling_params(model), "{model}");
+        }
+        for model in [
+            "gpt-4.1-mini",
+            "gpt-4o",
+            "deepseek-chat",
+            "qwen3:8b",
+            "gpt-oss:20b",
+            "o1x",
+        ] {
+            assert!(!model_rejects_sampling_params(model), "{model}");
+        }
+    }
+
+    #[test]
+    fn error_bodies_are_summarised_from_common_shapes() {
+        assert_eq!(
+            describe_error_body(r#"{"error":{"message":"bad key","code":"invalid_api_key"}}"#),
+            "invalid_api_key: bad key"
+        );
+        assert_eq!(
+            describe_error_body(
+                r#"{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}"#
+            ),
+            "overloaded_error: Overloaded"
+        );
+        assert_eq!(
+            describe_error_body(r#"{"message":"quota exhausted"}"#),
+            "quota exhausted"
+        );
+        assert_eq!(describe_error_body("<html>502</html>"), "<html>502</html>");
+    }
+
+    #[test]
+    fn idle_timeout_never_drops_below_the_floor() {
+        let mut s = AiProviderSettings {
+            request_timeout_secs: 45,
+            ..AiProviderSettings::default()
+        };
+        assert_eq!(idle_timeout_secs(&s), MIN_IDLE_TIMEOUT_SECS);
+        s.request_timeout_secs = 300;
+        assert_eq!(idle_timeout_secs(&s), 300);
     }
 }

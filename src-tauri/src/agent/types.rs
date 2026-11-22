@@ -252,11 +252,11 @@ impl Default for AiProviderSettings {
             enabled: false,
             provider: "openai_compatible".to_string(),
             base_url: "https://api.openai.com/v1".to_string(),
-            model: "gpt-4.1-mini".to_string(),
+            model: "gpt-5.5".to_string(),
             api_key_configured: false,
             temperature: 0.2,
             max_input_chars: 24_000,
-            request_timeout_secs: 45,
+            request_timeout_secs: 120,
         }
     }
 }

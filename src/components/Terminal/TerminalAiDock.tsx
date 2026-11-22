@@ -33,7 +33,11 @@ interface TerminalAiEventPayload {
 
 const MAX_COMMAND_SUGGESTIONS = 6;
 const TERMINAL_AI_SETTINGS_TIMEOUT_MS = 5000;
-const TERMINAL_AI_TIMEOUT_GRACE_SECS = 5;
+// The backend gives up after `request_timeout_secs` (at least
+// MIN_IDLE_TIMEOUT_SECS) without data from the provider; the dock waits a
+// little longer so the backend's clearer error normally arrives first.
+const MIN_IDLE_TIMEOUT_SECS = 120;
+const TERMINAL_AI_IDLE_GRACE_SECS = 15;
 const SHELL_FENCE_LANGS = new Set([
   '',
   'bash',
@@ -51,6 +55,11 @@ const SHELL_FENCE_LANGS = new Set([
 const newRequestId = () =>
   globalThis.crypto?.randomUUID?.() ??
   `terminal-ai-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+/** Ask the backend to stop streaming a request the user no longer waits for. */
+const cancelTerminalAiRequest = (requestId: string) => {
+  invoke('cancel_terminal_ai_chat', { requestId }).catch(() => {});
+};
 
 const formatError = (err: unknown): string => {
   if (typeof err === 'string') return err;
@@ -154,6 +163,7 @@ export const TerminalAiDock: React.FC = () => {
   useEffect(() => {
     return () => {
       mountedRef.current = false;
+      if (activeRequestIdRef.current) cancelTerminalAiRequest(activeRequestIdRef.current);
       cleanupListeners();
     };
   }, [cleanupListeners]);
@@ -238,7 +248,10 @@ export const TerminalAiDock: React.FC = () => {
     (showNotice = true) => {
       const requestId = activeRequestIdRef.current;
       activeRequestIdRef.current = null;
-      if (requestId) cleanupListeners(requestId);
+      if (requestId) {
+        cancelTerminalAiRequest(requestId);
+        cleanupListeners(requestId);
+      }
       setBusy(false);
       setPhase('');
       if (showNotice) setNotice(t('terminal_ai_stopped_waiting'));
@@ -316,9 +329,23 @@ export const TerminalAiDock: React.FC = () => {
     const deltaEvent = `terminal-ai-delta-${requestId}`;
     const doneEvent = `terminal-ai-done-${requestId}`;
     const errorEvent = `terminal-ai-error-${requestId}`;
-    const timeoutMs =
-      Math.max(1, latestSettings.request_timeout_secs + TERMINAL_AI_TIMEOUT_GRACE_SECS) * 1000;
+    // Idle timeout: restarted by every streamed chunk, so a long answer that
+    // keeps arriving is never cut off; only a silent provider times out.
+    const idleTimeoutMs =
+      (Math.max(MIN_IDLE_TIMEOUT_SECS, latestSettings.request_timeout_secs) +
+        TERMINAL_AI_IDLE_GRACE_SECS) *
+      1000;
     let timeoutHandle: ReturnType<typeof window.setTimeout> | null = null;
+    let rejectIdle: ((err: Error) => void) | null = null;
+    const armIdleTimer = () => {
+      if (timeoutHandle) window.clearTimeout(timeoutHandle);
+      timeoutHandle = window.setTimeout(() => {
+        cancelTerminalAiRequest(requestId);
+        rejectIdle?.(
+          new Error(t('terminal_ai_timeout_error', { seconds: Math.ceil(idleTimeoutMs / 1000) })),
+        );
+      }, idleTimeoutMs);
+    };
     let sawDelta = false;
     try {
       cleanupListeners();
@@ -327,6 +354,7 @@ export const TerminalAiDock: React.FC = () => {
         const unlistenDelta = await listen<TerminalAiEventPayload>(deltaEvent, (event) => {
           if (!isCurrentRequest() || !event.payload.textDelta) return;
           sawDelta = true;
+          armIdleTimer();
           setPhase(t('terminal_ai_phase_streaming'));
           setAnswer((prev) => prev + event.payload.textDelta);
         });
@@ -366,12 +394,9 @@ export const TerminalAiDock: React.FC = () => {
       if (!isCurrentRequest()) return;
       setPhase(t('terminal_ai_phase_requesting'));
       const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutHandle = window.setTimeout(() => {
-          reject(
-            new Error(t('terminal_ai_timeout_error', { seconds: Math.ceil(timeoutMs / 1000) })),
-          );
-        }, timeoutMs);
+        rejectIdle = reject;
       });
+      armIdleTimer();
       const fullText = await Promise.race([
         invoke<string>('run_terminal_ai_chat', { request }),
         timeoutPromise,

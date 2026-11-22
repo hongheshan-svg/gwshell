@@ -1315,7 +1315,52 @@ async fn test_ai_provider_with_settings(
     agent::provider::test_provider_connectivity(settings, api_key).await
 }
 
-const TERMINAL_AI_TIMEOUT_GRACE_SECS: u64 = 5;
+/// Safety cap on one terminal AI answer. Stalls are caught much sooner by the
+/// provider's idle timeout (no data for `request_timeout_secs`); this only
+/// bounds a stream that keeps trickling forever.
+const TERMINAL_AI_MAX_DURATION_SECS: u64 = 15 * 60;
+
+/// Cancellation flags of the terminal AI requests in flight, by request id, so
+/// the dock's Stop button ends the provider stream instead of leaving it to
+/// run (and bill) to completion in the background.
+fn terminal_ai_requests() -> &'static Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>> {
+    static REQUESTS: std::sync::OnceLock<
+        Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>,
+    > = std::sync::OnceLock::new();
+    REQUESTS.get_or_init(Default::default)
+}
+
+/// Registers a request's cancellation flag; unregisters it when dropped.
+struct TerminalAiRequestGuard {
+    request_id: String,
+    cancelled: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl TerminalAiRequestGuard {
+    fn register(request_id: &str) -> Self {
+        let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        terminal_ai_requests()
+            .lock()
+            .insert(request_id.to_string(), cancelled.clone());
+        Self {
+            request_id: request_id.to_string(),
+            cancelled,
+        }
+    }
+}
+
+impl Drop for TerminalAiRequestGuard {
+    fn drop(&mut self) {
+        terminal_ai_requests().lock().remove(&self.request_id);
+    }
+}
+
+#[tauri::command]
+fn cancel_terminal_ai_chat(request_id: String) {
+    if let Some(flag) = terminal_ai_requests().lock().get(&request_id) {
+        flag.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
 
 fn terminal_ai_event_name(kind: &str, request_id: &str) -> String {
     format!("terminal-ai-{}-{}", kind, request_id)
@@ -1355,13 +1400,11 @@ async fn run_terminal_ai_chat(
     let done_event = terminal_ai_event_name("done", &request_id);
     let error_event = terminal_ai_event_name("error", &request_id);
     let delta_handle = app_handle.clone();
-    let hard_timeout_secs = settings
-        .request_timeout_secs
-        .max(1)
-        .saturating_add(TERMINAL_AI_TIMEOUT_GRACE_SECS);
+    let guard = TerminalAiRequestGuard::register(&request_id);
+    let cancelled = guard.cancelled.clone();
 
     let result = match timeout(
-        Duration::from_secs(hard_timeout_secs),
+        Duration::from_secs(TERMINAL_AI_MAX_DURATION_SECS),
         agent::provider::stream_chat_completion(
             settings,
             api_key,
@@ -1370,17 +1413,18 @@ async fn run_terminal_ai_chat(
             move |delta| {
                 let _ = delta_handle.emit(&delta_event, serde_json::json!({ "textDelta": delta }));
             },
-            || false,
+            move || cancelled.load(std::sync::atomic::Ordering::Relaxed),
         ),
     )
     .await
     {
         Ok(result) => result,
         Err(_) => Err(format!(
-            "AI request timed out after {} seconds",
-            hard_timeout_secs
+            "AI request timed out after {} minutes",
+            TERMINAL_AI_MAX_DURATION_SECS / 60
         )),
     };
+    drop(guard);
 
     match result {
         Ok(full_text) => {
@@ -2832,6 +2876,7 @@ pub fn run() {
             test_ai_provider,
             test_ai_provider_with_settings,
             run_terminal_ai_chat,
+            cancel_terminal_ai_chat,
             list_agent_audits,
             start_agent_session,
             run_agent_session,
