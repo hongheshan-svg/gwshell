@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Search } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { buildCommands, type Command } from './commands';
@@ -149,16 +150,20 @@ export const CommandPalette: React.FC = () => {
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={onKeyDown}
       >
-        <input
-          ref={inputRef}
-          className="command-palette-input"
-          placeholder={t('palette_placeholder', 'Search commands…')}
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setActiveIndex(0);
-          }}
-        />
+        <div className="command-palette-header">
+          <Search size={15} className="command-palette-search-icon" />
+          <input
+            ref={inputRef}
+            className="command-palette-input"
+            placeholder={t('palette_placeholder', 'Search commands…')}
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActiveIndex(0);
+            }}
+          />
+          <kbd className="command-palette-esc">Esc</kbd>
+        </div>
         <div className="command-palette-list" ref={listRef}>
           {flatItems.length === 0 && (
             <div className="command-palette-empty">{t('palette_no_results', 'No results')}</div>
@@ -193,6 +198,7 @@ export const CommandPalette: React.FC = () => {
             );
           })}
         </div>
+        <div className="command-palette-footer">{t('palette_footer_hint')}</div>
       </div>
     </div>
   );

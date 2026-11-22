@@ -14,6 +14,10 @@ import {
   Play,
   Edit,
   Trash2,
+  Box,
+  Usb,
+  TerminalSquare,
+  X,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -140,7 +144,7 @@ export const SessionPanel: React.FC = () => {
 
   return (
     <div className="sidebar-panel">
-      {/* Header row 1: title + search */}
+      {/* Compact single-row header: title + search + new asset */}
       <div className="sidebar-header">
         <div className="sidebar-header-row">
           <h3
@@ -150,24 +154,28 @@ export const SessionPanel: React.FC = () => {
           >
             {t('panel_asset_list')}
           </h3>
-          <button
-            className="sidebar-action-btn"
-            onClick={() => setShowSearch(!showSearch)}
-            title={t('panel_search')}
-          >
-            <Search size={13} />
-          </button>
-        </div>
-        {/* Toolbar row 2: + button area */}
-        <div className="sidebar-toolbar">
-          <button
-            ref={plusBtnRef}
-            className="sidebar-action-btn sidebar-add-btn"
-            onClick={() => setShowNewAssetMenu(!showNewAssetMenu)}
-            title={t('panel_new_asset')}
-          >
-            <Plus size={15} />
-          </button>
+          <div className="sidebar-actions">
+            <button
+              type="button"
+              className={`sidebar-action-btn${showSearch ? ' active' : ''}`}
+              onClick={() => {
+                if (showSearch) setSearchQuery('');
+                setShowSearch(!showSearch);
+              }}
+              title={t('panel_search')}
+            >
+              <Search size={14} />
+            </button>
+            <button
+              type="button"
+              ref={plusBtnRef}
+              className="sidebar-action-btn sidebar-add-btn"
+              onClick={() => setShowNewAssetMenu(!showNewAssetMenu)}
+              title={t('panel_new_asset')}
+            >
+              <Plus size={14} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -183,30 +191,54 @@ export const SessionPanel: React.FC = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
               autoFocus
             />
+            {searchQuery && (
+              <button
+                type="button"
+                className="search-clear-btn"
+                onClick={() => setSearchQuery('')}
+                title={t('table_clear_search')}
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
         </div>
       )}
 
       <div className="sidebar-content">
         {filteredSessions ? (
-          filteredSessions.map((session) => (
-            <SessionItem
-              key={session.id}
-              session={session}
-              onConnect={handleConnect}
-              onContextMenu={handleContextMenu}
-            />
-          ))
+          filteredSessions.length === 0 ? (
+            <div className="sidebar-empty sidebar-empty--search">
+              <Search size={22} />
+              <p>{t('table_no_matches')}</p>
+            </div>
+          ) : (
+            filteredSessions.map((session) => (
+              <SessionItem
+                key={session.id}
+                session={session}
+                onConnect={handleConnect}
+                onContextMenu={handleContextMenu}
+              />
+            ))
+          )
         ) : allSessions.length === 0 ? (
           <div className="sidebar-empty">
-            <Monitor size={32} />
+            <Monitor size={28} />
             <p>{t('panel_no_assets')}</p>
             <button
+              type="button"
               className="btn btn-primary"
-              style={{ fontSize: 11, height: 28 }}
+              style={{
+                fontSize: 12,
+                height: 30,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+              }}
               onClick={() => setShowNewAssetMenu(true)}
             >
-              <Plus size={12} /> {t('panel_new_asset')}
+              <Plus size={13} /> {t('panel_new_asset')}
             </button>
           </div>
         ) : (
@@ -370,9 +402,24 @@ const SessionItem: React.FC<{
       onContextMenu={(e) => onContextMenu(e, session)}
     >
       <span className="session-item-icon">
-        <Server size={14} />
+        {session.session_type === 'docker' ? (
+          <Box size={13} />
+        ) : session.session_type === 'serial' ? (
+          <Usb size={13} />
+        ) : session.session_type === 'localshell' ? (
+          <TerminalSquare size={13} />
+        ) : (
+          <Server size={13} />
+        )}
       </span>
       <span className="session-item-name">{session.name}</span>
+      {session.color_label && (
+        <span
+          className="session-color-pip"
+          style={{ background: session.color_label }}
+          aria-hidden="true"
+        />
+      )}
       <span className={`session-status-dot ${isConnected ? 'connected' : 'disconnected'}`} />
     </div>
   );

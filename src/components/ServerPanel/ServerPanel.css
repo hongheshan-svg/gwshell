@@ -1,17 +1,19 @@
 .sp-drawer {
   position: fixed;
-  top: 32px;
+  top: var(--titlebar-height, 38px);
   right: 0;
   bottom: 0;
   width: 380px;
   z-index: 900;
-  background: var(--bg-secondary);
+  background: var(--chrome-bg);
+  backdrop-filter: blur(var(--surface-blur));
+  -webkit-backdrop-filter: blur(var(--surface-blur));
   border-left: 1px solid var(--border-color);
   color: var(--text-primary);
   display: flex;
   flex-direction: column;
-  animation: sp-slide-in 0.2s ease-out;
-  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+  animation: sp-slide-in 180ms cubic-bezier(0.2, 0, 0, 1);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 @keyframes sp-slide-in {
@@ -29,38 +31,44 @@
   justify-content: space-between;
   padding: 10px 14px;
   border-bottom: 1px solid var(--border-color);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
 }
 .sp-header__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
   background: transparent;
   border: 0;
-  color: inherit;
+  color: var(--text-muted);
   cursor: pointer;
-  padding: 4px;
+  padding: 0;
   border-radius: var(--radius-sm);
 }
 .sp-header__close:hover {
-  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .sp-banner {
-  padding: 6px 14px;
+  padding: 7px 14px;
   font-size: 12px;
 }
 .sp-banner--info {
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--accent-bg);
   color: var(--accent-primary);
 }
 .sp-banner--error {
-  background: rgba(239, 68, 68, 0.12);
+  background: rgba(var(--danger-rgb), 0.12);
   color: var(--danger);
 }
 
 .sp-body {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -70,41 +78,48 @@
 }
 
 .sp-card {
-  background: var(--bg-primary);
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 10px 12px;
+  padding: 12px;
 }
 .sp-card__title {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
 }
 .sp-empty {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 .sp-grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px 14px;
+  gap: 8px 14px;
 }
 .sp-grid-4 {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 6px 10px;
+  gap: 8px 10px;
 }
 .sp-kv {
   display: flex;
   flex-direction: column;
+  gap: 2px;
   font-size: 12px;
 }
 .sp-kv__k {
-  color: var(--text-secondary);
+  font-size: 11px;
+  color: var(--text-muted);
 }
 .sp-kv__v {
   color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -114,40 +129,44 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  gap: 2px;
 }
 .sp-stat__label {
-  font-size: 11px;
-  color: var(--text-secondary);
+  font-size: 10.5px;
+  color: var(--text-muted);
 }
 .sp-stat__value {
   font-size: 14px;
   font-weight: 600;
+  font-family: var(--font-mono);
 }
 
 .sp-corelist {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   margin-top: 8px;
 }
 .sp-corerow {
   display: grid;
   grid-template-columns: 40px 1fr 48px;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
   font-size: 11px;
+  font-family: var(--font-mono);
 }
 .sp-corerow__bar {
   display: block;
-  height: 8px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-pill);
   overflow: hidden;
 }
 .sp-corerow__bar-fill {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, #22c55e, #3b82f6);
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--success), var(--accent-primary));
 }
 .sp-corerow__pct {
   text-align: right;
@@ -155,8 +174,9 @@
 }
 
 .sp-loadavg {
-  margin-top: 8px;
+  margin-top: 10px;
   font-size: 11px;
+  font-family: var(--font-mono);
   color: var(--text-secondary);
   display: flex;
   gap: 10px;
@@ -165,8 +185,8 @@
 .sp-membar {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-bottom: 8px;
+  gap: 5px;
+  margin-bottom: 10px;
 }
 .sp-membar__head {
   display: flex;
@@ -175,19 +195,20 @@
   color: var(--text-secondary);
 }
 .sp-membar__track {
-  height: 10px;
-  background: var(--bg-secondary);
+  height: 8px;
+  background: var(--bg-tertiary);
   border-radius: var(--radius-pill);
   overflow: hidden;
 }
 .sp-membar__fill {
   height: 100%;
+  border-radius: var(--radius-pill);
 }
 .sp-membar__fill--ram {
-  background: linear-gradient(90deg, #3b82f6, #22c55e);
+  background: linear-gradient(90deg, var(--accent-primary), var(--success));
 }
 .sp-membar__fill--swap {
-  background: linear-gradient(90deg, #f59e0b, #ef4444);
+  background: linear-gradient(90deg, var(--warning), var(--danger));
 }
 
 .sp-legend {
@@ -195,7 +216,7 @@
   gap: 10px;
   font-size: 11px;
   color: var(--text-secondary);
-  margin: 8px 0 2px;
+  margin: 8px 0 4px;
 }
 .sp-legend__item {
   display: inline-flex;
@@ -204,8 +225,8 @@
 }
 .sp-legend__dot {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
 }
 .sp-sparkline {
@@ -221,15 +242,15 @@
 .sp-table th,
 .sp-table td {
   text-align: left;
-  padding: 3px 6px;
+  padding: 4px 6px;
 }
 .sp-table thead th {
-  color: var(--text-secondary);
-  font-weight: 500;
+  color: var(--text-muted);
+  font-weight: 600;
   border-bottom: 1px solid var(--border-color);
 }
 .sp-table tbody tr:hover {
-  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+  background: var(--bg-hover);
 }
 
 .sp-kill-btn {
@@ -250,18 +271,19 @@
   cursor: default;
 }
 .sp-kill-btn:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.12);
+  background: rgba(var(--danger-rgb), 0.14);
+  border-color: rgba(var(--danger-rgb), 0.4);
 }
 .sp-kill-btn--armed {
-  background: rgba(239, 68, 68, 0.25);
+  background: rgba(var(--danger-rgb), 0.24);
   border-color: var(--danger);
   animation: sp-pulse 0.8s ease-in-out infinite alternate;
 }
 @keyframes sp-pulse {
   from {
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5);
+    box-shadow: 0 0 0 0 rgba(var(--danger-rgb), 0.45);
   }
   to {
-    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
+    box-shadow: 0 0 0 4px rgba(var(--danger-rgb), 0);
   }
 }

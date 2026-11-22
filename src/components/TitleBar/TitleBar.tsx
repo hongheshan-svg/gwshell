@@ -45,7 +45,10 @@ export const TitleBar: React.FC = () => {
     // onDoubleClick toggleMaximize here, or it fires twice and cancels out.
     <div className={`titlebar${IS_MACOS ? ' titlebar--macos' : ''}`}>
       <div className="titlebar-title" data-tauri-drag-region>
-        GWShell
+        <span className="titlebar-brand-mark" aria-hidden="true">
+          &gt;_
+        </span>
+        <span>GWShell</span>
       </div>
       <div className="titlebar-center" data-tauri-drag-region>
         <button type="button" className="titlebar-cmdk" onClick={() => setShowCommandPalette(true)}>
@@ -55,25 +58,30 @@ export const TitleBar: React.FC = () => {
         </button>
       </div>
       <div className="titlebar-controls">
-        <button
-          className={`titlebar-btn${agentPanelOpen ? ' titlebar-btn--active' : ''}`}
-          onClick={toggleAgentPanel}
-          title={t('agent_panel_title')}
-          data-gw-action="toggle_agent_panel"
-        >
-          <Bot size={14} />
-        </button>
-        <button
-          className={`titlebar-btn${serverPanelOpen ? ' titlebar-btn--active' : ''}`}
-          onClick={toggleServerPanel}
-          title={t('serverPanel_toggle_title')}
-          data-gw-action="toggle_server_panel"
-        >
-          <Activity size={14} />
-        </button>
+        <div className="titlebar-tools">
+          <button
+            type="button"
+            className={`titlebar-tool-btn${agentPanelOpen ? ' titlebar-btn--active' : ''}`}
+            onClick={toggleAgentPanel}
+            title={t('agent_panel_title')}
+            data-gw-action="toggle_agent_panel"
+          >
+            <Bot size={15} />
+          </button>
+          <button
+            type="button"
+            className={`titlebar-tool-btn${serverPanelOpen ? ' titlebar-btn--active' : ''}`}
+            onClick={toggleServerPanel}
+            title={t('serverPanel_toggle_title')}
+            data-gw-action="toggle_server_panel"
+          >
+            <Activity size={15} />
+          </button>
+        </div>
         {!IS_MACOS && (
-          <>
+          <div className="titlebar-window-controls">
             <button
+              type="button"
               className="titlebar-btn"
               onClick={handleMinimize}
               data-gw-action="minimize"
@@ -82,6 +90,7 @@ export const TitleBar: React.FC = () => {
               <Minus size={14} />
             </button>
             <button
+              type="button"
               className="titlebar-btn"
               onClick={handleMaximize}
               data-gw-action="toggle_maximize"
@@ -90,6 +99,7 @@ export const TitleBar: React.FC = () => {
               <Square size={10} />
             </button>
             <button
+              type="button"
               className="titlebar-btn titlebar-close"
               onClick={handleClose}
               data-gw-action="exit"
@@ -97,7 +107,7 @@ export const TitleBar: React.FC = () => {
             >
               <X size={14} />
             </button>
-          </>
+          </div>
         )}
       </div>
     </div>

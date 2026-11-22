@@ -1,12 +1,12 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ScrollText, Sun, Moon, PanelLeftClose, MoreVertical } from 'lucide-react';
+import { ScrollText, Sun, Moon, PanelLeftClose, MoreHorizontal, Settings } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 
 /**
- * Footer of the single sidebar. Holds the utility controls that used to live in
- * the (now-removed) icon rail: snippets toggle, theme, collapse, and the app menu.
- * SFTP intentionally stays in the TabBar (it is contextual to an SSH tab).
+ * Footer of the single sidebar. Holds primary workspace utilities:
+ * snippets toggle, theme switch, direct settings shortcut, sidebar collapse,
+ * and overflow app menu.
  */
 export const SidebarFooter: React.FC = () => {
   const { t } = useTranslation();
@@ -16,6 +16,7 @@ export const SidebarFooter: React.FC = () => {
     toggleSidebar,
     activeNavItem,
     setActiveNavItem,
+    setShowSettings,
     showAppMenu,
     setShowAppMenu,
   } = useAppStore();
@@ -24,25 +25,45 @@ export const SidebarFooter: React.FC = () => {
   return (
     <div className="sidebar-footer">
       <button
+        type="button"
         className={`nav-icon-btn ${snippetsActive ? 'active' : ''}`}
         onClick={() => setActiveNavItem(snippetsActive ? 'sessions' : 'snippets')}
         title={t('nav_snippets')}
       >
-        <ScrollText size={18} />
-      </button>
-      <button className="nav-icon-btn" onClick={toggleTheme} title={t('nav_toggle_theme')}>
-        {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-      </button>
-      <div style={{ flex: 1 }} />
-      <button className="nav-icon-btn" onClick={toggleSidebar} title={t('nav_toggle_sidebar')}>
-        <PanelLeftClose size={18} />
+        <ScrollText size={15} />
       </button>
       <button
+        type="button"
+        className="nav-icon-btn"
+        onClick={toggleTheme}
+        title={t('nav_toggle_theme')}
+      >
+        {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+      </button>
+      <button
+        type="button"
+        className="nav-icon-btn"
+        onClick={() => setShowSettings(true)}
+        title={t('menu_settings')}
+      >
+        <Settings size={15} />
+      </button>
+      <div style={{ flex: 1 }} />
+      <button
+        type="button"
+        className="nav-icon-btn"
+        onClick={toggleSidebar}
+        title={t('nav_toggle_sidebar')}
+      >
+        <PanelLeftClose size={15} />
+      </button>
+      <button
+        type="button"
         className={`nav-icon-btn ${showAppMenu ? 'active' : ''}`}
         onClick={() => setShowAppMenu(!showAppMenu)}
         title={t('nav_menu')}
       >
-        <MoreVertical size={18} />
+        <MoreHorizontal size={15} />
       </button>
     </div>
   );

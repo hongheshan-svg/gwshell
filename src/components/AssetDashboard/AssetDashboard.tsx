@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
-import { Server, Plus, Zap, FileInput } from 'lucide-react';
+import { Server, Plus, Zap, FileInput, Search } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import type { SessionConfig } from '../../types';
 import type { MetricsSnapshot } from '../../types/serverMetrics';
@@ -11,15 +11,25 @@ import './AssetDashboard.css';
 
 interface Props {
   sessions: SessionConfig[]; // already filtered (pass filteredSessions)
+  hasAnySessions?: boolean;
+  onClearSearch?: () => void;
   onConnect: (s: SessionConfig) => void;
   onEdit: (s: SessionConfig) => void;
+  onContextMenu?: (e: React.MouseEvent, s: SessionConfig) => void;
 }
 
 const UNGROUPED_SENTINEL = '__ungrouped__';
 const CPU_HIST_LEN = 40;
 const TICK_THROTTLE_MS = 800;
 
-export const AssetDashboard: React.FC<Props> = ({ sessions, onConnect, onEdit }) => {
+export const AssetDashboard: React.FC<Props> = ({
+  sessions,
+  hasAnySessions = false,
+  onClearSearch,
+  onConnect,
+  onEdit,
+  onContextMenu,
+}) => {
   const { t } = useTranslation('gwshell');
   const tabs = useAppStore((s) => s.tabs);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
@@ -215,8 +225,23 @@ export const AssetDashboard: React.FC<Props> = ({ sessions, onConnect, onEdit })
     if (tab) setActiveTab(tab.id);
   };
 
-  // Empty state: instead of a bare "no assets" line, offer the three ways in.
+  // Empty state: distinguish "search yielded nothing" from true first-run empty.
   if (sessions.length === 0) {
+    if (hasAnySessions) {
+      return (
+        <div className="asset-dash-empty">
+          <div className="asset-no-matches">
+            <Search size={26} />
+            <p>{t('table_no_matches')}</p>
+            {onClearSearch && (
+              <button type="button" className="settings-btn-outline" onClick={onClearSearch}>
+                {t('table_clear_search')}
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
     return <EmptyStateCtas />;
   }
 
@@ -226,7 +251,10 @@ export const AssetDashboard: React.FC<Props> = ({ sessions, onConnect, onEdit })
         <div key={groupName} className="dash-group">
           {(groups.size > 1 || groupName !== UNGROUPED_SENTINEL) && (
             <div className="dash-group-title">
-              {groupName === UNGROUPED_SENTINEL ? t('dash_ungrouped', 'Ungrouped') : groupName}
+              <span>
+                {groupName === UNGROUPED_SENTINEL ? t('dash_ungrouped', 'Ungrouped') : groupName}
+              </span>
+              <span className="dash-group-count">{groupSessions.length}</span>
             </div>
           )}
           <div className="dash-grid">
@@ -243,6 +271,7 @@ export const AssetDashboard: React.FC<Props> = ({ sessions, onConnect, onEdit })
                   onConnect={onConnect}
                   onEdit={onEdit}
                   onFocus={onFocus}
+                  onContextMenu={onContextMenu}
                 />
               );
             })}
@@ -275,26 +304,40 @@ export const EmptyStateCtas: React.FC = () => {
   return (
     <div className="asset-dash-empty">
       <div className="asset-empty-content">
-        <Server size={32} />
-        <p>{t('table_empty', 'No sessions yet')}</p>
+        <div className="empty-hero-icon" aria-hidden="true">
+          <Server size={24} />
+        </div>
+        <h3 className="empty-hero-title">{t('table_empty', 'No sessions yet')}</h3>
+        <p className="empty-hero-subtitle">{t('empty_cta_subtitle')}</p>
         <div className="empty-cta-row">
-          <button className="empty-cta-card" onClick={() => setShowNewSession(true)}>
-            <Plus size={16} />
+          <button type="button" className="empty-cta-card" onClick={() => setShowNewSession(true)}>
+            <span className="empty-cta-icon">
+              <Plus size={16} />
+            </span>
             <span>{t('newasset_ssh')}</span>
             <span className="empty-cta-desc">{t('empty_cta_ssh_desc')}</span>
           </button>
-          <button className="empty-cta-card" onClick={() => setShowQuickConnect(true)}>
-            <Zap size={16} />
+          <button
+            type="button"
+            className="empty-cta-card"
+            onClick={() => setShowQuickConnect(true)}
+          >
+            <span className="empty-cta-icon">
+              <Zap size={16} />
+            </span>
             <span>{t('newasset_quickconnect')}</span>
             <span className="empty-cta-desc">{t('empty_cta_quick_desc')}</span>
           </button>
           <button
+            type="button"
             className="empty-cta-card"
             onClick={() => {
               void handleImportSshConfig();
             }}
           >
-            <FileInput size={16} />
+            <span className="empty-cta-icon">
+              <FileInput size={16} />
+            </span>
             <span>{t('empty_cta_import')}</span>
             <span className="empty-cta-desc">{t('empty_cta_import_desc')}</span>
           </button>

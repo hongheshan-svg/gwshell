@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Play, Pencil, Box, Usb, TerminalSquare, Server } from 'lucide-react';
+import { Play, Pencil, Box, Usb, TerminalSquare, Server, ArrowUpRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { SessionConfig } from '../../types';
 import type { MetricsSnapshot } from '../../types/serverMetrics';
@@ -14,6 +14,7 @@ interface Props {
   onConnect: (s: SessionConfig) => void;
   onEdit: (s: SessionConfig) => void;
   onFocus?: (s: SessionConfig) => void; // focus existing tab when connected
+  onContextMenu?: (e: React.MouseEvent, s: SessionConfig) => void;
 }
 
 // ---- Helpers ----------------------------------------------------------------
@@ -134,11 +135,12 @@ export const HostDashCard: React.FC<Props> = ({
   onConnect,
   onEdit,
   onFocus,
+  onContextMenu,
 }) => {
   const { t } = useTranslation('gwshell');
 
-  // Color stripe: session.color_label or fallback to CSS var (use inline style trick)
-  const stripeColor = session.color_label ?? 'var(--border-color)';
+  // Color stripe: explicit color label when assigned, subtle transparent tint otherwise
+  const stripeColor = session.color_label ?? 'transparent';
 
   // Derived metrics (only when connected + snapshot)
   const cpuPct = snapshot?.cpu ? Math.round(snapshot.cpu.total_percent) : 0;
@@ -229,9 +231,10 @@ export const HostDashCard: React.FC<Props> = ({
     <div
       className={`dash-card${connected ? ' connected' : ''}`}
       onDoubleClick={() => (connected ? onFocus?.(session) : onConnect(session))}
+      onContextMenu={(e) => onContextMenu?.(e, session)}
     >
-      {/* Left color stripe */}
-      <div className="dash-stripe" style={{ background: stripeColor }} />
+      {/* Left color stripe (visible when session has a color label) */}
+      {session.color_label && <div className="dash-stripe" style={{ background: stripeColor }} />}
 
       <div className="dash-card-inner">
         {/* Header row */}
@@ -244,7 +247,19 @@ export const HostDashCard: React.FC<Props> = ({
             {session.name}
           </span>
           <div className="dash-actions">
+            {connected && onFocus && (
+              <button
+                type="button"
+                className="dash-action-btn primary"
+                title={t('dash_open')}
+                onClick={() => onFocus(session)}
+                aria-label={t('dash_open')}
+              >
+                <ArrowUpRight size={14} />
+              </button>
+            )}
             <button
+              type="button"
               className="dash-action-btn"
               title={t('table_edit')}
               onClick={() => onEdit(session)}

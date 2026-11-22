@@ -73,18 +73,40 @@ export const UnlockScreen: React.FC = () => {
           flexDirection: 'column',
           alignItems: 'center',
           gap: 16,
-          padding: '40px 48px',
-          borderRadius: 12,
+          padding: '36px 40px',
+          borderRadius: 'var(--radius-lg)',
           background: 'var(--bg-secondary)',
-          boxShadow: '0 12px 48px rgba(0,0,0,0.5)',
-          minWidth: 320,
+          border: '1px solid var(--border-color)',
+          boxShadow: 'var(--shadow-lg)',
+          width: 360,
+          maxWidth: '92vw',
         }}
       >
-        <Lock size={36} style={{ color: 'var(--accent)' }} />
-        <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary)' }}>
+        <div
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--accent-bg)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--accent-primary)',
+          }}
+        >
+          <Lock size={24} />
+        </div>
+        <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)' }}>
           {t('vault_unlock_title')}
         </div>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center' }}>
+        <div
+          style={{
+            fontSize: 13,
+            color: 'var(--text-secondary)',
+            textAlign: 'center',
+            lineHeight: 1.5,
+          }}
+        >
           {t('vault_unlock_desc')}
         </div>
         <input
@@ -100,11 +122,11 @@ export const UnlockScreen: React.FC = () => {
           style={{
             width: '100%',
             padding: '10px 12px',
-            borderRadius: 6,
-            border: `1px solid ${error ? 'var(--danger)' : 'var(--border)'}`,
+            borderRadius: 'var(--radius-sm)',
+            border: `1px solid ${error ? 'var(--danger)' : 'var(--border-color)'}`,
             background: 'var(--bg-primary)',
             color: 'var(--text-primary)',
-            fontSize: 14,
+            fontSize: 13,
             outline: 'none',
           }}
         />
@@ -117,14 +139,14 @@ export const UnlockScreen: React.FC = () => {
           style={{
             width: '100%',
             padding: '10px 12px',
-            borderRadius: 6,
+            borderRadius: 'var(--radius-sm)',
             border: 'none',
-            background: 'var(--accent)',
-            color: 'var(--bg-primary)',
-            fontSize: 14,
+            background: 'var(--accent-primary)',
+            color: '#fff',
+            fontSize: 13,
             fontWeight: 600,
             cursor: busy || !passphrase ? 'default' : 'pointer',
-            opacity: busy || !passphrase ? 0.6 : 1,
+            opacity: busy || !passphrase ? 0.55 : 1,
           }}
         >
           {t('vault_unlock_btn')}

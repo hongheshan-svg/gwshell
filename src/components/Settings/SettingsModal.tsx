@@ -774,28 +774,41 @@ export const SettingsModal: React.FC = () => {
   useEscapeClose(handleClose);
 
   if (!showSettings) return null;
-  const fonts = [
-    'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif',
-    'Inter, system-ui, sans-serif',
-    CMD_TERMINAL_FONT,
-    'Consolas',
-    'Cascadia Mono',
-    'Cascadia Code',
-    'JetBrains Mono, "Noto Sans SC", monospace',
-    'Fira Code',
-    'monospace',
+  const fonts: SelectOption[] = [
+    {
+      value: 'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif',
+      label: 'System UI',
+    },
+    { value: 'Inter, system-ui, sans-serif', label: 'Inter' },
+    { value: CMD_TERMINAL_FONT, label: 'Consolas / Cascadia Mono' },
+    { value: 'Consolas', label: 'Consolas' },
+    { value: 'Cascadia Mono', label: 'Cascadia Mono' },
+    { value: 'Cascadia Code', label: 'Cascadia Code' },
+    { value: 'JetBrains Mono, "Noto Sans SC", monospace', label: 'JetBrains Mono' },
+    { value: 'Fira Code', label: 'Fira Code' },
+    { value: 'monospace', label: 'Monospace' },
   ];
 
   return (
     <div className="settings-overlay">
-      <div className="settings-panel">
+      <div
+        className="settings-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('settings_title')}
+      >
         {/* Header */}
         <div className="settings-header">
           <div className="settings-header-left">
             <span className="settings-brand">GWShell</span>
           </div>
           <h2>{t('settings_title')}</h2>
-          <button className="modal-close" onClick={handleClose}>
+          <button
+            type="button"
+            className="modal-close"
+            onClick={handleClose}
+            aria-label={t('common.dismiss')}
+          >
             <X size={16} />
           </button>
         </div>

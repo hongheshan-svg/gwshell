@@ -8,17 +8,23 @@ import {
   Edit,
   Play,
   Copy,
-  PanelLeftClose,
-  PanelLeftOpen,
+  LayoutGrid,
+  List,
+  X,
 } from 'lucide-react';
 import type { SessionConfig } from '../../types';
 import { useAssetData } from '../../hooks/useAssetData';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useAppStore } from '../../stores/appStore';
+import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
 import { AssetDashboard, EmptyStateCtas } from '../AssetDashboard/AssetDashboard';
+
+const SUPPORTED_QUICK_CREATE_TYPES = new Set(['ssh', 'ssh-tunnel']);
 
 export const AssetTable: React.FC = () => {
   const {
+    realSessions,
     filteredSessions,
     searchQuery,
     setSearchQuery,
@@ -32,20 +38,40 @@ export const AssetTable: React.FC = () => {
     handleDeleteSelected,
     handleCopySession,
     doPingRef,
-    sidebarCollapsed,
-    toggleSidebar,
   } = useAssetData();
+  const setShowQuickConnect = useAppStore((s) => s.setShowQuickConnect);
+  const setShowDockerModal = useAppStore((s) => s.setShowDockerModal);
+  const setShowLocalTerminalModal = useAppStore((s) => s.setShowLocalTerminalModal);
+  const setShowSerialModal = useAppStore((s) => s.setShowSerialModal);
   const { t } = useTranslation();
   const confirm = useConfirm();
   const homeView = useSettingsStore((s) => s.settings.homeView);
   const saveSettings = useSettingsStore((s) => s.save);
   const allSettings = useSettingsStore((s) => s.settings);
+  const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
+  const addBtnRef = useRef<HTMLButtonElement>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
     session: SessionConfig;
   } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  const handleNewAssetSelect = (type: string) => {
+    if (type === 'quickconnect') {
+      setShowQuickConnect(true);
+      return;
+    }
+    if (SUPPORTED_QUICK_CREATE_TYPES.has(type)) {
+      setShowNewSession(true);
+    } else if (type === 'serial') {
+      setShowSerialModal(true);
+    } else if (type === 'docker') {
+      setShowDockerModal(true);
+    } else if (type === 'localshell') {
+      setShowLocalTerminalModal(true);
+    }
+  };
 
   const allSelected =
     filteredSessions.length > 0 && filteredSessions.every((s) => selectedSessionIds.includes(s.id));
@@ -127,15 +153,6 @@ export const AssetTable: React.FC = () => {
       {/* Toolbar */}
       <div className="asset-toolbar">
         <div className="asset-toolbar-left">
-          <button
-            type="button"
-            className="asset-session-toggle"
-            onClick={toggleSidebar}
-            title={t('nav_toggle_sidebar')}
-            aria-label={t('nav_toggle_sidebar')}
-          >
-            {sidebarCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
-          </button>
           <div className="home-view-seg" role="group" aria-label="View mode">
             <button
               type="button"
@@ -145,7 +162,8 @@ export const AssetTable: React.FC = () => {
               }}
               aria-pressed={homeView === 'card'}
             >
-              {t('home_view_card')}
+              <LayoutGrid size={13} />
+              <span>{t('home_view_card')}</span>
             </button>
             <button
               type="button"
@@ -155,12 +173,19 @@ export const AssetTable: React.FC = () => {
               }}
               aria-pressed={homeView === 'table'}
             >
-              {t('home_view_list')}
+              <List size={13} />
+              <span>{t('home_view_list')}</span>
             </button>
           </div>
+          {realSessions.length > 0 && (
+            <span className="asset-count-pill">
+              {searchQuery
+                ? `${filteredSessions.length} / ${realSessions.length}`
+                : realSessions.length}
+            </span>
+          )}
         </div>
         <div className="asset-toolbar-center">
-          {/* "0 selected" is permanent noise — only surface this when a selection exists. */}
           {selectedSessionIds.length > 0 && (
             <span className="asset-toolbar-info">
               {t('table_selected', { count: selectedSessionIds.length })}
@@ -169,22 +194,26 @@ export const AssetTable: React.FC = () => {
         </div>
         <div className="asset-toolbar-right">
           <div className="asset-search-box">
-            <Search size={12} />
+            <Search size={13} />
             <input
               type="text"
               placeholder={t('table_search_placeholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+            {searchQuery && (
+              <button
+                type="button"
+                className="search-clear-btn"
+                onClick={() => setSearchQuery('')}
+                title={t('table_clear_search')}
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
           <button
-            className="asset-toolbar-btn"
-            onClick={() => setShowNewSession(true)}
-            title={t('table_new')}
-          >
-            <Plus size={14} />
-          </button>
-          <button
+            type="button"
             className="asset-toolbar-btn"
             onClick={() => doPingRef.current()}
             title={t('table_refresh')}
@@ -193,6 +222,7 @@ export const AssetTable: React.FC = () => {
           </button>
           {selectedSessionIds.length > 0 && (
             <button
+              type="button"
               className="asset-toolbar-btn danger"
               onClick={() => void handleDeleteSelected()}
               title={t('table_delete_selected')}
@@ -200,18 +230,39 @@ export const AssetTable: React.FC = () => {
               <Trash2 size={14} />
             </button>
           )}
+          <button
+            type="button"
+            ref={addBtnRef}
+            className="asset-new-btn"
+            onClick={() => setShowNewAssetMenu((v) => !v)}
+            title={t('panel_new_asset')}
+          >
+            <Plus size={14} />
+            <span>{t('table_new')}</span>
+          </button>
         </div>
       </div>
+
+      {showNewAssetMenu && (
+        <NewAssetMenu
+          anchorRef={addBtnRef}
+          onClose={() => setShowNewAssetMenu(false)}
+          onSelect={handleNewAssetSelect}
+        />
+      )}
 
       {/* Body: card grid or table depending on homeView */}
       {homeView === 'card' ? (
         <AssetDashboard
           sessions={filteredSessions}
+          hasAnySessions={realSessions.length > 0}
+          onClearSearch={() => setSearchQuery('')}
           onConnect={handleConnect}
           onEdit={(s) => {
             setEditingSession(s);
             setShowNewSession(true);
           }}
+          onContextMenu={handleContextMenu}
         />
       ) : (
         <div className="asset-table-container">
@@ -235,7 +286,21 @@ export const AssetTable: React.FC = () => {
               {filteredSessions.length === 0 ? (
                 <tr>
                   <td colSpan={colCount} className="asset-empty">
-                    <EmptyStateCtas />
+                    {realSessions.length > 0 ? (
+                      <div className="asset-no-matches">
+                        <Search size={24} />
+                        <p>{t('table_no_matches')}</p>
+                        <button
+                          type="button"
+                          className="settings-btn-outline"
+                          onClick={() => setSearchQuery('')}
+                        >
+                          {t('table_clear_search')}
+                        </button>
+                      </div>
+                    ) : (
+                      <EmptyStateCtas />
+                    )}
                   </td>
                 </tr>
               ) : (

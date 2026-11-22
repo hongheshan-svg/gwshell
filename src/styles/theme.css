@@ -1,49 +1,53 @@
 /* ============================================================================
    GWShell — Design Tokens (SINGLE SOURCE OF TRUTH)
 
-   This is the ONLY place to change the app's visual language. Edit a token here
-   and it propagates everywhere. Components must reference var(--token) and must
-   NOT hardcode colors, radii, spacing, shadows, or fonts.
+   Modern minimalist developer-tool aesthetic (Linear / Warp inspired):
+   - Deep obsidian-slate dark hierarchy with crisp hairline borders
+   - Clean paper-slate light hierarchy with a vibrant cobalt accent
+   - Restrained radii, breathable spacing, and tactile micro-transitions
 
    Sections: Surfaces · Text · Accent · Semantic · Radius · Spacing · Fonts ·
              Shadows · Translucency · Motion · Layout · Aliases
    ============================================================================ */
 
 :root {
-  /* ---- Surfaces (terminal dark) ---- */
-  --bg-primary: #0c0c0c; /* app / deepest background */
-  --bg-secondary: #111111; /* chrome surfaces: titlebar, sidebar, tabbar */
-  --bg-tertiary: #181818; /* raised: inputs, nested panels */
-  --bg-hover: #222222;
-  --bg-active: #2d2d2d;
-  --bg-card: #151515; /* cards / list rows */
+  color-scheme: dark;
 
-  --border-color: #262626;
-  --border-light: #3a3a3a;
+  /* ---- Surfaces (obsidian-slate dark) ---- */
+  --bg-primary: #0c0e12; /* deepest canvas / terminal */
+  --bg-secondary: #12151c; /* chrome surfaces: titlebar, sidebar, tabbar */
+  --bg-tertiary: #191d26; /* raised controls: inputs, chips, buttons */
+  --bg-hover: #212734; /* subtle interactive hover */
+  --bg-active: #283042; /* pressed / selected surface */
+  --bg-card: #151922; /* cards / list containers */
+
+  --border-color: #232938; /* crisp hairline border */
+  --border-light: #323b4f; /* emphasized border on hover */
 
   /* ---- Text ---- */
-  --text-primary: #f2f2f2;
-  --text-secondary: #cccccc;
-  --text-muted: #858585;
+  --text-primary: #eff2f7;
+  --text-secondary: #a7b1c4;
+  --text-muted: #6c768b;
 
-  /* ---- Signature accent (terminal blue) ---- */
-  --accent-primary: #3a96dd;
-  --accent-primary-rgb: 58, 150, 221;
-  --accent-hover: #5ab5ff;
-  --accent-bg: rgba(58, 150, 221, 0.18);
+  /* ---- Signature accent (crisp electric blue, harmonizes with boot mark) ---- */
+  --accent-primary: #4c8dff;
+  --accent-primary-rgb: 76, 141, 255;
+  --accent-hover: #6aa2ff;
+  --accent-bg: rgba(76, 141, 255, 0.14);
 
   /* ---- Semantic ---- */
-  --success: #4ade80;
-  --success-rgb: 74, 222, 128;
+  --success: #34d399;
+  --success-rgb: 52, 211, 153;
   --warning: #fbbf24;
   --warning-rgb: 251, 191, 36;
   --danger: #f87171;
   --danger-rgb: 248, 113, 113;
 
   /* ---- Radius ---- */
+  --radius-xs: 4px;
   --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
   --radius-pill: 9999px;
 
   /* ---- Spacing scale ---- */
@@ -55,33 +59,34 @@
   --space-6: 32px;
 
   /* ---- Fonts ---- */
-  --font-mono: 'Cascadia Mono', 'JetBrains Mono', 'Consolas', 'Fira Code', monospace;
+  --font-mono:
+    'JetBrains Mono', 'Cascadia Mono', 'SF Mono', ui-monospace, 'Consolas', 'Fira Code', monospace;
   --font-sans:
-    -apple-system, system-ui, 'Segoe UI', 'Inter', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    'Inter', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
 
   /* ---- Shadows ---- */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 12px 40px -8px rgba(0, 0, 0, 0.55);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28), 0 1px 1px rgba(0, 0, 0, 0.16);
+  --shadow-md: 0 6px 20px -4px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  --shadow-lg: 0 20px 50px -12px rgba(0, 0, 0, 0.68), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
 
-  /* ---- Translucency (B-level: CSS only, no native window changes) ---- */
-  --surface-blur: 10px;
-  --chrome-bg: rgba(17, 17, 17, 0.82); /* translucent chrome surfaces */
-  --term-bg: rgba(12, 12, 12, 0.98); /* terminal: kept near-opaque for readability */
+  /* ---- Translucency (CSS only, no native window changes) ---- */
+  --surface-blur: 14px;
+  --chrome-bg: rgba(18, 21, 28, 0.88);
+  --term-bg: rgba(12, 14, 18, 0.98);
 
   /* ---- Motion ---- */
-  --transition-fast: 110ms ease;
-  --transition: 170ms ease;
+  --transition-fast: 120ms cubic-bezier(0.2, 0, 0, 1);
+  --transition: 180ms cubic-bezier(0.2, 0, 0, 1);
 
   /* ---- Layout dimensions ---- */
-  --sidebar-width: 220px;
+  --titlebar-height: 38px;
+  --sidebar-width: 236px;
   --sidebar-collapsed-width: 44px;
-  --tabbar-height: 34px;
-  --statusbar-height: 24px;
+  --tabbar-height: 38px;
+  --statusbar-height: 34px;
 
-  /* ---- Back-compat aliases: legacy token names referenced across components
-          that were never defined and silently fell back to hardcoded colors.
-          Point them at the real theme-aware tokens. ---- */
+  /* ---- Back-compat aliases ---- */
   --accent: var(--accent-primary);
   --accent-color: var(--accent-primary);
   --accent-subtle: var(--accent-bg);
@@ -98,36 +103,38 @@
 }
 
 [data-theme='light'] {
+  color-scheme: light;
+
   --bg-primary: #ffffff;
-  --bg-secondary: #f7f7f8;
-  --bg-tertiary: #f1f1f3;
-  --bg-hover: #ececf0;
-  --bg-active: #e3e3e8;
+  --bg-secondary: #f6f8fb;
+  --bg-tertiary: #eef1f6;
+  --bg-hover: #e6ebf3;
+  --bg-active: #dce3ef;
   --bg-card: #ffffff;
 
-  --border-color: #dedee4;
-  --border-light: #ececf0;
+  --border-color: #e2e6ef;
+  --border-light: #cbd3e1;
 
-  --text-primary: #171717;
-  --text-secondary: #4f4f55;
-  --text-muted: #777780;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #7b8496;
 
-  --accent-primary: #111111;
-  --accent-primary-rgb: 17, 17, 17;
-  --accent-hover: #333333;
-  --accent-bg: rgba(17, 17, 17, 0.08);
+  --accent-primary: #2563eb;
+  --accent-primary-rgb: 37, 99, 235;
+  --accent-hover: #1d4ed8;
+  --accent-bg: rgba(37, 99, 235, 0.1);
 
-  --success: #16a34a;
-  --success-rgb: 22, 163, 74;
-  --warning: #ca8a04;
-  --warning-rgb: 202, 138, 4;
+  --success: #10b981;
+  --success-rgb: 16, 185, 129;
+  --warning: #d97706;
+  --warning-rgb: 217, 119, 6;
   --danger: #dc2626;
   --danger-rgb: 220, 38, 38;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 12px 40px -8px rgba(0, 0, 0, 0.16);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 1px rgba(15, 23, 42, 0.03);
+  --shadow-md: 0 8px 24px -6px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.05);
+  --shadow-lg: 0 20px 50px -12px rgba(15, 23, 42, 0.2), 0 4px 12px rgba(15, 23, 42, 0.06);
 
-  --chrome-bg: rgba(255, 255, 255, 0.78);
+  --chrome-bg: rgba(255, 255, 255, 0.88);
   --term-bg: rgba(255, 255, 255, 0.98);
 }

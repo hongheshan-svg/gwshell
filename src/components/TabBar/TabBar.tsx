@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import {
   X,
   Plus,
-  Menu,
   FolderOpen,
   Columns2,
   PanelLeftOpen,
@@ -177,7 +176,7 @@ export const TabBar: React.FC = () => {
             className={`tab-item asset-list-tab ${tab.id === activeTabId ? 'active' : ''}`}
             onClick={() => setActiveTab(tab.id)}
           >
-            <Menu size={13} />
+            <LayoutGrid size={13} />
             <span>{t('tab_list')}</span>
           </div>
         ))}
