@@ -6,13 +6,34 @@
 import type { Completion } from './completion';
 import type { CommandTable } from './commandDictionary';
 import { tableForShellName, tableForRemoteShell } from './commandDictionary';
+import type { LineTracker } from './inputLineTracker';
 
-// Command history: per-tab line buffer, completion state, and callbacks.
-export const inputBuffers = new Map<string, string>();
-export const completionSetters = new Map<
-  string,
-  (items: Completion[], index: number, x: number, y: number, above: boolean) => void
->();
+/** What the completion dropdown should show; `items: []` hides it. */
+export interface CompletionView {
+  items: Completion[];
+  index: number;
+  /** The user moved the selection with ↑/↓, so Enter accepts it. */
+  navigated: boolean;
+  x: number; // column the item text should start at
+  y: number; // cursor row (viewport)
+  above: boolean; // render above the cursor row instead of below
+  /** Length of the typed line; each item's text starts with it. */
+  typedLen: number;
+}
+
+export const HIDDEN_COMPLETIONS: CompletionView = {
+  items: [],
+  index: 0,
+  navigated: false,
+  x: 0,
+  y: 0,
+  above: false,
+  typedLen: 0,
+};
+
+// Command history: per-tab typed-line tracker, completion state, and callbacks.
+export const lineTrackers = new Map<string, LineTracker>();
+export const completionSetters = new Map<string, (view: CompletionView) => void>();
 export const completionAccept = new Map<string, (suffix: string) => void>();
 
 export const tabCwd = new Map<string, string>();
@@ -26,7 +47,6 @@ export const tabCompletions = new Map<string, Completion[]>();
 export const tabCompletionIdx = new Map<string, number>();
 export const completionNav = new Map<string, boolean>(); // user moved selection with ↑/↓
 export const tabInputSenders = new Map<string, (data: string) => void>(); // populated by the snippet input-sender task
-export const bracketedPaste = new Map<string, boolean>();
 // Set when the terminal's last output line looks like a password / passphrase
 // / verification-code prompt. While set, typed input is NOT recorded as command
 // history and completions are suppressed - otherwise a password entered at a
@@ -70,22 +90,17 @@ export function normalizeTable(s: string): CommandTable {
   return s === 'cmd' || s === 'powershell' ? s : 'unix';
 }
 
-// Estimate how many terminal rows a completion dropdown will occupy, so the
-// `placeAbove` heuristic can decide whether it fits below the cursor. Command-
-// dictionary items carry a description line (~1.5x row height), history items
-// are single-row. Capped at 8 visible items.
+// How many terminal rows a completion dropdown occupies, so the `placeAbove`
+// heuristic can decide whether it fits below the cursor. Each item is exactly
+// one terminal row tall (see .terminal-completion-row); padding and border add
+// up to about one more. Capped at 8 visible items.
 export function estimateDropdownRows(items: Completion[]): number {
-  const visible = items.slice(0, 8);
-  let rows = 0;
-  for (const it of visible) {
-    rows += it.desc ? 1.5 : 1;
-  }
-  return Math.ceil(rows);
+  return Math.min(items.length, 8) + 1;
 }
 
 /** Clear all completion state for a tab. Called by destroyTerminal + reconnect. */
 export function resetCompletionState(tabId: string): void {
-  inputBuffers.delete(tabId);
+  lineTrackers.delete(tabId);
   tabCommandTable.delete(tabId);
   completionSetters.delete(tabId);
   completionAccept.delete(tabId);
@@ -94,7 +109,6 @@ export function resetCompletionState(tabId: string): void {
   tabCompletionIdx.delete(tabId);
   completionNav.delete(tabId);
   tabInputSenders.delete(tabId);
-  bracketedPaste.delete(tabId);
   const apTimer = awaitingPasswordTimer.get(tabId);
   if (apTimer) {
     clearTimeout(apTimer);

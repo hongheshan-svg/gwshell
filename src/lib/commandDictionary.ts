@@ -279,8 +279,7 @@ export const POWERSHELL_DEFS: CommandDef[] = [
 
 // Each table sorted once at module load. Uses case-insensitive locale-aware
 // comparison so PowerShell mixed-case cmdlets (Get-ChildItem, Set-Location)
-// sort intuitively, and so binary-search lookups with the same comparator
-// can find prefix runs reliably.
+// sort intuitively.
 const collator = new Intl.Collator(undefined, { sensitivity: 'base' });
 const SORTED: Record<CommandTable, CommandDef[]> = {
   unix: [...UNIX_DEFS].sort((a, b) => collator.compare(a.cmd, b.cmd)),
@@ -319,15 +318,14 @@ export function tableForRemoteShell(remoteShell: string | null | undefined): Com
 }
 
 /**
- * Prefix-match the chosen table on the COMMAND NAME only.
- * Returns nothing when the prefix is empty or contains whitespace (the caller
- * is past the command name and into arguments, which the dictionary lacks).
- * Excludes exact-length matches so we never suggest an empty completion.
+ * Prefix-match the chosen table on the COMMAND NAME only, in alphabetical order.
+ * Returns nothing when the prefix is empty or contains whitespace (callers pass
+ * the single word in command position, see commandWordAt). Excludes exact-length
+ * matches so we never suggest an empty completion.
  *
- * Uses binary search to find the first entry >= prefix, then collects the
- * contiguous run of prefix matches — O(log n + k) instead of O(n). The table
- * is pre-sorted by cmd (case-insensitive localeCompare), and all command names
- * are ASCII so a plain `<` comparison agrees with the sort order.
+ * Unix is case-sensitive (`L` must not offer `ls`: accepting would append `s`
+ * and produce `Ls`); cmd and PowerShell are case-insensitive like the shells.
+ * A linear scan is plenty for a few hundred entries.
  */
 export function lookupCommands(
   prefix: string,
@@ -335,24 +333,12 @@ export function lookupCommands(
   table: CommandTable = 'unix',
 ): { cmd: string; desc: string }[] {
   if (!prefix || /\s/.test(prefix)) return [];
-  const arr = SORTED[table];
+  const ci = table !== 'unix';
+  const p = ci ? prefix.toLowerCase() : prefix;
   const out: { cmd: string; desc: string }[] = [];
-  // Binary search for the first entry whose cmd >= prefix (using the same
-  // case-insensitive collator as the sort, so the search is consistent).
-  let lo = 0;
-  let hi = arr.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1;
-    if (collator.compare(arr[mid].cmd, prefix) < 0) lo = mid + 1;
-    else hi = mid;
-  }
-  // Collect the contiguous run of prefix matches (case-insensitive, matching
-  // the collator used for sort/search).
-  const prefixLower = prefix.toLowerCase();
-  for (let i = lo; i < arr.length; i++) {
-    const d = arr[i];
-    if (!d.cmd.toLowerCase().startsWith(prefixLower)) break; // sorted: first non-match ends the run
-    if (d.cmd.length > prefix.length) {
+  for (const d of SORTED[table]) {
+    if (d.cmd.length <= prefix.length) continue;
+    if ((ci ? d.cmd.toLowerCase() : d.cmd).startsWith(p)) {
       out.push({ cmd: d.cmd, desc: locale === 'zh' ? d.zh : d.en });
     }
   }

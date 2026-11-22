@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { CommandTable } from './commandDictionary';
+import { commandNames } from './commandLine';
 
 export interface HistoryEntry {
   command: string;
@@ -19,6 +20,10 @@ export interface SuggestCtx {
 
 // Aggregated entries loaded from the backend, plus in-session appends.
 let entries: HistoryEntry[] = [];
+
+// Lower-cased program name -> how many times it was run, across all history.
+// Built lazily, updated incrementally by record(), dropped by init().
+let usageCache: Map<string, number> | null = null;
 
 // Soft cap on the in-memory entry list. `record` merges duplicates but a long
 // session with many distinct commands would otherwise grow `entries` without
@@ -42,8 +47,12 @@ export async function init(limit: number): Promise<void> {
     // in getSuggestions doesn't have to run containsSecret on every candidate
     // on every keystroke.
     entries = result.filter((e) => !containsSecret(e.command));
+    usageCache = null;
   } catch {
-    if (seq === initSeq) entries = [];
+    if (seq === initSeq) {
+      entries = [];
+      usageCache = null;
+    }
   }
 }
 
@@ -144,6 +153,14 @@ export function record(command: string, ctx: SuggestCtx = {}): void {
     entries.splice(minIdx, 1);
   }
 
+  // Keep the usage counts current without a full rebuild on every Enter.
+  if (usageCache) {
+    for (const name of commandNames(command)) {
+      const k = name.toLowerCase();
+      usageCache.set(k, (usageCache.get(k) ?? 0) + 1);
+    }
+  }
+
   invoke('save_command_history', {
     command,
     cwd,
@@ -158,23 +175,59 @@ function recencyDecay(ageSec: number): number {
   return 1 / (1 + Math.max(0, ageSec) / (7 * DAY));
 }
 
-// Returns ranked full-command candidates (highest score first), max 8.
+function isCaseInsensitive(table: CommandTable | undefined): boolean {
+  return table === 'cmd' || table === 'powershell';
+}
+
+/**
+ * Ranked full-command candidates that extend `prefix` (best first), max 8.
+ *
+ * Matching follows the shell: case-sensitive for unix, case-insensitive for
+ * cmd/PowerShell (where `get-c` should find `Get-ChildItem`, and two spellings
+ * of the same command count as one). Commands from the current host always
+ * rank above commands from other hosts; within each group the score is
+ * frequency × recency, plus a bonus for the current directory.
+ */
 export function getSuggestions(prefix: string, ctx: SuggestCtx = {}): string[] {
   if (!prefix) return [];
+  const ci = isCaseInsensitive(ctx.table);
+  const p = ci ? prefix.toLowerCase() : prefix;
   const now = Math.floor(Date.now() / 1000);
-  const best = new Map<string, number>(); // command -> best score
+  const best = new Map<string, { command: string; local: boolean; score: number }>();
   for (const e of entries) {
-    if (!e.command.startsWith(prefix) || e.command.length <= prefix.length) continue;
+    if (e.command.length <= prefix.length) continue;
+    const key = ci ? e.command.toLowerCase() : e.command;
+    if (!key.startsWith(p)) continue;
     // Secret scrubbing is done once at init() and at record() time, so the
     // hot path here doesn't re-run containsSecret on every candidate.
+    const local = !!ctx.scope && e.scope === ctx.scope;
     let score = Math.log2(e.count + 1) * recencyDecay(now - e.last_used);
-    if (ctx.scope && e.scope === ctx.scope) score += 2;
-    if (ctx.cwd && e.cwd === ctx.cwd) score += 1;
-    const prev = best.get(e.command);
-    if (prev === undefined || score > prev) best.set(e.command, score);
+    if (local && ctx.cwd && e.cwd === ctx.cwd) score += 1;
+    const prev = best.get(key);
+    if (!prev || (local && !prev.local) || (local === prev.local && score > prev.score)) {
+      best.set(key, { command: e.command, local, score });
+    }
   }
-  return [...best.entries()]
-    .sort((a, b) => b[1] - a[1])
+  return [...best.values()]
+    .sort((a, b) => Number(b.local) - Number(a.local) || b.score - a.score)
     .slice(0, 8)
-    .map(([cmd]) => cmd);
+    .map((c) => c.command);
+}
+
+/**
+ * How often each program has been run (keys lower-cased), counting every
+ * command-position word, so `sudo docker ps | grep x` counts sudo, docker and
+ * grep. Used to rank command-dictionary suggestions by personal usage.
+ */
+export function commandUsage(): Map<string, number> {
+  if (usageCache) return usageCache;
+  const m = new Map<string, number>();
+  for (const e of entries) {
+    for (const name of commandNames(e.command)) {
+      const k = name.toLowerCase();
+      m.set(k, (m.get(k) ?? 0) + e.count);
+    }
+  }
+  usageCache = m;
+  return m;
 }
