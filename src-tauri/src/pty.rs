@@ -176,15 +176,21 @@ fn find_unix_shell_binary(shell_name: &str) -> Option<String> {
 
 #[cfg(not(target_os = "windows"))]
 fn build_unix_shell_command(program: &str) -> CommandBuilder {
-    let mut c = CommandBuilder::new(program);
     // On macOS, terminal emulators (Terminal.app, iTerm2, Warp, VS Code) spawn
     // login shells (`-l`) so `/etc/zprofile`, `~/.zprofile`, and `~/.bash_profile`
     // are sourced even when launched from Finder/Dock with a minimal launchd env.
     #[cfg(target_os = "macos")]
-    if unix_shell_supports_login_flag(program) {
-        c.arg("-l");
+    {
+        let mut c = CommandBuilder::new(program);
+        if unix_shell_supports_login_flag(program) {
+            c.arg("-l");
+        }
+        c
     }
-    c
+    #[cfg(not(target_os = "macos"))]
+    {
+        CommandBuilder::new(program)
+    }
 }
 
 #[cfg(not(target_os = "windows"))]
