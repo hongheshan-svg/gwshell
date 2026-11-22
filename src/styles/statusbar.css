@@ -1,0 +1,60 @@
+/* ========== Status Bar ========== */
+
+.status-bar {
+  height: var(--statusbar-height, 26px);
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 8px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+}
+
+/* Active session target (user@host) — mono, truncated when narrow */
+.status-session-target {
+  font-family: var(--font-mono);
+  max-width: 260px;
+}
+
+.status-session-target span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.status-dot.connected {
+  background: var(--success);
+  box-shadow: 0 0 0 2px rgba(var(--success-rgb), 0.2);
+}
+.status-dot.disconnected {
+  background: var(--text-muted);
+  opacity: 0.45;
+}
+
+.status-spacer {
+  flex: 1;
+}

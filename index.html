@@ -202,7 +202,9 @@
       // must reach React's onClick — if this delegate intercepted them it would
       // stopPropagation() (swallowing the click) and fire a non-existent IPC call,
       // making the button appear completely dead.
-      var GW_WINDOW_ACTIONS = { minimize: 1, toggle_maximize: 1, exit: 1 };
+      // Only genuine window-plugin actions are handled here; `exit` goes
+      // through `quit_app` so Rust runs `shutdown_cleanup` before exiting.
+      var GW_WINDOW_ACTIONS = { minimize: 1, toggle_maximize: 1 };
       document.addEventListener(
         'click',
         function (e) {

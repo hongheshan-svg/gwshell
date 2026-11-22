@@ -68,7 +68,7 @@ export function computeStickyScroll(
   if (rows < 1) return null;
 
   const lines: string[] = [];
-  for (let line = endLine; line >= command.promptStartLine; line--) {
+  for (let line = endLine; line >= command.promptStartLine && lines.length < rows; line--) {
     const bufLine = buffer.getLine(line);
     if (!bufLine) break;
     lines.unshift(bufLine.translateToString(true));

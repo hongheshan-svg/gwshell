@@ -1,0 +1,944 @@
+/* ========== Modal ========== */
+
+/* Small app-styled confirmation dialog (used instead of window.confirm) */
+.confirm-dialog {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-5);
+  min-width: 320px;
+  max-width: 420px;
+}
+
+.confirm-dialog-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: var(--space-4);
+  line-height: 1.5;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.modal-close {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.modal-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.form-group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.form-group input,
+.form-group select {
+  height: 32px;
+  padding: 0 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.1s linear;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  border-color: var(--accent-primary);
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.form-row .form-group {
+  flex: 1;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.btn {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  transition: all 0.1s linear;
+}
+
+.btn:hover {
+  background: var(--bg-hover);
+}
+
+.btn-primary {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+/* ========== Context Menu ========== */
+
+.context-menu {
+  position: fixed;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  min-width: 160px;
+  box-shadow: var(--shadow-lg);
+  z-index: 2000;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+}
+
+.context-menu-item:hover {
+  background: var(--accent-bg);
+  color: var(--accent-primary);
+}
+
+.context-menu-item:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  opacity: 0.55;
+}
+
+.context-menu-item:disabled:hover {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
+/* ========== Type Tag ========== */
+
+.type-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+}
+
+.type-tag.ssh {
+  background: rgba(66, 211, 146, 0.12);
+  color: var(--success);
+}
+
+.type-tag.sftp {
+  background: rgba(245, 166, 35, 0.12);
+  color: var(--warning);
+}
+
+.type-tag.localshell {
+  background: rgba(76, 141, 255, 0.12);
+  color: var(--accent-primary);
+}
+
+/* ========== Nav Logo ========== */
+
+.nav-logo {
+  margin-bottom: 4px;
+  color: var(--accent-primary) !important;
+}
+
+/* ========== App Menu ========== */
+
+.app-menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3000;
+}
+
+.app-menu {
+  position: fixed;
+  bottom: 52px;
+  left: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  min-width: 220px;
+  box-shadow: var(--shadow-lg);
+  z-index: 3001;
+}
+
+.app-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  transition: background 0.1s;
+  user-select: none;
+}
+
+.app-menu-item:hover {
+  background: var(--accent-bg);
+  color: var(--accent-primary);
+}
+
+.app-menu-item.danger {
+  color: var(--danger);
+}
+
+.app-menu-item.danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.app-menu-shortcut {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.app-menu-arrow {
+  margin-left: auto;
+  color: var(--text-muted);
+}
+
+.app-menu-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
+/* ========== New Asset Dropdown Menu ========== */
+
+.new-asset-menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4000;
+}
+
+.new-asset-menu {
+  position: fixed;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  min-width: 180px;
+  box-shadow: var(--shadow-lg);
+  z-index: 4001;
+}
+
+.new-asset-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: background 0.1s;
+  user-select: none;
+  position: relative;
+}
+
+.new-asset-menu-item:hover,
+.new-asset-menu-item.hovered {
+  background: var(--accent-bg);
+  color: var(--accent-primary);
+}
+
+.new-asset-menu-icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.new-asset-menu-item:hover .new-asset-menu-icon,
+.new-asset-menu-item.hovered .new-asset-menu-icon {
+  color: var(--accent-primary);
+}
+
+.new-asset-menu-arrow {
+  margin-left: auto;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+}
+
+.new-asset-submenu {
+  position: fixed;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  min-width: 160px;
+  box-shadow: var(--shadow-lg);
+  z-index: 4002;
+}
+
+/* ========== Sidebar Add Button ========== */
+
+.sidebar-add-btn {
+  position: relative;
+}
+
+/* ========== SSH Config Modal ========== */
+
+.ssh-modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  width: 580px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+}
+
+.ssh-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.ssh-modal-header h2 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Tabs */
+.ssh-modal-tabs {
+  display: flex;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border-color);
+  gap: 0;
+}
+
+.ssh-tab {
+  padding: 10px 18px;
+  font-size: 13px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s;
+}
+
+.ssh-tab:hover {
+  color: var(--text-primary);
+}
+
+.ssh-tab.active {
+  color: var(--accent-primary);
+  font-weight: 500;
+}
+
+.ssh-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 12px;
+  right: 12px;
+  height: 2px;
+  background: var(--accent-primary);
+  border-radius: var(--radius-sm) 2px 0 0;
+}
+
+/* Body */
+.ssh-modal-body {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Form rows */
+.ssh-form-row {
+  display: flex;
+  gap: 14px;
+}
+
+.ssh-form-row .ssh-form-group {
+  flex: 1;
+}
+
+.ssh-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ssh-form-group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.ssh-form-group label.label-error {
+  color: var(--danger);
+}
+
+.ssh-form-group input,
+.ssh-form-group select,
+.ssh-form-group textarea {
+  padding: 0 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.1s linear;
+}
+
+.ssh-form-group input,
+.ssh-form-group select {
+  height: 34px;
+}
+
+.ssh-form-group input:focus,
+.ssh-form-group select:focus,
+.ssh-form-group textarea:focus {
+  border-color: var(--accent-primary);
+}
+
+.ssh-form-group input.input-error {
+  border-color: var(--danger);
+}
+
+.field-error {
+  font-size: 11px;
+  color: var(--danger);
+  margin-top: -2px;
+}
+
+/* Color label dots */
+.color-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.color-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.1s linear;
+  padding: 0;
+}
+
+.color-dot:hover {
+  border-color: var(--text-muted);
+}
+
+.color-dot.selected {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 2px var(--bg-secondary);
+}
+
+.color-dot-clear {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.12s;
+}
+
+.color-dot-clear:hover {
+  background: var(--bg-hover);
+  color: var(--danger);
+}
+
+/* Auth toggle buttons */
+.ssh-auth-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ssh-auth-btn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  transition: all 0.1s linear;
+}
+
+.ssh-auth-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.ssh-auth-btn.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+/* Password field with eye toggle */
+.ssh-password-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.ssh-password-wrap input {
+  width: 100%;
+  padding-right: 36px;
+}
+
+.ssh-password-toggle {
+  position: absolute;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.ssh-password-toggle:hover {
+  color: var(--text-primary);
+}
+
+/* Remark textarea */
+.ssh-remark {
+  resize: vertical;
+  min-height: 60px;
+  padding: 8px 10px !important;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Tab placeholder */
+.ssh-tab-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Footer */
+.ssh-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.ssh-footer-link {
+  background: none;
+  border: none;
+  color: var(--accent-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s;
+}
+
+.ssh-footer-link:hover {
+  background: var(--accent-bg);
+}
+
+/* Right-aligned Cancel + Save group; Save reads as the primary action. */
+.ssh-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ssh-footer-link.ssh-footer-primary {
+  background: var(--accent-primary);
+  color: #fff;
+}
+.ssh-footer-link.ssh-footer-primary:hover {
+  background: var(--accent-hover);
+}
+
+/* Required-field asterisk on form labels. */
+.required-mark {
+  color: var(--danger);
+  font-weight: 600;
+  margin-left: 1px;
+}
+
+/* Keyboard-only focus ring for click targets that otherwise show no focus
+   state on the dark theme (icon buttons, links, custom role=button elements).
+   :focus-visible keeps mouse clicks ring-free. */
+button:focus-visible,
+a:focus-visible,
+[role='button']:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Serial port autofill (高级 tab) */
+.autofill-section {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.autofill-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  gap: 10px;
+}
+
+.autofill-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.autofill-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.autofill-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.autofill-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.autofill-check-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.autofill-check-label input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.autofill-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.autofill-add-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.autofill-rows {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.autofill-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.autofill-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0 8px;
+  height: 34px;
+  flex: 1;
+}
+
+.autofill-pattern {
+  flex: 0 0 150px;
+}
+.autofill-content {
+  flex: 1;
+}
+
+.autofill-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.autofill-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  min-width: 0;
+}
+.autofill-input::placeholder {
+  color: var(--text-muted);
+}
+
+.autofill-arrow {
+  font-size: 14px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.autofill-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.autofill-ctrl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.1s;
+  flex-shrink: 0;
+}
+.autofill-ctrl-btn:hover {
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+.autofill-ctrl-btn.ctrl-green {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: #22c55e;
+  color: #22c55e;
+}
+.autofill-ctrl-btn.ctrl-blue {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+.autofill-ctrl-btn.ctrl-red {
+  color: #ef4444;
+}
+.autofill-ctrl-btn.ctrl-red:hover {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: #ef4444;
+}
+
+.autofill-seq {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+/* Docker type tag */
+.type-tag.docker {
+  background: rgba(168, 85, 247, 0.12);
+  color: #a855f7;
+}
+
+/* ========== Docker Container Picker ========== */
+
+.docker-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.docker-pick-row.selected {
+  background: var(--bg-hover);
+}
+
+.docker-pick-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.docker-pick-name {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.docker-pick-image {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.docker-pick-status {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}

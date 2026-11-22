@@ -1,21 +1,50 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
-import { open as dialogOpen, save as dialogSave } from '@tauri-apps/plugin-dialog';
 import { X } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
-import type { SessionConfig } from '../../types';
 import {
   useSettingsStore,
   defaultSettings as persistedDefaultSettings,
+  type AppSettings,
 } from '../../stores/settingsStore';
 import type { TranslationKeys } from '../../i18n';
 import { TERMINAL_SCHEME_OPTIONS } from '../../lib/terminalThemes';
 import { useEscapeClose } from '../../lib/useEscapeClose';
 import { AiSettingsSection } from './AiSettingsSection';
 import { ShortcutEditor } from './ShortcutEditor';
+import { VaultSection } from './VaultSection';
+import { HotkeyRecorder } from './HotkeyRecorder';
+import { StorageSection } from './StorageSection';
+import {
+  NumInput,
+  Row,
+  SectionTitle,
+  Sel,
+  ShortcutTable,
+  Toggle,
+  type SelectOption,
+  type ShortcutItem,
+} from './SettingsControls';
 
-/* ---- Nav categories ---- */
+export type { AppSettings };
+
+const CMD_TERMINAL_FONT = 'Consolas, "Cascadia Mono", "Courier New", monospace';
+
+const FONT_OPTIONS: SelectOption[] = [
+  {
+    value: 'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif',
+    label: 'System UI',
+  },
+  { value: 'Inter, system-ui, sans-serif', label: 'Inter' },
+  { value: CMD_TERMINAL_FONT, label: 'Consolas / Cascadia Mono' },
+  { value: 'Consolas', label: 'Consolas' },
+  { value: 'Cascadia Mono', label: 'Cascadia Mono' },
+  { value: 'Cascadia Code', label: 'Cascadia Code' },
+  { value: 'JetBrains Mono, "Noto Sans SC", monospace', label: 'JetBrains Mono' },
+  { value: 'Fira Code', label: 'Fira Code' },
+  { value: 'monospace', label: 'Monospace' },
+];
+
 const navCategories: {
   title?: TranslationKeys;
   items: { id: string; labelKey: TranslationKeys }[];
@@ -29,724 +58,58 @@ const navCategories: {
   },
   {
     title: 'settings_cat_shortcuts',
-    items: [
-      { id: 'shortcut-basic', labelKey: 'settings_shortcut_basic' },
-      { id: 'shortcut-ssh', labelKey: 'settings_shortcut_ssh' },
-    ],
+    items: [{ id: 'shortcut-basic', labelKey: 'settings_shortcut_basic' }],
   },
   { items: [{ id: 'agent-ai', labelKey: 'agent_ai_title' }] },
   { items: [{ id: 'vault', labelKey: 'vault_section' }] },
   { items: [{ id: 'storage', labelKey: 'settings_storage' }] },
 ];
 
-/* ---- Settings state ---- */
-export interface AppSettings {
-  theme: 'dark' | 'light';
-  middleClickCloseTab: boolean;
-  uiFont: string;
-  enableAnimation: boolean;
-  mouseWheelZoom: boolean;
-  tabCloseConfirm: boolean;
-  tabFlashAlert: boolean;
-  language: string;
-  zoomLevel: string;
-  sessionTabMemory: boolean;
-  // SSH/SFTP
-  terminalFont: string;
-  terminalFontSize: string;
-  autoCopyOnSelect: boolean;
-  terminalCmdHint: boolean;
-  sshHistoryCmd: boolean;
-  sshHistoryCmdLoadCount: string;
-  pasteWarnMultiline: boolean;
-  terminalColorScheme: string;
-  cmdHintAllSessions: boolean;
-  cmdHintScopeByHost: boolean;
-  terminalStripeBackground: boolean;
-  middleClickAction: string;
-  rightClickAction: string;
-  terminalSound: boolean;
-  ctrlVPaste: boolean;
-  terminalLineHeight: string;
-  terminalLetterSpacing: string;
-  terminalMaxScrollback: string;
-  keymapOverrides: Record<string, string | null>;
-  // Quake dropdown console
-  quakeEnabled: boolean;
-  quakeHotkey: string;
-  homeView: 'card' | 'table';
-  sessionLogEnabled: boolean;
-  terminalStickyScroll: boolean;
-}
-
-const CMD_TERMINAL_FONT = 'Consolas, "Cascadia Mono", "Courier New", monospace';
-
-/* ---- Shortcut data ---- */
-interface ShortcutItem {
-  labelKey: TranslationKeys;
-  keys: string;
-}
-const shortcutsBasicLeft: ShortcutItem[] = [
-  { labelKey: 'settings_sc_save', keys: 'Ctrl S' },
-  { labelKey: 'settings_sc_find', keys: 'Ctrl F' },
-  { labelKey: 'settings_sc_copy', keys: 'Ctrl C' },
-  { labelKey: 'settings_sc_paste', keys: 'Ctrl V' },
-  { labelKey: 'settings_sc_cut', keys: 'Ctrl X' },
-  { labelKey: 'settings_sc_delete', keys: 'Backspace' },
-  { labelKey: 'settings_sc_rename', keys: 'F2' },
-];
-const shortcutsBasicRight: ShortcutItem[] = [
-  { labelKey: 'settings_sc_refresh', keys: 'F5' },
-  { labelKey: 'settings_sc_enter', keys: 'Enter' },
-  { labelKey: 'settings_sc_undo', keys: 'Ctrl Z' },
-  { labelKey: 'settings_sc_redo', keys: 'Ctrl Y' },
-  { labelKey: 'settings_sc_selectall', keys: 'Ctrl A' },
-  { labelKey: 'settings_sc_focus', keys: 'Tab' },
-];
-const shortcutsOtherLeft: ShortcutItem[] = [
-  { labelKey: 'settings_sc_agent', keys: 'Ctrl L' },
-  { labelKey: 'settings_sc_global_search', keys: 'Ctrl Shift F' },
-  { labelKey: 'settings_sc_history', keys: 'Ctrl E' },
-  { labelKey: 'settings_sc_format', keys: 'Shift Alt F' },
-  { labelKey: 'settings_sc_compress', keys: 'Shift Alt C' },
-];
-const shortcutsOtherRight: ShortcutItem[] = [
-  { labelKey: 'settings_sc_left', keys: '←' },
-  { labelKey: 'settings_sc_right', keys: '→' },
-  { labelKey: 'settings_sc_up', keys: '↑' },
-  { labelKey: 'settings_sc_down', keys: '↓' },
-  { labelKey: 'settings_sc_rotate', keys: 'Ctrl Shift →' },
-];
-const shortcutsSshLeft: ShortcutItem[] = [
+const shortcutsBuiltinLeft: ShortcutItem[] = [
   { labelKey: 'settings_sc_term_copy', keys: 'Ctrl Shift C' },
-  { labelKey: 'settings_sc_clear', keys: 'Ctrl Shift L' },
-  { labelKey: 'settings_sc_upload', keys: 'Ctrl Shift U' },
-  { labelKey: 'settings_sc_download', keys: 'Ctrl Shift D' },
-  { labelKey: 'settings_sc_copy_path', keys: 'Ctrl Alt C' },
-  { labelKey: 'settings_sc_new_file', keys: 'Ctrl Alt N' },
-];
-const shortcutsSshRight: ShortcutItem[] = [
   { labelKey: 'settings_sc_term_paste', keys: 'Ctrl Shift V' },
-  { labelKey: 'settings_sc_reconnect', keys: 'Ctrl Shift R' },
-  { labelKey: 'settings_sc_edit_file', keys: 'Ctrl Alt E' },
-  { labelKey: 'settings_sc_chmod', keys: 'Ctrl Alt M' },
-  { labelKey: 'settings_sc_broadcast', keys: 'Ctrl Shift B' },
 ];
-/* ---- Sub-components ---- */
-const Toggle: React.FC<{ value: boolean; onChange: (v: boolean) => void }> = ({
-  value,
-  onChange,
-}) => (
-  <button
-    className={`settings-toggle ${value ? 'on' : ''}`}
-    onClick={() => onChange(!value)}
-    type="button"
-  >
-    <span className="settings-toggle-knob" />
-  </button>
-);
+const shortcutsBuiltinRight: ShortcutItem[] = [
+  { labelKey: 'settings_sc_save', keys: 'Ctrl S' },
+  { labelKey: 'settings_sc_selectall', keys: 'Ctrl A' },
+];
 
-type SelectOption = string | { value: string; label: string };
-const optionValue = (option: SelectOption) => (typeof option === 'string' ? option : option.value);
-const optionLabel = (option: SelectOption) => (typeof option === 'string' ? option : option.label);
+const FONT_SIZE_PRESETS = [
+  '8px',
+  '9px',
+  '10px',
+  '11px',
+  '12px',
+  '13px',
+  '14px',
+  '15px',
+  '16px',
+  '18px',
+  '20px',
+  '22px',
+  '24px',
+  '28px',
+  '32px',
+];
 
-const Sel: React.FC<{ value: string; options: SelectOption[]; onChange: (v: string) => void }> = ({
-  value,
-  options,
-  onChange,
-}) => {
-  const resolvedOptions =
-    (value === 'zh' || value === 'en') && !options.some((o) => optionValue(o) === value)
-      ? [
-          { value: 'zh', label: '简体中文' },
-          { value: 'en', label: 'English' },
-        ]
-      : options;
-
-  return (
-    <select className="settings-select" value={value} onChange={(e) => onChange(e.target.value)}>
-      {resolvedOptions.map((o) => (
-        <option key={optionValue(o)} value={optionValue(o)}>
-          {optionLabel(o)}
-        </option>
-      ))}
-    </select>
-  );
-};
-
-const NumInput: React.FC<{
-  value: string;
-  onChange: (v: string) => void;
-  prefix?: string;
-  width?: number;
-}> = ({ value, onChange, prefix, width }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-    {prefix && <span className="settings-desc">{prefix}</span>}
-    <input
-      className="settings-input"
-      style={{ width: width ?? 70 }}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    />
-  </div>
-);
-
-const Row: React.FC<{ label: string; desc?: string; children: React.ReactNode }> = ({
-  label,
-  desc,
-  children,
-}) => (
-  <div className="settings-row">
-    <div className="settings-row-left">
-      <span className="settings-label">{label}</span>
-      {desc && <span className="settings-desc">{desc}</span>}
-    </div>
-    <div className="settings-row-right">{children}</div>
-  </div>
-);
-
-const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="settings-section-title">{children}</div>
-);
-
-const ShortcutTable: React.FC<{
-  left: ShortcutItem[];
-  right: ShortcutItem[];
-  t: (k: TranslationKeys) => string;
-}> = ({ left, right, t }) => (
-  <div className="settings-columns">
-    <div className="settings-col">
-      {left.map((s) => (
-        <div key={s.labelKey} className="shortcut-row">
-          <span className="shortcut-label">{t(s.labelKey)}</span>
-          <span className="shortcut-keys">
-            {s.keys.split(' ').map((k, i) => (
-              <kbd key={i}>{k}</kbd>
-            ))}
-          </span>
-        </div>
-      ))}
-    </div>
-    <div className="settings-col">
-      {right.map((s) => (
-        <div key={s.labelKey} className="shortcut-row">
-          <span className="shortcut-label">{t(s.labelKey)}</span>
-          <span className="shortcut-keys">
-            {s.keys.split(' ').map((k, i) => (
-              <kbd key={i}>{k}</kbd>
-            ))}
-          </span>
-        </div>
-      ))}
-    </div>
-  </div>
-);
-
-/* ---- Vault section (master-passphrase app lock) ---- */
-// Self-contained: talks to the vault_* IPC directly and is not part of the
-// AppSettings blob (enabled state lives only in the backend verifier).
-const VaultSection: React.FC<{ open: boolean }> = ({ open }) => {
-  const { t } = useTranslation();
-  const [enabled, setEnabled] = useState(false);
-  // Enable
-  const [newPass, setNewPass] = useState('');
-  const [newPass2, setNewPass2] = useState('');
-  // Change
-  const [curPass, setCurPass] = useState('');
-  const [chgNew, setChgNew] = useState('');
-  const [chgNew2, setChgNew2] = useState('');
-  // Disable
-  const [disPass, setDisPass] = useState('');
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-
-  const refresh = useCallback(() => {
-    invoke<boolean>('vault_is_enabled')
-      .then(setEnabled)
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (open) {
-      refresh();
-      setMsg(null);
-      setNewPass('');
-      setNewPass2('');
-      setCurPass('');
-      setChgNew('');
-      setChgNew2('');
-      setDisPass('');
-    }
-  }, [open, refresh]);
-
-  const inputStyle: React.CSSProperties = { width: 200 };
-
-  const handleEnable = async () => {
-    setMsg(null);
-    if (!newPass) {
-      setMsg({ kind: 'err', text: t('vault_err_empty') });
-      return;
-    }
-    if (newPass !== newPass2) {
-      setMsg({ kind: 'err', text: t('vault_err_mismatch') });
-      return;
-    }
-    try {
-      await invoke('vault_set_passphrase', { passphrase: newPass });
-      setNewPass('');
-      setNewPass2('');
-      setMsg({ kind: 'ok', text: t('vault_enabled_ok') });
-      refresh();
-    } catch {
-      setMsg({ kind: 'err', text: t('vault_err_generic') });
-    }
-  };
-
-  const handleChange = async () => {
-    setMsg(null);
-    if (!chgNew) {
-      setMsg({ kind: 'err', text: t('vault_err_empty') });
-      return;
-    }
-    if (chgNew !== chgNew2) {
-      setMsg({ kind: 'err', text: t('vault_err_mismatch') });
-      return;
-    }
-    try {
-      // Single atomic call: verify current + set new in one round-trip (eliminates TOCTOU).
-      const ok = await invoke<boolean>('vault_change_passphrase', {
-        currentPassphrase: curPass,
-        newPassphrase: chgNew,
-      });
-      if (!ok) {
-        setMsg({ kind: 'err', text: t('vault_err_wrong_current') });
-        return;
-      }
-      setCurPass('');
-      setChgNew('');
-      setChgNew2('');
-      setMsg({ kind: 'ok', text: t('vault_changed_ok') });
-      refresh();
-    } catch {
-      setMsg({ kind: 'err', text: t('vault_err_generic') });
-    }
-  };
-
-  const handleDisable = async () => {
-    setMsg(null);
-    try {
-      const cleared = await invoke<boolean>('vault_clear', { currentPassphrase: disPass });
-      if (!cleared) {
-        setMsg({ kind: 'err', text: t('vault_err_wrong_current') });
-        return;
-      }
-      setDisPass('');
-      setMsg({ kind: 'ok', text: t('vault_disabled_ok') });
-      refresh();
-    } catch {
-      setMsg({ kind: 'err', text: t('vault_err_generic') });
-    }
-  };
-
-  return (
-    <>
-      <SectionTitle>{t('vault_section')}</SectionTitle>
-      <div className="settings-col" style={{ maxWidth: 560 }}>
-        <p className="settings-desc" style={{ marginBottom: 8 }}>
-          {t('vault_intro')}
-        </p>
-        <Row label={t('vault_status')}>
-          <span className="settings-label">
-            {enabled ? t('vault_status_on') : t('vault_status_off')}
-          </span>
-        </Row>
-
-        {!enabled ? (
-          <>
-            <Row label={t('vault_new_passphrase')}>
-              <input
-                type="password"
-                className="settings-input"
-                style={inputStyle}
-                value={newPass}
-                onChange={(e) => setNewPass(e.target.value)}
-                autoComplete="new-password"
-              />
-            </Row>
-            <Row label={t('vault_confirm_passphrase')}>
-              <input
-                type="password"
-                className="settings-input"
-                style={inputStyle}
-                value={newPass2}
-                onChange={(e) => setNewPass2(e.target.value)}
-                autoComplete="new-password"
-              />
-            </Row>
-            <Row label="">
-              <button
-                className="settings-btn-primary"
-                onClick={() => {
-                  void handleEnable();
-                }}
-              >
-                {t('vault_enable_btn')}
-              </button>
-            </Row>
-          </>
-        ) : (
-          <>
-            <SectionTitle>{t('vault_change_title')}</SectionTitle>
-            <Row label={t('vault_current_passphrase')}>
-              <input
-                type="password"
-                className="settings-input"
-                style={inputStyle}
-                value={curPass}
-                onChange={(e) => setCurPass(e.target.value)}
-                autoComplete="current-password"
-              />
-            </Row>
-            <Row label={t('vault_new_passphrase')}>
-              <input
-                type="password"
-                className="settings-input"
-                style={inputStyle}
-                value={chgNew}
-                onChange={(e) => setChgNew(e.target.value)}
-                autoComplete="new-password"
-              />
-            </Row>
-            <Row label={t('vault_confirm_passphrase')}>
-              <input
-                type="password"
-                className="settings-input"
-                style={inputStyle}
-                value={chgNew2}
-                onChange={(e) => setChgNew2(e.target.value)}
-                autoComplete="new-password"
-              />
-            </Row>
-            <Row label="">
-              <button
-                className="settings-btn-primary"
-                onClick={() => {
-                  void handleChange();
-                }}
-              >
-                {t('vault_change_btn')}
-              </button>
-            </Row>
-
-            <SectionTitle>{t('vault_disable_title')}</SectionTitle>
-            <p className="settings-desc" style={{ marginBottom: 8 }}>
-              {t('vault_disable_desc')}
-            </p>
-            <Row label={t('vault_current_passphrase')}>
-              <input
-                type="password"
-                className="settings-input"
-                style={inputStyle}
-                value={disPass}
-                onChange={(e) => setDisPass(e.target.value)}
-                autoComplete="current-password"
-              />
-            </Row>
-            <Row label="">
-              <button
-                className="settings-btn-danger"
-                onClick={() => {
-                  void handleDisable();
-                }}
-              >
-                {t('vault_disable_btn')}
-              </button>
-            </Row>
-          </>
-        )}
-
-        {msg && (
-          <p
-            className="settings-desc"
-            style={{ marginTop: 8, color: msg.kind === 'err' ? 'var(--danger)' : 'var(--success)' }}
-          >
-            {msg.text}
-          </p>
-        )}
-      </div>
-    </>
-  );
-};
-
-/* ---- Hotkey recorder (Quake global shortcut) ---- */
-// Click to arm, press a combination; stored in Tauri accelerator format
-// ("CommandOrControl+Shift+Backquote") but displayed with friendly key names.
-// Raw accelerator strings overflowed the input and meant nothing to users.
-const ACCEL_DISPLAY: Record<string, string> = {
-  CommandOrControl: 'Ctrl',
-  Backquote: '`',
-  Backslash: '\\',
-  BracketLeft: '[',
-  BracketRight: ']',
-  Comma: ',',
-  Period: '.',
-  Slash: '/',
-  Semicolon: ';',
-  Quote: "'",
-  Minus: '-',
-  Equal: '=',
-  Space: 'Space',
-};
-
-// KeyboardEvent.code → Tauri accelerator key name (punctuation/special keys).
-const ACCEL_FROM_CODE: Record<string, string> = {
-  Backquote: 'Backquote',
-  Backslash: 'Backslash',
-  BracketLeft: 'BracketLeft',
-  BracketRight: 'BracketRight',
-  Comma: 'Comma',
-  Period: 'Period',
-  Slash: 'Slash',
-  Semicolon: 'Semicolon',
-  Quote: 'Quote',
-  Minus: 'Minus',
-  Equal: 'Equal',
-  Space: 'Space',
-};
-
-function displayAccel(accel: string): string {
-  return accel
-    .split('+')
-    .map((p) => ACCEL_DISPLAY[p] ?? p)
-    .join('+');
-}
-
-const HotkeyRecorder: React.FC<{
-  value: string;
-  disabled?: boolean;
-  onChange: (accel: string) => void;
-}> = ({ value, disabled, onChange }) => {
-  const { t } = useTranslation();
-  const [recording, setRecording] = useState(false);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!recording) return;
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.key === 'Escape') {
-      setRecording(false);
-      return;
-    }
-    if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return; // wait for the main key
-    const parts: string[] = [];
-    if (e.ctrlKey || e.metaKey) parts.push('CommandOrControl');
-    if (e.shiftKey) parts.push('Shift');
-    if (e.altKey) parts.push('Alt');
-    if (parts.length === 0) return; // a global hotkey needs at least one modifier
-    const code = e.code;
-    let key: string | null = null;
-    if (code.startsWith('Key')) key = code.slice(3);
-    else if (code.startsWith('Digit')) key = code.slice(5);
-    else if (/^F\d{1,2}$/.test(code)) key = code;
-    else key = ACCEL_FROM_CODE[code] ?? null;
-    if (!key) return; // unsupported main key
-    onChange([...parts, key].join('+'));
-    setRecording(false);
-  };
-
-  return (
-    <button
-      type="button"
-      className={`settings-input hotkey-recorder${recording ? ' recording' : ''}`}
-      disabled={disabled}
-      onClick={() => setRecording(true)}
-      onKeyDown={handleKeyDown}
-      onBlur={() => setRecording(false)}
-    >
-      {recording ? t('settings_hotkey_recording') : displayAccel(value)}
-    </button>
-  );
-};
-
-/* ---- Storage section (export / import / clear local data) ---- */
-// Self-contained: drives the storage IPC commands directly. Import and clear
-// refresh the in-memory session list so the sidebar reflects the change
-// immediately. Clear uses an inline two-step confirm (no extra dialog
-// capability needed).
-const StorageSection: React.FC = () => {
-  const { t } = useTranslation();
-  const setSessions = useAppStore((s) => s.setSessions);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-  const [confirmClear, setConfirmClear] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  // Revert the danger button to its normal label if the user doesn't confirm.
-  useEffect(() => {
-    if (!confirmClear) return;
-    const timer = setTimeout(() => setConfirmClear(false), 4000);
-    return () => clearTimeout(timer);
-  }, [confirmClear]);
-
-  const refreshSessions = async () => {
-    setSessions(await invoke<SessionConfig[]>('get_sessions'));
-  };
-
-  const handleExport = async () => {
-    setMsg(null);
-    try {
-      const path = await dialogSave({
-        title: t('settings_storage_export'),
-        defaultPath: `gwshell-sessions-${new Date().toISOString().slice(0, 10)}.json`,
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-      });
-      if (!path) return;
-      setBusy(true);
-      await invoke('export_sessions_data', { path });
-      setMsg({ kind: 'ok', text: t('settings_storage_exported', { path }) });
-    } catch (e) {
-      setMsg({ kind: 'err', text: t('settings_storage_failed', { msg: String(e) }) });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleImport = async () => {
-    setMsg(null);
-    try {
-      const path = await dialogOpen({
-        title: t('settings_storage_import'),
-        multiple: false,
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-      });
-      if (typeof path !== 'string' || !path) return;
-      setBusy(true);
-      const count = await invoke<number>('import_sessions_data', { path });
-      await refreshSessions();
-      setMsg({ kind: 'ok', text: t('settings_storage_imported', { count }) });
-    } catch (e) {
-      setMsg({ kind: 'err', text: t('settings_storage_failed', { msg: String(e) }) });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleImportSshConfig = async () => {
-    setMsg(null);
-    try {
-      setBusy(true);
-      // No path → backend reads the default ~/.ssh/config.
-      const count = await invoke<number>('import_ssh_config', { path: null });
-      await refreshSessions();
-      setMsg({ kind: 'ok', text: t('settings_storage_imported', { count }) });
-    } catch (e) {
-      setMsg({ kind: 'err', text: t('settings_storage_failed', { msg: String(e) }) });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleClear = async () => {
-    if (!confirmClear) {
-      setConfirmClear(true);
-      return;
-    }
-    setConfirmClear(false);
-    setMsg(null);
-    try {
-      setBusy(true);
-      await invoke('clear_local_data');
-      await refreshSessions();
-      setMsg({ kind: 'ok', text: t('settings_storage_cleared') });
-    } catch (e) {
-      setMsg({ kind: 'err', text: t('settings_storage_failed', { msg: String(e) }) });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <>
-      <SectionTitle>{t('settings_storage_sync')}</SectionTitle>
-      <div className="settings-col" style={{ maxWidth: 700 }}>
-        <div className="storage-row">
-          <span className="settings-label">{t('settings_storage_local_data')}</span>
-          <span className="settings-desc" style={{ flex: 1 }}>
-            {t('settings_storage_local_data_desc')}
-          </span>
-          <button
-            className="settings-btn-danger"
-            disabled={busy}
-            onClick={() => {
-              void handleClear();
-            }}
-          >
-            {confirmClear ? t('settings_storage_clear_confirm') : t('settings_storage_clear')}
-          </button>
-        </div>
-        <div className="storage-row">
-          <span className="settings-label">{t('settings_storage_import_export')}</span>
-          <span className="settings-desc" style={{ flex: 1 }}>
-            {t('settings_storage_import_export_desc')}
-          </span>
-          <button
-            className="settings-btn-outline"
-            style={{ marginRight: 6 }}
-            disabled={busy}
-            onClick={() => {
-              void handleImport();
-            }}
-          >
-            {t('settings_storage_import')}
-          </button>
-          <button
-            className="settings-btn-outline"
-            disabled={busy}
-            onClick={() => {
-              void handleExport();
-            }}
-          >
-            {t('settings_storage_export')}
-          </button>
-        </div>
-        <div className="storage-row">
-          <span className="settings-label">{t('settings_storage_sshconfig')}</span>
-          <span className="settings-desc" style={{ flex: 1 }}>
-            {t('settings_storage_sshconfig_desc')}
-          </span>
-          <button
-            className="settings-btn-outline"
-            disabled={busy}
-            onClick={() => {
-              void handleImportSshConfig();
-            }}
-          >
-            {t('settings_storage_import')}
-          </button>
-        </div>
-        {msg && (
-          <p
-            className="settings-desc"
-            style={{ marginTop: 8, color: msg.kind === 'err' ? 'var(--danger)' : 'var(--success)' }}
-          >
-            {msg.text}
-          </p>
-        )}
-      </div>
-    </>
-  );
-};
-
-/* ---- Main Component ---- */
 export const SettingsModal: React.FC = () => {
-  const { showSettings, setShowSettings, settingsInitialNav, theme, setTheme } = useAppStore();
+  const showSettings = useAppStore((s) => s.showSettings);
+  const setShowSettings = useAppStore((s) => s.setShowSettings);
+  const settingsInitialNav = useAppStore((s) => s.settingsInitialNav);
+  const theme = useAppStore((s) => s.theme);
+  const setTheme = useAppStore((s) => s.setTheme);
   const persistedSettings = useSettingsStore((s) => s.settings);
   const saveSettings = useSettingsStore((s) => s.save);
   const { t } = useTranslation();
   const [activeNav, setActiveNav] = useState('basic');
   const [settings, setSettings] = useState<AppSettings>({ ...persistedDefaultSettings, theme });
   const [dirty, setDirty] = useState(false);
+  const prevOpenRef = useRef(false);
 
   useEffect(() => {
-    if (showSettings) {
+    const justOpened = showSettings && !prevOpenRef.current;
+    prevOpenRef.current = showSettings;
+    if (justOpened) {
       setSettings({ ...persistedSettings, theme });
       if (settingsInitialNav) setActiveNav(settingsInitialNav);
       setDirty(false);
@@ -769,25 +132,16 @@ export const SettingsModal: React.FC = () => {
     setDirty(true);
   };
 
-  // Hooks must run unconditionally (before any early return) per rules-of-hooks.
   const handleClose = () => setShowSettings(false);
   useEscapeClose(handleClose);
 
   if (!showSettings) return null;
-  const fonts: SelectOption[] = [
-    {
-      value: 'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif',
-      label: 'System UI',
-    },
-    { value: 'Inter, system-ui, sans-serif', label: 'Inter' },
-    { value: CMD_TERMINAL_FONT, label: 'Consolas / Cascadia Mono' },
-    { value: 'Consolas', label: 'Consolas' },
-    { value: 'Cascadia Mono', label: 'Cascadia Mono' },
-    { value: 'Cascadia Code', label: 'Cascadia Code' },
-    { value: 'JetBrains Mono, "Noto Sans SC", monospace', label: 'JetBrains Mono' },
-    { value: 'Fira Code', label: 'Fira Code' },
-    { value: 'monospace', label: 'Monospace' },
-  ];
+
+  const fontSizeOptions = FONT_SIZE_PRESETS.includes(settings.terminalFontSize)
+    ? FONT_SIZE_PRESETS
+    : [...FONT_SIZE_PRESETS, settings.terminalFontSize].sort(
+        (a, b) => (parseInt(a) || 0) - (parseInt(b) || 0),
+      );
 
   return (
     <div className="settings-overlay">
@@ -797,7 +151,6 @@ export const SettingsModal: React.FC = () => {
         aria-modal="true"
         aria-label={t('settings_title')}
       >
-        {/* Header */}
         <div className="settings-header">
           <div className="settings-header-left">
             <span className="settings-brand">GWShell</span>
@@ -814,7 +167,6 @@ export const SettingsModal: React.FC = () => {
         </div>
 
         <div className="settings-body">
-          {/* Nav */}
           <div className="settings-nav">
             {navCategories.map((cat, i) => (
               <div key={i} className="settings-nav-group">
@@ -822,6 +174,7 @@ export const SettingsModal: React.FC = () => {
                 {cat.items.map((item) => (
                   <button
                     key={item.id}
+                    type="button"
                     className={`settings-nav-item ${activeNav === item.id ? 'active' : ''}`}
                     onClick={() => setActiveNav(item.id)}
                   >
@@ -832,9 +185,7 @@ export const SettingsModal: React.FC = () => {
             ))}
           </div>
 
-          {/* Content */}
           <div className="settings-content">
-            {/* ===== 基础 ===== */}
             {activeNav === 'basic' && (
               <div className="settings-columns">
                 <div className="settings-col">
@@ -856,7 +207,11 @@ export const SettingsModal: React.FC = () => {
                     />
                   </Row>
                   <Row label={t('settings_ui_font')}>
-                    <Sel value={settings.uiFont} options={fonts} onChange={(v) => u('uiFont', v)} />
+                    <Sel
+                      value={settings.uiFont}
+                      options={FONT_OPTIONS}
+                      onChange={(v) => u('uiFont', v)}
+                    />
                   </Row>
                   <Row label={t('settings_animation')}>
                     <Toggle
@@ -879,19 +234,16 @@ export const SettingsModal: React.FC = () => {
                       onChange={(v) => u('tabCloseConfirm', v)}
                     />
                   </Row>
-                  <Row label={t('settings_tab_flash')} desc={t('settings_tab_flash_desc')}>
-                    <Toggle
-                      value={settings.tabFlashAlert}
-                      onChange={(v) => u('tabFlashAlert', v)}
-                    />
-                  </Row>
                 </div>
                 <div className="settings-col">
                   <SectionTitle>&nbsp;</SectionTitle>
                   <Row label={t('settings_language')}>
                     <Sel
                       value={settings.language}
-                      options={['简体中文', 'English', '繁體中文', '日本語']}
+                      options={[
+                        { value: 'zh', label: '简体中文' },
+                        { value: 'en', label: 'English' },
+                      ]}
                       onChange={(v) => u('language', v)}
                     />
                   </Row>
@@ -925,7 +277,6 @@ export const SettingsModal: React.FC = () => {
               </div>
             )}
 
-            {/* ===== SSH/SFTP ===== */}
             {activeNav === 'ssh-sftp' && (
               <>
                 <SectionTitle>SSH</SectionTitle>
@@ -937,7 +288,7 @@ export const SettingsModal: React.FC = () => {
                     >
                       <Sel
                         value={settings.terminalFont}
-                        options={fonts}
+                        options={FONT_OPTIONS}
                         onChange={(v) => u('terminalFont', v)}
                       />
                     </Row>
@@ -990,18 +341,12 @@ export const SettingsModal: React.FC = () => {
                         onChange={(v) => u('terminalColorScheme', v)}
                       />
                     </Row>
-                    <Row label={t('settings_stripe_bg')}>
-                      <Toggle
-                        value={settings.terminalStripeBackground}
-                        onChange={(v) => u('terminalStripeBackground', v)}
-                      />
-                    </Row>
                   </div>
                   <div className="settings-col">
                     <Row label={t('settings_terminal_fontsize')}>
                       <Sel
                         value={settings.terminalFontSize}
-                        options={['10px', '11px', '12px', '13px', '14px', '16px', '18px']}
+                        options={fontSizeOptions}
                         onChange={(v) => u('terminalFontSize', v)}
                       />
                     </Row>
@@ -1074,7 +419,6 @@ export const SettingsModal: React.FC = () => {
               </>
             )}
 
-            {/* ===== 快捷键-基础 ===== */}
             {activeNav === 'shortcut-basic' && (
               <>
                 <SectionTitle>{t('settings_shortcut_editable')}</SectionTitle>
@@ -1083,38 +427,24 @@ export const SettingsModal: React.FC = () => {
                   onChange={(ko) => u('keymapOverrides', ko)}
                 />
                 <SectionTitle>{t('settings_section_basic')}</SectionTitle>
-                <ShortcutTable left={shortcutsBasicLeft} right={shortcutsBasicRight} t={t} />
-                <SectionTitle>{t('settings_sc_other')}</SectionTitle>
-                <ShortcutTable left={shortcutsOtherLeft} right={shortcutsOtherRight} t={t} />
-              </>
-            )}
-
-            {/* ===== 快捷键-SSH/SFTP ===== */}
-            {activeNav === 'shortcut-ssh' && (
-              <>
-                <SectionTitle>SSH/SFTP</SectionTitle>
-                <ShortcutTable left={shortcutsSshLeft} right={shortcutsSshRight} t={t} />
+                <ShortcutTable left={shortcutsBuiltinLeft} right={shortcutsBuiltinRight} t={t} />
               </>
             )}
 
             {activeNav === 'agent-ai' && <AiSettingsSection />}
-
-            {/* ===== 保险库 / Vault ===== */}
             {activeNav === 'vault' && <VaultSection open={showSettings && activeNav === 'vault'} />}
-
-            {/* ===== 储存仓库 ===== */}
             {activeNav === 'storage' && <StorageSection />}
           </div>
         </div>
 
-        {/* Footer */}
         <div className="settings-footer">
           <span className="settings-footer-hint">{t('settings_footer_default')}</span>
           <div className="settings-footer-actions">
-            <button className="settings-btn-outline" onClick={handleReset}>
+            <button type="button" className="settings-btn-outline" onClick={handleReset}>
               {t('settings_reset')}
             </button>
             <button
+              type="button"
               className={`settings-btn-primary ${!dirty ? 'disabled' : ''}`}
               onClick={() => {
                 void handleApply();

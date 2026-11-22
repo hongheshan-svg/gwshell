@@ -6,12 +6,14 @@ interface CompletionDropdownProps {
   view: CompletionView;
   fontFamily: string;
   fontSize: number;
+  onSelect?: (index: number) => void;
 }
 
 export const CompletionDropdown: React.FC<CompletionDropdownProps> = ({
   view,
   fontFamily,
   fontSize,
+  onSelect,
 }) => {
   const { items, index, navigated, x, y, above, typedLen } = view;
   const listRef = useRef<HTMLDivElement>(null);
@@ -36,7 +38,14 @@ export const CompletionDropdown: React.FC<CompletionDropdownProps> = ({
       {items.map((it, i) => {
         const state = i !== index ? '' : navigated ? ' is-selected' : ' is-default';
         return (
-          <div key={`${it.kind}:${it.text}`} className={`terminal-completion-row${state}`}>
+          <div
+            key={`${it.kind}:${it.text}`}
+            className={`terminal-completion-row${state}`}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onSelect?.(i);
+            }}
+          >
             {it.kind === 'history' ? (
               <Clock className="terminal-completion-icon" size={13} />
             ) : (

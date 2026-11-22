@@ -17,10 +17,9 @@ import { useAssetData } from '../../hooks/useAssetData';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAppStore } from '../../stores/appStore';
+import { openNewAssetModal } from '../../lib/newAssetAction';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
 import { AssetDashboard, EmptyStateCtas } from '../AssetDashboard/AssetDashboard';
-
-const SUPPORTED_QUICK_CREATE_TYPES = new Set(['ssh', 'ssh-tunnel']);
 
 export const AssetTable: React.FC = () => {
   const {
@@ -31,18 +30,13 @@ export const AssetTable: React.FC = () => {
     selectedSessionIds,
     setSelectedSessionIds,
     toggleSelectSession,
-    setShowNewSession,
-    setEditingSession,
     removeSession,
     handleConnect,
     handleDeleteSelected,
     handleCopySession,
     doPingRef,
   } = useAssetData();
-  const setShowQuickConnect = useAppStore((s) => s.setShowQuickConnect);
-  const setShowDockerModal = useAppStore((s) => s.setShowDockerModal);
-  const setShowLocalTerminalModal = useAppStore((s) => s.setShowLocalTerminalModal);
-  const setShowSerialModal = useAppStore((s) => s.setShowSerialModal);
+  const openEditSession = useAppStore((s) => s.openEditSession);
   const { t } = useTranslation();
   const confirm = useConfirm();
   const homeView = useSettingsStore((s) => s.settings.homeView);
@@ -56,22 +50,6 @@ export const AssetTable: React.FC = () => {
     session: SessionConfig;
   } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
-
-  const handleNewAssetSelect = (type: string) => {
-    if (type === 'quickconnect') {
-      setShowQuickConnect(true);
-      return;
-    }
-    if (SUPPORTED_QUICK_CREATE_TYPES.has(type)) {
-      setShowNewSession(true);
-    } else if (type === 'serial') {
-      setShowSerialModal(true);
-    } else if (type === 'docker') {
-      setShowDockerModal(true);
-    } else if (type === 'localshell') {
-      setShowLocalTerminalModal(true);
-    }
-  };
 
   const allSelected =
     filteredSessions.length > 0 && filteredSessions.every((s) => selectedSessionIds.includes(s.id));
@@ -247,7 +225,7 @@ export const AssetTable: React.FC = () => {
         <NewAssetMenu
           anchorRef={addBtnRef}
           onClose={() => setShowNewAssetMenu(false)}
-          onSelect={handleNewAssetSelect}
+          onSelect={openNewAssetModal}
         />
       )}
 
@@ -258,10 +236,7 @@ export const AssetTable: React.FC = () => {
           hasAnySessions={realSessions.length > 0}
           onClearSearch={() => setSearchQuery('')}
           onConnect={handleConnect}
-          onEdit={(s) => {
-            setEditingSession(s);
-            setShowNewSession(true);
-          }}
+          onEdit={(s) => openEditSession(s)}
           onContextMenu={handleContextMenu}
         />
       ) : (
@@ -364,10 +339,7 @@ export const AssetTable: React.FC = () => {
                           </button>
                           <button
                             className="asset-action-btn"
-                            onClick={() => {
-                              setEditingSession(session);
-                              setShowNewSession(true);
-                            }}
+                            onClick={() => openEditSession(session)}
                             title={t('table_edit')}
                           >
                             <Edit size={12} />
@@ -428,8 +400,7 @@ export const AssetTable: React.FC = () => {
           </button>
           <button
             onClick={() => {
-              setEditingSession(contextMenu.session);
-              setShowNewSession(true);
+              openEditSession(contextMenu.session);
               setContextMenu(null);
             }}
           >

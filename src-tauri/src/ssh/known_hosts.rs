@@ -116,43 +116,34 @@ pub fn pinned_key_type(host: &str, port: u16) -> Option<String> {
         .map(|e| e.key_type.clone())
 }
 
-fn save(hosts: &HashMap<String, KnownHostEntry>) {
-    if let Some(path) = known_hosts_path() {
-        if let Some(parent) = path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        if let Ok(json) = serde_json::to_string_pretty(hosts) {
-            // Write to a sibling temp file, lock its permissions down, then
-            // rename over the real file: a crash mid-write must never leave a
-            // truncated store (which `load` would read as "no hosts trusted"),
-            // and the trust store must never be readable by other local users.
-            let tmp = path.with_extension("json.tmp");
-            if fs::write(&tmp, json).is_err() {
-                return;
-            }
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600));
-            }
-            if fs::rename(&tmp, &path).is_err() {
-                let _ = fs::remove_file(&tmp);
-            }
-        }
+fn save(hosts: &HashMap<String, KnownHostEntry>) -> Result<(), String> {
+    let path =
+        known_hosts_path().ok_or_else(|| "Unable to resolve known_hosts path".to_string())?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create known_hosts directory: {}", e))?;
     }
+    let json = serde_json::to_string_pretty(hosts)
+        .map_err(|e| format!("Failed to serialize known_hosts: {}", e))?;
+    // Write to a unique sibling temp file, lock permissions down, then rename
+    // atomically so concurrent trusts or crashes never corrupt the store.
+    let tmp = path.with_extension(format!("json.{}.tmp", uuid::Uuid::new_v4()));
+    fs::write(&tmp, json).map_err(|e| format!("Failed to write known_hosts temp file: {}", e))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600));
+    }
+    if let Err(e) = fs::rename(&tmp, &path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(format!("Failed to persist known_hosts: {}", e));
+    }
+    Ok(())
 }
 
-/// Record `fingerprint` as trusted for `host:port`.
-///
-/// Refuses to replace an existing entry of the same key family with a
-/// different fingerprint: that is exactly the MITM signal `verify` reports as
-/// `Mismatch`, and the UI deliberately offers no "trust anyway" path for it
-/// (the user must delete the stale entry by hand). Enforcing it here too means
-/// a compromised WebView cannot silently re-pin a hostile key through the
-/// `ssh_trust_host` IPC command. First-time hosts (verdict `Unknown`) and
-/// cross-family replacements the user explicitly confirmed (verdict
-/// `KeyTypeChanged`) are recorded.
 pub fn trust_host(host: &str, port: u16, fingerprint: &str, key_type: &str) -> Result<(), String> {
+    static LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+    let _guard = LOCK.lock();
     let mut hosts = load();
     let key = format!("{}:{}", host, port);
     check_overwrite(&hosts, &key, fingerprint, key_type)?;
@@ -163,8 +154,7 @@ pub fn trust_host(host: &str, port: u16, fingerprint: &str, key_type: &str) -> R
             key_type: key_type.to_string(),
         },
     );
-    save(&hosts);
-    Ok(())
+    save(&hosts)
 }
 
 /// The pure overwrite guard behind `trust_host` (split out for unit tests).

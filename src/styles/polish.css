@@ -1,0 +1,75 @@
+/* ============================================================================
+   P1 form polish — translucency, soft focus, motion. Centralized overrides so
+   the look is tunable from here + theme.css. (Appended = wins over earlier rules.)
+   ============================================================================ */
+
+/* Floating surfaces get a subtle frosted-glass treatment (they sit over content) */
+.modal-content,
+.context-menu,
+.app-menu,
+.new-asset-menu,
+.new-asset-submenu,
+.command-palette-card,
+.session-dropdown,
+.quick-connect-card,
+.split-menu {
+  background: var(--chrome-bg);
+  backdrop-filter: blur(var(--surface-blur));
+  -webkit-backdrop-filter: blur(var(--surface-blur));
+  box-shadow: var(--shadow-lg);
+}
+
+/* Soft, consistent focus ring on standalone text inputs */
+input:focus,
+select:focus,
+textarea:focus,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+
+/* Composite inputs highlight their outer wrapper instead of nesting a second box */
+.sidebar-search input:focus,
+.sidebar-search input:focus-visible,
+.asset-search-box input:focus,
+.asset-search-box input:focus-visible,
+.command-palette-input:focus,
+.command-palette-input:focus-visible,
+.terminal-ai-textarea:focus,
+.terminal-ai-textarea:focus-visible,
+input[type='checkbox']:focus,
+input[type='checkbox']:focus-visible {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* Gentle motion on interactive chrome */
+button,
+input,
+select,
+textarea,
+.tab-item,
+.session-item,
+.session-group-header,
+.sidebar-action-btn,
+.sidebar-add-btn,
+.nav-icon-btn {
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+/* P3: command palette row alignment — label fills, icon left, sub/hint right */
+.command-palette-item {
+  justify-content: flex-start;
+}
+.command-palette-item-label {
+  flex: 1 1 auto;
+  text-align: left;
+}

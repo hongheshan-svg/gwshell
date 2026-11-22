@@ -46,6 +46,7 @@ struct SerialHandle {
     tx: mpsc::SyncSender<SerialCmd>,
     input: Arc<Mutex<SerialInputBuffer>>,
     wake_pending: Arc<AtomicBool>,
+    encoding: &'static encoding_rs::Encoding,
     owner_thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
 }
 
@@ -92,10 +93,13 @@ impl SerialManager {
             "2" => StopBits::Two,
             _ => StopBits::One,
         };
-        let par = match parity {
-            p if p.contains("Odd") => Parity::Odd,
-            p if p.contains("Even") => Parity::Even,
-            _ => Parity::None,
+        let parity_lower = parity.to_ascii_lowercase();
+        let par = if parity_lower.contains("odd") {
+            Parity::Odd
+        } else if parity_lower.contains("even") {
+            Parity::Even
+        } else {
+            Parity::None
         };
         // Map flow-control string to enum. Accept the common aliases
         // case-insensitively; unrecognized values default to None.
@@ -229,14 +233,13 @@ impl SerialManager {
                 }
 
                 if !close_requested && write_buf.is_empty() && owner_input.lock().bytes.is_empty() {
-                    match rx.recv_timeout(Duration::from_millis(8)) {
+                    match rx.recv() {
                         Ok(SerialCmd::WakeInput) => {
                             owner_wake_pending.store(false, Ordering::Release);
                         }
-                        Ok(SerialCmd::Close) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        Ok(SerialCmd::Close) | Err(mpsc::RecvError) => {
                             close_requested = true;
                         }
-                        Err(mpsc::RecvTimeoutError::Timeout) => {}
                     }
                 }
             }
@@ -253,6 +256,7 @@ impl SerialManager {
                 tx,
                 input: input_buffer,
                 wake_pending,
+                encoding: resolved_encoding,
                 owner_thread: Arc::new(Mutex::new(Some(owner_thread))),
             },
         );
@@ -266,7 +270,14 @@ impl SerialManager {
             return Err("Session not found".to_string());
         };
 
-        handle.input.lock().push(data)?;
+        let encoded: std::borrow::Cow<'_, [u8]> = if handle.encoding == encoding_rs::UTF_8 {
+            std::borrow::Cow::Borrowed(data)
+        } else {
+            let text = String::from_utf8_lossy(data);
+            let (cow, _, _) = handle.encoding.encode(&text);
+            std::borrow::Cow::Owned(cow.into_owned())
+        };
+        handle.input.lock().push(&encoded)?;
         if !handle.wake_pending.swap(true, Ordering::AcqRel)
             && handle.tx.try_send(SerialCmd::WakeInput).is_err()
         {
@@ -283,9 +294,19 @@ impl SerialManager {
 
     fn close_serial_wait(&self, session_id: &str) {
         if let Some(handle) = self.sessions.lock().remove(session_id) {
+            // Drop `handle` before joining so `tx` closes and delivers
+            // `Disconnected` even when the bounded queue was full. Wrap join in
+            // a 2s timeout so a wedged serial driver can never deadlock callers.
             let _ = handle.tx.try_send(SerialCmd::Close);
-            if let Some(thread) = handle.owner_thread.lock().take() {
-                let _ = thread.join();
+            let thread = handle.owner_thread.lock().take();
+            drop(handle);
+            if let Some(thread) = thread {
+                let (tx, rx) = std::sync::mpsc::channel();
+                std::thread::spawn(move || {
+                    let _ = thread.join();
+                    let _ = tx.send(());
+                });
+                let _ = rx.recv_timeout(Duration::from_secs(2));
             }
         }
     }

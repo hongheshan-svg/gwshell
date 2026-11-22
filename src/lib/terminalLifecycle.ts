@@ -163,12 +163,13 @@ export function scheduleTerminalResizeSettle(
   sessionId: string,
   tabType: TabInfo['type'],
   delayMs = 180,
+  useSshResize?: boolean,
 ): void {
   const existing = settleTimerIds.get(tabId);
   if (existing) clearTimeout(existing);
   const timerId = setTimeout(() => {
     settleTimerIds.delete(tabId);
-    forceTerminalRedraw(tabId, sessionId, tabType);
+    forceTerminalRedraw(tabId, sessionId, tabType, useSshResize);
   }, delayMs);
   settleTimerIds.set(tabId, timerId);
 }
@@ -195,6 +196,7 @@ export function forceTerminalRedraw(
   tabId: string,
   sessionId: string,
   tabType: TabInfo['type'],
+  useSshResize?: boolean,
 ): void {
   const inst = terminalInstances.get(tabId);
   if (!inst) return;
@@ -228,7 +230,7 @@ export function forceTerminalRedraw(
   if (tabType === 'serial' || tabType === 'asset-list') return;
   const cols = inst.terminal.cols;
   const rows = inst.terminal.rows;
-  if (tabType === 'ssh') {
+  if (useSshResize ?? tabType === 'ssh') {
     invoke('resize_ssh', { sessionId, cols, rows }).catch(() => {});
   } else {
     invoke('resize_pty', { sessionId, rows, cols }).catch(() => {});

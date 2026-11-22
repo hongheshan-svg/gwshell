@@ -21,6 +21,7 @@ interface StickyScrollOverlayProps {
   fontFamily: string;
   fontSize: number;
   enabled: boolean;
+  terminalReady: boolean;
 }
 
 export const StickyScrollOverlay: React.FC<StickyScrollOverlayProps> = ({
@@ -28,15 +29,18 @@ export const StickyScrollOverlay: React.FC<StickyScrollOverlayProps> = ({
   fontFamily,
   fontSize,
   enabled,
+  terminalReady,
 }) => {
   const appTheme = useAppStore((s) => s.theme);
   const colorScheme = useSettingsStore((s) => s.settings.terminalColorScheme);
-  const [lines, setLines] = useState<string[]>([]);
+  const [sticky, setSticky] = useState<{ lines: string[]; title: string }>({
+    lines: [],
+    title: '',
+  });
   const [hovered, setHovered] = useState(false);
-  const [title, setTitle] = useState<string>('');
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !terminalReady) return;
     const inst = terminalInstances.get(tabId);
     if (!inst) return;
     const terminal = inst.terminal;
@@ -46,11 +50,17 @@ export const StickyScrollOverlay: React.FC<StickyScrollOverlayProps> = ({
       const viewportY = terminal.buffer.active.viewportY;
       const command = getCommandForLine(tabId, terminal, viewportY);
       const state = computeStickyScroll(terminal, command);
-      setLines((prev) => {
-        const next = state?.lines ?? [];
-        if (prev.length === next.length && prev.every((l, i) => l === next[i])) return prev;
-        setTitle(state?.commandLine ?? '');
-        return next;
+      setSticky((prev) => {
+        const nextLines = state?.lines ?? [];
+        const nextTitle = state?.commandLine ?? '';
+        if (
+          prev.title === nextTitle &&
+          prev.lines.length === nextLines.length &&
+          prev.lines.every((l, i) => l === nextLines[i])
+        ) {
+          return prev;
+        }
+        return { lines: nextLines, title: nextTitle };
       });
     };
     const refresh = (): void => {
@@ -85,8 +95,9 @@ export const StickyScrollOverlay: React.FC<StickyScrollOverlayProps> = ({
         } catch {}
       }
     };
-  }, [enabled, tabId]);
+  }, [enabled, tabId, terminalReady]);
 
+  const { lines, title } = sticky;
   if (!enabled || lines.length === 0) return null;
 
   const inst = terminalInstances.get(tabId);

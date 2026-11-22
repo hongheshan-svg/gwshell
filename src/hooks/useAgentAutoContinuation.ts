@@ -32,32 +32,40 @@ export function useAgentAutoContinuation(): AgentAutoContinuationStatus {
   }, [loadPolicy, policyLoaded, setError]);
 
   useEffect(() => {
-    if (!activeSession || activeSession.status === 'cancelled') return;
+    if (!activeSession || activeSession.status === 'cancelled' || activeSession.status === 'failed')
+      return;
     if (!policy.auto_continue_enabled) return;
     if (sessionIdRef.current !== activeSession.id) {
       sessionIdRef.current = activeSession.id;
       analyzedAutoEvidenceRef.current = 0;
       analyzedResultsRef.current = 0;
       continuationCountRef.current = 0;
+      inFlightRef.current = false;
       setRuntimeStatus({ inFlight: false, count: 0 });
     }
 
+    // Release inFlight once the backend session transitions out of `running`.
+    if (activeSession.status === 'running') return;
+    if (inFlightRef.current) {
+      inFlightRef.current = false;
+      setRuntimeStatus({ inFlight: false, count: continuationCountRef.current });
+    }
+
+    // Only react to post-initial evidence (`manual` or `live_log`) and new tool
+    // results — `alert_rules` is already included in the initial session run.
     const autoEvidence = evidence.filter(
       (item) =>
-        item.source === 'manual' ||
-        item.source === 'alert_rules' ||
-        (policy.live_log_auto_analysis && item.source === 'live_log'),
+        item.source === 'manual' || (policy.live_log_auto_analysis && item.source === 'live_log'),
     );
     const hasNewAutoEvidence = autoEvidence.length > analyzedAutoEvidenceRef.current;
     const hasNewResults = results.length > analyzedResultsRef.current;
     if (!hasNewAutoEvidence && !hasNewResults) return;
-    if (inFlightRef.current) return;
     if (continuationCountRef.current >= policy.max_auto_continuations) return;
 
     const timer = window.setTimeout(
       () => {
         const snapshot = useAgentStore.getState();
-        if (!snapshot.activeSession || snapshot.activeSession.status === 'cancelled') return;
+        if (snapshot.activeSession?.status !== 'completed') return;
 
         inFlightRef.current = true;
         continuationCountRef.current += 1;
@@ -74,15 +82,14 @@ export function useAgentAutoContinuation(): AgentAutoContinuationStatus {
             analyzedAutoEvidenceRef.current = snapshot.evidence.filter(
               (item) =>
                 item.source === 'manual' ||
-                item.source === 'alert_rules' ||
                 (policy.live_log_auto_analysis && item.source === 'live_log'),
             ).length;
             analyzedResultsRef.current = snapshot.results.length;
           })
-          .catch((err) => setError(String(err)))
-          .finally(() => {
+          .catch((err) => {
             inFlightRef.current = false;
             setRuntimeStatus({ inFlight: false, count: continuationCountRef.current });
+            setError(String(err));
           });
       },
       hasNewResults ? 500 : 3000,

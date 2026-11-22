@@ -5,21 +5,9 @@ import { invoke } from '@tauri-apps/api/core';
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
 import { useAppStore } from '../../stores/appStore';
 import { useEscapeClose } from '../../lib/useEscapeClose';
+import { GroupSelectField } from './GroupSelectField';
+import { ColorLabelPicker } from './ColorLabelPicker';
 import type { SessionConfig } from '../../types';
-
-const colorLabels = [
-  '#ef4444',
-  '#f97316',
-  '#eab308',
-  '#22c55e',
-  '#10b981',
-  '#06b6d4',
-  '#3b82f6',
-  '#6366f1',
-  '#a855f7',
-  '#9ca3af',
-  '#374151',
-];
 
 const CHARSETS = [
   'UTF-8',
@@ -93,7 +81,12 @@ const ShellPicker: React.FC<{
 
 // ---- Modal ----
 export const LocalTerminalModal: React.FC = () => {
-  const { showLocalTerminalModal, setShowLocalTerminalModal, addSession, addTab } = useAppStore();
+  const showLocalTerminalModal = useAppStore((s) => s.showLocalTerminalModal);
+  const setShowLocalTerminalModal = useAppStore((s) => s.setShowLocalTerminalModal);
+  const editingSession = useAppStore((s) => s.editingSession);
+  const setEditingSession = useAppStore((s) => s.setEditingSession);
+  const addSession = useAppStore((s) => s.addSession);
+  const addTab = useAppStore((s) => s.addTab);
   const { t } = useTranslation();
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [shellOptions, setShellOptions] = useState<ShellOption[]>([
@@ -101,25 +94,49 @@ export const LocalTerminalModal: React.FC = () => {
   ]);
   const [form, setForm] = useState({
     name: '',
+    group: '',
     color_label: '',
     shell: 'powershell',
+    custom_shell_path: '',
     charset: 'UTF-8',
     init_command: '',
     working_dir: '',
     remark: '',
   });
 
+  const isEditing = editingSession?.session_type === 'localshell';
+
   useEffect(() => {
     if (showLocalTerminalModal) {
-      setForm({
-        name: '',
-        color_label: '',
-        shell: 'powershell',
-        charset: 'UTF-8',
-        init_command: '',
-        working_dir: '',
-        remark: '',
-      });
+      const editingLocal = editingSession?.session_type === 'localshell' ? editingSession : null;
+      const savedShell = editingLocal?.shell_name ?? 'powershell';
+      const looksCustomPath =
+        savedShell.startsWith('/') || savedShell.includes('\\') || savedShell === 'custom';
+      if (editingLocal) {
+        setForm({
+          name: editingLocal.name,
+          group: editingLocal.group ?? '',
+          color_label: editingLocal.color_label ?? '',
+          shell: looksCustomPath ? 'custom' : savedShell,
+          custom_shell_path: looksCustomPath && savedShell !== 'custom' ? savedShell : '',
+          charset: editingLocal.charset ?? 'UTF-8',
+          init_command: editingLocal.init_command ?? '',
+          working_dir: editingLocal.working_dir ?? '',
+          remark: editingLocal.remark ?? '',
+        });
+      } else {
+        setForm({
+          name: '',
+          group: '',
+          color_label: '',
+          shell: 'powershell',
+          custom_shell_path: '',
+          charset: 'UTF-8',
+          init_command: '',
+          working_dir: '',
+          remark: '',
+        });
+      }
       setTouched({});
       // Load available shells from backend
       invoke<ShellOption[]>('list_shells')
@@ -128,9 +145,10 @@ export const LocalTerminalModal: React.FC = () => {
             s.id === 'custom' ? { ...s, label: t('local_shell_custom') } : s,
           );
           setShellOptions(mapped);
-          // Default to first non-custom shell
-          const first = mapped.find((s) => s.id !== 'custom');
-          if (first) setForm((f) => ({ ...f, shell: first.id }));
+          if (!editingLocal) {
+            const first = mapped.find((s) => s.id !== 'custom');
+            if (first) setForm((f) => ({ ...f, shell: first.id }));
+          }
         })
         .catch(() => {
           /* keep default */
@@ -139,10 +157,13 @@ export const LocalTerminalModal: React.FC = () => {
     // t is stable (i18next fixed-T); intentionally omitted to avoid re-running
     // the shell-discovery effect on language change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showLocalTerminalModal]);
+  }, [showLocalTerminalModal, editingSession]);
 
   // Hooks must run unconditionally (before any early return) per rules-of-hooks.
-  const handleClose = () => setShowLocalTerminalModal(false);
+  const handleClose = () => {
+    setShowLocalTerminalModal(false);
+    setEditingSession(null);
+  };
   useEscapeClose(handleClose);
 
   if (!showLocalTerminalModal) return null;
@@ -167,34 +188,41 @@ export const LocalTerminalModal: React.FC = () => {
     name: form.name,
     session_type: 'localshell',
     auth_method: 'password',
+    group: form.group.trim() || undefined,
     color_label: form.color_label || undefined,
-    shell_name: form.shell,
+    shell_name: form.shell === 'custom' ? form.custom_shell_path.trim() || undefined : form.shell,
     charset: form.charset,
     init_command: form.init_command || undefined,
     working_dir: form.working_dir || undefined,
     remark: form.remark || undefined,
-    created_at: new Date().toISOString().slice(0, 10),
+    created_at: isEditing ? editingSession.created_at : new Date().toISOString().slice(0, 10),
   });
 
   const handleSave = () => {
     setTouched({ name: true });
     if (!form.name) return;
-    addSession(buildConfig(crypto.randomUUID()));
+    const sessionId = isEditing ? editingSession.id : crypto.randomUUID();
+    addSession(buildConfig(sessionId));
     handleClose();
   };
 
   const handleTestConnect = () => {
     setTouched({ name: true });
     if (!form.name) return;
-    const sessionId = crypto.randomUUID();
+    const sessionId = isEditing ? editingSession.id : crypto.randomUUID();
     addSession(buildConfig(sessionId));
-    addTab({
-      id: crypto.randomUUID(),
-      sessionId,
-      title: form.name,
-      type: 'localshell',
-      connected: false,
-    });
+    const existingTab = useAppStore.getState().tabs.find((tb) => tb.sessionId === sessionId);
+    if (existingTab) {
+      useAppStore.getState().setActiveTab(existingTab.id);
+    } else {
+      addTab({
+        id: crypto.randomUUID(),
+        sessionId,
+        title: form.name,
+        type: 'localshell',
+        connected: false,
+      });
+    }
     handleClose();
   };
 
@@ -220,25 +248,10 @@ export const LocalTerminalModal: React.FC = () => {
         <div className="ssh-modal-body">
           {/* Row: color + name */}
           <div className="ssh-form-row">
-            <div className="ssh-form-group">
-              <label>{t('ssh_color_label')}</label>
-              <div className="color-label-row">
-                {colorLabels.map((color) => (
-                  <button
-                    key={color}
-                    className={`color-dot ${form.color_label === color ? 'selected' : ''}`}
-                    style={{ background: color }}
-                    onClick={() => setForm({ ...form, color_label: color })}
-                  />
-                ))}
-                <button
-                  className="color-dot-clear"
-                  onClick={() => setForm({ ...form, color_label: '' })}
-                >
-                  <X size={11} />
-                </button>
-              </div>
-            </div>
+            <ColorLabelPicker
+              value={form.color_label}
+              onChange={(color_label) => setForm({ ...form, color_label })}
+            />
             <div className="ssh-form-group">
               <label className={nameError ? 'label-error' : ''}>{t('ssh_name')}</label>
               <input
@@ -249,9 +262,11 @@ export const LocalTerminalModal: React.FC = () => {
                 className={nameError ? 'input-error' : ''}
                 placeholder="My Terminal"
               />
-              {nameError && <span className="field-error">name is a required field</span>}
+              {nameError && <span className="field-error">{t('field_required')}</span>}
             </div>
           </div>
+
+          <GroupSelectField value={form.group} onChange={(group) => setForm({ ...form, group })} />
 
           {/* Shell picker */}
           <div className="ssh-form-group">
@@ -262,6 +277,18 @@ export const LocalTerminalModal: React.FC = () => {
               onChange={(v) => setForm({ ...form, shell: v })}
             />
           </div>
+
+          {form.shell === 'custom' && (
+            <div className="ssh-form-group">
+              <label>{t('local_shell_custom_path')}</label>
+              <input
+                type="text"
+                value={form.custom_shell_path}
+                onChange={(e) => setForm({ ...form, custom_shell_path: e.target.value })}
+                placeholder="/usr/local/bin/zsh"
+              />
+            </div>
+          )}
 
           {/* Charset */}
           <div className="ssh-form-group">

@@ -5,14 +5,31 @@ import { exit } from '@tauri-apps/plugin-process';
 import { useTranslation } from 'react-i18next';
 import { Globe, Settings, Search, LogOut } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { useEscapeClose } from '../../lib/useEscapeClose';
-import { isTauriRuntime } from '../../lib/platform';
+import { IS_MACOS, isTauriRuntime } from '../../lib/platform';
+import { KEY_ACTIONS } from '../../keymap/actions';
+import { formatStep, parseBinding } from '../../keymap/match';
 
 const getAppWindow = () => (isTauriRuntime() ? getCurrentWindow() : null);
 
+function formatPaletteShortcut(overrides: Record<string, string | null>): string {
+  const def = KEY_ACTIONS.find((a) => a.id === 'palette.open')?.defaultBinding ?? 'Ctrl+K';
+  const ov = overrides['palette.open'];
+  const binding = ov === undefined ? def : ov;
+  if (!binding) return '';
+  const chord = parseBinding(binding);
+  return chord ? chord.map(formatStep).join(' ') : binding;
+}
+
 export const AppMenu: React.FC = () => {
-  const { showAppMenu, setShowAppMenu, setShowSettings, setShowCommandPalette, locale, setLocale } =
-    useAppStore();
+  const showAppMenu = useAppStore((s) => s.showAppMenu);
+  const setShowAppMenu = useAppStore((s) => s.setShowAppMenu);
+  const setShowSettings = useAppStore((s) => s.setShowSettings);
+  const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
+  const locale = useAppStore((s) => s.locale);
+  const setLocale = useAppStore((s) => s.setLocale);
+  const keymapOverrides = useSettingsStore((s) => s.settings.keymapOverrides);
   const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -36,8 +53,9 @@ export const AppMenu: React.FC = () => {
   const handleQuit = () => {
     setShowAppMenu(false);
     if (isTauriRuntime()) {
-      exit(0).catch(() => {});
-      invoke('quit_app').catch(() => {});
+      invoke('quit_app').catch(() => {
+        exit(0).catch(() => {});
+      });
       setTimeout(() => {
         const appWindow = getAppWindow();
         appWindow?.destroy().catch(() => {
@@ -49,10 +67,21 @@ export const AppMenu: React.FC = () => {
     }
   };
 
+  const handleToggleLocale = () => {
+    const next = locale === 'zh' ? 'en' : 'zh';
+    setLocale(next);
+    void useSettingsStore
+      .getState()
+      .patch({ language: next })
+      .catch(() => {});
+  };
+
+  const paletteShortcut = formatPaletteShortcut(keymapOverrides);
+
   return (
     <div className="app-menu-overlay">
       <div className="app-menu" ref={menuRef}>
-        <div className="app-menu-item" onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')}>
+        <div className="app-menu-item" onClick={handleToggleLocale}>
           <Globe size={14} />
           <span>{t('menu_language')}</span>
           <span className="app-menu-shortcut">{locale === 'zh' ? 'EN' : '中文'}</span>
@@ -76,13 +105,13 @@ export const AppMenu: React.FC = () => {
         >
           <Search size={14} />
           <span>{t('menu_quick_search')}</span>
-          <span className="app-menu-shortcut">Ctrl+Shift+F</span>
+          {paletteShortcut && <span className="app-menu-shortcut">{paletteShortcut}</span>}
         </div>
         <div className="app-menu-divider" />
         <div className="app-menu-item danger" onClick={handleQuit}>
           <LogOut size={14} />
           <span>{t('menu_quit')}</span>
-          <span className="app-menu-shortcut">Alt+F4</span>
+          <span className="app-menu-shortcut">{IS_MACOS ? '⌘Q' : 'Alt+F4'}</span>
         </div>
       </div>
     </div>

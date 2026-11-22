@@ -121,12 +121,20 @@ pub async fn list_dir(sftp: &SftpSession, path: &str) -> Result<Vec<SftpEntry>, 
         let meta = entry.metadata();
         let name = entry.file_name();
         let full = format!("{}/{}", path.trim_end_matches('/'), name);
+        // Resolve symlinks via `stat` (`metadata`) so links pointing to
+        // directories open as directories rather than failing as downloads.
+        let is_dir = if meta.is_symlink() {
+            sftp.metadata(&full)
+                .await
+                .map(|m| m.is_dir())
+                .unwrap_or(false)
+        } else {
+            meta.is_dir()
+        };
         out.push(SftpEntry {
             name,
             path: full,
-            is_dir: meta.is_dir(),
-            // russh-sftp `Metadata` (= `FileAttributes`): `size: Option<u64>`,
-            // `mtime: Option<u32>`, `permissions: Option<u32>`.
+            is_dir,
             size: meta.size.unwrap_or(0),
             modified: meta.mtime.map(|t| t as u64),
             permissions: meta.permissions,
@@ -192,12 +200,13 @@ pub async fn read_text(sftp: &SftpSession, path: &str) -> Result<String, String>
         .await
         .map_err(|e| format!("SFTP open failed: {}", e))?;
     let mut buf = Vec::new();
-    // Cap the read itself so even without metadata we never allocate past the limit.
-    f.take(MAX_TEXT_BYTES)
+    // Read up to MAX_TEXT_BYTES + 1 so files of exactly MAX_TEXT_BYTES succeed
+    // while strictly larger files are rejected without unbounded allocation.
+    f.take(MAX_TEXT_BYTES + 1)
         .read_to_end(&mut buf)
         .await
         .map_err(|e| format!("SFTP read failed: {}", e))?;
-    if buf.len() as u64 >= MAX_TEXT_BYTES {
+    if buf.len() as u64 > MAX_TEXT_BYTES {
         return Err(format!(
             "File is too large to read as text (exceeds {} MiB). Use download instead.",
             MAX_TEXT_BYTES / 1024 / 1024
@@ -387,7 +396,13 @@ pub async fn download_dir(
                 EntryName::Ok => {}
             }
             let rpath = format!("{}/{}", rdir, name);
-            if entry.metadata().is_dir() {
+            let meta = entry.metadata();
+            if meta.is_symlink() {
+                // Skip symlinks during recursive download (mirrors upload_dir)
+                // to prevent directory-cycle loops and unexpected target reads.
+                continue;
+            }
+            if meta.is_dir() {
                 stack.push((rpath, ldir.join(&name)));
             } else {
                 files.push((rpath, ldir.join(&name)));
@@ -465,14 +480,14 @@ pub async fn upload_dir(
 }
 
 pub async fn chmod(sftp: &SftpSession, path: &str, mode: u32) -> Result<(), String> {
-    // russh-sftp 2.3: `metadata` returns `Metadata` (= `FileAttributes` with a
-    // `permissions: Option<u32>` field); `set_metadata(path, Metadata)` writes it back.
-    let mut meta = sftp
-        .metadata(path)
-        .await
-        .map_err(|e| format!("SFTP stat failed: {}", e))?;
-    meta.permissions = Some(mode);
-    sftp.set_metadata(path, meta)
+    // Only send the permissions attribute — round-tripping uid/gid/size/times
+    // via `set_metadata` fails with Permission denied on strict servers for
+    // non-root users.
+    let attrs = russh_sftp::protocol::FileAttributes {
+        permissions: Some(mode),
+        ..Default::default()
+    };
+    sftp.set_metadata(path, attrs)
         .await
         .map_err(|e| format!("SFTP chmod failed: {}", e))
 }

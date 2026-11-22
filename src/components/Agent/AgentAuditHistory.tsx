@@ -33,20 +33,26 @@ export const AgentAuditHistory: React.FC = () => {
     (s) => `${s.activeSession?.status ?? 'none'}-${s.evidence.length}-${s.results.length}`,
   );
   const [records, setRecords] = useState<AgentAuditRecord[]>([]);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     if (!activeTab?.sessionId) {
       setRecords([]);
+      setLoadError(false);
       return;
     }
 
     let cancelled = false;
+    setLoadError(false);
     invoke<AgentAuditRecord[]>('list_agent_audits', { targetSessionId: activeTab.sessionId })
       .then((loaded) => {
         if (!cancelled) setRecords(loaded);
       })
       .catch(() => {
-        if (!cancelled) setRecords([]);
+        if (!cancelled) {
+          setRecords([]);
+          setLoadError(true);
+        }
       });
 
     return () => {
@@ -57,8 +63,12 @@ export const AgentAuditHistory: React.FC = () => {
   return (
     <div className="agent-history">
       <div className="agent-section-title">{t('agent_audit_history')}</div>
-      {records.length === 0 ? (
-        <div className="agent-empty">{t('agent_no_audit_history')}</div>
+      {!activeTab?.sessionId ? (
+        <div className="agent-empty">{t('agent_audit_no_session')}</div>
+      ) : loadError ? (
+        <div className="agent-empty">{t('agent_audit_load_failed')}</div>
+      ) : records.length === 0 ? (
+        <div className="agent-empty">{t('agent_audit_empty')}</div>
       ) : (
         records.slice(0, 6).map((record) => (
           <details className="agent-history-item" key={record.id}>

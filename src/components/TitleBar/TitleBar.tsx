@@ -1,22 +1,33 @@
 import React from 'react';
 import { Minus, Square, X, Activity, Search, Bot } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { exit } from '@tauri-apps/plugin-process';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../stores/appStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { IS_MACOS, isTauriRuntime } from '../../lib/platform';
+import { KEY_ACTIONS } from '../../keymap/actions';
+import { formatStep, parseBinding } from '../../keymap/match';
 
 const getAppWindow = () => (isTauriRuntime() ? getCurrentWindow() : null);
 
 export const TitleBar: React.FC = () => {
   const { t } = useTranslation();
-  const {
-    serverPanelOpen,
-    toggleServerPanel,
-    agentPanelOpen,
-    toggleAgentPanel,
-    setShowCommandPalette,
-  } = useAppStore();
+  const serverPanelOpen = useAppStore((s) => s.serverPanelOpen);
+  const toggleServerPanel = useAppStore((s) => s.toggleServerPanel);
+  const agentPanelOpen = useAppStore((s) => s.agentPanelOpen);
+  const toggleAgentPanel = useAppStore((s) => s.toggleAgentPanel);
+  const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
+  const keymapOverrides = useSettingsStore((s) => s.settings.keymapOverrides);
+
+  const paletteBadge = (() => {
+    const def = KEY_ACTIONS.find((a) => a.id === 'palette.open')?.defaultBinding ?? 'Ctrl+K';
+    const ov = keymapOverrides['palette.open'];
+    const binding = ov === undefined ? def : ov;
+    if (!binding) return '';
+    const chord = parseBinding(binding);
+    return chord ? chord.map(formatStep).join(' ') : binding;
+  })();
 
   const handleMinimize = () => {
     getAppWindow()
@@ -32,10 +43,11 @@ export const TitleBar: React.FC = () => {
 
   const handleClose = () => {
     if (isTauriRuntime()) {
-      exit(0).catch(() => {});
-      getAppWindow()
-        ?.close()
-        .catch(() => {});
+      invoke('quit_app').catch(() => {
+        getAppWindow()
+          ?.close()
+          .catch(() => {});
+      });
     }
   };
 
@@ -54,7 +66,7 @@ export const TitleBar: React.FC = () => {
         <button type="button" className="titlebar-cmdk" onClick={() => setShowCommandPalette(true)}>
           <Search size={12} />
           <span>{t('palette_entry', '搜索或输入命令')}</span>
-          <kbd>{IS_MACOS ? '⌘K' : 'Ctrl K'}</kbd>
+          {paletteBadge && <kbd>{paletteBadge}</kbd>}
         </button>
       </div>
       <div className="titlebar-controls">

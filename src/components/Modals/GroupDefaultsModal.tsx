@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../stores/appStore';
 import { loadGroupDefaults, saveGroupDefaults } from '../../lib/groupDefaults';
 import type { GroupDefaults } from '../../lib/groupDefaults';
+import { useEscapeClose } from '../../lib/useEscapeClose';
 
 export const GroupDefaultsModal: React.FC = () => {
   const { t } = useTranslation();
-  const { groupDefaultsTarget, setGroupDefaultsTarget } = useAppStore();
+  const groupDefaultsTarget = useAppStore((s) => s.groupDefaultsTarget);
+  const setGroupDefaultsTarget = useAppStore((s) => s.setGroupDefaultsTarget);
   const group = groupDefaultsTarget!; // App gates render with non-null check
 
   const [defs, setDefs] = useState<GroupDefaults>(() => loadGroupDefaults()[group] ?? {});
@@ -16,7 +18,8 @@ export const GroupDefaultsModal: React.FC = () => {
     setDefs(loadGroupDefaults()[group] ?? {});
   }, [group]);
 
-  const close = () => setGroupDefaultsTarget(null);
+  const close = useCallback(() => setGroupDefaultsTarget(null), [setGroupDefaultsTarget]);
+  useEscapeClose(close);
 
   const set = <K extends keyof GroupDefaults>(key: K, value: GroupDefaults[K] | '') => {
     setDefs((prev) => {
@@ -28,6 +31,17 @@ export const GroupDefaultsModal: React.FC = () => {
       }
       return next;
     });
+  };
+
+  const setNumericField = (key: 'port' | 'jump_port' | 'proxy_port', raw: string) => {
+    if (raw.trim() === '') {
+      set(key, '');
+      return;
+    }
+    const parsed = parseInt(raw, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      set(key, parsed);
+    }
   };
 
   const save = () => {
@@ -44,16 +58,9 @@ export const GroupDefaultsModal: React.FC = () => {
     close();
   };
 
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      close();
-    }
-  };
-
   return (
-    <div className="group-defaults-overlay" onMouseDown={close} onKeyDown={onKeyDown}>
-      <div className="group-defaults-card" onMouseDown={(e) => e.stopPropagation()} tabIndex={-1}>
+    <div className="group-defaults-overlay" onMouseDown={close}>
+      <div className="group-defaults-card" onMouseDown={(e) => e.stopPropagation()}>
         <div className="group-defaults-title">
           {t('group_defaults_title')}: <span className="group-defaults-group-name">{group}</span>
         </div>
@@ -76,10 +83,7 @@ export const GroupDefaultsModal: React.FC = () => {
             className="group-defaults-input"
             type="number"
             value={defs.port ?? ''}
-            onChange={(e) => {
-              const v = e.target.value;
-              set('port', v === '' ? '' : (parseInt(v, 10) as unknown as undefined)); // eslint-disable-line no-restricted-syntax -- number-to-undefined cast; union field accepts number|undefined|''
-            }}
+            onChange={(e) => setNumericField('port', e.target.value)}
             placeholder="22"
             min={1}
             max={65535}
@@ -97,11 +101,11 @@ export const GroupDefaultsModal: React.FC = () => {
             }
           >
             <option value="">—</option>
-            <option value="password">password</option>
-            <option value="publickey">publickey</option>
-            <option value="agent">agent</option>
-            <option value="keyboardinteractive">keyboardinteractive</option>
-            <option value="none">none</option>
+            <option value="password">{t('ssh_auth_password')}</option>
+            <option value="publickey">{t('ssh_auth_publickey')}</option>
+            <option value="agent">{t('ssh_auth_agent')}</option>
+            <option value="keyboardinteractive">{t('ssh_auth_mfa')}</option>
+            <option value="none">{t('ssh_auth_none')}</option>
           </select>
 
           {/* Private Key Path */}
@@ -130,10 +134,7 @@ export const GroupDefaultsModal: React.FC = () => {
             className="group-defaults-input"
             type="number"
             value={defs.jump_port ?? ''}
-            onChange={(e) => {
-              const v = e.target.value;
-              set('jump_port', v === '' ? '' : (parseInt(v, 10) as unknown as undefined)); // eslint-disable-line no-restricted-syntax -- number-to-undefined cast; union field accepts number|undefined|''
-            }}
+            onChange={(e) => setNumericField('jump_port', e.target.value)}
             placeholder="22"
             min={1}
             max={65535}
@@ -171,9 +172,9 @@ export const GroupDefaultsModal: React.FC = () => {
             }
           >
             <option value="">—</option>
-            <option value="none">none</option>
-            <option value="socks5">socks5</option>
-            <option value="http">http</option>
+            <option value="none">{t('ssh_proxy_none')}</option>
+            <option value="socks5">SOCKS5</option>
+            <option value="http">HTTP CONNECT</option>
           </select>
 
           {/* Proxy Host */}
@@ -192,10 +193,7 @@ export const GroupDefaultsModal: React.FC = () => {
             className="group-defaults-input"
             type="number"
             value={defs.proxy_port ?? ''}
-            onChange={(e) => {
-              const v = e.target.value;
-              set('proxy_port', v === '' ? '' : (parseInt(v, 10) as unknown as undefined)); // eslint-disable-line no-restricted-syntax -- number-to-undefined cast; union field accepts number|undefined|''
-            }}
+            onChange={(e) => setNumericField('proxy_port', e.target.value)}
             placeholder="1080"
             min={1}
             max={65535}

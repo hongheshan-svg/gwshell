@@ -2,8 +2,7 @@ use serde::Serialize;
 use std::sync::Arc;
 use tauri::State;
 
-use crate::session::{AuthMethod, SessionConfig};
-use crate::ssh::params::ConnectParams;
+use crate::ssh::params::connect_params_from_session;
 use crate::AppState;
 
 // ── docker ps format string ────────────────────────────────────────────────
@@ -50,79 +49,6 @@ pub fn parse_docker_ps(out: &str) -> Vec<DockerContainer> {
         .collect()
 }
 
-// ── connect_params_from_session ────────────────────────────────────────────
-
-/// Build SSH `ConnectParams` from a saved SSH `SessionConfig` (the docker
-/// tunnel target), mirroring how `ssh_connect` in lib.rs constructs
-/// `ConnectParams` from its individual IPC arguments.
-///
-/// Field-by-field mapping from `SessionConfig` → `ConnectParams`:
-///
-/// | ConnectParams field           | Source / default                           |
-/// |-------------------------------|--------------------------------------------|
-/// | host                          | `s.host.unwrap_or_default()`               |
-/// | port                          | `s.port.unwrap_or(22)`                     |
-/// | username                      | `s.username.unwrap_or_default()`           |
-/// | password                      | `s.password`                               |
-/// | private_key_path              | `s.private_key_path`                       |
-/// | auth_method                   | derived from `s.auth_method` enum → str    |
-/// | totp_code                     | `s.totp_code`                              |
-/// | jump_host                     | `s.jump_host`                              |
-/// | jump_port                     | `s.jump_port.unwrap_or(22)`                |
-/// | jump_username                 | `s.jump_username`                          |
-/// | jump_password                 | `s.jump_password`                          |
-/// | jump_private_key_path         | `s.jump_private_key_path`                  |
-/// | proxy_type                    | `s.proxy_type`                             |
-/// | proxy_host                    | `s.proxy_host`                             |
-/// | proxy_port                    | `s.proxy_port.unwrap_or(1080)`             |
-/// | proxy_username                | `s.proxy_username`                         |
-/// | proxy_password                | `s.proxy_password`                         |
-/// | connection_timeout            | `s.connection_timeout.unwrap_or(30)`       |
-/// | idle_disconnect_minutes       | `s.idle_disconnect_minutes.unwrap_or(0)`   |
-/// | agent_forward                 | `s.agent_forward.unwrap_or(false)`         |
-/// | keepalive_interval            | `s.keepalive_interval.map(|v| v as u64)`   |
-/// | server_alive_count_max        | `s.server_alive_count_max`                 |
-pub fn connect_params_from_session(s: &SessionConfig) -> ConnectParams {
-    // Convert the AuthMethod enum to the lowercase string that `auth.rs` matches
-    // on. This mirrors the behaviour of ssh_connect in lib.rs, which receives a
-    // raw String from the frontend and stores it directly; here we convert from
-    // the persisted enum variant using the same name mapping.
-    let auth_method = match s.auth_method {
-        AuthMethod::Password => "password".to_string(),
-        AuthMethod::PublicKey => "publickey".to_string(),
-        AuthMethod::KeyboardInteractive => "keyboardinteractive".to_string(),
-        AuthMethod::Agent => "agent".to_string(),
-        AuthMethod::None => "none".to_string(),
-    };
-
-    ConnectParams {
-        host: s.host.clone().unwrap_or_default(),
-        port: s.port.unwrap_or(22),
-        username: s.username.clone().unwrap_or_default(),
-        password: s.password.clone(),
-        private_key_path: s.private_key_path.clone(),
-        auth_method,
-        totp_code: s.totp_code.clone(),
-        jump_host: s.jump_host.clone(),
-        jump_port: s.jump_port.unwrap_or(22),
-        jump_username: s.jump_username.clone(),
-        jump_password: s.jump_password.clone(),
-        jump_private_key_path: s.jump_private_key_path.clone(),
-        proxy_type: s.proxy_type.clone(),
-        proxy_host: s.proxy_host.clone(),
-        proxy_port: s.proxy_port.unwrap_or(1080),
-        proxy_username: s.proxy_username.clone(),
-        proxy_password: s.proxy_password.clone(),
-        connection_timeout: s.connection_timeout.unwrap_or(30),
-        idle_disconnect_minutes: s.idle_disconnect_minutes.unwrap_or(0),
-        agent_forward: s.agent_forward.unwrap_or(false),
-        // SessionConfig.keepalive_interval is Option<u32>; ConnectParams wants
-        // Option<u64> — widen the integer.
-        keepalive_interval: s.keepalive_interval.map(|v| v as u64),
-        server_alive_count_max: s.server_alive_count_max,
-    }
-}
-
 // ── valid_container_id ─────────────────────────────────────────────────────
 
 /// Reject container IDs that could inject flags or shell metacharacters into
@@ -157,18 +83,34 @@ fn split_exec_rc(out: &str) -> (String, i32) {
 
 // ── docker_list_containers ─────────────────────────────────────────────────
 
+fn valid_docker_host(host: &str) -> bool {
+    !host.is_empty()
+        && host.len() <= 256
+        && host.bytes().all(|b| {
+            b.is_ascii_alphanumeric() || matches!(b, b':' | b'/' | b'.' | b'-' | b'_' | b'[' | b']')
+        })
+}
+
 #[tauri::command]
 pub async fn docker_list_containers(
     connect_method: String, // "Local" | "SSH"
     tunnel_session_id: Option<String>,
+    docker_host: Option<String>,
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<DockerContainer>, String> {
+    let docker_host = docker_host
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    if let Some(ref host) = docker_host {
+        if !valid_docker_host(host) {
+            return Err("Invalid docker host endpoint".to_string());
+        }
+    }
+
     if connect_method.eq_ignore_ascii_case("ssh") {
         let tunnel_id = tunnel_session_id
             .ok_or_else(|| "No SSH session selected for this Docker host".to_string())?;
 
-        // Look up the SSH tunnel session from in-memory sessions.
-        // `state.sessions` is a parking_lot::Mutex (synchronous `.lock()`).
         let sess = {
             let guard = state.sessions.lock();
             guard.iter().find(|s| s.id == tunnel_id).cloned()
@@ -177,21 +119,24 @@ pub async fn docker_list_containers(
 
         let params = connect_params_from_session(&sess);
 
-        // Transient one-shot: establish a fresh connection, exec docker ps, drop.
         let (conn, _fwd) = crate::ssh::connect::establish(&params)
             .await
             .map_err(|e| format!("SSH connect failed: {}", e))?;
         let conn = Arc::new(conn);
-        // Merge stderr and append an exit-code sentinel so we can detect
-        // failures (e.g. docker missing, daemon down, permission denied) that
-        // would otherwise surface as silent empty output.
+        let host_flag = docker_host
+            .as_deref()
+            .map(|h| format!(" -H {}", h))
+            .unwrap_or_default();
         let remote_cmd = format!(
-            "docker ps --no-trunc --format '{}' 2>&1; echo \"__rc=$?\"",
-            PS_FMT
+            "docker{} ps --no-trunc --format '{}' 2>&1; echo \"__rc=$?\"",
+            host_flag, PS_FMT
         );
         let raw = crate::ssh::exec::exec(&conn, &remote_cmd)
             .await
             .map_err(|e| format!("docker ps failed: {}", e))?;
+        let _ = conn
+            .disconnect(russh::Disconnect::ByApplication, "", "English")
+            .await;
         let (body, rc) = split_exec_rc(&raw);
         if rc != 0 {
             return Err(if body.trim().is_empty() {
@@ -203,10 +148,20 @@ pub async fn docker_list_containers(
         Ok(parse_docker_ps(&body))
     } else {
         // Local: run the docker CLI as a child process.
-        let output = tokio::task::spawn_blocking(|| {
-            std::process::Command::new("docker")
-                .args(["ps", "--no-trunc", "--format", PS_FMT])
-                .output()
+        let host_arg = docker_host.clone();
+        let output = tokio::task::spawn_blocking(move || {
+            let mut cmd = std::process::Command::new("docker");
+            if let Some(ref h) = host_arg {
+                cmd.args(["-H", h]);
+            }
+            cmd.args(["ps", "--no-trunc", "--format", PS_FMT]);
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+                cmd.creation_flags(CREATE_NO_WINDOW);
+            }
+            cmd.output()
         })
         .await
         .map_err(|e| format!("task join: {}", e))?
@@ -235,13 +190,20 @@ pub async fn docker_exec(
     cols: u32,
     connect_method: String, // "Local" | "SSH"
     tunnel_session_id: Option<String>,
+    docker_host: Option<String>,
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    // Validate container_id first — defence against injection on the SSH
-    // string-interpolation path. Also protects the local PTY path.
     if !valid_container_id(&container_id) {
         return Err("Invalid container id".to_string());
+    }
+    let docker_host = docker_host
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    if let Some(ref host) = docker_host {
+        if !valid_docker_host(host) {
+            return Err("Invalid docker host endpoint".to_string());
+        }
     }
 
     if connect_method.eq_ignore_ascii_case("ssh") {
@@ -254,25 +216,27 @@ pub async fn docker_exec(
         .ok_or_else(|| "Referenced SSH session not found".to_string())?;
 
         let params = connect_params_from_session(&sess);
-
-        // Build the command with `--` to prevent argv flag smuggling from the
-        // container_id (already validated, but belt-and-suspenders).
-        let cmd = format!("docker exec -it -- {} sh -c '{}'", container_id, EXEC_SHELL);
+        let host_flag = docker_host
+            .as_deref()
+            .map(|h| format!(" -H {}", h))
+            .unwrap_or_default();
+        let cmd = format!(
+            "docker{} exec -it -- {} sh -c '{}'",
+            host_flag, container_id, EXEC_SHELL
+        );
 
         state
             .ssh_manager
             .connect_and_exec_interactive(&session_id, params, cmd, rows, cols, app_handle)
             .await
     } else {
-        // Local: spawn docker exec in a PTY via PtyManager.
         let sid = session_id.clone();
         let cid = container_id.clone();
         let st = state.inner().clone();
-        // rows/cols arrive as u32 from Tauri IPC; PtyManager uses u16.
         let (r, c) = (rows as u16, cols as u16);
         tokio::task::spawn_blocking(move || {
             st.pty_manager
-                .create_docker_exec(&sid, app_handle, r, c, &cid)
+                .create_docker_exec(&sid, app_handle, r, c, &cid, docker_host.as_deref())
         })
         .await
         .map_err(|e| format!("task join: {}", e))?

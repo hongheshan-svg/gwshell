@@ -14,124 +14,29 @@ import {
   RefreshCw,
   ChevronUp,
   Home,
-  Edit3,
   X,
-  Copy,
-  Shield,
-  FilePlus,
   FolderUp,
-  ExternalLink,
-  FileEdit,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { useConfirm } from '../../hooks/useConfirm';
+import { usePanelResize } from '../../hooks/usePanelResize';
 import { fileIconFor } from '../../lib/fileIcons';
 import { getSftpHomeCandidates, normalizeResolvedSftpDirectory } from '../../lib/sftpPaths';
+import {
+  formatPermissions,
+  formatSize,
+  isTextFile,
+  type SftpEntry,
+  type SftpProgress,
+} from '../../lib/sftpUtils';
 import { SftpEditor } from './SftpEditor';
-
-const TEXT_EXTENSIONS = new Set([
-  'txt',
-  'md',
-  'json',
-  'xml',
-  'yml',
-  'yaml',
-  'toml',
-  'ini',
-  'cfg',
-  'conf',
-  'sh',
-  'bash',
-  'zsh',
-  'fish',
-  'bat',
-  'cmd',
-  'ps1',
-  'js',
-  'ts',
-  'jsx',
-  'tsx',
-  'mjs',
-  'cjs',
-  'py',
-  'rb',
-  'pl',
-  'php',
-  'lua',
-  'go',
-  'rs',
-  'java',
-  'kt',
-  'scala',
-  'c',
-  'cpp',
-  'h',
-  'hpp',
-  'cs',
-  'css',
-  'scss',
-  'less',
-  'sass',
-  'html',
-  'htm',
-  'vue',
-  'svelte',
-  'sql',
-  'graphql',
-  'gql',
-  'env',
-  'gitignore',
-  'dockerignore',
-  'editorconfig',
-  'eslintrc',
-  'prettierrc',
-  'log',
-  'csv',
-  'tsv',
-  'properties',
-  'service',
-  'timer',
-  'socket',
-  'desktop',
-  'nginx',
-  'apache',
-  'Makefile',
-  'Dockerfile',
-  'Vagrantfile',
-  'Rakefile',
-  'Gemfile',
-]);
-
-function isTextFile(name: string): boolean {
-  // dotfiles like .bashrc, .profile
-  if (name.startsWith('.') && !name.includes('.', 1)) return true;
-  const ext = name.split('.').pop()?.toLowerCase() ?? '';
-  return TEXT_EXTENSIONS.has(ext);
-}
-
-interface SftpEntry {
-  name: string;
-  path: string;
-  is_dir: boolean;
-  size: number;
-  modified: number | null;
-  permissions: number | null;
-}
+import { SftpContextMenu } from './SftpContextMenu';
+import { SftpChmodDialog } from './SftpChmodDialog';
 
 interface SftpPanelProps {
   sessionId: string;
   username?: string;
   connected?: boolean;
-}
-
-/// Payload of the backend's `sftp-progress-{sessionId}` events.
-interface SftpProgress {
-  kind: 'upload' | 'download';
-  file: string;
-  fileIndex: number;
-  fileTotal: number;
-  bytes: number;
-  total: number;
 }
 
 export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, connected }) => {
@@ -163,13 +68,16 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
   const [chmodValue, setChmodValue] = useState('');
   // inline editor
   const [editingFile, setEditingFile] = useState<SftpEntry | null>(null);
-  const [width, setWidth] = useState(300);
-  const resizingRef = useRef(false);
-  const startXRef = useRef(0);
-  const startWidthRef = useRef(0);
+  const { width, onResizeMouseDown } = usePanelResize({
+    initialWidth: 300,
+    minWidth: 200,
+    maxWidth: 600,
+    edge: 'left',
+  });
   const initializedRef = useRef(false);
   const homePathRef = useRef<string | null>(null);
   const initRunRef = useRef(0);
+  const loadSeqRef = useRef(0);
   // Scroll container for the virtualized file list.
   const listScrollRef = useRef<HTMLDivElement>(null);
   // Guards file transfers so overlapping operations (double-click during a
@@ -264,50 +172,28 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
 
     const candidates = getSftpHomeCandidates(username);
 
-    // Probe candidates IN PARALLEL and take the first that resolves, instead
-    // of awaiting them serially. Each probe is a single realpath round-trip, so
-    // the whole detection finishes in ~1 RTT instead of N×RTT. (Implemented
-    // without Promise.any — the TS lib target is ES2020.)
-    const probes = candidates;
-    try {
-      const resolved = await new Promise<string>((resolve, reject) => {
-        let remaining = probes.length;
-        if (remaining === 0) {
-          reject(new Error('no candidates'));
-          return;
-        }
-        for (const c of probes) {
-          resolveReadableDir(c)
-            .then((r) => {
-              if (r) resolve(r);
-              else if (--remaining === 0) reject(new Error('all unresolved'));
-            })
-            .catch(() => {
-              if (--remaining === 0) reject(new Error('all unresolved'));
-            });
-        }
-      });
-      homePathRef.current = resolved;
-      return resolved;
-    } catch {
-      // Some servers don't support canonicalize/realpath for otherwise
-      // readable directories. Fall back to list probes, but still never use a
-      // literal "~" path; SFTP is not a shell and many servers treat it as a
-      // real child directory name.
-      // Fall back to serial lightweight list probes so we don't accept an
-      // unreadable candidate from a failed realpath.
-      for (const candidate of probes) {
-        try {
-          await invoke<unknown[]>('sftp_list', { sessionId, path: candidate });
-          homePathRef.current = candidate;
-          return candidate;
-        } catch {
-          // Try next candidate.
-        }
-      }
-      homePathRef.current = '/';
-      return '/';
+    // Probe candidates IN PARALLEL (~1 RTT), then pick the first non-null
+    // result in candidate priority order so /home/<user> always beats /.
+    const results = await Promise.all(candidates.map((c) => resolveReadableDir(c)));
+    const preferred = results.find((r): r is string => r !== null);
+    if (preferred) {
+      homePathRef.current = preferred;
+      return preferred;
     }
+
+    // Some servers don't support canonicalize/realpath for otherwise readable
+    // directories. Fall back to serial list probes in priority order.
+    for (const candidate of candidates) {
+      try {
+        await invoke<unknown[]>('sftp_list', { sessionId, path: candidate });
+        homePathRef.current = candidate;
+        return candidate;
+      } catch {
+        // Try next candidate.
+      }
+    }
+    homePathRef.current = '/';
+    return '/';
     // sessionId is stable for the panel's lifetime (one panel per session);
     // omitting it avoids recreating this callback on session prop changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -340,10 +226,12 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
 
   const loadDir = useCallback(
     async (path: string) => {
+      const seq = ++loadSeqRef.current;
       setLoading(true);
       setError(null);
       try {
         const items = await invoke<SftpEntry[]>('sftp_list', { sessionId, path });
+        if (seq !== loadSeqRef.current) return;
         setEntries(items);
         setSelectedEntry((selected) => {
           if (!selected) return null;
@@ -351,10 +239,13 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
         });
         setPathInput(path);
       } catch (err) {
+        if (seq !== loadSeqRef.current) return;
         setError(String(err));
         setEntries([]);
       } finally {
-        setLoading(false);
+        if (seq === loadSeqRef.current) {
+          setLoading(false);
+        }
       }
     },
     [sessionId],
@@ -626,43 +517,6 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
     window.addEventListener('click', handler);
     return () => window.removeEventListener('click', handler);
   }, [contextMenu]);
-
-  // Resize handle
-  const onResizeMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    resizingRef.current = true;
-    startXRef.current = e.clientX;
-    startWidthRef.current = width;
-
-    const onMouseMove = (ev: MouseEvent) => {
-      if (!resizingRef.current) return;
-      const delta = startXRef.current - ev.clientX;
-      setWidth(Math.max(200, Math.min(600, startWidthRef.current + delta)));
-    };
-
-    const onMouseUp = () => {
-      resizingRef.current = false;
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    };
-
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-  };
-
-  const formatSize = (bytes: number): string => {
-    if (bytes === 0) return '-';
-    if (bytes < 1024) return `${bytes}B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
-    return `${(bytes / 1024 / 1024 / 1024).toFixed(1)}GB`;
-  };
-
-  const formatPermissions = (perm: number | null): string => {
-    if (perm === null) return '';
-    const mode = perm & 0o777;
-    return mode.toString(8);
-  };
 
   // Counts are memoized so a re-render triggered by something other than the
   // entries list (e.g. resizing the panel width) doesn't re-scan the whole list.
@@ -990,238 +844,62 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
 
         {/* Context menu */}
         {contextMenu && (
-          <div className="sftp-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
-            {contextMenu.entry ? (
-              <>
-                {/* --- Entry-level right-click --- */}
-                {!contextMenu.entry.is_dir && (
-                  <>
-                    {isTextFile(contextMenu.entry.name) && (
-                      <div
-                        className="sftp-context-item"
-                        onClick={() => {
-                          setEditingFile(contextMenu.entry);
-                          setContextMenu(null);
-                        }}
-                      >
-                        <FileEdit size={13} />
-                        <span>{t('sftp_edit_online')}</span>
-                      </div>
-                    )}
-                    <div
-                      className="sftp-context-item"
-                      onClick={() => {
-                        void handleOpenLocal(contextMenu.entry!);
-                        setContextMenu(null);
-                      }}
-                    >
-                      <ExternalLink size={13} />
-                      <span>{t('sftp_open_local')}</span>
-                    </div>
-                  </>
-                )}
-                <div
-                  className="sftp-context-item"
-                  onClick={() => {
-                    void handleDownload(contextMenu.entry!);
-                    setContextMenu(null);
-                  }}
-                >
-                  <Download size={13} />
-                  <span>{t('sftp_download_to')}</span>
-                </div>
-                <div
-                  className="sftp-context-item"
-                  onClick={() => {
-                    void handleUpload();
-                    setContextMenu(null);
-                  }}
-                >
-                  <Upload size={13} />
-                  <span>{t('sftp_upload_file')}</span>
-                </div>
-                <div
-                  className="sftp-context-item"
-                  onClick={() => {
-                    void handleUploadFolder();
-                    setContextMenu(null);
-                  }}
-                >
-                  <FolderUp size={13} />
-                  <span>{t('sftp_upload_folder')}</span>
-                </div>
-                <div className="sftp-context-divider" />
-                <div
-                  className="sftp-context-item"
-                  onClick={() => {
-                    void loadDir(currentPath);
-                    setContextMenu(null);
-                  }}
-                >
-                  <RefreshCw size={13} />
-                  <span>{t('sftp_refresh')}</span>
-                </div>
-                <div className="sftp-context-divider" />
-                <div
-                  className="sftp-context-item"
-                  onClick={() => {
-                    handleCopyPath(contextMenu.entry!.path);
-                    setContextMenu(null);
-                  }}
-                >
-                  <Copy size={13} />
-                  <span>{t('sftp_copy_path')}</span>
-                </div>
-                <div
-                  className="sftp-context-item"
-                  onClick={() => {
-                    setRenamingEntry(contextMenu.entry!.path);
-                    setRenameValue(contextMenu.entry!.name);
-                    setContextMenu(null);
-                  }}
-                >
-                  <Edit3 size={13} />
-                  <span>{t('sftp_rename')}</span>
-                </div>
-                <div
-                  className="sftp-context-item"
-                  onClick={() => {
-                    setChmodEntry(contextMenu.entry);
-                    setChmodValue(formatPermissions(contextMenu.entry!.permissions));
-                    setContextMenu(null);
-                  }}
-                >
-                  <Shield size={13} />
-                  <span>{t('sftp_chmod')}</span>
-                </div>
-                <div className="sftp-context-divider" />
-                <div
-                  className="sftp-context-item sftp-context-danger"
-                  onClick={() => {
-                    void handleDelete(contextMenu.entry!);
-                    setContextMenu(null);
-                  }}
-                >
-                  <Trash2 size={13} />
-                  <span>{t('sftp_delete')}</span>
-                </div>
-              </>
-            ) : (
-              <>
-                {/* --- Blank area right-click --- */}
-                <div
-                  className="sftp-context-item"
-                  onClick={() => {
-                    void loadDir(currentPath);
-                    setContextMenu(null);
-                  }}
-                >
-                  <RefreshCw size={13} />
-                  <span>{t('sftp_refresh')}</span>
-                </div>
-                <div className="sftp-context-divider" />
-                <div
-                  className="sftp-context-item"
-                  onClick={() => {
-                    handleCopyPath(currentPath);
-                    setContextMenu(null);
-                  }}
-                >
-                  <Copy size={13} />
-                  <span>{t('sftp_copy_path')}</span>
-                </div>
-                <div
-                  className="sftp-context-item"
-                  onClick={() => {
-                    setNewFolderMode(true);
-                    setNewFolderName('');
-                    setContextMenu(null);
-                  }}
-                >
-                  <FolderPlus size={13} />
-                  <span>{t('sftp_new_folder')}</span>
-                </div>
-                <div
-                  className="sftp-context-item"
-                  onClick={() => {
-                    setNewFileMode(true);
-                    setNewFileName('');
-                    setContextMenu(null);
-                  }}
-                >
-                  <FilePlus size={13} />
-                  <span>{t('sftp_new_file')}</span>
-                </div>
-                <div className="sftp-context-divider" />
-                <div
-                  className="sftp-context-item"
-                  onClick={() => {
-                    void handleUpload();
-                    setContextMenu(null);
-                  }}
-                >
-                  <Upload size={13} />
-                  <span>{t('sftp_upload_file')}</span>
-                </div>
-                <div
-                  className="sftp-context-item"
-                  onClick={() => {
-                    void handleUploadFolder();
-                    setContextMenu(null);
-                  }}
-                >
-                  <FolderUp size={13} />
-                  <span>{t('sftp_upload_folder')}</span>
-                </div>
-              </>
-            )}
-          </div>
+          <SftpContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            entry={contextMenu.entry}
+            currentPath={currentPath}
+            onClose={() => setContextMenu(null)}
+            onEditOnline={(entry) => setEditingFile(entry)}
+            onOpenLocal={(entry) => {
+              void handleOpenLocal(entry);
+            }}
+            onDownload={(entry) => {
+              void handleDownload(entry);
+            }}
+            onUpload={() => {
+              void handleUpload();
+            }}
+            onUploadFolder={() => {
+              void handleUploadFolder();
+            }}
+            onRefresh={() => {
+              void loadDir(currentPath);
+            }}
+            onCopyPath={handleCopyPath}
+            onStartRename={(entry) => {
+              setRenamingEntry(entry.path);
+              setRenameValue(entry.name);
+            }}
+            onStartChmod={(entry) => {
+              setChmodEntry(entry);
+              setChmodValue(formatPermissions(entry.permissions));
+            }}
+            onDelete={(entry) => {
+              void handleDelete(entry);
+            }}
+            onStartNewFolder={() => {
+              setNewFolderMode(true);
+              setNewFolderName('');
+            }}
+            onStartNewFile={() => {
+              setNewFileMode(true);
+              setNewFileName('');
+            }}
+          />
         )}
 
         {/* Chmod dialog */}
         {chmodEntry && (
-          <div
-            className="sftp-chmod-overlay"
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget) setChmodEntry(null);
+          <SftpChmodDialog
+            entry={chmodEntry}
+            value={chmodValue}
+            onChange={setChmodValue}
+            onCancel={() => setChmodEntry(null)}
+            onConfirm={() => {
+              void handleChmod();
             }}
-          >
-            <div className="sftp-chmod-dialog">
-              <div className="sftp-chmod-title">{t('sftp_chmod')}</div>
-              <div className="sftp-chmod-filename">{chmodEntry.name}</div>
-              <div className="sftp-chmod-row">
-                <label>{t('sftp_chmod_label')}</label>
-                <input
-                  className="sftp-chmod-input"
-                  value={chmodValue}
-                  onChange={(e) => setChmodValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void handleChmod();
-                    if (e.key === 'Escape') setChmodEntry(null);
-                  }}
-                  placeholder="755"
-                  maxLength={4}
-                  autoFocus
-                />
-              </div>
-              <div className="sftp-chmod-actions">
-                <button
-                  className="sftp-chmod-btn sftp-chmod-cancel"
-                  onClick={() => setChmodEntry(null)}
-                >
-                  {t('sftp_cancel')}
-                </button>
-                <button
-                  className="sftp-chmod-btn sftp-chmod-ok"
-                  onClick={() => {
-                    void handleChmod();
-                  }}
-                >
-                  {t('sftp_confirm')}
-                </button>
-              </div>
-            </div>
-          </div>
+          />
         )}
       </div>
 
@@ -1232,6 +910,9 @@ export const SftpPanel: React.FC<SftpPanelProps> = ({ sessionId, username, conne
           remotePath={editingFile.path}
           fileName={editingFile.name}
           onClose={() => setEditingFile(null)}
+          onSaved={() => {
+            void loadDir(currentPath);
+          }}
         />
       )}
     </>

@@ -20,8 +20,11 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../stores/appStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useConfirm } from '../../hooks/useConfirm';
+import { openNewAssetModal } from '../../lib/newAssetAction';
 import { destroyTerminal } from '../../lib/terminalLifecycle';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
 import type { TabInfo } from '../../types';
@@ -79,26 +82,32 @@ export const TabBar: React.FC = () => {
     setActiveTab,
     removeTab,
     reorderTabs,
-    setShowNewSession,
-    setShowSerialModal,
-    setShowDockerModal,
-    setShowLocalTerminalModal,
-    setShowQuickConnect,
     sftpPanelOpen,
     toggleSftpPanel,
     splitCount,
     setSplitCount,
     sidebarCollapsed,
     toggleSidebar,
-  } = useAppStore();
+  } = useAppStore(
+    useShallow((s) => ({
+      tabs: s.tabs,
+      activeTabId: s.activeTabId,
+      setActiveTab: s.setActiveTab,
+      removeTab: s.removeTab,
+      reorderTabs: s.reorderTabs,
+      sftpPanelOpen: s.sftpPanelOpen,
+      toggleSftpPanel: s.toggleSftpPanel,
+      splitCount: s.splitCount,
+      setSplitCount: s.setSplitCount,
+      sidebarCollapsed: s.sidebarCollapsed,
+      toggleSidebar: s.toggleSidebar,
+    })),
+  );
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const [showNewAssetMenu, setShowNewAssetMenu] = useState(false);
   const [splitMenuOpen, setSplitMenuOpen] = useState(false);
-  // Tab awaiting in-app close confirmation (replaces the native confirm
-  // dialog, whose UI clashes with the app's visual language).
-  const [confirmTabId, setConfirmTabId] = useState<string | null>(null);
   const addBtnRef = useRef<HTMLButtonElement>(null);
-  const supportedQuickCreateTypes = new Set(['ssh', 'ssh-tunnel']);
 
   const isConnectedInteractiveTab = (tabId: string) => {
     const tab = tabs.find((tb) => tb.id === tabId);
@@ -115,7 +124,15 @@ export const TabBar: React.FC = () => {
   const handleCloseTab = (tabId: string) => {
     const { tabCloseConfirm } = useSettingsStore.getState().settings;
     if (tabCloseConfirm && isConnectedInteractiveTab(tabId)) {
-      setConfirmTabId(tabId);
+      void confirm({
+        title: t('tab_close_confirm_btn'),
+        message: t('tab_close_confirm_msg'),
+        confirmLabel: t('tab_close_confirm_btn'),
+        cancelLabel: t('common_cancel'),
+        danger: true,
+      }).then((ok) => {
+        if (ok) doCloseTab(tabId);
+      });
       return;
     }
     doCloseTab(tabId);
@@ -127,22 +144,6 @@ export const TabBar: React.FC = () => {
       const { middleClickCloseTab } = useSettingsStore.getState().settings;
       if (!middleClickCloseTab) return;
       handleCloseTab(tabId);
-    }
-  };
-
-  const handleNewAssetSelect = (type: string) => {
-    if (type === 'quickconnect') {
-      setShowQuickConnect(true);
-      return;
-    }
-    if (supportedQuickCreateTypes.has(type)) {
-      setShowNewSession(true);
-    } else if (type === 'serial') {
-      setShowSerialModal(true);
-    } else if (type === 'docker') {
-      setShowDockerModal(true);
-    } else if (type === 'localshell') {
-      setShowLocalTerminalModal(true);
     }
   };
 
@@ -209,7 +210,7 @@ export const TabBar: React.FC = () => {
         <NewAssetMenu
           anchorRef={addBtnRef}
           onClose={() => setShowNewAssetMenu(false)}
-          onSelect={handleNewAssetSelect}
+          onSelect={openNewAssetModal}
         />
       )}
       {/* Split count selector - only show when there are >=2 terminal tabs */}
@@ -251,38 +252,6 @@ export const TabBar: React.FC = () => {
               </div>
             </>
           )}
-        </div>
-      )}
-      {/* In-app close confirmation (replaces the native confirm dialog) */}
-      {confirmTabId && (
-        <div
-          className="modal-overlay"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setConfirmTabId(null);
-          }}
-        >
-          <div className="confirm-dialog" role="alertdialog" aria-modal="true">
-            <p className="confirm-dialog-text">{t('tab_close_confirm_msg')}</p>
-            <div className="confirm-dialog-actions">
-              <button
-                className="settings-btn-outline"
-                onClick={() => setConfirmTabId(null)}
-                autoFocus
-              >
-                {t('common_cancel')}
-              </button>
-              <button
-                className="settings-btn-danger"
-                onClick={() => {
-                  const id = confirmTabId;
-                  setConfirmTabId(null);
-                  doCloseTab(id);
-                }}
-              >
-                {t('tab_close_confirm_btn')}
-              </button>
-            </div>
-          </div>
         </div>
       )}
       {/* SFTP toggle - only show when active tab is SSH */}

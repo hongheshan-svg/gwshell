@@ -3,16 +3,49 @@ import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../stores/appStore';
 import { useAgentStore } from '../../stores/agentStore';
-import type { AgentSessionInfo } from '../../types/agent';
+import type {
+  AgentAnalysisUpdate,
+  AgentAuditRecord,
+  AgentEvidence,
+  AgentSessionInfo,
+  AgentToolCall,
+  AgentToolResult,
+} from '../../types/agent';
 
 export const AgentSessionList: React.FC = () => {
   const { t } = useTranslation();
   const activeTab = useAppStore((s) => s.tabs.find((tab) => tab.id === s.activeTabId));
   const activeSession = useAgentStore((s) => s.activeSession);
   const setActiveSession = useAgentStore((s) => s.setActiveSession);
+  const hydrateSessionState = useAgentStore((s) => s.hydrateSessionState);
   const [query, setQuery] = useState('');
   const [onlyCurrent, setOnlyCurrent] = useState(true);
   const [sessions, setSessions] = useState<AgentSessionInfo[]>([]);
+
+  const handleSelectSession = (session: AgentSessionInfo) => {
+    setActiveSession(session);
+    invoke<AgentAuditRecord[]>('list_agent_audits', {
+      targetSessionId: session.target_session_id,
+    })
+      .then((records) => {
+        const match = records.find((r) => r.agent_session_id === session.id);
+        if (!match) return;
+        // eslint-disable-next-line no-restricted-syntax
+        const parsed = JSON.parse(match.report_json) as {
+          evidence?: AgentEvidence[];
+          actions?: AgentToolCall[];
+          results?: AgentToolResult[];
+          latest_update?: AgentAnalysisUpdate | null;
+        };
+        hydrateSessionState(session, {
+          evidence: parsed.evidence ?? [],
+          actions: parsed.actions ?? [],
+          results: parsed.results ?? [],
+          latestUpdate: parsed.latest_update ?? null,
+        });
+      })
+      .catch(() => {});
+  };
 
   useEffect(() => {
     invoke<AgentSessionInfo[]>('list_agent_sessions')
@@ -57,7 +90,7 @@ export const AgentSessionList: React.FC = () => {
           <button
             className={`agent-session-list-item ${activeSession?.id === session.id ? 'active' : ''}`}
             key={session.id}
-            onClick={() => setActiveSession(session)}
+            onClick={() => handleSelectSession(session)}
             type="button"
           >
             <span>{session.status}</span>

@@ -39,7 +39,7 @@ interface AgentPolicyStore {
   loaded: boolean;
   load: () => Promise<void>;
   setPolicy: (policy: AgentPolicySettings) => void;
-  save: (policy: AgentPolicySettings) => Promise<void>;
+  save: (policy: AgentPolicySettings) => Promise<boolean>;
 }
 
 export const useAgentPolicyStore = create<AgentPolicyStore>((set, get) => ({
@@ -59,6 +59,7 @@ export const useAgentPolicyStore = create<AgentPolicyStore>((set, get) => ({
     set({ policy, loaded: true });
     try {
       await invoke('save_agent_policy_settings', { settings: policy });
+      return true;
     } catch (err) {
       // Roll back the optimistic update so the UI matches the backend.
       set({ policy: previous });
@@ -68,6 +69,7 @@ export const useAgentPolicyStore = create<AgentPolicyStore>((set, get) => ({
         title: i18n.t('toast.agentPolicySaveFailed'),
         message: String(err),
       });
+      return false;
     }
   },
 }));

@@ -21,10 +21,9 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { useConfirm } from '../../hooks/useConfirm';
+import { openNewAssetModal } from '../../lib/newAssetAction';
 import { NewAssetMenu } from './NewAssetMenu';
 import type { SessionConfig } from '../../types';
-
-const SUPPORTED_QUICK_CREATE_TYPES = new Set(['ssh', 'ssh-tunnel']);
 
 export const SessionPanel: React.FC = () => {
   const { t } = useTranslation();
@@ -32,14 +31,7 @@ export const SessionPanel: React.FC = () => {
   // Sessions drive the list; subscribe to the array directly (it only changes
   // on add/remove/edit/latency, all of which warrant a re-render here).
   const sessions = useAppStore((s) => s.sessions);
-  // Action setters are stable references — selecting them individually never
-  // causes a re-render on their own.
-  const setShowNewSession = useAppStore((s) => s.setShowNewSession);
-  const setShowQuickConnect = useAppStore((s) => s.setShowQuickConnect);
-  const setShowDockerModal = useAppStore((s) => s.setShowDockerModal);
-  const setShowLocalTerminalModal = useAppStore((s) => s.setShowLocalTerminalModal);
-  const setShowSerialModal = useAppStore((s) => s.setShowSerialModal);
-  const setEditingSession = useAppStore((s) => s.setEditingSession);
+  const openEditSession = useAppStore((s) => s.openEditSession);
   const removeSession = useAppStore((s) => s.removeSession);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const setGroupDefaultsTarget = useAppStore((s) => s.setGroupDefaultsTarget);
@@ -117,22 +109,6 @@ export const SessionPanel: React.FC = () => {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, session });
   }, []);
-
-  const handleNewAssetSelect = (type: string) => {
-    if (type === 'quickconnect') {
-      setShowQuickConnect(true);
-      return;
-    }
-    if (SUPPORTED_QUICK_CREATE_TYPES.has(type)) {
-      setShowNewSession(true);
-    } else if (type === 'serial') {
-      setShowSerialModal(true);
-    } else if (type === 'docker') {
-      setShowDockerModal(true);
-    } else if (type === 'localshell') {
-      setShowLocalTerminalModal(true);
-    }
-  };
 
   const filteredSessions = searchQuery
     ? allSessions.filter(
@@ -301,7 +277,7 @@ export const SessionPanel: React.FC = () => {
         <NewAssetMenu
           anchorRef={plusBtnRef}
           onClose={() => setShowNewAssetMenu(false)}
-          onSelect={handleNewAssetSelect}
+          onSelect={openNewAssetModal}
         />
       )}
 
@@ -325,8 +301,7 @@ export const SessionPanel: React.FC = () => {
           <button
             role="menuitem"
             onClick={() => {
-              setEditingSession(contextMenu.session);
-              setShowNewSession(true);
+              openEditSession(contextMenu.session);
               setContextMenu(null);
             }}
           >

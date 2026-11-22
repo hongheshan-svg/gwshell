@@ -22,6 +22,7 @@ import {
   isAiProviderUsable,
 } from '../../lib/aiModels';
 import { getTerminalAiContext } from '../../lib/terminalContext';
+import { extractTerminalCommands } from '../../lib/terminalAiCommands';
 import type { AiProviderSettings, TerminalAiChatRequest } from '../../types/agent';
 import { sendInputToTab } from '../../lib/terminalLifecycle';
 
@@ -31,26 +32,21 @@ interface TerminalAiEventPayload {
   message?: string;
 }
 
-const MAX_COMMAND_SUGGESTIONS = 6;
+interface TabDockDraft {
+  input: string;
+  answer: string;
+  error: string;
+  notice: string;
+}
+
+const EMPTY_DRAFT: TabDockDraft = { input: '', answer: '', error: '', notice: '' };
+
 const TERMINAL_AI_SETTINGS_TIMEOUT_MS = 5000;
 // The backend gives up after `request_timeout_secs` (at least
 // MIN_IDLE_TIMEOUT_SECS) without data from the provider; the dock waits a
 // little longer so the backend's clearer error normally arrives first.
 const MIN_IDLE_TIMEOUT_SECS = 120;
 const TERMINAL_AI_IDLE_GRACE_SECS = 15;
-const SHELL_FENCE_LANGS = new Set([
-  '',
-  'bash',
-  'sh',
-  'shell',
-  'zsh',
-  'fish',
-  'terminal',
-  'console',
-  'cmd',
-  'powershell',
-  'pwsh',
-]);
 
 const newRequestId = () =>
   globalThis.crypto?.randomUUID?.() ??
@@ -86,64 +82,15 @@ const invokeWithTimeout = async <T,>(
   }
 };
 
-const cleanCommandLine = (line: string) => {
-  const trimmed = line.trim();
-  const promptMatch = /^(?:(?:[\w.-]+@[\w.-]+(?::[^$#>\s]+)?)?[$#>]|\$|#|>)\s+(.+)$/.exec(trimmed);
-  return (promptMatch?.[1] ?? trimmed).trim();
-};
-
-const isCommandCandidate = (line: string) => {
-  if (!line || line.length > 260) return false;
-  if (line.startsWith('#') || line.startsWith('//')) return false;
-  if (/^(output|result|返回|输出|说明)[:：]/i.test(line)) return false;
-  if (line.startsWith('```')) return false;
-  return /^(?:sudo\s+)?(?:[A-Za-z0-9_./-]+)(?:\s|$)/.test(line);
-};
-
-const addCommandCandidate = (commands: string[], seen: Set<string>, rawLine: string) => {
-  const command = cleanCommandLine(rawLine);
-  if (!isCommandCandidate(command) || seen.has(command)) return;
-  seen.add(command);
-  commands.push(command);
-};
-
-const extractTerminalCommands = (text: string) => {
-  const commands: string[] = [];
-  const seen = new Set<string>();
-  const fenceRegex = /```([^\n`]*)\n([\s\S]*?)```/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = fenceRegex.exec(text)) && commands.length < MAX_COMMAND_SUGGESTIONS) {
-    const lang = match[1].trim().toLowerCase();
-    if (!SHELL_FENCE_LANGS.has(lang)) continue;
-    for (const line of match[2].split('\n')) {
-      if (commands.length >= MAX_COMMAND_SUGGESTIONS) break;
-      addCommandCandidate(commands, seen, line);
-    }
-  }
-
-  for (const line of text.split('\n')) {
-    if (commands.length >= MAX_COMMAND_SUGGESTIONS) break;
-    if (/^\s*(?:(?:[\w.-]+@[\w.-]+(?::[^$#>\s]+)?)?[$#>]|\$|#|>)\s+\S+/.test(line)) {
-      addCommandCandidate(commands, seen, line);
-    }
-  }
-
-  return commands;
-};
-
 export const TerminalAiDock: React.FC = () => {
   const { t } = useTranslation();
   const tabs = useAppStore((s) => s.tabs);
   const activeTabId = useAppStore((s) => s.activeTabId);
   const openSettingsNav = useAppStore((s) => s.openSettingsNav);
   const [open, setOpen] = useState(false);
-  const [input, setInput] = useState('');
-  const [answer, setAnswer] = useState('');
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [draftsByTab, setDraftsByTab] = useState<Record<string, TabDockDraft>>({});
   const [phase, setPhase] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busyTabId, setBusyTabId] = useState<string | null>(null);
   const [aiSettings, setAiSettings] = useState<AiProviderSettings | null>(null);
   const [copied, setCopied] = useState(false);
   const [contextTick, setContextTick] = useState(0);
@@ -212,6 +159,39 @@ export const TerminalAiDock: React.FC = () => {
     () => tabs.find((tab) => tab.id === activeTabId && tab.type !== 'asset-list'),
     [activeTabId, tabs],
   );
+  const currentTabId = activeTab?.id ?? '';
+  const currentDraft = draftsByTab[currentTabId] ?? EMPTY_DRAFT;
+  const { input, answer, error, notice } = currentDraft;
+  const busy = busyTabId !== null && busyTabId === currentTabId;
+
+  const updateDraft = useCallback(
+    (tabId: string, updater: (prev: TabDockDraft) => TabDockDraft) => {
+      if (!tabId) return;
+      setDraftsByTab((prev) => ({
+        ...prev,
+        [tabId]: updater(prev[tabId] ?? EMPTY_DRAFT),
+      }));
+    },
+    [],
+  );
+
+  // Prune drafts for tabs that have been closed.
+  useEffect(() => {
+    const liveIds = new Set(tabs.map((tab) => tab.id));
+    setDraftsByTab((prev) => {
+      let changed = false;
+      const next: Record<string, TabDockDraft> = {};
+      for (const [id, draft] of Object.entries(prev)) {
+        if (liveIds.has(id)) {
+          next[id] = draft;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [tabs]);
+
   const context = useMemo(
     () => (activeTab ? getTerminalAiContext(activeTab.id) : null),
     // contextTick forces a re-read so selection/output chips stay fresh while open.
@@ -238,10 +218,10 @@ export const TerminalAiDock: React.FC = () => {
     if (!activeTab || !input.trim()) return;
     const ok = sendInputToTab(activeTab.id, `${input.trimEnd()}\r`);
     if (!ok) {
-      setError(t('terminal_ai_execute_failed'));
+      updateDraft(activeTab.id, (prev) => ({ ...prev, error: t('terminal_ai_execute_failed') }));
       return;
     }
-    setInput('');
+    updateDraft(activeTab.id, (prev) => ({ ...prev, input: '' }));
   };
 
   const stopWaiting = useCallback(
@@ -252,17 +232,22 @@ export const TerminalAiDock: React.FC = () => {
         cancelTerminalAiRequest(requestId);
         cleanupListeners(requestId);
       }
-      setBusy(false);
+      const stoppedTab = busyTabId;
+      setBusyTabId(null);
       setPhase('');
-      if (showNotice) setNotice(t('terminal_ai_stopped_waiting'));
+      if (showNotice && stoppedTab) {
+        updateDraft(stoppedTab, (prev) => ({ ...prev, notice: t('terminal_ai_stopped_waiting') }));
+      }
     },
-    [cleanupListeners, t],
+    [busyTabId, cleanupListeners, t, updateDraft],
   );
 
   const insertCommand = (command: string) => {
     if (!activeTab) return;
     const ok = sendInputToTab(activeTab.id, command);
-    if (!ok) setError(t('terminal_ai_insert_failed'));
+    if (!ok) {
+      updateDraft(activeTab.id, (prev) => ({ ...prev, error: t('terminal_ai_insert_failed') }));
+    }
   };
 
   const copyAnswer = async () => {
@@ -273,14 +258,13 @@ export const TerminalAiDock: React.FC = () => {
   };
 
   const askAgent = async () => {
-    if (!activeTab || !input.trim() || busy) return;
+    if (!activeTab || !input.trim() || busyTabId !== null) return;
+    const targetTabId = activeTab.id;
     const requestId = newRequestId();
     activeRequestIdRef.current = requestId;
-    setBusy(true);
+    setBusyTabId(targetTabId);
     setPhase(t('terminal_ai_phase_loading_model'));
-    setError('');
-    setNotice('');
-    setAnswer('');
+    updateDraft(targetTabId, (prev) => ({ ...prev, error: '', notice: '', answer: '' }));
 
     const isCurrentRequest = () => mountedRef.current && activeRequestIdRef.current === requestId;
 
@@ -290,31 +274,31 @@ export const TerminalAiDock: React.FC = () => {
     } catch (err) {
       if (isCurrentRequest()) {
         activeRequestIdRef.current = null;
-        setBusy(false);
+        setBusyTabId(null);
         setPhase('');
-        setAnswer('');
-        setError(formatError(err));
+        updateDraft(targetTabId, (prev) => ({ ...prev, answer: '', error: formatError(err) }));
       }
       return;
     }
     if (!isCurrentRequest()) return;
     if (!latestSettings || !isAiProviderUsable(latestSettings)) {
       activeRequestIdRef.current = null;
-      setBusy(false);
+      setBusyTabId(null);
       setPhase('');
-      setAnswer('');
-      setError(
-        latestSettings?.enabled
+      updateDraft(targetTabId, (prev) => ({
+        ...prev,
+        answer: '',
+        error: latestSettings?.enabled
           ? t('terminal_ai_model_unavailable')
           : t('terminal_ai_model_disabled'),
-      );
+      }));
       return;
     }
     setAiSettings(latestSettings);
-    const currentContext = getTerminalAiContext(activeTab.id);
+    const currentContext = getTerminalAiContext(targetTabId);
     const request: TerminalAiChatRequest = {
       request_id: requestId,
-      tab_id: activeTab.id,
+      tab_id: targetTabId,
       target_session_id: activeTab.sessionId,
       tab_title: activeTab.title,
       question: input.trim(),
@@ -356,14 +340,18 @@ export const TerminalAiDock: React.FC = () => {
           sawDelta = true;
           armIdleTimer();
           setPhase(t('terminal_ai_phase_streaming'));
-          setAnswer((prev) => prev + event.payload.textDelta);
+          const delta = event.payload.textDelta;
+          updateDraft(targetTabId, (prev) => ({ ...prev, answer: prev.answer + delta }));
         });
         requestUnlisteners.push(unlistenDelta);
         const unlistenDone = await listen<TerminalAiEventPayload>(doneEvent, (event) => {
           if (!isCurrentRequest()) return;
-          if (!sawDelta && event.payload.text) setAnswer(event.payload.text);
+          if (!sawDelta && event.payload.text) {
+            const text = event.payload.text;
+            updateDraft(targetTabId, (prev) => ({ ...prev, answer: text }));
+          }
           activeRequestIdRef.current = null;
-          setBusy(false);
+          setBusyTabId(null);
           setPhase('');
           cleanupListeners(requestId);
         });
@@ -371,10 +359,11 @@ export const TerminalAiDock: React.FC = () => {
         const unlistenError = await listen<TerminalAiEventPayload>(errorEvent, (event) => {
           if (!isCurrentRequest()) return;
           activeRequestIdRef.current = null;
-          setBusy(false);
+          setBusyTabId(null);
           setPhase('');
           // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-          setError(event.payload.message || t('terminal_ai_error'));
+          const msg = event.payload.message || t('terminal_ai_error');
+          updateDraft(targetTabId, (prev) => ({ ...prev, error: msg }));
           cleanupListeners(requestId);
         });
         requestUnlisteners.push(unlistenError);
@@ -403,16 +392,18 @@ export const TerminalAiDock: React.FC = () => {
       ]);
       if (isCurrentRequest()) {
         activeRequestIdRef.current = null;
-        if (!sawDelta) setAnswer(fullText);
-        setBusy(false);
+        if (!sawDelta) {
+          updateDraft(targetTabId, (prev) => ({ ...prev, answer: fullText }));
+        }
+        setBusyTabId(null);
         setPhase('');
       }
     } catch (err) {
       if (isCurrentRequest()) {
         activeRequestIdRef.current = null;
-        setBusy(false);
+        setBusyTabId(null);
         setPhase('');
-        setError(formatError(err));
+        updateDraft(targetTabId, (prev) => ({ ...prev, error: formatError(err) }));
       }
     } finally {
       if (timeoutHandle) window.clearTimeout(timeoutHandle);
@@ -527,7 +518,10 @@ export const TerminalAiDock: React.FC = () => {
         ref={textareaRef}
         className="terminal-ai-input"
         disabled={busy}
-        onChange={(event) => setInput(event.target.value)}
+        onChange={(event) => {
+          const val = event.target.value;
+          updateDraft(currentTabId, (prev) => ({ ...prev, input: val }));
+        }}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
@@ -549,7 +543,7 @@ export const TerminalAiDock: React.FC = () => {
         </button>
         <button
           className="terminal-ai-ghost"
-          disabled={!input.trim() || busy}
+          disabled={!input.trim() || busyTabId !== null}
           onClick={() => void askAgent()}
           type="button"
         >
@@ -567,9 +561,8 @@ export const TerminalAiDock: React.FC = () => {
         <button
           className="terminal-ai-icon-btn"
           onClick={() => {
-            setAnswer('');
-            setError('');
-            setNotice('');
+            if (busy) stopWaiting(false);
+            updateDraft(currentTabId, (prev) => ({ ...prev, answer: '', error: '', notice: '' }));
           }}
           title={t('terminal_ai_clear')}
           type="button"
@@ -582,7 +575,7 @@ export const TerminalAiDock: React.FC = () => {
         <span className="terminal-ai-count">{input.length}</span>
         <button
           className="terminal-ai-send"
-          disabled={!input.trim() || busy}
+          disabled={!input.trim() || busyTabId !== null}
           onClick={() => void askAgent()}
           type="button"
         >

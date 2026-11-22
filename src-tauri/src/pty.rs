@@ -98,6 +98,12 @@ fn resolve_shell(name: Option<&str>) -> CommandBuilder {
         Some("wsl") => CommandBuilder::new("wsl.exe"),
         Some("zsh") => CommandBuilder::new("zsh"),
         Some("fish") => CommandBuilder::new("fish"),
+        Some(path)
+            if (path.contains('\\') || path.contains('/'))
+                && std::path::Path::new(path).exists() =>
+        {
+            CommandBuilder::new(path)
+        }
         _ => {
             // powershell or default
             let mut c = CommandBuilder::new("powershell.exe");
@@ -118,8 +124,18 @@ fn resolve_shell(name: Option<&str>) -> CommandBuilder {
         }
         Some("zsh") => CommandBuilder::new("zsh"),
         Some("fish") => CommandBuilder::new("fish"),
-        Some("cmd") => CommandBuilder::new("sh"), // fallback on unix
-        _ => CommandBuilder::new("bash"),         // bash (default)
+        Some("bash") => CommandBuilder::new("bash"),
+        Some("cmd") => CommandBuilder::new("sh"),
+        Some(path) if path.starts_with('/') && std::path::Path::new(path).exists() => {
+            CommandBuilder::new(path)
+        }
+        _ => {
+            let default_shell = std::env::var("SHELL")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| "bash".to_string());
+            CommandBuilder::new(default_shell)
+        }
     }
 }
 
@@ -140,7 +156,10 @@ pub fn list_available_shells() -> Vec<ShellEntry> {
         });
 
         // PowerShell 7 (pwsh.exe)
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         let pwsh_exists = std::process::Command::new("where")
+            .creation_flags(CREATE_NO_WINDOW)
             .arg("/Q")
             .arg("pwsh")
             .status()
@@ -157,6 +176,7 @@ pub fn list_available_shells() -> Vec<ShellEntry> {
 
         // WSL distros — output is UTF-16LE on Windows
         if let Ok(output) = std::process::Command::new("wsl")
+            .creation_flags(CREATE_NO_WINDOW)
             .args(["--list", "--quiet"])
             .output()
         {
@@ -169,10 +189,12 @@ pub fn list_available_shells() -> Vec<ShellEntry> {
                 let text = String::from_utf16_lossy(&utf16);
                 for line in text.lines() {
                     let name = line.trim().trim_matches('\0').trim();
-                    if name.is_empty() {
+                    if name.is_empty()
+                        || name.eq_ignore_ascii_case("docker-desktop")
+                        || name.eq_ignore_ascii_case("docker-desktop-data")
+                    {
                         continue;
                     }
-                    // Skip Docker Desktop internal distros that aren't useful interactively
                     shells.push(ShellEntry {
                         id: format!("wsl:{}", name),
                         label: format!("{} - WSL", name),
@@ -391,7 +413,7 @@ impl PtyManager {
                 }
 
                 if !close_requested && write_buf.is_empty() && owner_input.lock().bytes.is_empty() {
-                    match rx.recv_timeout(Duration::from_millis(8)) {
+                    match rx.recv() {
                         Ok(PtyCmd::WakeInput) => {
                             owner_wake_pending.store(false, Ordering::Release);
                         }
@@ -403,10 +425,9 @@ impl PtyManager {
                                 pixel_height: 0,
                             });
                         }
-                        Ok(PtyCmd::Close) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        Ok(PtyCmd::Close) | Err(mpsc::RecvError) => {
                             close_requested = true;
                         }
-                        Err(mpsc::RecvTimeoutError::Timeout) => {}
                     }
                 }
             }
@@ -441,6 +462,7 @@ impl PtyManager {
         shell_name: Option<String>,
         working_dir: Option<String>,
         charset: Option<String>,
+        env_vars: Option<String>,
     ) -> Result<(), String> {
         self.close_pty(session_id);
 
@@ -471,6 +493,11 @@ impl PtyManager {
             };
             cmd.env("LANG", locale);
         }
+        if let Some(ref raw_env) = env_vars {
+            for (k, v) in crate::ssh::parse_env_vars(raw_env) {
+                cmd.env(k, v);
+            }
+        }
 
         if let Some(ref dir) = working_dir {
             cmd.cwd(std::path::Path::new(dir));
@@ -491,10 +518,14 @@ impl PtyManager {
         rows: u16,
         cols: u16,
         container_id: &str,
+        docker_host: Option<&str>,
     ) -> Result<(), String> {
         self.close_pty(session_id);
 
         let mut cmd = CommandBuilder::new("docker");
+        if let Some(host) = docker_host.filter(|h| !h.trim().is_empty()) {
+            cmd.args(["-H", host]);
+        }
         // `--` ends docker-exec option parsing, so a container id starting with
         // `-` cannot smuggle flags into `docker exec` (defense-in-depth; the id
         // is also format-validated at the `docker_exec` command layer).
@@ -565,9 +596,13 @@ impl PtyManager {
     pub fn close_pty_wait(&self, session_id: &str) -> Result<(), String> {
         let handle = self.sessions.lock().remove(session_id);
         if let Some(handle) = handle {
-            // Best-effort signal; ignore Full error since we'll join next.
+            // Best-effort signal; drop `handle` before joining so its `tx`
+            // sender closes and delivers `Disconnected` even if the bounded
+            // command queue was full.
             let _ = handle.tx.try_send(PtyCmd::Close);
-            if let Some(join) = handle.writer_join.lock().take() {
+            let join = handle.writer_join.lock().take();
+            drop(handle);
+            if let Some(join) = join {
                 // 2s timeout wrapping the join, falling back to signal-only on
                 // timeout (UI thread must not hang on a stuck child).
                 let (tx, rx) = std::sync::mpsc::channel();

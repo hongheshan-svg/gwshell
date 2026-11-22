@@ -4,24 +4,17 @@ import { invoke } from '@tauri-apps/api/core';
 import { X } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { useEscapeClose } from '../../lib/useEscapeClose';
+import { GroupSelectField } from './GroupSelectField';
+import { ColorLabelPicker } from './ColorLabelPicker';
 import type { SessionConfig } from '../../types';
 
-const colorLabels = [
-  '#ef4444',
-  '#f97316',
-  '#eab308',
-  '#22c55e',
-  '#10b981',
-  '#06b6d4',
-  '#3b82f6',
-  '#6366f1',
-  '#a855f7',
-  '#9ca3af',
-  '#374151',
-];
-
 export const DockerModal: React.FC = () => {
-  const { showDockerModal, setShowDockerModal, addSession, sessions } = useAppStore();
+  const showDockerModal = useAppStore((s) => s.showDockerModal);
+  const setShowDockerModal = useAppStore((s) => s.setShowDockerModal);
+  const editingSession = useAppStore((s) => s.editingSession);
+  const setEditingSession = useAppStore((s) => s.setEditingSession);
+  const addSession = useAppStore((s) => s.addSession);
+  const sessions = useAppStore((s) => s.sessions);
   const { t } = useTranslation();
 
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -31,6 +24,7 @@ export const DockerModal: React.FC = () => {
   }>({ kind: 'idle' });
   const [form, setForm] = useState({
     name: '',
+    group: '',
     color_label: '',
     environment: '',
     docker_protocol: 'unix' as 'unix' | 'tcp' | 'http' | 'https', // eslint-disable-line no-restricted-syntax -- literal widening for union default value
@@ -40,25 +34,45 @@ export const DockerModal: React.FC = () => {
     remark: '',
   });
 
+  const isEditing = editingSession?.session_type === 'docker';
+
   React.useEffect(() => {
     if (showDockerModal) {
-      setForm({
-        name: '',
-        color_label: '',
-        environment: '',
-        docker_protocol: 'unix',
-        docker_unix_path: '/var/run/docker.sock',
-        docker_connect_method: 'SSH',
-        docker_ssh_tunnel: '',
-        remark: '',
-      });
+      if (editingSession?.session_type === 'docker') {
+        setForm({
+          name: editingSession.name,
+          group: editingSession.group ?? '',
+          color_label: editingSession.color_label ?? '',
+          environment: editingSession.environment ?? '',
+          docker_protocol: editingSession.docker_protocol ?? 'unix',
+          docker_unix_path: editingSession.docker_unix_path ?? '/var/run/docker.sock',
+          docker_connect_method: editingSession.docker_connect_method ?? 'SSH',
+          docker_ssh_tunnel: editingSession.docker_ssh_tunnel ?? '',
+          remark: editingSession.remark ?? '',
+        });
+      } else {
+        setForm({
+          name: '',
+          group: '',
+          color_label: '',
+          environment: '',
+          docker_protocol: 'unix',
+          docker_unix_path: '/var/run/docker.sock',
+          docker_connect_method: 'SSH',
+          docker_ssh_tunnel: '',
+          remark: '',
+        });
+      }
       setTouched({});
       setTestState({ kind: 'idle' });
     }
-  }, [showDockerModal]);
+  }, [showDockerModal, editingSession]);
 
   // Hooks must run unconditionally (before any early return) per rules-of-hooks.
-  const handleClose = () => setShowDockerModal(false);
+  const handleClose = () => {
+    setShowDockerModal(false);
+    setEditingSession(null);
+  };
   useEscapeClose(handleClose);
 
   if (!showDockerModal) return null;
@@ -73,18 +87,20 @@ export const DockerModal: React.FC = () => {
 
     const now = new Date().toISOString().slice(0, 10);
     const config: SessionConfig = {
-      id: crypto.randomUUID(),
+      id: isEditing ? editingSession.id : crypto.randomUUID(),
       name: form.name,
       session_type: 'docker',
       auth_method: 'password',
+      group: form.group.trim() || undefined,
       color_label: form.color_label || undefined,
       environment: form.environment || undefined,
       docker_protocol: form.docker_protocol,
       docker_unix_path: form.docker_unix_path || undefined,
       docker_connect_method: form.docker_connect_method || undefined,
-      docker_ssh_tunnel: form.docker_ssh_tunnel || undefined,
+      docker_ssh_tunnel:
+        form.docker_connect_method === 'SSH' ? form.docker_ssh_tunnel || undefined : undefined,
       remark: form.remark || undefined,
-      created_at: now,
+      created_at: isEditing ? editingSession.created_at : now,
     };
 
     addSession(config);
@@ -98,11 +114,19 @@ export const DockerModal: React.FC = () => {
       setTestState({ kind: 'err', text: t('docker_test_need_tunnel') });
       return;
     }
+    const rawPath = form.docker_unix_path.trim();
+    const dockerHost = rawPath
+      ? rawPath.includes('://')
+        ? rawPath
+        : `${form.docker_protocol}://${rawPath}`
+      : null;
     setTestState({ kind: 'busy' });
     try {
       const containers = await invoke<unknown[]>('docker_list_containers', {
         connectMethod: form.docker_connect_method,
-        tunnelSessionId: form.docker_ssh_tunnel || null,
+        tunnelSessionId:
+          form.docker_connect_method === 'SSH' ? form.docker_ssh_tunnel || null : null,
+        dockerHost,
       });
       setTestState({ kind: 'ok', text: t('docker_test_ok', { count: containers.length }) });
     } catch (e) {
@@ -136,25 +160,10 @@ export const DockerModal: React.FC = () => {
           <>
             {/* Color label + Environment */}
             <div className="ssh-form-row">
-              <div className="ssh-form-group">
-                <label>{t('ssh_color_label')}</label>
-                <div className="color-label-row">
-                  {colorLabels.map((color) => (
-                    <button
-                      key={color}
-                      className={`color-dot ${form.color_label === color ? 'selected' : ''}`}
-                      style={{ background: color }}
-                      onClick={() => setForm({ ...form, color_label: color })}
-                    />
-                  ))}
-                  <button
-                    className="color-dot-clear"
-                    onClick={() => setForm({ ...form, color_label: '' })}
-                  >
-                    <X size={11} />
-                  </button>
-                </div>
-              </div>
+              <ColorLabelPicker
+                value={form.color_label}
+                onChange={(color_label) => setForm({ ...form, color_label })}
+              />
               <div className="ssh-form-group">
                 <label>{t('ssh_environment')}</label>
                 <select
@@ -180,19 +189,26 @@ export const DockerModal: React.FC = () => {
                   onBlur={() => handleBlur('name')}
                   className={nameError ? 'input-error' : ''}
                 />
-                {nameError && <span className="field-error">name is a required field</span>}
+                {nameError && <span className="field-error">{t('field_required')}</span>}
               </div>
               <div className="ssh-form-group">
                 <label>{t('docker_protocol')}</label>
                 <select
                   value={form.docker_protocol}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    // eslint-disable-next-line no-restricted-syntax
+                    const nextProto = e.target.value as 'unix' | 'tcp' | 'http' | 'https';
                     setForm({
                       ...form,
-                      // eslint-disable-next-line no-restricted-syntax
-                      docker_protocol: e.target.value as 'unix' | 'tcp' | 'http' | 'https',
-                    })
-                  }
+                      docker_protocol: nextProto,
+                      docker_unix_path:
+                        nextProto === 'unix'
+                          ? form.docker_unix_path || '/var/run/docker.sock'
+                          : form.docker_unix_path === '/var/run/docker.sock'
+                            ? ''
+                            : form.docker_unix_path,
+                    });
+                  }}
                 >
                   <option value="unix">Unix</option>
                   <option value="tcp">TCP</option>
@@ -202,17 +218,25 @@ export const DockerModal: React.FC = () => {
               </div>
             </div>
 
-            {/* Unix Path */}
-            {form.docker_protocol === 'unix' && (
-              <div className="ssh-form-group">
-                <label>{t('docker_unix_path')}</label>
-                <input
-                  type="text"
-                  value={form.docker_unix_path}
-                  onChange={(e) => setForm({ ...form, docker_unix_path: e.target.value })}
-                />
-              </div>
-            )}
+            <GroupSelectField
+              value={form.group}
+              onChange={(group) => setForm({ ...form, group })}
+            />
+
+            {/* Socket / Endpoint */}
+            <div className="ssh-form-group">
+              <label>
+                {form.docker_protocol === 'unix' ? t('docker_unix_path') : t('docker_endpoint')}
+              </label>
+              <input
+                type="text"
+                value={form.docker_unix_path}
+                onChange={(e) => setForm({ ...form, docker_unix_path: e.target.value })}
+                placeholder={
+                  form.docker_protocol === 'unix' ? '/var/run/docker.sock' : '127.0.0.1:2375'
+                }
+              />
+            </div>
 
             {/* Connect method + SSH Tunnel */}
             <div className="ssh-form-row">
@@ -226,20 +250,22 @@ export const DockerModal: React.FC = () => {
                   <option value="Local">{t('common_local')}</option>
                 </select>
               </div>
-              <div className="ssh-form-group">
-                <label>{t('docker_ssh_tunnel')}</label>
-                <select
-                  value={form.docker_ssh_tunnel}
-                  onChange={(e) => setForm({ ...form, docker_ssh_tunnel: e.target.value })}
-                >
-                  <option value="">{t('docker_select')}</option>
-                  {sshSessions.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {form.docker_connect_method === 'SSH' && (
+                <div className="ssh-form-group">
+                  <label>{t('docker_ssh_tunnel')}</label>
+                  <select
+                    value={form.docker_ssh_tunnel}
+                    onChange={(e) => setForm({ ...form, docker_ssh_tunnel: e.target.value })}
+                  >
+                    <option value="">{t('docker_select')}</option>
+                    {sshSessions.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Remark */}

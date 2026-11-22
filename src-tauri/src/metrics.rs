@@ -558,6 +558,17 @@ echo '---END---'
         }
     }
 
+    /// Unconditionally stop the poller for `session_id` regardless of remaining
+    /// subscriber ref-count (used when the underlying SSH session closes).
+    pub fn force_stop(&self, session_id: &str) {
+        self.refs.lock().remove(session_id);
+        if let Some(handle) = self.tasks.lock().remove(session_id) {
+            handle.abort();
+        }
+        self.last.lock().remove(session_id);
+        self.static_host.lock().remove(session_id);
+    }
+
     /// Abort all pollers unconditionally (used on app shutdown).
     /// Clears all reference counts too.
     pub fn stop_all(&self) {

@@ -53,6 +53,13 @@ pub fn classify_command(command: &str) -> AgentRisk {
     if let Some(AgentRisk::Blocked) = classify_blocked_sensitive_read_segment(&c) {
         return AgentRisk::Blocked;
     }
+    // Check sensitive paths across ALL commands (not just cat/tail/grep) so
+    // utilities like `head`, `base64`, `awk`, `sed`, `strings`, or `xxd`
+    // cannot bypass secret-file protection.
+    let any_sensitive_path_risk = classify_sensitive_paths_in_command_text(&c);
+    if any_sensitive_path_risk == Some(AgentRisk::Blocked) {
+        return AgentRisk::Blocked;
+    }
     if has_shell_control_syntax(&c) {
         return AgentRisk::High;
     }
@@ -61,12 +68,16 @@ pub fn classify_command(command: &str) -> AgentRisk {
     // inspected here (`tail /etc/shado[w]` reads /etc/shadow), so such
     // commands can never be classified read-only/low and auto-executed.
     if has_unquoted_shell_expansion(&c) {
-        return AgentRisk::Medium;
+        return any_sensitive_path_risk
+            .map(|r| stronger_risk(Some(AgentRisk::Medium), r))
+            .unwrap_or(AgentRisk::Medium);
     }
     // `env VAR=… cmd` can inject LD_PRELOAD/PATH/… into an otherwise harmless
     // command; the classifier cannot reason about that.
     if uses_env_assignment(&c) {
-        return AgentRisk::Medium;
+        return any_sensitive_path_risk
+            .map(|r| stronger_risk(Some(AgentRisk::Medium), r))
+            .unwrap_or(AgentRisk::Medium);
     }
     if is_mutating_journalctl_command(&c) {
         return AgentRisk::Medium;
@@ -76,6 +87,9 @@ pub fn classify_command(command: &str) -> AgentRisk {
         return AgentRisk::Medium;
     }
     if let Some(risk) = classify_sensitive_read_command(&c) {
+        return risk;
+    }
+    if let Some(risk) = any_sensitive_path_risk {
         return risk;
     }
     if let Some(risk) = classify_proc_cat_command(&c) {
@@ -468,14 +482,27 @@ fn classify_wrapped_destructive_command(command: &str) -> Option<AgentRisk> {
     None
 }
 
+fn is_script_interpreter(name: &str) -> bool {
+    matches!(
+        name,
+        "python" | "python2" | "python3" | "perl" | "ruby" | "node" | "nodejs" | "php"
+    ) || name.starts_with("python3.")
+}
+
 fn classify_interpreter_command(command: &str) -> Option<AgentRisk> {
     let command = normalized_command(command)?;
     if is_powershell_command(&command.name) && has_powershell_encoded_command(&command.args) {
         return Some(AgentRisk::High);
     }
 
+    if is_script_interpreter(&command.name) {
+        let args_text = command.args.join(" ");
+        let path_risk = classify_sensitive_paths_in_command_text(&args_text);
+        return Some(at_least_high(path_risk.unwrap_or(AgentRisk::High)));
+    }
+
     let inner = match command.name.as_str() {
-        "sh" | "bash" | "zsh" => shell_c_command(&command.args),
+        "sh" | "bash" | "zsh" | "dash" | "ash" | "ksh" => shell_c_command(&command.args),
         "cmd" | "cmd.exe" => command_after_flag(&command.args, &["/c"]),
         "pwsh" | "pwsh.exe" | "powershell" | "powershell.exe" => {
             command_after_flag(&command.args, &["-command", "-c"])
@@ -532,13 +559,16 @@ fn join_command_args(args: &[&str], start: usize) -> String {
 
 fn classify_sensitive_paths_in_command_text(command: &str) -> Option<AgentRisk> {
     let mut risk = None;
-    for token in command.split_whitespace() {
-        let token = token.trim_matches(|ch| {
-            matches!(
+    for token in command.split(|ch: char| {
+        ch.is_whitespace()
+            || matches!(
                 ch,
-                '\'' | '"' | ';' | ',' | ')' | '(' | '[' | ']' | '{' | '}'
+                '\'' | '"' | ';' | ',' | ')' | '(' | '[' | ']' | '{' | '}' | '=' | '`'
             )
-        });
+    }) {
+        if token.is_empty() {
+            continue;
+        }
         if let Some(path_risk) = sensitive_path_risk(token) {
             risk = Some(stronger_risk(risk, path_risk));
         }
@@ -1640,5 +1670,31 @@ mod tests {
         );
         assert_eq!(systemctl_unit("systemctl status nginx", &["reload"]), None);
         assert_eq!(systemctl_unit("df -h", &["reload"]), None);
+    }
+
+    #[test]
+    fn non_cat_sensitive_file_reads_and_script_interpreters_are_blocked_or_high() {
+        assert_eq!(
+            classify_command("head -n 50 /etc/shadow"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(classify_command("base64 ~/.ssh/id_rsa"), AgentRisk::Blocked);
+        assert_eq!(
+            classify_command("strings ~/.ssh/id_rsa"),
+            AgentRisk::Blocked
+        );
+        assert_eq!(classify_command("awk 1 /etc/shadow"), AgentRisk::Blocked);
+        assert_eq!(
+            classify_command("python3 -c \"print(open('/etc/shadow').read())\""),
+            AgentRisk::Blocked
+        );
+        assert_eq!(
+            classify_command("python3 -c \"print('hello')\""),
+            AgentRisk::High
+        );
+        assert_eq!(
+            classify_command("node -e \"console.log(1)\""),
+            AgentRisk::High
+        );
     }
 }

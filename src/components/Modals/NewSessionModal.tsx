@@ -4,22 +4,10 @@ import { X, Eye, EyeOff, FolderOpen } from 'lucide-react';
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
 import { useAppStore } from '../../stores/appStore';
 import { useEscapeClose } from '../../lib/useEscapeClose';
+import { GroupSelectField } from './GroupSelectField';
+import { ColorLabelPicker } from './ColorLabelPicker';
 import type { SessionConfig } from '../../types';
 import type { TranslationKeys } from '../../i18n';
-
-const colorLabels = [
-  '#ef4444',
-  '#f97316',
-  '#eab308',
-  '#22c55e',
-  '#10b981',
-  '#06b6d4',
-  '#3b82f6',
-  '#6366f1',
-  '#a855f7',
-  '#9ca3af',
-  '#374151',
-];
 
 const configTabKeys: { id: string; labelKey: TranslationKeys }[] = [
   { id: 'standard', labelKey: 'ssh_tab_standard' },
@@ -43,14 +31,12 @@ const authMethods: { id: AuthType; labelKey: TranslationKeys }[] = [
 ];
 
 export const NewSessionModal: React.FC = () => {
-  const {
-    showNewSession,
-    setShowNewSession,
-    addSession,
-    addTab,
-    editingSession,
-    setEditingSession,
-  } = useAppStore();
+  const showNewSession = useAppStore((s) => s.showNewSession);
+  const setShowNewSession = useAppStore((s) => s.setShowNewSession);
+  const addSession = useAppStore((s) => s.addSession);
+  const addTab = useAppStore((s) => s.addTab);
+  const editingSession = useAppStore((s) => s.editingSession);
+  const setEditingSession = useAppStore((s) => s.setEditingSession);
   const { t } = useTranslation();
 
   const [activeTab, setActiveTab] = useState('standard');
@@ -80,10 +66,14 @@ export const NewSessionModal: React.FC = () => {
   });
 
   React.useEffect(() => {
+    if (!showNewSession) return;
     setDirtySecrets(new Set());
+    setTouched({});
+    setActiveTab('standard');
+    setShowPassword(false);
+    setShowJumpPassword(false);
     if (editingSession) {
       setForm(editingSession);
-      setTouched({});
     } else {
       setForm({
         name: '',
@@ -101,10 +91,6 @@ export const NewSessionModal: React.FC = () => {
         proxy_type: 'none',
         tunnel_type: 'local',
       });
-      setTouched({});
-      setActiveTab('standard');
-      setShowPassword(false);
-      setShowJumpPassword(false);
     }
   }, [editingSession, showNewSession]);
 
@@ -225,14 +211,18 @@ export const NewSessionModal: React.FC = () => {
     const config = buildConfig(sessionId);
     addSession(config);
 
-    const tabId = crypto.randomUUID();
-    addTab({
-      id: tabId,
-      sessionId,
-      title: config.name,
-      type: config.session_type,
-      connected: false,
-    });
+    const existingTab = useAppStore.getState().tabs.find((tb) => tb.sessionId === sessionId);
+    if (existingTab) {
+      useAppStore.getState().setActiveTab(existingTab.id);
+    } else {
+      addTab({
+        id: crypto.randomUUID(),
+        sessionId,
+        title: config.name,
+        type: config.session_type,
+        connected: false,
+      });
+    }
     handleClose();
   };
 
@@ -342,28 +332,10 @@ export const NewSessionModal: React.FC = () => {
 
               {/* Color label + Environment — optional/cosmetic, kept after the essential fields */}
               <div className="ssh-form-row">
-                <div className="ssh-form-group">
-                  <label>{t('ssh_color_label')}</label>
-                  <div className="color-label-row">
-                    {colorLabels.map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        className={`color-dot ${form.color_label === color ? 'selected' : ''}`}
-                        style={{ background: color }}
-                        aria-label={color}
-                        aria-pressed={form.color_label === color}
-                        onClick={() => setForm({ ...form, color_label: color })}
-                      />
-                    ))}
-                    <button
-                      className="color-dot-clear"
-                      onClick={() => setForm({ ...form, color_label: '' })}
-                    >
-                      <X size={11} />
-                    </button>
-                  </div>
-                </div>
+                <ColorLabelPicker
+                  value={form.color_label ?? ''}
+                  onChange={(color_label) => setForm({ ...form, color_label })}
+                />
                 <div className="ssh-form-group">
                   <label>{t('ssh_environment')}</label>
                   <select
@@ -378,6 +350,11 @@ export const NewSessionModal: React.FC = () => {
                 </div>
               </div>
 
+              <GroupSelectField
+                value={form.group ?? ''}
+                onChange={(group) => setForm({ ...form, group })}
+              />
+
               {/* Auth method */}
               <div className="ssh-form-group">
                 <label>{t('ssh_auth_method')}</label>
@@ -385,8 +362,10 @@ export const NewSessionModal: React.FC = () => {
                   {authMethods.map((btn) => (
                     <button
                       key={btn.id}
+                      type="button"
                       className={`ssh-auth-btn ${form.auth_method === btn.id ? 'active' : ''}`}
                       onClick={() => {
+                        if (form.auth_method === btn.id) return;
                         // A password and a key passphrase are different secrets:
                         // switching method clears the stored one too.
                         setForm({ ...form, auth_method: btn.id, password: '' });
@@ -583,42 +562,50 @@ export const NewSessionModal: React.FC = () => {
                     <div className="ssh-form-group" />
                   </div>
 
-                  <div className="ssh-form-row">
-                    <div className="ssh-form-group">
-                      <label>{t('ssh_tunnel_remote_host')}</label>
-                      <input
-                        type="text"
-                        placeholder="localhost"
-                        value={form.tunnel_remote_host ?? ''}
-                        onChange={(e) => setForm({ ...form, tunnel_remote_host: e.target.value })}
-                      />
-                    </div>
-                    <div className="ssh-form-group">
-                      <label>{t('ssh_tunnel_remote_port')}</label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={65535}
-                        placeholder="e.g. 3306"
-                        value={form.tunnel_remote_port ?? ''}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            tunnel_remote_port: parseInt(e.target.value) || undefined,
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
+                  {form.tunnel_type !== 'dynamic' && (
+                    <>
+                      <div className="ssh-form-row">
+                        <div className="ssh-form-group">
+                          <label>{t('ssh_tunnel_remote_host')}</label>
+                          <input
+                            type="text"
+                            placeholder="localhost"
+                            value={form.tunnel_remote_host ?? ''}
+                            onChange={(e) =>
+                              setForm({ ...form, tunnel_remote_host: e.target.value })
+                            }
+                          />
+                        </div>
+                        <div className="ssh-form-group">
+                          <label>{t('ssh_tunnel_remote_port')}</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={65535}
+                            placeholder="e.g. 3306"
+                            value={form.tunnel_remote_port ?? ''}
+                            onChange={(e) =>
+                              setForm({
+                                ...form,
+                                tunnel_remote_port: parseInt(e.target.value) || undefined,
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
 
-                  {form.tunnel_local_port && form.tunnel_remote_host && form.tunnel_remote_port && (
-                    <div className="ssh-tab-desc">
-                      {t('ssh_tunnel_desc', {
-                        localPort: form.tunnel_local_port,
-                        remoteHost: form.tunnel_remote_host,
-                        remotePort: form.tunnel_remote_port,
-                      })}
-                    </div>
+                      {form.tunnel_local_port &&
+                        form.tunnel_remote_host &&
+                        form.tunnel_remote_port && (
+                          <div className="ssh-tab-desc">
+                            {t('ssh_tunnel_desc', {
+                              localPort: form.tunnel_local_port,
+                              remoteHost: form.tunnel_remote_host,
+                              remotePort: form.tunnel_remote_port,
+                            })}
+                          </div>
+                        )}
+                    </>
                   )}
                 </>
               )}
@@ -814,6 +801,14 @@ export const NewSessionModal: React.FC = () => {
                       onChange={(e) => setForm({ ...form, agent_forward: e.target.checked })}
                     />
                     <span>{t('ssh_agent_forward')}</span>
+                  </label>
+                  <label className="ssh-toggle-label" style={{ marginTop: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={form.compression ?? false}
+                      onChange={(e) => setForm({ ...form, compression: e.target.checked })}
+                    />
+                    <span>{t('ssh_compression')}</span>
                   </label>
                 </div>
                 <div className="ssh-form-group">

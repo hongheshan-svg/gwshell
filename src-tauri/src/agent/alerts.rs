@@ -16,8 +16,31 @@ pub fn detect_alerts(evidence: &[AgentEvidence], policy: &AgentPolicySettings) -
 
 fn detect_disk_alerts(body: &str, threshold: u8) -> Vec<String> {
     let mut alerts = Vec::new();
+    let mut in_df_block = false;
     for line in body.lines() {
-        for token in line.split_whitespace() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            in_df_block = false;
+            continue;
+        }
+        let lower = trimmed.to_ascii_lowercase();
+        if lower.starts_with("filesystem") {
+            // Only match block-space `df` tables (`Use%` or macOS `Capacity`),
+            // never inode tables (`df -ihP`, which contain `iuse%`).
+            in_df_block =
+                !lower.contains("iuse%") && (lower.contains("use%") || lower.contains("capacity"));
+            continue;
+        }
+        if !in_df_block {
+            continue;
+        }
+        let tokens: Vec<&str> = trimmed.split_whitespace().collect();
+        // A valid `df -P` / `df -hP` row has at least 6 columns and ends with a mount path.
+        if tokens.len() < 6 || !tokens.last().is_some_and(|mount| mount.starts_with('/')) {
+            in_df_block = false;
+            continue;
+        }
+        for token in &tokens[1..tokens.len() - 1] {
             let Some(percent) = token.strip_suffix('%') else {
                 continue;
             };
@@ -25,7 +48,7 @@ fn detect_disk_alerts(body: &str, threshold: u8) -> Vec<String> {
                 continue;
             };
             if value >= threshold {
-                alerts.push(format!("disk usage threshold crossed: {}", line.trim()));
+                alerts.push(format!("disk usage threshold crossed: {}", trimmed));
                 break;
             }
         }
@@ -73,5 +96,28 @@ mod tests {
 
         assert!(alerts.iter().any(|alert| alert.contains("disk usage")));
         assert!(alerts.iter().any(|alert| alert.contains("memory usage")));
+    }
+
+    #[test]
+    fn ignores_percentages_outside_df_block_and_inode_tables() {
+        let evidence = vec![AgentEvidence {
+            id: "ev-2".into(),
+            source: "ssh_exec".into(),
+            label: "ps_and_inodes".into(),
+            body: concat!(
+                "USER PID %CPU %MEM COMMAND\n",
+                "root 123 99% 40% /usr/bin/worker\n",
+                "\n",
+                "Filesystem Inodes IUsed IFree IUse% Mounted on\n",
+                "/dev/sda1 1000 990 10 99% /\n",
+                "\n",
+                "Build progress: 100% done\n"
+            )
+            .into(),
+            created_at: 2,
+        }];
+
+        let alerts = detect_alerts(&evidence, &AgentPolicySettings::default());
+        assert!(alerts.is_empty(), "unexpected false alerts: {:?}", alerts);
     }
 }

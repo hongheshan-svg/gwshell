@@ -1,26 +1,30 @@
-import { Suspense, lazy, useEffect, useMemo, useRef } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { I18nextProvider } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { useShallow } from 'zustand/react/shallow';
 import { TitleBar } from './components/TitleBar/TitleBar';
 import { SidebarFooter } from './components/Sidebar/SidebarFooter';
 import { SessionPanel } from './components/Sidebar/SessionPanel';
 import { SnippetPanel } from './components/Sidebar/SnippetPanel';
-import { useSnippetStore } from './stores/snippetStore';
 import { TabBar } from './components/TabBar/TabBar';
 import { AssetTable } from './components/AssetTable/AssetTable';
 import { StatusBar } from './components/StatusBar/StatusBar';
 import { UnlockScreen } from './components/UnlockScreen';
 import { ToastProvider } from './components/Toast/ToastProvider';
 import { ConfirmDialog } from './components/ConfirmDialog/ConfirmDialog';
+import { DockerContainerPicker } from './components/Terminal/DockerContainerPicker';
 import {
   dispatchTypedEvent,
   type DockerPickPayload,
   type DockerCancelPayload,
 } from './lib/ipcEvents';
+import { useAppStore } from './stores/appStore';
+import { useSettingsEffects } from './hooks/useSettingsEffects';
+import { useAppBoot } from './hooks/useAppBoot';
+import i18n from './i18n';
+import './styles/theme.css';
+import './styles/global.css';
 
 // Heavy / interaction-only chunks: deferred until the user actually needs them.
-// On startup we only render the shell + asset list — every other resource (xterm,
-// SFTP editor, plugin-dialog, modals) loads on demand.
 const TerminalContainer = lazy(() =>
   import('./components/Terminal/TerminalContainer').then((m) => ({ default: m.TerminalContainer })),
 );
@@ -30,18 +34,6 @@ const SftpPanel = lazy(() =>
 const TerminalSearchBar = lazy(() =>
   import('./components/Terminal/TerminalSearchBar').then((m) => ({ default: m.TerminalSearchBar })),
 );
-import { useAppStore } from './stores/appStore';
-import { DockerContainerPicker } from './components/Terminal/DockerContainerPicker';
-import { useSettingsStore } from './stores/settingsStore';
-import { useSettingsEffects } from './hooks/useSettingsEffects';
-import { createKeymapHandler } from './keymap/dispatch';
-import i18n from './i18n';
-import type { SessionConfig } from './types';
-import * as commandHistory from './lib/commandHistory';
-import { saveOpenTabs, tabsSignature, loadOpenTabs } from './lib/tabSession';
-import './styles/theme.css';
-import './styles/global.css';
-
 const NewSessionModal = lazy(() =>
   import('./components/Modals/NewSessionModal').then((m) => ({ default: m.NewSessionModal })),
 );
@@ -84,9 +76,9 @@ const GroupDefaultsModal = lazy(() =>
 
 function App() {
   useSettingsEffects();
+  useAppBoot();
+
   const {
-    theme,
-    setSessions,
     tabs,
     activeTabId,
     sftpPanelOpen,
@@ -104,164 +96,50 @@ function App() {
     dockerPicker,
     setDockerPicker,
     vaultLocked,
-    setVaultLocked,
     mainView,
     activeNavItem,
     sidebarCollapsed,
     agentPanelOpen,
-  } = useAppStore();
-  const loadSettings = useSettingsStore((s) => s.load);
-  const settingsLoaded = useSettingsStore((s) => s.loaded);
-  const sessionTabMemory = useSettingsStore((s) => s.settings.sessionTabMemory);
-  const sshHistoryCmd = useSettingsStore((s) => s.settings.sshHistoryCmd);
-  const sshHistoryCmdLoadCount = useSettingsStore((s) => s.settings.sshHistoryCmdLoadCount);
-
-  // Show asset table directly (synchronous) when no terminal is active.
-  // TerminalContainer is lazy-loaded with xterm.js (344KB); showing AssetTable
-  // through it would cause the asset list to flash in only after the heavy chunk loads.
-  const showAssetTable =
-    activeTabId === 'asset-list' ||
-    mainView === 'asset-list' ||
-    tabs.filter((t) => t.type !== 'asset-list').length === 0;
-  const needTerminals = !showAssetTable;
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
-
-  useEffect(() => {
-    void loadSettings();
-  }, [loadSettings]);
-
-  useEffect(() => {
-    if (!settingsLoaded) return;
-    if (sshHistoryCmd) {
-      void commandHistory.init(parseInt(sshHistoryCmdLoadCount) || 100);
-    }
-    // sshHistoryCmd/Count intentionally omitted: setting changes go through
-    // settingsStore.save() which re-calls init() directly.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settingsLoaded]);
-
-  // Boot sequence: show only the splash card for 2s, then crossfade to the app.
-  // 1. Show the window immediately (transparent — only the card is visible).
-  // 2. After the minimum splash duration, fade the card out AND reveal #root
-  //    at the same time so the main window "appears" as the card disappears.
-  useEffect(() => {
-    const MIN_SPLASH_MS = 2000;
-    invoke('app_ready').catch(() => {});
-
-    const t0 =
-      // eslint-disable-next-line no-restricted-syntax
-      (window as unknown as { __GWSHELL_BOOT_T0__?: number }).__GWSHELL_BOOT_T0__ ??
-      performance.now();
-    const elapsed = performance.now() - t0;
-    const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
-
-    const timer = setTimeout(() => {
-      // Reveal app and fade splash simultaneously.
-      document.getElementById('root')?.classList.add('ready');
-      const splash = document.getElementById('boot-splash');
-      if (splash) {
-        splash.classList.add('fade-out');
-        splash.addEventListener('transitionend', () => splash.remove(), { once: true });
-        setTimeout(() => {
-          try {
-            splash.remove();
-          } catch {}
-        }, 600);
-      }
-    }, remaining);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Vault gate: if the master-passphrase lock is enabled, cover the app with the
-  // unlock overlay until the user authenticates. Runs once on boot.
-  useEffect(() => {
-    invoke<boolean>('vault_is_enabled')
-      .then((enabled) => {
-        if (enabled) setVaultLocked(true);
-      })
-      .catch(() => {});
-  }, [setVaultLocked]);
-
-  // Sessions are pre-loaded via Tauri's initialization_script (window.__GWSHELL_SESSIONS__).
-  // Fall back to IPC only when the injection wasn't available (edge cases / dev hot-reload).
-  const didFetchSessionsRef = useRef(false);
-  useEffect(() => {
-    if (didFetchSessionsRef.current) return;
-    if (sessions.length === 0) {
-      didFetchSessionsRef.current = true;
-      invoke<SessionConfig[]>('get_sessions')
-        .then((s) => {
-          if (s.length > 0) setSessions(s);
-        })
-        .catch(() => {});
-    }
-    // setSessions is a stable zustand setter; sessions.length is checked only
-    // to decide whether the initial fetch is needed (guarded by the ref).
-  }, [sessions.length, setSessions]);
-
-  // Persist the open-tab set (debounced) when "remember tabs" is on. Keyed on a
-  // derived signature so connect/disconnect (`connected`) changes don't rewrite.
-  const tabSig = useMemo(
-    () => tabsSignature(tabs, sessions, activeTabId),
-    [tabs, sessions, activeTabId],
+  } = useAppStore(
+    useShallow((s) => ({
+      tabs: s.tabs,
+      activeTabId: s.activeTabId,
+      sftpPanelOpen: s.sftpPanelOpen,
+      sessions: s.sessions,
+      showNewSession: s.showNewSession,
+      showQuickConnect: s.showQuickConnect,
+      showDockerModal: s.showDockerModal,
+      showLocalTerminalModal: s.showLocalTerminalModal,
+      showSerialModal: s.showSerialModal,
+      showSettings: s.showSettings,
+      showAppMenu: s.showAppMenu,
+      showCommandPalette: s.showCommandPalette,
+      showTerminalSearch: s.showTerminalSearch,
+      groupDefaultsTarget: s.groupDefaultsTarget,
+      dockerPicker: s.dockerPicker,
+      setDockerPicker: s.setDockerPicker,
+      vaultLocked: s.vaultLocked,
+      mainView: s.mainView,
+      activeNavItem: s.activeNavItem,
+      sidebarCollapsed: s.sidebarCollapsed,
+      agentPanelOpen: s.agentPanelOpen,
+    })),
   );
-  useEffect(() => {
-    if (!settingsLoaded || !sessionTabMemory) return;
-    const timer = setTimeout(() => {
-      saveOpenTabs(tabs, sessions, activeTabId);
-    }, 500);
-    return () => clearTimeout(timer);
-    // tabs/sessions/activeTabId intentionally omitted: tabSig captures the
-    // restorable signature; the timer reads the latest values when it fires.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabSig, settingsLoaded, sessionTabMemory]);
 
-  // Restore tabs once, after settings load AND sessions hydrate. Auto-reconnect
-  // happens via each restored TerminalView's setupConnection on mount.
-  const restoredRef = useRef(false);
-  const { addTab, setActiveTab } = useAppStore();
+  // Keep TerminalContainer mounted once any terminal tab exists (hidden via CSS
+  // while viewing the Asset List) so live SSH/PTY/Serial tabs never tear down
+  // their data/exit event listeners and drop output or logs in the background.
+  const hasTerminalTabs = tabs.some((t) => t.type !== 'asset-list');
+  const showAssetTable =
+    activeTabId === 'asset-list' || mainView === 'asset-list' || !hasTerminalTabs;
+  const needTerminals = hasTerminalTabs;
+  const [agentPanelMounted, setAgentPanelMounted] = useState(false);
+
   useEffect(() => {
-    if (restoredRef.current || !settingsLoaded) return;
-    if (!sessionTabMemory) {
-      restoredRef.current = true;
-      return;
+    if (agentPanelOpen && !agentPanelMounted) {
+      setAgentPanelMounted(true);
     }
-    // Wait for sessions to hydrate (sync injection or async get_sessions fallback).
-    if (sessions.length === 0) return;
-    restoredRef.current = true;
-
-    const stored = loadOpenTabs();
-    if (!stored) return;
-    const byId = new Map(sessions.map((s) => [s.id, s]));
-    const newIds: string[] = [];
-    for (const pt of stored.tabs) {
-      const s = byId.get(pt.sessionId);
-      if (!s || s._temporary) continue; // session deleted or temporary — skip
-      const id = crypto.randomUUID();
-      addTab({ id, sessionId: pt.sessionId, title: pt.title, type: pt.type, connected: false });
-      newIds.push(id);
-    }
-    if (newIds.length > 0) {
-      const idx = Math.min(Math.max(0, stored.activeTabIndex), newIds.length - 1);
-      setActiveTab(newIds[idx]);
-    }
-  }, [settingsLoaded, sessionTabMemory, sessions, addTab, setActiveTab]);
-
-  const loadSnippets = useSnippetStore((s) => s.load);
-  useEffect(() => {
-    void loadSnippets();
-  }, [loadSnippets]);
-
-  const keymapOverrides = useSettingsStore((s) => s.settings.keymapOverrides);
-  useEffect(() => {
-    const handler = createKeymapHandler(() => useSettingsStore.getState().settings.keymapOverrides);
-    window.addEventListener('keydown', handler, true);
-    return () => window.removeEventListener('keydown', handler, true);
-  }, [keymapOverrides]);
+  }, [agentPanelOpen, agentPanelMounted]);
 
   return (
     <I18nextProvider i18n={i18n}>
@@ -284,11 +162,20 @@ function App() {
                 </div>
               )}
               {needTerminals && (
-                <Suspense fallback={null}>
-                  <TerminalContainer />
-                </Suspense>
+                <div
+                  style={{
+                    display: showAssetTable ? 'none' : 'flex',
+                    flex: 1,
+                    minWidth: 0,
+                    minHeight: 0,
+                  }}
+                >
+                  <Suspense fallback={null}>
+                    <TerminalContainer />
+                  </Suspense>
+                </div>
               )}
-              {needTerminals && showTerminalSearch && (
+              {!showAssetTable && needTerminals && showTerminalSearch && (
                 <Suspense fallback={null}>
                   <TerminalSearchBar />
                 </Suspense>
@@ -301,6 +188,7 @@ function App() {
                   return (
                     <Suspense fallback={null}>
                       <SftpPanel
+                        key={activeTab.sessionId}
                         sessionId={activeTab.sessionId}
                         username={sess?.username}
                         connected={activeTab.connected}
@@ -308,7 +196,7 @@ function App() {
                     </Suspense>
                   );
                 })()}
-              {agentPanelOpen && (
+              {agentPanelMounted && (
                 <Suspense fallback={null}>
                   <AgentPanel />
                 </Suspense>

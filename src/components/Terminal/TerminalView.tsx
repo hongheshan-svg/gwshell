@@ -3,7 +3,6 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { WebglAddon } from '@xterm/addon-webgl';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
@@ -15,6 +14,8 @@ import * as commandHistory from '../../lib/commandHistory';
 import { resolveTerminalTheme } from '../../lib/terminalThemes';
 import { runLoginScript } from '../../lib/sendScript';
 import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';
+import { buildDockerHost, buildSshConnectParams } from '../../lib/terminalConnectors';
+import { attachWebglRenderer } from '../../lib/terminalRenderer';
 import { buildCompletions, type Completion } from '../../lib/completion';
 import {
   applyInput,
@@ -79,8 +80,6 @@ import {
   settleTimerIds,
   pendingBackendResize,
   sentFirstResize,
-  getSuggestedRendererTypeDom,
-  setSuggestedRendererTypeDom,
   cleanupTabListeners,
   cleanupTerminalInteractions,
   sendInputToTab,
@@ -169,7 +168,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
   const [contextMenu, setContextMenu] = useState<TerminalContextMenuState | null>(null);
   const [completionView, setCompletionView] = useState<CompletionView>(HIDDEN_COMPLETIONS);
   const [pasteConfirm, setPasteConfirm] = useState<string | null>(null);
+  const [terminalReady, setTerminalReady] = useState<boolean>(() => terminalInstances.has(tab.id));
   const fingerprintResolveRef = useRef<(accepted: boolean) => void>(() => {});
+
+  const isSshBacked = useCallback((): boolean => {
+    if (tab.type === 'ssh') return true;
+    if (tab.type === 'docker') {
+      const dsess = sessionsRef.current.find((s) => s.id === tab.sessionId);
+      return (dsess?.docker_connect_method ?? '').toLowerCase() === 'ssh';
+    }
+    return false;
+  }, [tab.sessionId, tab.type]);
 
   useEffect(() => {
     if (pasteConfirm === null) return;
@@ -205,7 +214,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
   const maybePasteText = useCallback(
     (text: string) => {
       if (!text) return;
-      if (useSettingsStore.getState().settings.pasteWarnMultiline && text.includes('\n')) {
+      if (useSettingsStore.getState().settings.pasteWarnMultiline && /[\r\n]/.test(text)) {
         setPasteConfirm(text);
       } else {
         terminalInstances.get(tab.id)?.terminal.paste(text);
@@ -358,6 +367,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       }
 
       if (cancelled) return;
+      setTerminalReady(true);
 
       // Re-attach the terminal if its parent is a different container.
       // (renderer addon attaches after terminal.open below)
@@ -391,7 +401,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         };
 
         const doCopy = () => {
-          copyCurrentSelection();
           const sel = readTerminalSelection(termRef) || selectionSnapshotRef.current;
           if (!sel) return false;
           void writeClipboardText(sel);
@@ -422,6 +431,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                 }
               }, 120);
             }
+          } else {
+            selectionSnapshotRef.current = '';
+            setTerminalSelection(tab.id, '');
           }
         });
 
@@ -544,9 +556,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                 return false;
               };
 
-              // Accept with Tab / →
-              if (e.key === 'Tab' || (e.key === 'ArrowRight' && plainArrow)) {
+              // Accept with → always, or with Tab only when the user actively
+              // navigated the dropdown (so plain Tab still reaches native shell
+              // filename/flag completion).
+              if (e.key === 'ArrowRight' && plainArrow) {
                 return accept(idx);
+              }
+              if (e.key === 'Tab') {
+                if (completionNav.get(tab.id)) {
+                  return accept(idx);
+                }
+                hideCompletions(tab.id);
+                return true;
               }
 
               // Dismiss with Esc
@@ -657,108 +678,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // Sticky fallback: once WebGL fails for one terminal, skip the WebGL
       // attempt for subsequent terminals in the same session (VSCode's
       // _suggestedRendererType mechanism).
-      if ((wasFreshlyOpened || instance.rendererLost) && !getSuggestedRendererTypeDom()) {
-        try {
-          instance.rendererAddon?.dispose();
-        } catch {}
-        instance.rendererAddon = undefined;
-        // Reset atlas tracking from any previous (disposed) WebGL addon.
-        instance.textureAtlasCanvases = undefined;
-        try {
-          // Match VSCode: pass customGlyphs so powerline/box-drawing/custom CSI
-          // shapes render as designed glyphs instead of degraded fallbacks.
-          const webgl = new WebglAddon({ customGlyphs: true });
-          webgl.onContextLoss(() => {
-            instance.rendererLost = true;
-            instance.textureAtlasCanvases = undefined;
-            try {
-              webgl.dispose();
-            } catch {}
-            // Match VSCode: re-fit after WebGL dispose because WebGL cell
-            // dimensions differ from the DOM renderer's — without this the
-            // cursor's per-cell position math uses stale metrics, causing
-            // cursor shimmering/offset on Windows ConPTY.
-            safeFit(tab.id);
-            forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
-          });
-          // Match VSCode: wire the WebGL texture-atlas lifecycle events.
-          // VSCode forwards these to its "Show Terminal Texture Atlas" debug
-          // command and uses them for renderer telemetry. Here we maintain
-          // the live atlas-canvas page list on the instance (so a future debug
-          // viewer can render them without re-touching the addon) and, when
-          // gwshell:webgl-debug is set, trace the lifecycle to the console.
-          //
-          // Semantics (per @xterm/addon-webgl source):
-          //  - onChangeTextureAtlas: a FRESH atlas instance was acquired
-          //    (first load, or a swap after DPR/dimension change / cache
-          //    eviction). Fires with pages[0].canvas. Note: a plain
-          //    clearTextureAtlas() does NOT swap the instance — it only
-          //    clears the pixels and requests a redraw — so this event is the
-          //    signal for an actual atlas replacement, not a texture clear.
-          //  - onAddTextureAtlasCanvas / onRemoveTextureAtlasCanvas: a page
-          //    was added (cache pressure → new page) or removed (compaction).
-          instance.textureAtlasCanvases = [];
-          const dbg = webglDebugEnabled();
-          try {
-            webgl.onChangeTextureAtlas((canvas) => {
-              // Atlas instance replaced — start the page list from page 0.
-              instance.textureAtlasCanvases = [canvas];
-              if (dbg)
-                console.debug(
-                  '[gwshell:webgl] atlas rebuilt (page 0)',
-                  canvas.width,
-                  'x',
-                  canvas.height,
-                );
-            });
-          } catch {
-            /* onChangeTextureAtlas unavailable on this addon version */
-          }
-          try {
-            webgl.onAddTextureAtlasCanvas((canvas) => {
-              const list = instance.textureAtlasCanvases ?? (instance.textureAtlasCanvases = []);
-              if (!list.includes(canvas)) list.push(canvas);
-              if (dbg) console.debug('[gwshell:webgl] atlas page added →', list.length, 'page(s)');
-            });
-          } catch {
-            /* onAddTextureAtlasCanvas unavailable */
-          }
-          try {
-            webgl.onRemoveTextureAtlasCanvas((canvas) => {
-              const list = instance.textureAtlasCanvases;
-              if (list) {
-                const i = list.indexOf(canvas);
-                if (i >= 0) list.splice(i, 1);
-              }
-              if (dbg)
-                console.debug(
-                  '[gwshell:webgl] atlas page removed →',
-                  instance.textureAtlasCanvases?.length ?? 0,
-                  'page(s)',
-                );
-            });
-          } catch {
-            /* onRemoveTextureAtlasCanvas unavailable */
-          }
-          instance.terminal.loadAddon(webgl);
-          instance.rendererAddon = webgl;
-          instance.rendererLost = false;
-          // Match VSCode: re-fit after WebGL load because the WebGL renderer's
-          // cell dimensions differ from the DOM renderer's. Without this the
-          // cursor position is computed against stale cell metrics, causing
-          // the cursor to shimmer/flicker in TUI apps (Claude Code, Codex).
-          safeFit(tab.id);
-          try {
-            instance.terminal.clearTextureAtlas();
-          } catch {}
-          try {
-            instance.terminal.refresh(0, instance.terminal.rows - 1);
-          } catch {}
-        } catch {
-          // WebGL could not be loaded — fall back to the DOM renderer.
-          setSuggestedRendererTypeDom(true);
-        }
-      }
+      attachWebglRenderer(instance, tab, wasFreshlyOpened, isSshBacked);
 
       // ConPTY 1.22+ sends a DA1 request (CSI c) at startup and waits for a
       // terminal response before continuing to render. If we don't respond,
@@ -815,7 +735,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           if (wasReparented) {
-            forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
+            forceTerminalRedraw(tab.id, tab.sessionId, tab.type, isSshBacked());
             // For local ConPTY sessions, force ConPTY to re-send the current
             // screen content by toggling alt-screen mode. \x1b[?1049h enters
             // alt-screen (saving current screen), \x1b[?1049l exits (restoring)
@@ -826,7 +746,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             }
           } else {
             scheduleTerminalFit(tab.id);
-            scheduleTerminalResizeSettle(tab.id, tab.sessionId, tab.type, 80);
+            scheduleTerminalResizeSettle(tab.id, tab.sessionId, tab.type, 80, isSshBacked());
           }
         });
       });
@@ -1123,15 +1043,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             return;
           }
 
-          // Command history: track input line and compute completions.
-          // Generalized beyond SSH; gated by sshHistoryCmd (capture) + cmdHintAllSessions.
+          // Command history & hints: track input line independently for history
+          // capture (sshHistoryCmd) and command-dictionary suggestions (terminalCmdHint).
+          const wasAwaitingPassword = !!awaitingPassword.get(tab.id);
           {
             const st = useSettingsStore.getState().settings;
-            const captureOn =
-              st.sshHistoryCmd &&
+            const trackingOn =
+              (st.sshHistoryCmd || st.terminalCmdHint) &&
               isInteractiveTerminal(tab.type) &&
               (tab.type === 'ssh' || st.cmdHintAllSessions);
-            if (captureOn) {
+            if (trackingOn) {
               const sess = sessionsRef.current.find((s) => s.id === tab.sessionId);
               const scope = st.cmdHintScopeByHost ? tabScope(tab.type, sess) : '';
               const cwd = st.cmdHintScopeByHost ? (tabCwd.get(tab.id) ?? '') : '';
@@ -1155,10 +1076,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               });
 
               if (data === '\r' || data === '\n') {
-                // Record on Enter — but NOT when the preceding output was a
-                // password prompt: the "command" here is actually a secret
-                // being typed into sudo/su/mysql/etc.
-                if (result.submitted && !awaitingPassword.get(tab.id)) {
+                // Record on Enter — only when history capture is enabled and NOT
+                // when the preceding output was a password prompt.
+                if (st.sshHistoryCmd && result.submitted && !wasAwaitingPassword) {
                   commandHistory.record(result.submitted.trim(), { scope, cwd, sessionType });
                 }
                 const apT = awaitingPasswordTimer.get(tab.id);
@@ -1187,15 +1107,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               } else if (result.effect === 'hide') {
                 hideCompletions(tab.id);
               }
+            } else if (data === '\r' || data === '\n') {
+              const apT = awaitingPasswordTimer.get(tab.id);
+              if (apT) {
+                clearTimeout(apT);
+                awaitingPasswordTimer.delete(tab.id);
+              }
+              awaitingPassword.delete(tab.id);
             }
           }
 
           // Input broadcast: fan this keystroke to all OTHER connected interactive
-          // terminals. The focused tab still writes to itself below. No echo loop:
-          // sendInputToTab feeds writeQueue/IPC, it does not trigger onData.
+          // terminals, except when this tab is at a password/passphrase prompt.
           {
             const app = useAppStore.getState();
-            if (app.broadcastInput) {
+            if (app.broadcastInput && !wasAwaitingPassword) {
               for (const tb of app.tabs) {
                 if (
                   tb.id !== tab.id &&
@@ -1232,6 +1158,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             const tracker = lineTrackers.get(tab.id);
             if (tracker) tracker.buf += suffix;
             hideCompletions(tab.id);
+            const app = useAppStore.getState();
+            if (app.broadcastInput && !awaitingPassword.get(tab.id)) {
+              for (const tb of app.tabs) {
+                if (
+                  tb.id !== tab.id &&
+                  tb.connected &&
+                  (tb.type === 'ssh' ||
+                    tb.type === 'localshell' ||
+                    tb.type === 'serial' ||
+                    tb.type === 'docker')
+                ) {
+                  sendInputToTab(tb.id, suffix);
+                }
+              }
+            }
             writeQueue += suffix;
             if (writeQueue.length >= WRITE_CHUNK_SIZE) {
               if (writeTimer) {
@@ -1266,7 +1207,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           const cmd = resizeCmd;
           const tabId = tab.id;
           const sessionId = tab.sessionId;
-          const isSsh = tab.type === 'ssh';
+          const isSsh = cmd === 'resize_ssh';
           resizeDispose = instance.terminal.onResize(({ rows, cols }) => {
             const fire = () => {
               if (isSsh) {
@@ -1408,53 +1349,87 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           ? applyGroupDefaults(rawSession, loadGroupDefaults())
           : rawSession;
 
-        const buildSshParams = (sess: typeof session) => ({
-          sessionId: tab.sessionId,
-          host: sess?.host ?? '',
-          port: sess?.port ?? 22,
-          username: sess?.username ?? 'root',
-          password: sess?.password ?? null,
-          privateKeyPath: sess?.private_key_path ?? null,
-          authMethod: sess?.auth_method ?? 'password',
-          totpCode: sess?.totp_code ?? null,
-          jumpHost: sess?.jump_host ?? null,
-          jumpPort: sess?.jump_port ?? 22,
-          jumpUsername: sess?.jump_username ?? null,
-          jumpPassword: sess?.jump_password ?? null,
-          jumpPrivateKeyPath: sess?.jump_private_key_path ?? null,
-          proxyType: sess?.proxy_type ?? null,
-          proxyHost: sess?.proxy_host ?? null,
-          proxyPort: sess?.proxy_port ?? 1080,
-          proxyUsername: sess?.proxy_username ?? null,
-          proxyPassword: sess?.proxy_password ?? null,
-          connectionTimeout: sess?.connection_timeout ?? 30,
-          idleDisconnectMinutes: sess?.idle_disconnect_minutes ?? null,
-          agentForward: sess?.agent_forward ?? false,
-          keepaliveInterval:
-            sess?.keepalive_interval != null && String(sess.keepalive_interval).trim() !== ''
-              ? Number(sess.keepalive_interval)
-              : null,
-          serverAliveCountMax:
-            sess?.server_alive_count_max != null &&
-            String(sess.server_alive_count_max).trim() !== ''
-              ? Number(sess.server_alive_count_max)
-              : null,
-          rows: instance.terminal.rows,
-          cols: instance.terminal.cols,
-        });
+        const buildSshParams = (sess: typeof session) =>
+          buildSshConnectParams(
+            tab.sessionId,
+            sess,
+            instance.terminal.rows,
+            instance.terminal.cols,
+          );
 
         const shouldUseSavedSshConfig = (sess: typeof session): boolean =>
           !!sess && !sess._temporary;
 
         const invokeSshConnect = (sess: typeof session): Promise<void> => {
           if (shouldUseSavedSshConfig(sess)) {
+            const groupDefaultsMap = loadGroupDefaults();
+            const groupDefaults = sess?.group ? (groupDefaultsMap[sess.group] ?? null) : null;
             return invoke('ssh_connect_saved', {
               sessionId: tab.sessionId,
               rows: instance.terminal.rows,
               cols: instance.terminal.cols,
+              groupDefaults,
             });
           }
           return invoke('ssh_connect', buildSshParams(sess));
+        };
+
+        const scheduleInitCommand = (targetWriteCmd: string, cmd: string) => {
+          initScriptTimers.push(
+            setTimeout(() => {
+              initScriptCancels.push(
+                runLoginScript((d) => {
+                  invoke(targetWriteCmd, { sessionId: tab.sessionId, data: d }).catch(() => {});
+                }, cmd),
+              );
+            }, 300),
+          );
+        };
+
+        const startSessionTunnel = async (sess: NonNullable<typeof session>): Promise<void> => {
+          const tunnelReady =
+            sess.tunnel_enabled &&
+            (sess.tunnel_type === 'dynamic'
+              ? !!sess.tunnel_local_port
+              : !!(sess.tunnel_local_port && sess.tunnel_remote_host && sess.tunnel_remote_port));
+          if (!tunnelReady) return;
+          try {
+            const actualPort = await invoke<number>('start_tunnel', {
+              sessionId: tab.sessionId,
+              host: '',
+              port: 22,
+              username: '',
+              password: null,
+              privateKeyPath: null,
+              authMethod: 'none',
+              jumpHost: null,
+              jumpPort: 22,
+              jumpUsername: null,
+              jumpPassword: null,
+              jumpPrivateKeyPath: null,
+              proxyType: null,
+              proxyHost: null,
+              proxyPort: 1080,
+              proxyUsername: null,
+              proxyPassword: null,
+              localPort: sess.tunnel_local_port ?? 0,
+              // Backend expects non-null host/port; dynamic (SOCKS) ignores them.
+              remoteHost: sess.tunnel_remote_host ?? '',
+              remotePort: sess.tunnel_remote_port ?? 0,
+              tunnelType: sess.tunnel_type ?? 'local',
+            });
+            instance?.terminal.write(
+              sess.tunnel_type === 'dynamic'
+                ? `\r\n\x1b[90m${t('term_tunnel_socks_ok', { localPort: actualPort })}\x1b[0m\r\n`
+                : sess.tunnel_type === 'remote'
+                  ? `\r\n\x1b[90m${t('term_tunnel_remote_ok', { port: actualPort, host: sess.tunnel_remote_host!, localPort: sess.tunnel_remote_port! })}\x1b[0m\r\n`
+                  : `\r\n\x1b[90m${t('term_tunnel_ok', { localPort: actualPort, remoteHost: sess.tunnel_remote_host!, remotePort: sess.tunnel_remote_port! })}\x1b[0m\r\n`,
+            );
+          } catch (tunnelErr) {
+            instance?.terminal.write(
+              `\r\n\x1b[33m${t('term_tunnel_fail', { error: String(tunnelErr) })}\x1b[0m\r\n`,
+            );
+          }
         };
 
         const doSshConnect = async (sess: typeof session): Promise<void> => {
@@ -1489,21 +1464,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                 } catch (trustErr) {
                   // Backend overwrite guard refused to re-pin (MITM hardening).
                   instance?.terminal.write(`\r\n\x1b[31m[SECURITY] ${String(trustErr)}\x1b[0m\r\n`);
-                  return;
+                  throw new Error('HOST_KEY_ABORTED');
                 }
                 // Retry through the same handler: with a jump host, trusting
                 // the jump hop's key can surface the TARGET's unknown key next.
                 await doSshConnect(sess);
+                return;
               } else if (isMismatch) {
                 instance?.terminal.write(
                   `\r\n\x1b[31m[SECURITY] ${t('fp_mismatch_warning')}\x1b[0m\r\n` +
                     `\r\n\x1b[31m${t('fp_current_fingerprint', { fingerprint })}\x1b[0m\r\n` +
                     `\r\n\x1b[33m${t('fp_mismatch_hint')}\x1b[0m\r\n`,
                 );
+                throw new Error('HOST_KEY_ABORTED');
               } else {
                 instance?.terminal.write(`\r\n\x1b[33m[${t('fp_cancelled')}]\x1b[0m\r\n`);
+                throw new Error('HOST_KEY_ABORTED');
               }
-              return;
             }
             throw rawErr;
           }
@@ -1545,6 +1522,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             if (!freshSession) throw new Error('session not found in store');
             if (tab.type === 'ssh') {
               await doSshConnect(freshSession);
+              if (cancelled) return;
+              if (freshSession.init_command) {
+                scheduleInitCommand('write_to_ssh', freshSession.init_command);
+              }
+              await startSessionTunnel(freshSession);
             } else if (tab.type === 'serial') {
               if (!freshSession.serial_port) throw new Error('serial port not configured');
               await invoke('serial_open', {
@@ -1562,7 +1544,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                 // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                 serialEncoding: freshSession.serial_encoding || null,
               });
+              if (cancelled) return;
+              if (freshSession.serial_init_commands) {
+                scheduleInitCommand('write_to_serial', freshSession.serial_init_commands);
+              }
             }
+            if (cancelled) return;
             connectedTabs.add(tab.id);
             useAppStore.getState().updateTabConnected(tab.id, true);
             reconnectableTabs.delete(tab.id);
@@ -1588,10 +1575,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               }
             }
           } catch (err) {
-            instance?.terminal.write(
-              `\r\n\x1b[31m${String(err)}\x1b[0m\r\n` +
-                `\x1b[33m${t('term_press_any_key_to_reconnect')}\x1b[0m\r\n`,
-            );
+            if (cancelled) return;
+            const isHostKeyAbort = err instanceof Error && err.message === 'HOST_KEY_ABORTED';
+            if (!isHostKeyAbort) {
+              instance?.terminal.write(`\r\n\x1b[31m${String(err)}\x1b[0m\r\n`);
+            }
+            instance?.terminal.write(`\x1b[33m${t('term_press_any_key_to_reconnect')}\x1b[0m\r\n`);
             // Re-arm so a second keypress tries again.
             reconnectableTabs.add(tab.id);
           }
@@ -1629,21 +1618,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                 shellName: session?.shell_name ?? null,
                 workingDir: session?.working_dir ?? null,
                 charset: session?.charset ?? null,
+                envVars: session?.env_vars ?? null,
               });
               connectionReady = true;
               if (session?.init_command) {
-                const cmd = session.init_command;
-                initScriptTimers.push(
-                  setTimeout(() => {
-                    initScriptCancels.push(
-                      runLoginScript((d) => {
-                        invoke('write_to_pty', { sessionId: tab.sessionId, data: d }).catch(
-                          () => {},
-                        );
-                      }, cmd),
-                    );
-                  }, 300),
-                );
+                scheduleInitCommand('write_to_pty', session.init_command);
               }
             } else if (tab.type === 'ssh') {
               if (!session?.host) {
@@ -1677,18 +1656,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                 await doSshConnect(session);
                 connectionReady = true;
                 if (session.init_command) {
-                  const cmd = session.init_command;
-                  initScriptTimers.push(
-                    setTimeout(() => {
-                      initScriptCancels.push(
-                        runLoginScript((d) => {
-                          invoke('write_to_ssh', { sessionId: tab.sessionId, data: d }).catch(
-                            () => {},
-                          );
-                        }, cmd),
-                      );
-                    }, 300),
-                  );
+                  scheduleInitCommand('write_to_ssh', session.init_command);
                 }
 
                 // Resolve the completion table: a concrete override is handled
@@ -1710,55 +1678,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                   }
                 }
 
-                // Dynamic (SOCKS) only needs a local port; local/remote need the full triple.
-                const tunnelReady =
-                  session.tunnel_enabled &&
-                  (session.tunnel_type === 'dynamic'
-                    ? !!session.tunnel_local_port
-                    : !!(
-                        session.tunnel_local_port &&
-                        session.tunnel_remote_host &&
-                        session.tunnel_remote_port
-                      ));
-                if (tunnelReady) {
-                  try {
-                    const actualPort = await invoke<number>('start_tunnel', {
-                      sessionId: tab.sessionId,
-                      host: '',
-                      port: 22,
-                      username: '',
-                      password: null,
-                      privateKeyPath: null,
-                      authMethod: 'none',
-                      jumpHost: null,
-                      jumpPort: 22,
-                      jumpUsername: null,
-                      jumpPassword: null,
-                      jumpPrivateKeyPath: null,
-                      proxyType: null,
-                      proxyHost: null,
-                      proxyPort: 1080,
-                      proxyUsername: null,
-                      proxyPassword: null,
-                      localPort: session.tunnel_local_port ?? 0,
-                      // Backend expects non-null host/port; dynamic (SOCKS) ignores them.
-                      remoteHost: session.tunnel_remote_host ?? '',
-                      remotePort: session.tunnel_remote_port ?? 0,
-                      tunnelType: session.tunnel_type ?? 'local',
-                    });
-                    instance?.terminal.write(
-                      session.tunnel_type === 'dynamic'
-                        ? `\r\n\x1b[90m${t('term_tunnel_socks_ok', { localPort: actualPort })}\x1b[0m\r\n`
-                        : session.tunnel_type === 'remote'
-                          ? `\r\n\x1b[90m${t('term_tunnel_remote_ok', { port: actualPort, host: session.tunnel_remote_host!, localPort: session.tunnel_remote_port! })}\x1b[0m\r\n`
-                          : `\r\n\x1b[90m${t('term_tunnel_ok', { localPort: actualPort, remoteHost: session.tunnel_remote_host!, remotePort: session.tunnel_remote_port! })}\x1b[0m\r\n`,
-                    );
-                  } catch (tunnelErr) {
-                    instance?.terminal.write(
-                      `\r\n\x1b[33m${t('term_tunnel_fail', { error: String(tunnelErr) })}\x1b[0m\r\n`,
-                    );
-                  }
-                }
+                await startSessionTunnel(session);
               }
             } else if (tab.type === 'serial') {
               if (!session?.serial_port) {
@@ -1787,29 +1707,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                 });
                 connectionReady = true;
                 if (session.serial_init_commands) {
-                  const cmd = session.serial_init_commands;
-                  initScriptTimers.push(
-                    setTimeout(() => {
-                      initScriptCancels.push(
-                        runLoginScript((d) => {
-                          invoke('write_to_serial', { sessionId: tab.sessionId, data: d }).catch(
-                            () => {},
-                          );
-                        }, cmd),
-                      );
-                    }, 300),
-                  );
+                  scheduleInitCommand('write_to_serial', session.serial_init_commands);
                 }
               }
             } else if (tab.type === 'docker') {
               const method = session?.docker_connect_method ?? '';
               const tunnelId = session?.docker_ssh_tunnel ?? null;
+              const dockerHost = buildDockerHost(session);
               instance?.terminal.write(`\r\n\x1b[90m${t('docker_listing')}\x1b[0m\r\n`);
               let containers: { id: string; name: string; image: string; status: string }[];
               try {
                 containers = await invoke('docker_list_containers', {
                   connectMethod: method,
                   tunnelSessionId: tunnelId,
+                  dockerHost,
                 });
               } catch (err) {
                 instance?.terminal.write(`\r\n\x1b[31m${String(err)}\x1b[0m\r\n`);
@@ -1873,6 +1784,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                 cols: instance.terminal.cols,
                 connectMethod: method,
                 tunnelSessionId: tunnelId,
+                dockerHost,
               });
               connectionReady = true;
             }
@@ -1884,9 +1796,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         } catch (err) {
           connectedTabs.delete(tab.id);
           useAppStore.getState().updateTabConnected(tab.id, false);
-          instance?.terminal.write(
-            `\r\n\x1b[31m${t('term_conn_error', { error: String(err) })}\x1b[0m\r\n`,
-          );
+          const isHostKeyAbort = err instanceof Error && err.message === 'HOST_KEY_ABORTED';
+          if (!isHostKeyAbort) {
+            instance?.terminal.write(
+              `\r\n\x1b[31m${t('term_conn_error', { error: String(err) })}\x1b[0m\r\n`,
+            );
+          }
+          if (tab.type === 'ssh' || tab.type === 'serial') {
+            reconnectableTabs.add(tab.id);
+            instance?.terminal.write(`\x1b[33m${t('term_press_any_key_to_reconnect')}\x1b[0m\r\n`);
+          }
         }
       };
 
@@ -1983,7 +1902,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       // full renderer reset instead of a plain fit.
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
+          forceTerminalRedraw(tab.id, tab.sessionId, tab.type, isSshBacked());
           try {
             inst.terminal.focus();
           } catch {}
@@ -1994,7 +1913,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         inst.terminal.blur();
       } catch {}
     }
-  }, [isActive, tab.id, tab.sessionId, tab.type]);
+  }, [isActive, isSshBacked, tab.id, tab.sessionId, tab.type]);
 
   // Use ResizeObserver on the container element so that ANY size change –
   // sidebar collapse/expand, split-pane open/close, window resize, SFTP panel
@@ -2016,7 +1935,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       lastW = w;
       lastH = h;
       scheduleTerminalFit(tab.id);
-      scheduleTerminalResizeSettle(tab.id, tab.sessionId, tab.type);
+      scheduleTerminalResizeSettle(tab.id, tab.sessionId, tab.type, 180, isSshBacked());
 
       // Update cell-size CSS variables used by the ghost text overlay.
       const inst = terminalInstances.get(tab.id);
@@ -2050,7 +1969,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               inst.terminal.clearTextureAtlas();
             } catch {}
           }
-          forceTerminalRedraw(tab.id, tab.sessionId, tab.type);
+          forceTerminalRedraw(tab.id, tab.sessionId, tab.type, isSshBacked());
         }, 100);
       }
     };
@@ -2072,7 +1991,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       observer.disconnect();
       if (activeDprMedia) activeDprMedia.removeEventListener('change', handleDprChange);
     };
-  }, [tab.id, tab.sessionId, tab.type]);
+  }, [isSshBacked, tab.id, tab.sessionId, tab.type]);
 
   return (
     <>
@@ -2087,6 +2006,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           fontFamily={terminalFont}
           fontSize={parseInt(terminalFontSize) || 13}
           enabled={terminalStickyScroll}
+          terminalReady={terminalReady}
         />
       </div>
 
@@ -2099,6 +2019,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
             view={completionView}
             fontFamily={terminalFont}
             fontSize={parseInt(terminalFontSize) || 13}
+            onSelect={(idx) => {
+              const item = completionView.items[idx];
+              if (!item) return;
+              const buf = lineTrackers.get(tab.id)?.buf ?? '';
+              completionAccept.get(tab.id)?.(item.text.slice(buf.length));
+              terminalInstances.get(tab.id)?.terminal.focus();
+            }}
           />
         )}
 

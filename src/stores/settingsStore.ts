@@ -52,7 +52,7 @@ export const defaultSettings: AppSettings = {
   theme: 'dark',
   middleClickCloseTab: true,
   uiFont: 'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif',
-  enableAnimation: false,
+  enableAnimation: true,
   mouseWheelZoom: true,
   tabCloseConfirm: true,
   tabFlashAlert: true,
@@ -91,6 +91,7 @@ interface SettingsStore {
   hasSaved: boolean;
   load: () => Promise<void>;
   save: (s: AppSettings) => Promise<void>;
+  patch: (partial: Partial<AppSettings>) => Promise<void>;
 }
 
 function normalizeSettings(saved: Partial<AppSettings>): AppSettings {
@@ -165,14 +166,18 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const prev = get().settings;
     set({ settings: normalized, hasSaved: true });
     await invoke('save_app_settings', { value: JSON.stringify(normalized) });
-    // Only re-pull history when the load count actually changed; otherwise
-    // every settings save clears and reloads entries, making active
-    // completion candidates flicker.
+    // Re-pull history when sshHistoryCmd turns on or the load count changes;
+    // otherwise every settings save would clear and reload entries, making
+    // active completion candidates flicker.
     if (
       normalized.sshHistoryCmd &&
-      normalized.sshHistoryCmdLoadCount !== prev.sshHistoryCmdLoadCount
+      (!prev.sshHistoryCmd || normalized.sshHistoryCmdLoadCount !== prev.sshHistoryCmdLoadCount)
     ) {
       void commandHistory.init(parseInt(normalized.sshHistoryCmdLoadCount) || 100);
     }
+  },
+
+  patch: async (partial: Partial<AppSettings>) => {
+    await get().save({ ...get().settings, ...partial });
   },
 }));

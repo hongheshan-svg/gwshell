@@ -180,6 +180,35 @@ impl Database {
 
     // ---- Sessions ----
 
+    /// When the OS keyring is unavailable, `get_sessions` decrypts `enc:v1:...`
+    /// fields to empty strings in memory. Saving a metadata-only edit (rename,
+    /// color, group) must NOT overwrite existing on-disk ciphertexts with empty
+    /// strings, or the user's stored credentials would be permanently destroyed.
+    fn preserve_undecryptable_secrets(
+        existing: &SessionConfig,
+        incoming: &mut SessionConfig,
+        keyring_available: bool,
+    ) {
+        if keyring_available {
+            return;
+        }
+        fn keep_if_empty(existing_val: &Option<String>, incoming_val: &mut Option<String>) {
+            let incoming_empty = matches!(incoming_val.as_deref(), None | Some(""));
+            if incoming_empty {
+                if let Some(cipher) = existing_val
+                    .as_deref()
+                    .filter(|v| crate::crypto::is_encrypted(v))
+                {
+                    *incoming_val = Some(cipher.to_string());
+                }
+            }
+        }
+        keep_if_empty(&existing.password, &mut incoming.password);
+        keep_if_empty(&existing.jump_password, &mut incoming.jump_password);
+        keep_if_empty(&existing.proxy_password, &mut incoming.proxy_password);
+        keep_if_empty(&existing.totp_code, &mut incoming.totp_code);
+    }
+
     pub fn save_session(&self, config: &SessionConfig) -> Result<(), String> {
         // Encrypt secret fields before they touch disk.
         let mut config = config.clone();
@@ -193,8 +222,20 @@ impl Database {
         {
             config.totp_code = None;
         }
-        crate::crypto::encrypt_session_secrets(&mut config);
+        let keyring_available = crate::crypto::secret_storage_available();
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        if !keyring_available {
+            if let Ok(existing_json) = conn.query_row(
+                "SELECT data FROM sessions WHERE id = ?1",
+                params![config.id],
+                |row| row.get::<_, String>(0),
+            ) {
+                if let Ok(existing) = serde_json::from_str::<SessionConfig>(&existing_json) {
+                    Self::preserve_undecryptable_secrets(&existing, &mut config, false);
+                }
+            }
+        }
+        crate::crypto::encrypt_session_secrets(&mut config);
         let data = serde_json::to_string(&config).map_err(|e| e.to_string())?;
         conn.execute(
             "INSERT OR REPLACE INTO sessions (id, data) VALUES (?1, ?2)",
@@ -542,5 +583,52 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(ids.first().map(String::as_str), Some("audit-54"));
         assert_eq!(ids.last().map(String::as_str), Some("audit-5"));
+    }
+
+    #[test]
+    fn preserve_undecryptable_secrets_keeps_ciphertext_when_keyring_unavailable() {
+        let existing = SessionConfig {
+            id: "s1".to_string(),
+            name: "prod".to_string(),
+            session_type: crate::session::SessionType::Ssh,
+            password: Some("enc:v1:SECRET_PW".to_string()),
+            jump_password: Some("enc:v1:SECRET_JUMP".to_string()),
+            proxy_password: Some("enc:v1:SECRET_PROXY".to_string()),
+            totp_code: Some("enc:v1:SECRET_TOTP".to_string()),
+            ..SessionConfig::default()
+        };
+        let mut incoming = SessionConfig {
+            id: "s1".to_string(),
+            name: "prod-renamed".to_string(),
+            session_type: crate::session::SessionType::Ssh,
+            password: Some(String::new()),
+            jump_password: None,
+            proxy_password: Some(String::new()),
+            totp_code: None,
+            ..SessionConfig::default()
+        };
+
+        Database::preserve_undecryptable_secrets(&existing, &mut incoming, false);
+        assert_eq!(incoming.password.as_deref(), Some("enc:v1:SECRET_PW"));
+        assert_eq!(
+            incoming.jump_password.as_deref(),
+            Some("enc:v1:SECRET_JUMP")
+        );
+        assert_eq!(
+            incoming.proxy_password.as_deref(),
+            Some("enc:v1:SECRET_PROXY")
+        );
+        assert_eq!(incoming.totp_code.as_deref(), Some("enc:v1:SECRET_TOTP"));
+
+        // When keyring IS available, an explicit clear is honored.
+        let mut cleared = SessionConfig {
+            id: "s1".to_string(),
+            name: "prod".to_string(),
+            session_type: crate::session::SessionType::Ssh,
+            password: Some(String::new()),
+            ..SessionConfig::default()
+        };
+        Database::preserve_undecryptable_secrets(&existing, &mut cleared, true);
+        assert_eq!(cleared.password.as_deref(), Some(""));
     }
 }

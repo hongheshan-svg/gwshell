@@ -9,6 +9,7 @@ interface SftpEditorProps {
   remotePath: string;
   fileName: string;
   onClose: () => void;
+  onSaved?: () => void;
 }
 
 export const SftpEditor: React.FC<SftpEditorProps> = ({
@@ -16,6 +17,7 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({
   remotePath,
   fileName,
   onClose,
+  onSaved,
 }) => {
   const { t } = useTranslation();
   const confirm = useConfirm();
@@ -25,6 +27,7 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const gutterRef = useRef<HTMLDivElement>(null);
   // Guard against showing a confirm dialog after the editor has unmounted
   // (e.g. user navigates away while the discard-check is pending).
   const isUnmountedRef = useRef(false);
@@ -60,19 +63,20 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({
     try {
       await invoke('sftp_write_text', { sessionId, remotePath, content });
       setOriginalContent(content);
+      onSaved?.();
     } catch (err) {
       setError(String(err));
     } finally {
       setSaving(false);
     }
-  }, [sessionId, remotePath, content]);
+  }, [sessionId, remotePath, content, onSaved]);
 
   const handleRevert = () => {
     setContent(originalContent);
   };
 
   // Guard close so unsaved edits aren't silently lost via the X button.
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     void (async () => {
       if (isModified) {
         if (isUnmountedRef.current) return;
@@ -87,7 +91,18 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({
       }
       onClose();
     })();
-  };
+  }, [confirm, isModified, onClose, t]);
+
+  useEffect(() => {
+    const onWindowKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', onWindowKeyDown);
+    return () => window.removeEventListener('keydown', onWindowKeyDown);
+  }, [handleClose]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -171,7 +186,7 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({
             <div className="sftp-editor-loading">{t('sftp_loading')}</div>
           ) : (
             <div className="sftp-editor-content">
-              <div className="sftp-editor-gutter">
+              <div ref={gutterRef} className="sftp-editor-gutter">
                 {Array.from({ length: lineCount }, (_, i) => (
                   <div key={i + 1} className="sftp-editor-line-num">
                     {i + 1}
@@ -184,6 +199,11 @@ export const SftpEditor: React.FC<SftpEditorProps> = ({
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onScroll={(e) => {
+                  if (gutterRef.current) {
+                    gutterRef.current.scrollTop = e.currentTarget.scrollTop;
+                  }
+                }}
                 spellCheck={false}
                 autoFocus
               />

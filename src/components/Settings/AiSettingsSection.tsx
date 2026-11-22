@@ -34,9 +34,9 @@ export const AiSettingsSection: React.FC = () => {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<AiProviderSettings>(defaults);
   const policy = useAgentPolicyStore((s) => s.policy);
-  const setPolicy = useAgentPolicyStore((s) => s.setPolicy);
   const loadPolicy = useAgentPolicyStore((s) => s.load);
   const savePolicy = useAgentPolicyStore((s) => s.save);
+  const [policyDraft, setPolicyDraft] = useState<AgentPolicySettings>(policy);
   const [apiKey, setApiKey] = useState('');
   const [aiMessage, setAiMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [policyMessage, setPolicyMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(
@@ -49,7 +49,9 @@ export const AiSettingsSection: React.FC = () => {
     invoke<AiProviderSettings>('load_ai_provider_settings')
       .then((loaded) => setSettings({ ...defaults, ...loaded }))
       .catch((err) => setAiMessage({ kind: 'err', text: String(err) }));
-    loadPolicy().catch((err) => setPolicyMessage({ kind: 'err', text: String(err) }));
+    loadPolicy()
+      .then(() => setPolicyDraft(useAgentPolicyStore.getState().policy))
+      .catch((err) => setPolicyMessage({ kind: 'err', text: String(err) }));
   }, [loadPolicy]);
 
   const selectedPreset = useMemo(() => findAiModelPreset(settings), [settings]);
@@ -79,8 +81,10 @@ export const AiSettingsSection: React.FC = () => {
     setSettings((s) => ({ ...s, ...partial }));
     setAiMessage(null);
   };
-  const onPolicyChange = (partial: Partial<AgentPolicySettings>) =>
-    setPolicy({ ...policy, ...partial });
+  const onPolicyChange = (partial: Partial<AgentPolicySettings>) => {
+    setPolicyDraft((prev) => ({ ...prev, ...partial }));
+    setPolicyMessage(null);
+  };
 
   const normalizedSettings = (): AiProviderSettings => ({
     ...settings,
@@ -113,7 +117,7 @@ export const AiSettingsSection: React.FC = () => {
   };
 
   const save = async () => {
-    setAiMessage({ kind: 'ok', text: t('agent_ai_model_selected_save_hint') });
+    setAiMessage(null);
     try {
       setBusy(true);
       await persistAiSettings();
@@ -126,7 +130,7 @@ export const AiSettingsSection: React.FC = () => {
   };
 
   const testProvider = async () => {
-    setAiMessage({ kind: 'ok', text: t('agent_ai_model_selected_save_hint') });
+    setAiMessage(null);
     try {
       setBusy(true);
       const result = await invoke<string>('test_ai_provider_with_settings', {
@@ -145,8 +149,13 @@ export const AiSettingsSection: React.FC = () => {
     setPolicyMessage(null);
     try {
       setBusy(true);
-      await savePolicy(policy);
-      setPolicyMessage({ kind: 'ok', text: t('agent_policy_saved') });
+      const ok = await savePolicy(policyDraft);
+      if (ok) {
+        setPolicyMessage({ kind: 'ok', text: t('agent_policy_saved') });
+      } else {
+        setPolicyDraft(useAgentPolicyStore.getState().policy);
+        setPolicyMessage({ kind: 'err', text: t('toast.agentPolicySaveFailed') });
+      }
     } catch (err) {
       setPolicyMessage({ kind: 'err', text: String(err) });
     } finally {
@@ -222,7 +231,7 @@ export const AiSettingsSection: React.FC = () => {
         />
       </div>
       <AgentPolicySection
-        policy={policy}
+        policy={policyDraft}
         busy={busy}
         onChange={onPolicyChange}
         onSave={() => {

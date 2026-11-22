@@ -21,7 +21,7 @@ use aes_gcm::{
     Aes256Gcm, Key, Nonce,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use std::sync::OnceLock;
+use parking_lot::Mutex;
 
 use crate::session::SessionConfig;
 
@@ -37,12 +37,25 @@ fn random_bytes<const N: usize>() -> Option<[u8; N]> {
     Some(b)
 }
 
-/// The process-wide master key, loaded from (or created in) the OS keyring once.
-/// `None` means no keyring backend is available — callers then refuse to
-/// persist secrets (stored empty) so plaintext never reaches the database.
+/// The process-wide master key, loaded from (or created in) the OS keyring.
+/// Cached once retrieved; if an earlier read failed (e.g. locked keychain),
+/// subsequent calls retry so unlocking the OS keychain recovers automatically.
 fn master_key() -> Option<[u8; 32]> {
-    static KEY: OnceLock<Option<[u8; 32]>> = OnceLock::new();
-    *KEY.get_or_init(load_or_create_key)
+    static KEY: Mutex<Option<[u8; 32]>> = Mutex::new(None);
+    let mut guard = KEY.lock();
+    if let Some(key) = *guard {
+        return Some(key);
+    }
+    let loaded = load_or_create_key();
+    if let Some(key) = loaded {
+        *guard = Some(key);
+    }
+    loaded
+}
+
+/// Whether `value` already carries the `enc:v1:` ciphertext tag.
+pub fn is_encrypted(value: &str) -> bool {
+    value.starts_with(ENC_PREFIX)
 }
 
 /// Whether secrets can actually be encrypted at rest (i.e. an OS keyring backend

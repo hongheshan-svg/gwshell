@@ -72,6 +72,16 @@ pub async fn spawn(
         }
     }
 
+    // Best-effort SSH `env` channel requests (matching OpenSSH `SendEnv`): must
+    // be sent before `request_shell`. Servers that disallow AcceptEnv ignore them.
+    if let Some(raw_env) = params.env_vars.as_deref() {
+        for (k, v) in parse_env_vars(raw_env) {
+            if let Err(e) = channel.set_env(false, k, v).await {
+                eprintln!("[gwshell] set_env failed (continuing): {}", e);
+            }
+        }
+    }
+
     if let Err(e) = channel.request_shell(true).await {
         let _ = session
             .disconnect(russh::Disconnect::ByApplication, "", "English")
@@ -270,5 +280,44 @@ fn emit_decoded(
     let _ = decoder.decode_to_string(bytes, &mut out, last);
     if !out.is_empty() {
         let _ = app.emit(ev, out);
+    }
+}
+
+/// Parse newline-separated `KEY=VALUE` lines into `(key, value)` pairs.
+/// Ignores blank lines, `#` comments, and invalid variable names.
+pub fn parse_env_vars(raw: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let Some((k, v)) = trimmed.split_once('=') else {
+            continue;
+        };
+        let key = k.trim();
+        if key.is_empty() || !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            continue;
+        }
+        out.push((key.to_string(), v.trim().to_string()));
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_env_vars;
+
+    #[test]
+    fn parse_env_vars_filters_comments_blanks_and_invalid_keys() {
+        let input = "\n# comment\nFOO=bar\n  LANG = en_US.UTF-8 \nBAD-KEY=1\nNO_EQUALS\nA_1=x=y\n";
+        assert_eq!(
+            parse_env_vars(input),
+            vec![
+                ("FOO".to_string(), "bar".to_string()),
+                ("LANG".to_string(), "en_US.UTF-8".to_string()),
+                ("A_1".to_string(), "x=y".to_string()),
+            ]
+        );
     }
 }

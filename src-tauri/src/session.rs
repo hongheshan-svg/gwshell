@@ -81,7 +81,6 @@ pub struct SessionConfig {
 #[serde(rename_all = "lowercase")]
 pub enum SessionType {
     Ssh,
-    Sftp,
     #[serde(alias = "localshell")]
     LocalShell,
     Docker,

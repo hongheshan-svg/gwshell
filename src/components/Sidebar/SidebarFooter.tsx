@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { ScrollText, Sun, Moon, PanelLeftClose, MoreHorizontal, Settings } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 /**
  * Footer of the single sidebar. Holds primary workspace utilities:
@@ -10,17 +11,24 @@ import { useAppStore } from '../../stores/appStore';
  */
 export const SidebarFooter: React.FC = () => {
   const { t } = useTranslation();
-  const {
-    theme,
-    toggleTheme,
-    toggleSidebar,
-    activeNavItem,
-    setActiveNavItem,
-    setShowSettings,
-    showAppMenu,
-    setShowAppMenu,
-  } = useAppStore();
+  const theme = useAppStore((s) => s.theme);
+  const toggleTheme = useAppStore((s) => s.toggleTheme);
+  const toggleSidebar = useAppStore((s) => s.toggleSidebar);
+  const activeNavItem = useAppStore((s) => s.activeNavItem);
+  const setActiveNavItem = useAppStore((s) => s.setActiveNavItem);
+  const setShowSettings = useAppStore((s) => s.setShowSettings);
+  const showAppMenu = useAppStore((s) => s.showAppMenu);
+  const setShowAppMenu = useAppStore((s) => s.setShowAppMenu);
   const snippetsActive = activeNavItem === 'snippets';
+
+  const handleToggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    toggleTheme();
+    void useSettingsStore
+      .getState()
+      .patch({ theme: next })
+      .catch(() => {});
+  };
 
   return (
     <div className="sidebar-footer">
@@ -35,7 +43,7 @@ export const SidebarFooter: React.FC = () => {
       <button
         type="button"
         className="nav-icon-btn"
-        onClick={toggleTheme}
+        onClick={handleToggleTheme}
         title={t('nav_toggle_theme')}
       >
         {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}

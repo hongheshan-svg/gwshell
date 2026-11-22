@@ -120,17 +120,39 @@ async fn execute_ssh_command(
 ) -> AgentToolResult {
     match timeout(
         Duration::from_secs(EXEC_TIMEOUT_SECS),
-        ssh.ssh_exec(&target_session_id, &command),
+        ssh.ssh_exec_with_status(&target_session_id, &command),
     )
     .await
     {
-        Ok(Ok(output)) => AgentToolResult {
-            call_id,
-            ok: true,
-            output: redact_and_limit(&output),
-            error: None,
-            verification: None,
-        },
+        Ok(Ok(exec_out)) => {
+            let combined = match (exec_out.stdout.is_empty(), exec_out.stderr.is_empty()) {
+                (false, false) => format!("{}\n[stderr]\n{}", exec_out.stdout, exec_out.stderr),
+                (false, true) => exec_out.stdout,
+                (true, false) => exec_out.stderr.clone(),
+                (true, true) => String::new(),
+            };
+            let ok = exec_out.exit_code.map_or(true, |code| code == 0);
+            let error = if ok {
+                None
+            } else {
+                let code = exec_out.exit_code.unwrap_or(1);
+                if exec_out.stderr.is_empty() {
+                    Some(format!("Command exited with status {}", code))
+                } else {
+                    Some(redact_and_limit(&format!(
+                        "Command exited with status {}: {}",
+                        code, exec_out.stderr
+                    )))
+                }
+            };
+            AgentToolResult {
+                call_id,
+                ok,
+                output: redact_and_limit(&combined),
+                error,
+                verification: None,
+            }
+        }
         Ok(Err(error)) => failed_result(call_id, error),
         Err(_) => failed_result(call_id, "tool execution timed out".to_string()),
     }

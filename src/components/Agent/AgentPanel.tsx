@@ -26,7 +26,6 @@ export const AgentPanel: React.FC = () => {
   const activeSession = useAgentStore((s) => s.activeSession);
   const error = useAgentStore((s) => s.error);
   const setError = useAgentStore((s) => s.setError);
-  if (!open) return null;
 
   const cancelAgent = async () => {
     if (activeSession?.status !== 'running') return;
@@ -39,7 +38,12 @@ export const AgentPanel: React.FC = () => {
   };
 
   return (
-    <aside className="agent-panel" aria-label={t('agent_panel_title')}>
+    <aside
+      className="agent-panel"
+      aria-label={t('agent_panel_title')}
+      aria-hidden={!open}
+      style={open ? undefined : { display: 'none' }}
+    >
       <div className="agent-panel-header">
         <span>{t('agent_panel_title')}</span>
         <div className="agent-panel-header-actions">

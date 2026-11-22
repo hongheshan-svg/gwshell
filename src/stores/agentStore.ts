@@ -20,7 +20,17 @@ interface AgentStore {
   appendAnalysisText: (delta: string) => void;
   setLatestUpdate: (update: AgentAnalysisUpdate) => void;
   upsertAction: (action: AgentToolCall) => void;
+  removeAction: (actionId: string) => void;
   pushResult: (result: AgentToolResult) => void;
+  hydrateSessionState: (
+    session: AgentSessionInfo,
+    data: {
+      evidence?: AgentEvidence[];
+      latestUpdate?: AgentAnalysisUpdate | null;
+      actions?: AgentToolCall[];
+      results?: AgentToolResult[];
+    },
+  ) => void;
   setError: (error: string | null) => void;
   reset: () => void;
 }
@@ -75,7 +85,18 @@ export const useAgentStore = create<AgentStore>((set) => ({
       actions[index] = action;
       return { actions };
     }),
+  removeAction: (actionId) => set((s) => ({ actions: s.actions.filter((a) => a.id !== actionId) })),
   pushResult: (result) => set((s) => ({ results: [...s.results, result] })),
+  hydrateSessionState: (session, data) =>
+    set((s) => {
+      if (s.activeSession?.id !== session.id) return s;
+      return {
+        evidence: data.evidence ?? s.evidence,
+        latestUpdate: data.latestUpdate ?? s.latestUpdate,
+        actions: data.actions ?? s.actions,
+        results: data.results ?? s.results,
+      };
+    }),
   setError: (error) => set({ error }),
   reset: () =>
     set({

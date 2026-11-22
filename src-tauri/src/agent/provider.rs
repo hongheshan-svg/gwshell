@@ -464,7 +464,9 @@ where
     }
 
     let mut full_text = String::new();
-    let mut pending = String::new();
+    // Buffer raw bytes until `\n` so multi-byte UTF-8 characters (e.g. CJK)
+    // split across TCP packet boundaries are decoded intact instead of U+FFFD.
+    let mut pending: Vec<u8> = Vec::new();
     let mut raw_response = String::new();
     let mut finish_reason: Option<String> = None;
     let mut stream = response.bytes_stream();
@@ -478,12 +480,12 @@ where
         let chunk = chunk.map_err(|e| {
             AttemptError::new(stream_error_message(&e)).streamed(!full_text.is_empty())
         })?;
-        let chunk_text = String::from_utf8_lossy(&chunk);
-        append_response_sample(&mut raw_response, &chunk_text);
-        pending.push_str(&chunk_text);
+        pending.extend_from_slice(&chunk);
 
-        while let Some(line_end) = pending.find('\n') {
-            let line: String = pending.drain(..=line_end).collect();
+        while let Some(line_end) = pending.iter().position(|&b| b == b'\n') {
+            let line_bytes: Vec<u8> = pending.drain(..=line_end).collect();
+            let line = String::from_utf8_lossy(&line_bytes);
+            append_response_sample(&mut raw_response, &line);
             if let Some(error) = parse_openai_sse_line_error(&line) {
                 return Err(AttemptError::new(error).streamed(!full_text.is_empty()));
             }
@@ -500,13 +502,17 @@ where
         }
     }
 
-    if !pending.trim().is_empty() {
-        if let Some(error) = parse_openai_sse_line_error(&pending) {
-            return Err(AttemptError::new(error).streamed(!full_text.is_empty()));
-        }
-        for delta in parse_openai_sse_text_delta(&pending) {
-            on_delta(&delta);
-            full_text.push_str(&delta);
+    if !pending.is_empty() {
+        let tail = String::from_utf8_lossy(&pending);
+        append_response_sample(&mut raw_response, &tail);
+        if !tail.trim().is_empty() {
+            if let Some(error) = parse_openai_sse_line_error(&tail) {
+                return Err(AttemptError::new(error).streamed(!full_text.is_empty()));
+            }
+            for delta in parse_openai_sse_text_delta(&tail) {
+                on_delta(&delta);
+                full_text.push_str(&delta);
+            }
         }
     }
 
@@ -610,7 +616,8 @@ where
     let response = send_request(builder, url, should_stop).await?;
 
     let mut full_text = String::new();
-    let mut pending = String::new();
+    let mut pending: Vec<u8> = Vec::new();
+    let mut raw_response = String::new();
     let mut stop_reason: Option<String> = None;
     let mut stream = response.bytes_stream();
     loop {
@@ -623,10 +630,12 @@ where
         let chunk = chunk.map_err(|e| {
             AttemptError::new(stream_error_message(&e)).streamed(!full_text.is_empty())
         })?;
-        pending.push_str(&String::from_utf8_lossy(&chunk));
+        pending.extend_from_slice(&chunk);
 
-        while let Some(line_end) = pending.find('\n') {
-            let line: String = pending.drain(..=line_end).collect();
+        while let Some(line_end) = pending.iter().position(|&b| b == b'\n') {
+            let line_bytes: Vec<u8> = pending.drain(..=line_end).collect();
+            let line = String::from_utf8_lossy(&line_bytes);
+            append_response_sample(&mut raw_response, &line);
             if let Some(error) = parse_anthropic_sse_line_error(&line) {
                 return Err(AttemptError::new(error).streamed(!full_text.is_empty()));
             }
@@ -643,16 +652,20 @@ where
         }
     }
 
-    if !pending.trim().is_empty() {
-        if let Some(error) = parse_anthropic_sse_line_error(&pending) {
-            return Err(AttemptError::new(error).streamed(!full_text.is_empty()));
-        }
-        if let Some(reason) = parse_anthropic_sse_line_stop_reason(&pending) {
-            stop_reason = Some(reason);
-        }
-        for delta in parse_anthropic_sse_text_delta(&pending) {
-            on_delta(&delta);
-            full_text.push_str(&delta);
+    if !pending.is_empty() {
+        let tail = String::from_utf8_lossy(&pending);
+        append_response_sample(&mut raw_response, &tail);
+        if !tail.trim().is_empty() {
+            if let Some(error) = parse_anthropic_sse_line_error(&tail) {
+                return Err(AttemptError::new(error).streamed(!full_text.is_empty()));
+            }
+            if let Some(reason) = parse_anthropic_sse_line_stop_reason(&tail) {
+                stop_reason = Some(reason);
+            }
+            for delta in parse_anthropic_sse_text_delta(&tail) {
+                on_delta(&delta);
+                full_text.push_str(&delta);
+            }
         }
     }
 
@@ -675,9 +688,24 @@ where
         _ => {}
     }
     if full_text.trim().is_empty() {
+        if let Some(error) = parse_anthropic_json_error(&raw_response) {
+            return Err(AttemptError::new(error));
+        }
+        if let Some(text) = parse_anthropic_json_text(&raw_response) {
+            on_delta(&text);
+            return Ok(text);
+        }
+        if looks_like_html(&raw_response) {
+            return Err(AttemptError::new(format!(
+                "AI provider returned HTML at {}. Check Base URL and Anthropic Messages API compatibility. Body: {}",
+                url,
+                truncate_error_body(&raw_response, 300)
+            )));
+        }
         return Err(AttemptError::new(format!(
-            "AI provider returned an empty response at {}. Check the model name and that the endpoint speaks the Anthropic Messages API.",
-            url
+            "AI provider returned an empty response at {}. Check the model name and that the endpoint speaks the Anthropic Messages API. Body: {}",
+            url,
+            truncate_error_body(&raw_response, 300)
         )));
     }
     Ok(full_text)
@@ -990,6 +1018,32 @@ fn parse_anthropic_sse_line_error(line: &str) -> Option<String> {
     Some(format!("AI provider stream failed: {}", message))
 }
 
+fn parse_anthropic_json_text(raw: &str) -> Option<String> {
+    let json = serde_json::from_str::<serde_json::Value>(raw.trim()).ok()?;
+    let blocks = json.get("content")?.as_array()?;
+    let text = blocks
+        .iter()
+        .filter(|b| b.get("type").and_then(|v| v.as_str()) == Some("text"))
+        .filter_map(|b| b.get("text").and_then(|v| v.as_str()))
+        .collect::<Vec<_>>()
+        .join("");
+    (!text.trim().is_empty()).then_some(text)
+}
+
+fn parse_anthropic_json_error(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    let json = serde_json::from_str::<serde_json::Value>(trimmed).ok()?;
+    if json.get("type").and_then(|v| v.as_str()) != Some("error") && json.get("error").is_none() {
+        return None;
+    }
+    let message = describe_error_body(trimmed);
+    if message.trim().is_empty() {
+        None
+    } else {
+        Some(format!("AI provider request failed: {}", message))
+    }
+}
+
 fn effective_max_input_chars(settings: &AiProviderSettings) -> usize {
     if settings.max_input_chars == 0 {
         AiProviderSettings::default().max_input_chars
@@ -1226,6 +1280,41 @@ data: {"choices":[{"delta":{"content":" world"}}]}"#;
         let chunk = r#"data: {"choices":[{"delta":{"content":""}}]}"#;
 
         assert_eq!(parse_openai_sse_text_delta(chunk), vec![""]);
+    }
+
+    #[test]
+    fn parses_anthropic_non_streaming_json_response() {
+        let raw =
+            r#"{"id":"msg_1","type":"message","content":[{"type":"text","text":"你好世界"}]}"#;
+        assert_eq!(parse_anthropic_json_text(raw).as_deref(), Some("你好世界"));
+        assert!(parse_anthropic_json_error(raw).is_none());
+
+        let err_raw =
+            r#"{"type":"error","error":{"type":"invalid_request_error","message":"bad model"}}"#;
+        assert!(parse_anthropic_json_error(err_raw)
+            .unwrap_or_default()
+            .contains("bad model"));
+    }
+
+    #[test]
+    fn byte_buffered_sse_reassembles_split_multibyte_utf8() {
+        // Simulate splitting a 3-byte CJK character ("中" = E4 B8 AD) across two TCP chunks.
+        let full = "data: {\"choices\":[{\"delta\":{\"content\":\"中文测试\"}}]}\n".as_bytes();
+        let split_at = full.iter().position(|&b| b == 0xE4).unwrap() + 1;
+        let mut pending: Vec<u8> = Vec::new();
+        let mut collected = String::new();
+
+        for chunk in [&full[..split_at], &full[split_at..]] {
+            pending.extend_from_slice(chunk);
+            while let Some(line_end) = pending.iter().position(|&b| b == b'\n') {
+                let line_bytes: Vec<u8> = pending.drain(..=line_end).collect();
+                let line = String::from_utf8_lossy(&line_bytes);
+                if let Some(delta) = parse_openai_sse_line_text_delta(&line) {
+                    collected.push_str(&delta);
+                }
+            }
+        }
+        assert_eq!(collected, "中文测试");
     }
 
     #[test]

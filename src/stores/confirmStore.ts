@@ -20,7 +20,13 @@ export const useConfirmStore = create<ConfirmState>((set, get) => ({
   open: false,
   options: null,
   resolve: null,
-  request: (opts) => new Promise<boolean>((resolve) => set({ open: true, options: opts, resolve })),
+  request: (opts) =>
+    new Promise<boolean>((resolve) => {
+      // If a previous confirm dialog is still pending, cancel it cleanly so its
+      // awaited Promise never leaks or hangs forever.
+      get().resolve?.(false);
+      set({ open: true, options: opts, resolve });
+    }),
   respond: (ok) => {
     get().resolve?.(ok);
     set({ open: false, options: null, resolve: null });

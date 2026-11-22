@@ -17,19 +17,26 @@ const GROUP_LABELS: Record<Command['group'], [string, string]> = {
 export const CommandPalette: React.FC = () => {
   const { t } = useTranslation('gwshell');
 
-  const {
-    sessions,
-    tabs,
-    addTab,
-    setActiveTab,
-    setShowNewSession,
-    setShowQuickConnect,
-    setShowLocalTerminalModal,
-    setShowSettings,
-    toggleSidebar,
-    toggleTheme,
-    setShowCommandPalette,
-  } = useAppStore();
+  const sessions = useAppStore((s) => s.sessions);
+  const tabs = useAppStore((s) => s.tabs);
+  const addTab = useAppStore((s) => s.addTab);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const setShowNewSession = useAppStore((s) => s.setShowNewSession);
+  const setShowQuickConnect = useAppStore((s) => s.setShowQuickConnect);
+  const setShowLocalTerminalModal = useAppStore((s) => s.setShowLocalTerminalModal);
+  const setShowSettings = useAppStore((s) => s.setShowSettings);
+  const toggleSidebar = useAppStore((s) => s.toggleSidebar);
+  const toggleThemeStore = useAppStore((s) => s.toggleTheme);
+  const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
+
+  const toggleTheme = useCallback(() => {
+    const next = useAppStore.getState().theme === 'dark' ? 'light' : 'dark';
+    toggleThemeStore();
+    void useSettingsStore
+      .getState()
+      .patch({ theme: next })
+      .catch(() => {});
+  }, [toggleThemeStore]);
 
   const { settings } = useSettingsStore();
 

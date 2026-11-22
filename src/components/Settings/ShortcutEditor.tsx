@@ -39,6 +39,14 @@ export const ShortcutEditor: React.FC<ShortcutEditorProps> = ({ value, onChange 
     }
     const step = eventToStep(e.nativeEvent);
     if (!step) return; // pure modifier — keep waiting
+    // Prevent binding bare character/navigation keys without a modifier (which
+    // would hijack normal typing across every input and terminal).
+    const hasModifier = step.ctrl || step.alt || step.meta;
+    const isFunctionKey = /^F([1-9]|1[0-2])$/.test(step.key);
+    if (!hasModifier && !isFunctionKey) {
+      setError(t('shortcut_conflict'));
+      return;
+    }
     const binding = stepToBinding(step);
     if (!parseBinding(binding)) {
       setError(t('shortcut_conflict'));
@@ -66,6 +74,7 @@ export const ShortcutEditor: React.FC<ShortcutEditorProps> = ({ value, onChange 
               {capturing === a.id ? (
                 <input
                   className="shortcut-capture"
+                  data-shortcut-capture="true"
                   autoFocus
                   readOnly
                   value={t('shortcut_press_key')}

@@ -1,6 +1,8 @@
-import type { TranslationKeys } from '../i18n';
+import i18n, { type TranslationKeys } from '../i18n';
 import { destroyTerminal } from '../lib/terminalLifecycle';
 import { useAppStore } from '../stores/appStore';
+import { useConfirmStore } from '../stores/confirmStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { IS_MACOS } from '../lib/platform';
 
 export interface KeyAction {
@@ -52,13 +54,27 @@ export const KEY_ACTIONS: KeyAction[] = [
       const { activeTabId, tabs, removeTab } = useAppStore.getState();
       if (!activeTabId) return;
       const tab = tabs.find((t) => t.id === activeTabId);
-      // Destroy the xterm instance + backend listeners before removing the tab,
-      // matching the TabBar close-button path. Skip for the asset-list pseudo-tab
-      // which never has a terminal instance.
-      if (tab && tab.type !== 'asset-list') {
+      if (!tab || tab.type === 'asset-list') return;
+      const doClose = () => {
         destroyTerminal(activeTabId);
+        removeTab(activeTabId);
+      };
+      const { tabCloseConfirm } = useSettingsStore.getState().settings;
+      if (tabCloseConfirm && tab.connected) {
+        void useConfirmStore
+          .getState()
+          .request({
+            title: i18n.t('tab_close_confirm_btn'),
+            message: i18n.t('tab_close_confirm_msg'),
+            confirmLabel: i18n.t('tab_close_confirm_btn'),
+            danger: true,
+          })
+          .then((ok) => {
+            if (ok) doClose();
+          });
+        return;
       }
-      removeTab(activeTabId);
+      doClose();
     },
   },
   {
@@ -70,14 +86,19 @@ export const KEY_ACTIONS: KeyAction[] = [
   {
     id: 'agent.toggle',
     labelKey: 'settings_sc_agent',
-    defaultBinding: 'Ctrl+L',
+    defaultBinding: 'Ctrl+Shift+A',
     run: () => useAppStore.getState().toggleAgentPanel(),
   },
   {
     id: 'terminal.search',
     labelKey: 'action_terminal_search',
     defaultBinding: 'Ctrl+Shift+H',
-    run: () => useAppStore.getState().setShowTerminalSearch(true),
+    run: () => {
+      const { activeTabId, tabs, setShowTerminalSearch } = useAppStore.getState();
+      const tab = tabs.find((t) => t.id === activeTabId);
+      if (!tab || tab.type === 'asset-list') return;
+      setShowTerminalSearch(true);
+    },
   },
 ];
 

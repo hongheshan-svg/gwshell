@@ -43,6 +43,23 @@ fn make_config(p: &ConnectParams) -> Arc<client::Config> {
     // Max unanswered keepalives before disconnect; absent/None → default 3.
     let keepalive_max = p.server_alive_count_max.unwrap_or(3) as usize;
 
+    let preferred = if p.compression {
+        russh::Preferred {
+            key: host_key_preference(known_hosts::pinned_key_type(&p.host, p.port).as_deref()),
+            compression: std::borrow::Cow::Borrowed(&[
+                russh::compression::ZLIB,
+                russh::compression::ZLIB_LEGACY,
+                russh::compression::NONE,
+            ]),
+            ..russh::Preferred::DEFAULT
+        }
+    } else {
+        russh::Preferred {
+            key: host_key_preference(known_hosts::pinned_key_type(&p.host, p.port).as_deref()),
+            ..russh::Preferred::DEFAULT
+        }
+    };
+
     Arc::new(client::Config {
         inactivity_timeout: if p.idle_disconnect_minutes > 0 {
             Some(Duration::from_secs(p.idle_disconnect_minutes as u64 * 60))
@@ -52,20 +69,23 @@ fn make_config(p: &ConnectParams) -> Arc<client::Config> {
         keepalive_interval,
         keepalive_max,
         nodelay: true,
-        preferred: russh::Preferred {
-            key: host_key_preference(known_hosts::pinned_key_type(&p.host, p.port).as_deref()),
-            ..russh::Preferred::DEFAULT
-        },
+        preferred,
         ..Default::default()
     })
 }
 
 /// Establish an authenticated russh session to the target, honouring jump host
-/// and proxy settings. Returns the live Handle plus the target session's
-/// remote-forward target map (shared with that session's `Client` handler).
+/// and proxy settings. Bounds the entire handshake + auth + jump channel setup
+/// by `p.connection_timeout`.
 pub async fn establish(p: &ConnectParams) -> Result<(Handle<Client>, ForwardTargets), String> {
-    let stream = build_transport_stream(p).await?;
-    connect_over(stream, p).await
+    let secs = p.connection_timeout.max(5) as u64;
+    let work = async {
+        let stream = build_transport_stream(p).await?;
+        connect_over(stream, p).await
+    };
+    tokio::time::timeout(Duration::from_secs(secs), work)
+        .await
+        .map_err(|_| format!("SSH connection timed out after {}s", secs))?
 }
 
 async fn build_transport_stream(p: &ConnectParams) -> Result<SshStream, String> {
@@ -91,8 +111,10 @@ async fn build_transport_stream(p: &ConnectParams) -> Result<SshStream, String> 
                 .is_some_and(|s| !s.is_empty())
             {
                 "publickey".into()
-            } else {
+            } else if p.jump_password.as_deref().is_some_and(|s| !s.is_empty()) {
                 "password".into()
+            } else {
+                "agent".into()
             },
             jump_host: None,
             proxy_type: p.proxy_type.clone(),

@@ -65,8 +65,13 @@ function extractBackendCommands() {
   const commands = new Set();
   const handlerMatch = text.match(/generate_handler!\s*\[([\s\S]*?)\]\s*\)/);
   if (handlerMatch) {
-    for (const token of handlerMatch[1].match(/[A-Za-z_][A-Za-z0-9_]*/g) || []) {
-      commands.add(token);
+    for (const rawEntry of handlerMatch[1].split(',')) {
+      const cleaned = rawEntry.replace(/\/\/[^\n]*/g, '').trim();
+      if (!cleaned) continue;
+      const fnName = cleaned.split('::').pop()?.trim();
+      if (fnName && /^[A-Za-z_][A-Za-z0-9_]*$/.test(fnName)) {
+        commands.add(fnName);
+      }
     }
   }
   return [...commands].sort();

@@ -9,35 +9,54 @@ use std::time::Duration;
 /// is the backstop for `ssh_exec`/`kill_remote_process`, which don't.
 const EXEC_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Run a command on a fresh channel of an existing connection; return stdout.
-pub async fn exec(conn: &Handle<Client>, command: &str) -> Result<String, String> {
+/// Structured output from a remote exec channel (stdout, stderr, exit code).
+#[derive(Debug, Clone)]
+pub struct ExecOutput {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: Option<u32>,
+}
+
+/// Run a command on a fresh channel of an existing connection, returning
+/// stdout, stderr, and the remote exit status.
+pub async fn exec_with_status(conn: &Handle<Client>, command: &str) -> Result<ExecOutput, String> {
     let channel = conn
         .channel_open_session()
         .await
         .map_err(|e| format!("Exec channel failed: {}", e))?;
-    // russh 0.61 `Channel::exec<A: Into<Vec<u8>>>(&self, want_reply, command)`:
-    // `&str` does not implement `Into<Vec<u8>>`, but `&[u8]` does, so pass bytes.
     channel
         .exec(true, command.as_bytes())
         .await
         .map_err(|e| format!("Exec failed: {}", e))?;
     let collect = async move {
         let mut channel = channel;
-        let mut out = Vec::new();
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let mut exit_code: Option<u32> = None;
         while let Some(msg) = channel.wait().await {
             match msg {
-                ChannelMsg::Data { data } => out.extend_from_slice(&data),
-                ChannelMsg::ExtendedData { .. } => {}
-                ChannelMsg::Eof | ChannelMsg::Close => break,
+                ChannelMsg::Data { data } => stdout.extend_from_slice(&data),
+                ChannelMsg::ExtendedData { data, ext: 1 } => stderr.extend_from_slice(&data),
+                ChannelMsg::ExitStatus { exit_status } => exit_code = Some(exit_status),
+                ChannelMsg::Close => break,
                 _ => {}
             }
         }
-        out
+        ExecOutput {
+            stdout: String::from_utf8_lossy(&stdout).trim().to_string(),
+            stderr: String::from_utf8_lossy(&stderr).trim().to_string(),
+            exit_code,
+        }
     };
-    let out = tokio::time::timeout(EXEC_TIMEOUT, collect)
+    tokio::time::timeout(EXEC_TIMEOUT, collect)
         .await
-        .map_err(|_| "Exec timed out".to_string())?;
-    Ok(String::from_utf8_lossy(&out).trim().to_string())
+        .map_err(|_| "Exec timed out".to_string())
+}
+
+/// Run a command on a fresh channel of an existing connection; return stdout.
+pub async fn exec(conn: &Handle<Client>, command: &str) -> Result<String, String> {
+    let res = exec_with_status(conn, command).await?;
+    Ok(res.stdout)
 }
 
 pub async fn exec_stream<F>(

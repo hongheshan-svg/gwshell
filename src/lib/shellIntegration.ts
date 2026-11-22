@@ -180,7 +180,8 @@ function handleOsc(tabId: string, terminal: Terminal, data: string, protocol: 13
     case 'C':
       return;
     case 'D': {
-      const exitCode = args.length === 1 && args[0] !== '' ? parseInt(args[0]) : undefined;
+      const parsed = args.length >= 1 && args[0] !== '' ? parseInt(args[0], 10) : Number.NaN;
+      const exitCode = Number.isNaN(parsed) ? undefined : parsed;
       handleCommandFinished(tabId, terminal, exitCode);
       return;
     }

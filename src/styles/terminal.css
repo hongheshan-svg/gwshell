@@ -1,0 +1,795 @@
+/* ========== Terminal Container ========== */
+
+.terminal-container {
+  flex: 1;
+  display: flex;
+  background: var(--bg-primary);
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+
+.terminal-container.terminal-split-grid {
+  display: grid;
+  gap: 1px;
+  background: var(--border-color);
+}
+.terminal-split-grid.split-2 {
+  grid-template: 1fr / repeat(2, 1fr);
+}
+.terminal-split-grid.split-4 {
+  grid-template: repeat(2, 1fr) / repeat(2, 1fr);
+}
+.terminal-split-grid.split-6 {
+  grid-template: repeat(2, 1fr) / repeat(3, 1fr);
+}
+.terminal-split-grid.split-8 {
+  grid-template: repeat(2, 1fr) / repeat(4, 1fr);
+}
+
+/* Each grid cell wraps a TerminalView (.terminal-pane). */
+.terminal-pane-cell {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+.terminal-pane-cell > .terminal-pane {
+  position: absolute;
+  inset: 0;
+}
+.terminal-pane-cell.is-active-pane {
+  box-shadow: inset 0 0 0 2px var(--accent-primary);
+}
+
+.terminal-pane-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  color: var(--text-muted);
+  min-width: 0;
+  min-height: 0;
+}
+.terminal-pane-empty::after {
+  content: '—';
+  font-size: 20px;
+  opacity: 0.4;
+}
+
+.terminal-pane {
+  flex: 1;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  contain: layout paint;
+}
+
+.terminal-pane .xterm {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.terminal-pane .xterm-screen,
+.terminal-pane .xterm-viewport,
+.terminal-pane .xterm-scroll-area {
+  max-width: 100%;
+}
+
+.terminal-pane .xterm-screen canvas {
+  display: block;
+}
+
+.terminal-pane .xterm:not(.focus) .xterm-cursor,
+.terminal-pane .xterm .xterm-cursor.xterm-cursor-hidden {
+  display: none !important;
+}
+
+/* ---- Terminal AI dock ---- */
+.terminal-ai-fab {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 40;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-secondary) 86%, transparent);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.terminal-ai-fab:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--bg-tertiary) 92%, transparent);
+}
+
+.terminal-ai-dock {
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 14px;
+  z-index: 45;
+  min-height: 188px;
+  max-height: min(44vh, 430px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(var(--surface-blur));
+}
+
+.terminal-ai-topbar {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px 6px;
+}
+
+.terminal-ai-context {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.terminal-ai-chip {
+  min-width: 0;
+  max-width: min(420px, 38vw);
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.terminal-ai-chip svg {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.terminal-ai-response {
+  max-height: 170px;
+  overflow: auto;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--bg-primary) 48%, transparent);
+}
+
+.terminal-ai-response pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.terminal-ai-answer {
+  position: relative;
+}
+
+.terminal-ai-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-secondary) 86%, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.terminal-ai-answer:hover .terminal-ai-copy,
+.terminal-ai-copy:focus-visible {
+  opacity: 1;
+}
+
+.terminal-ai-copy:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-hover);
+}
+
+/* Context source chips: muted unless that context is actually attached. */
+.terminal-ai-context-tag {
+  height: 26px;
+  padding: 0 9px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-style: dashed;
+}
+
+.terminal-ai-context-tag.is-active {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-tertiary));
+}
+
+.terminal-ai-command-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
+.terminal-ai-command-title {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.terminal-ai-command-chip {
+  min-width: 0;
+  min-height: 30px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.terminal-ai-command-chip:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.terminal-ai-command-chip code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-ai-command-chip span {
+  color: var(--accent-hover);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.terminal-ai-busy-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.terminal-ai-stop {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.terminal-ai-stop:hover {
+  border-color: var(--warning);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.terminal-ai-input {
+  flex: 1 1 76px;
+  min-height: 74px;
+  width: 100%;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 10px 14px 12px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.terminal-ai-input::placeholder {
+  color: var(--text-muted);
+}
+
+.terminal-ai-toolbar {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 8px;
+  border-top: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
+}
+
+.terminal-ai-primary,
+.terminal-ai-ghost,
+.terminal-ai-model,
+.terminal-ai-icon-btn,
+.terminal-ai-send {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.terminal-ai-primary {
+  padding: 0 13px;
+  border-color: color-mix(in srgb, var(--accent-primary) 54%, var(--border-color));
+  background: var(--accent-bg);
+  color: var(--accent-hover);
+  font-weight: 600;
+}
+
+.terminal-ai-ghost {
+  padding: 0 11px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.terminal-ai-model {
+  flex: 1 1 180px;
+  min-width: 140px;
+  max-width: 260px;
+  padding: 0 12px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.terminal-ai-model span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-ai-icon-btn,
+.terminal-ai-send {
+  flex: 0 0 32px;
+  width: 32px;
+  padding: 0;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.terminal-ai-send {
+  border-color: color-mix(in srgb, var(--accent-primary) 56%, var(--border-color));
+  background: color-mix(in srgb, var(--accent-primary) 22%, var(--bg-tertiary));
+  color: var(--accent-hover);
+}
+
+.terminal-ai-model.is-ready {
+  border-color: color-mix(in srgb, var(--success) 42%, var(--border-color));
+  color: var(--text-primary);
+}
+
+.terminal-ai-model.is-ready svg {
+  color: var(--success);
+}
+
+.terminal-ai-model.is-missing {
+  border-color: color-mix(in srgb, var(--warning) 36%, var(--border-color));
+}
+
+.terminal-ai-primary:hover:not(:disabled),
+.terminal-ai-ghost:hover:not(:disabled),
+.terminal-ai-model:hover:not(:disabled),
+.terminal-ai-icon-btn:hover:not(:disabled),
+.terminal-ai-send:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  color: var(--accent-hover);
+  background: var(--bg-hover);
+}
+
+.terminal-ai-primary:disabled,
+.terminal-ai-ghost:disabled,
+.terminal-ai-model:disabled,
+.terminal-ai-icon-btn:disabled,
+.terminal-ai-send:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.terminal-ai-safe,
+.terminal-ai-count {
+  flex: 0 0 auto;
+  min-width: 28px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.terminal-ai-count {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.terminal-ai-muted,
+.terminal-ai-error {
+  display: inline-block;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.terminal-ai-muted {
+  color: var(--text-muted);
+}
+
+.terminal-ai-error {
+  color: var(--danger);
+}
+
+.terminal-ai-error-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border-color));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.terminal-ai-error-box svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+@media (max-width: 820px) {
+  .terminal-ai-dock {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    max-height: 58vh;
+  }
+
+  .terminal-ai-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .terminal-ai-model {
+    flex-basis: 100%;
+    order: 6;
+  }
+
+  .terminal-ai-chip {
+    max-width: calc(100vw - 64px);
+  }
+}
+
+/* ---- Terminal sticky scroll (VSCode terminal.integrated.stickyScroll parity) ---- */
+/* Pins the current command's prompt rows at the top of the pane while the user
+   scrolls past them. Rows sit over xterm's viewport; the right offset (12px)
+   keeps them clear of the scrollbar overwritten by the rules below. */
+.terminal-sticky-scroll {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 12px;
+  z-index: 18;
+}
+
+.terminal-sticky-scroll-rows {
+  border-bottom: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.terminal-sticky-scroll .terminal-sticky-scroll-line {
+  white-space: pre;
+  overflow: hidden;
+}
+
+.terminal-sticky-scroll.is-hovered .terminal-sticky-scroll-rows {
+  background: var(--bg-hover);
+}
+
+/* ---- Command completion dropdown ---- */
+/* Rows are exactly one terminal row tall and use the terminal font, so the
+   list reads as a continuation of the terminal. The dropdown is shifted left
+   by --completion-text-offset so item text starts under the typed line; it
+   must equal border (1) + padding-left (4) + row padding-left (8) + icon (13)
+   + gap (8). */
+.terminal-completion {
+  --completion-text-offset: 34px;
+  position: absolute;
+  z-index: 20;
+  min-width: 240px;
+  max-width: 460px;
+  max-height: calc(var(--cell-h) * 8 + 10px);
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  user-select: none;
+  animation: terminal-completion-in 80ms ease-out;
+}
+
+@keyframes terminal-completion-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-completion {
+    animation: none;
+  }
+}
+
+.terminal-completion-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--cell-h);
+  padding: 0 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* First item before any navigation: Tab accepts it, Enter still runs the
+   typed line, so it is only lightly marked. */
+.terminal-completion-row.is-default {
+  background: color-mix(in srgb, var(--bg-hover) 55%, transparent);
+}
+
+/* Chosen with ↑/↓: Enter accepts it. */
+.terminal-completion-row.is-selected {
+  background: var(--bg-hover);
+}
+
+.terminal-completion-icon {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.terminal-completion-cmd {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+/* The part already typed is muted so the part Tab would add stands out. */
+.terminal-completion-typed {
+  color: var(--text-muted);
+}
+
+.terminal-completion-desc {
+  flex: 1 1 auto;
+  margin-left: 12px;
+  text-align: right;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ---- xterm scrollbar: thin by default, expands on hover (Windows CMD style) ---- */
+
+.xterm .xterm-viewport {
+  overflow-y: hidden !important;
+}
+
+.xterm .xterm-scrollable-element > .scrollbar {
+  width: 12px !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  right: 0 !important;
+}
+
+.xterm .xterm-scrollable-element > .scrollbar > .slider {
+  width: 8px !important;
+  right: 2px !important;
+  border-radius: var(--radius-pill) !important;
+}
+
+.xterm .xterm-scrollable-element > .invisible,
+.xterm .xterm-scrollable-element > .invisible.fade,
+.xterm .xterm-scrollable-element > .visible {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.terminal-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--text-muted);
+  padding: 32px;
+}
+
+.terminal-placeholder-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+}
+
+.terminal-placeholder h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.2;
+  margin: 0;
+}
+
+.terminal-placeholder p {
+  font-size: 12px;
+  max-width: 360px;
+  text-align: center;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.quick-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.quick-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.1s linear;
+}
+
+.quick-action-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-bg);
+}
+
+.quick-action-btn span {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ========== Terminal + SFTP Wrapper ========== */
+
+.terminal-sftp-wrapper {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+  /* Anchor for the absolutely-positioned in-terminal search bar overlay. */
+  position: relative;
+}
+
+/* ========== In-terminal Search Bar ========== */
+
+.terminal-search-bar {
+  position: absolute;
+  top: 6px;
+  right: 16px;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.terminal-search-input {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: inherit;
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  font-size: 12px;
+  width: 180px;
+}
+
+.terminal-search-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 42px;
+  text-align: center;
+}
+
+.terminal-search-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+}
+
+.terminal-search-btn:hover {
+  color: inherit;
+}

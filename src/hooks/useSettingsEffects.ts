@@ -61,15 +61,8 @@ export function useSettingsEffects() {
   }, [settings.zoomLevel]);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('enable-animation', settings.enableAnimation);
+    document.documentElement.dataset.reduceMotion = settings.enableAnimation ? 'false' : 'true';
   }, [settings.enableAnimation]);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle(
-      'terminal-stripe-bg',
-      settings.terminalStripeBackground,
-    );
-  }, [settings.terminalStripeBackground]);
 
   useEffect(() => {
     const fontSize = parsePx(settings.terminalFontSize, 13);

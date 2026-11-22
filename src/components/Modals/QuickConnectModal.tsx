@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../stores/appStore';
 import { parseQuickConnect } from '../../lib/quickConnect';
+import { setTempPassword } from '../../lib/tempSecrets';
 import type { SessionConfig } from '../../types';
 
 export const QuickConnectModal: React.FC = () => {
@@ -24,6 +25,9 @@ export const QuickConnectModal: React.FC = () => {
     }
     const id = crypto.randomUUID();
     const title = parsed.username ? `${parsed.username}@${parsed.host}` : parsed.host;
+    if (password) {
+      setTempPassword(id, password);
+    }
     const cfg: SessionConfig = {
       id,
       name: target.trim(),
@@ -32,7 +36,6 @@ export const QuickConnectModal: React.FC = () => {
       port: parsed.port,
       username: parsed.username,
       auth_method: password ? 'password' : 'agent',
-      password: password || undefined,
       _temporary: true,
     };
     addTemporarySession(cfg);

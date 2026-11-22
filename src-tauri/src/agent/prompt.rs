@@ -42,17 +42,39 @@ pub fn build_user_prompt(
     )
 }
 
+fn redact_tool_result(res: &AgentToolResult) -> AgentToolResult {
+    AgentToolResult {
+        output: redact_secrets(&res.output),
+        error: res.error.as_deref().map(redact_secrets),
+        verification: res
+            .verification
+            .as_deref()
+            .map(|v| Box::new(redact_tool_result(v))),
+        ..res.clone()
+    }
+}
+
 pub fn build_continuation_prompt(
     objective: &str,
     evidence: &[AgentEvidence],
     previous_update: Option<&AgentAnalysisUpdate>,
     results: &[AgentToolResult],
 ) -> String {
-    let evidence_json = serde_json::to_string(evidence).unwrap_or_else(|_| "[]".to_string());
+    // Always redact frontend-supplied manual evidence and tool results before
+    // sending them to an external model provider.
+    let safe_evidence: Vec<AgentEvidence> = evidence
+        .iter()
+        .map(|ev| AgentEvidence {
+            body: redact_secrets(&ev.body),
+            ..ev.clone()
+        })
+        .collect();
+    let safe_results: Vec<AgentToolResult> = results.iter().map(redact_tool_result).collect();
+    let evidence_json = serde_json::to_string(&safe_evidence).unwrap_or_else(|_| "[]".to_string());
     let previous_json = previous_update
         .and_then(|update| serde_json::to_string(update).ok())
         .unwrap_or_else(|| "null".to_string());
-    let results_json = serde_json::to_string(results).unwrap_or_else(|_| "[]".to_string());
+    let results_json = serde_json::to_string(&safe_results).unwrap_or_else(|_| "[]".to_string());
     format!(
         "Continuation objective:\n{}\n\nEvidence JSON:\n{}\n\nPrevious analysis JSON:\n{}\n\nTool results JSON:\n{}\n\n{}\n\nContinue analysis from the new tool results. Return concise streamed analysis, then one final JSON object with exactly these keys: summary, findings, proposed_actions, questions.",
         objective, evidence_json, previous_json, results_json, TOOL_SCHEMA_PROMPT

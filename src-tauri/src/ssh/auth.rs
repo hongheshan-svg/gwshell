@@ -114,10 +114,21 @@ where
         .request_identities()
         .await
         .map_err(|e| format!("Agent identities failed: {}", e))?;
+    let rsa_hash = session
+        .best_supported_rsa_hash()
+        .await
+        .ok()
+        .flatten()
+        .flatten();
     for id in identities {
         let public_key = id.public_key().into_owned();
+        let hash_alg = if public_key.algorithm().is_rsa() {
+            rsa_hash
+        } else {
+            None
+        };
         if let Ok(res) = session
-            .authenticate_publickey_with(user.to_string(), public_key, None, &mut agent)
+            .authenticate_publickey_with(user.to_string(), public_key, hash_alg, &mut agent)
             .await
         {
             if res.success() {

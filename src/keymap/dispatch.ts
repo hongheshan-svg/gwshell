@@ -1,5 +1,6 @@
 import { ACTION_BY_ID, KEY_ACTIONS } from './actions';
 import { parseBinding, matchStep, type Chord } from './match';
+import { useAppStore } from '../stores/appStore';
 
 export interface ResolvedBinding {
   actionId: string;
@@ -28,6 +29,8 @@ export function createKeymapHandler(
     stepIndex: number;
     timer: ReturnType<typeof setTimeout>;
   } | null = null;
+  let cachedOverrides: Record<string, string | null> | null = null;
+  let cachedBindings: ResolvedBinding[] = [];
   const clearPending = () => {
     if (pending) {
       clearTimeout(pending.timer);
@@ -37,8 +40,23 @@ export function createKeymapHandler(
 
   return (e: KeyboardEvent) => {
     if (e.defaultPrevented) return;
+    // Never fire app-level shortcuts behind the vault lock screen or while
+    // capturing a shortcut inside Settings -> ShortcutEditor.
+    if (useAppStore.getState().vaultLocked) return;
+    if (
+      typeof document !== 'undefined' &&
+      document.activeElement instanceof HTMLElement &&
+      document.activeElement.closest('[data-shortcut-capture]')
+    ) {
+      return;
+    }
     if (e.key === 'Control' || e.key === 'Shift' || e.key === 'Alt' || e.key === 'Meta') return;
-    const bindings = resolveBindings(getOverrides());
+    const overrides = getOverrides();
+    if (overrides !== cachedOverrides) {
+      cachedOverrides = overrides;
+      cachedBindings = resolveBindings(overrides);
+    }
+    const bindings = cachedBindings;
 
     if (pending) {
       const next = pending.binding.chord[pending.stepIndex];

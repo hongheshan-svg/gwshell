@@ -56,12 +56,13 @@ export function buildCommands(ctx: CommandCtx): Command[] {
   // KEY_ACTIONS — skip palette.open itself to avoid recursion
   for (const a of KEY_ACTIONS) {
     if (a.id === 'palette.open') continue;
-    const binding = ctx.keymapOverrides[a.id] ?? a.defaultBinding;
+    const ov = ctx.keymapOverrides[a.id];
+    const binding = ov === undefined ? a.defaultBinding : ov;
     cmds.push({
       id: `action:${a.id}`,
       group: 'action',
       label: ctx.t(a.labelKey),
-      hint: fmtBinding(binding),
+      hint: binding ? fmtBinding(binding) : undefined,
       icon: iconForAction(a.id),
       run: a.run,
     });

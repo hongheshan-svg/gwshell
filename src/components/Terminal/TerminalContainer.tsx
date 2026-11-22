@@ -36,14 +36,19 @@ export const TerminalContainer: React.FC = () => {
   }
 
   const splitActive = splitCount > 1;
+  const slotIds = splitActive ? new Set(splitPanes.filter((id): id is string => id != null)) : null;
+  const offGrid = slotIds ? terminalTabs.filter((t) => !slotIds.has(t.id)) : [];
 
-  if (splitActive) {
-    const slotIds = new Set(splitPanes.filter((id): id is string => id != null));
-    // Tabs not shown in any slot must stay MOUNTED (preserve xterm) but hidden.
-    const offGrid = terminalTabs.filter((t) => !slotIds.has(t.id));
-    return (
-      <>
-        <div className={`terminal-container terminal-split-grid split-${splitCount}`}>
+  return (
+    <div
+      className={
+        splitActive
+          ? `terminal-container terminal-split-grid split-${splitCount}`
+          : 'terminal-container'
+      }
+    >
+      {splitActive ? (
+        <>
           {splitPanes.map((id, slot) => {
             if (id == null) {
               return <div key={`empty-${slot}`} className="terminal-pane-empty" />;
@@ -65,22 +70,19 @@ export const TerminalContainer: React.FC = () => {
               </div>
             );
           })}
-          <TerminalAiDock />
-        </div>
-        <div style={{ display: 'none' }}>
-          {offGrid.map((tab) => (
-            <TerminalView key={tab.id} tab={tab} isActive={false} visible={false} />
-          ))}
-        </div>
-      </>
-    );
-  }
-
-  return (
-    <div className="terminal-container">
-      {terminalTabs.map((tab) => (
-        <TerminalView key={tab.id} tab={tab} isActive={tab.id === activeTabId} />
-      ))}
+          {offGrid.length > 0 && (
+            <div style={{ display: 'none' }}>
+              {offGrid.map((tab) => (
+                <TerminalView key={tab.id} tab={tab} isActive={false} visible={false} />
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        terminalTabs.map((tab) => (
+          <TerminalView key={tab.id} tab={tab} isActive={tab.id === activeTabId} />
+        ))
+      )}
       <TerminalAiDock />
     </div>
   );

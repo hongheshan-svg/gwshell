@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentPolicySettings } from '../../../types/agent';
 
@@ -8,9 +8,33 @@ interface Props {
   onChange: (partial: Partial<AgentPolicySettings>) => void;
 }
 
+const parseLines = (raw: string) =>
+  raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
 export const PolicyAutoExecution: React.FC<Props> = ({ policy, busy, onChange }) => {
   const { t } = useTranslation();
   const [listsOpen, setListsOpen] = useState(false);
+  const [allowlistText, setAllowlistText] = useState(() =>
+    policy.auto_execute_command_allowlist.join('\n'),
+  );
+  const [denylistText, setDenylistText] = useState(() =>
+    policy.auto_execute_service_denylist.join('\n'),
+  );
+
+  // Sync draft when external policy reloads (e.g. initial async load or rollback)
+  // without clobbering active edits whose parsed items already match.
+  useEffect(() => {
+    const joined = policy.auto_execute_command_allowlist.join('\n');
+    setAllowlistText((prev) => (parseLines(prev).join('\n') === joined ? prev : joined));
+  }, [policy.auto_execute_command_allowlist]);
+
+  useEffect(() => {
+    const joined = policy.auto_execute_service_denylist.join('\n');
+    setDenylistText((prev) => (parseLines(prev).join('\n') === joined ? prev : joined));
+  }, [policy.auto_execute_service_denylist]);
   return (
     <div className="policy-card">
       <div className="policy-card-title">{t('agent_policy_card_execution')}</div>
@@ -64,15 +88,12 @@ export const PolicyAutoExecution: React.FC<Props> = ({ policy, busy, onChange })
                 className="settings-input"
                 disabled={busy}
                 style={{ width: 280, minHeight: 58 }}
-                value={policy.auto_execute_command_allowlist.join('\n')}
-                onChange={(e) =>
-                  onChange({
-                    auto_execute_command_allowlist: e.target.value
-                      .split('\n')
-                      .map((line) => line.trim())
-                      .filter(Boolean),
-                  })
-                }
+                value={allowlistText}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setAllowlistText(raw);
+                  onChange({ auto_execute_command_allowlist: parseLines(raw) });
+                }}
               />
             </span>
           </label>
@@ -86,15 +107,12 @@ export const PolicyAutoExecution: React.FC<Props> = ({ policy, busy, onChange })
                 className="settings-input"
                 disabled={busy}
                 style={{ width: 280, minHeight: 58 }}
-                value={policy.auto_execute_service_denylist.join('\n')}
-                onChange={(e) =>
-                  onChange({
-                    auto_execute_service_denylist: e.target.value
-                      .split('\n')
-                      .map((line) => line.trim())
-                      .filter(Boolean),
-                  })
-                }
+                value={denylistText}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setDenylistText(raw);
+                  onChange({ auto_execute_service_denylist: parseLines(raw) });
+                }}
               />
             </span>
           </label>

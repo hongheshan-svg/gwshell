@@ -5,6 +5,7 @@ import type { SessionConfig, TabInfo, ThemeMode, MainView } from '../types';
 import i18n, { detectLocale, type Locale } from '../i18n';
 import { useToastStore } from './toastStore';
 import { buildSplitPanes, clearSlot, fillFirstEmpty } from '../lib/splitLayout';
+import { clearTempPassword } from '../lib/tempSecrets';
 
 export interface DockerContainer {
   id: string;
@@ -75,6 +76,7 @@ interface AppStore {
   setShowTerminalSearch: (show: boolean) => void;
   editingSession: SessionConfig | null;
   setEditingSession: (session: SessionConfig | null) => void;
+  openEditSession: (session: SessionConfig) => void;
   showDockerModal: boolean;
   setShowDockerModal: (show: boolean) => void;
   showLocalTerminalModal: boolean;
@@ -199,7 +201,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
       });
     });
   },
-  addTemporarySession: (session) => set((state) => ({ sessions: [...state.sessions, session] })),
+  addTemporarySession: (session) =>
+    set((state) => ({ sessions: [...state.sessions, redactSessionSecrets(session)] })),
   removeSession: (id) => {
     // Capture the removed session so it can be restored if the backend delete
     // fails (otherwise the UI shows it gone but it reappears after restart).
@@ -294,6 +297,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           // Only remove if no other tab uses this session
           const otherTabUsing = newTabs.some((t) => t.sessionId === closedTab.sessionId);
           if (!otherTabUsing) {
+            clearTempPassword(closedTab.sessionId);
             newSessions = state.sessions.filter((s) => s.id !== closedTab.sessionId);
           }
         }
@@ -363,6 +367,22 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setShowTerminalSearch: (show) => set({ showTerminalSearch: show }),
   editingSession: null,
   setEditingSession: (session) => set({ editingSession: session }),
+  openEditSession: (session) => {
+    switch (session.session_type) {
+      case 'serial':
+        set({ editingSession: session, showSerialModal: true });
+        break;
+      case 'localshell':
+        set({ editingSession: session, showLocalTerminalModal: true });
+        break;
+      case 'docker':
+        set({ editingSession: session, showDockerModal: true });
+        break;
+      default:
+        set({ editingSession: session, showNewSession: true });
+        break;
+    }
+  },
   showDockerModal: false,
   setShowDockerModal: (show) => set({ showDockerModal: show }),
   showLocalTerminalModal: false,

@@ -14,6 +14,7 @@ mod transport;
 
 pub use known_hosts::trust_host;
 pub use params::ConnectParams;
+pub(crate) use session::parse_env_vars;
 pub use sftp::{is_safe_local_file_name, ProgressFn, SftpEntry};
 
 use crate::ssh::handler::{Client, ForwardTargets};
@@ -111,8 +112,11 @@ impl SshManager {
     }
 
     /// Remove and gracefully close a session already in the map (if any).
-    /// Used before inserting a replacement so the old connection/tasks don't leak.
+    /// Also tears down any local/SOCKS forwards tied to this session so
+    /// reconnects never leak listening sockets.
     async fn close_existing(&self, session_id: &str) {
+        self.close_local_forward(session_id).await;
+        self.close_socks_forward(session_id).await;
         if let Some(old) = self.sessions.lock().await.remove(session_id) {
             let _ = old.shell.send(ShellCmd::Close).await;
         }
@@ -181,6 +185,21 @@ impl SshManager {
             Some(conn) => exec::exec(&conn, command).await,
             None => Err("Session not found".into()),
         }
+    }
+
+    pub async fn ssh_exec_with_status(
+        &self,
+        session_id: &str,
+        command: &str,
+    ) -> Result<exec::ExecOutput, String> {
+        let conn = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|s| s.conn.clone())
+            .ok_or("Session not found")?;
+        exec::exec_with_status(&conn, command).await
     }
 
     pub async fn ssh_exec_stream<F>(

@@ -31,6 +31,7 @@ const DEFAULT_DURATION_MS: Record<ToastKind, number> = {
 };
 
 let toastSeq = 0;
+const toastTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
@@ -39,12 +40,25 @@ export const useToastStore = create<ToastState>((set) => ({
     const duration = toast.durationMs ?? DEFAULT_DURATION_MS[toast.kind];
     set((state) => ({ toasts: [...state.toasts, { ...toast, id }] }));
     if (duration > 0) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
+        toastTimers.delete(id);
         set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }));
       }, duration);
+      toastTimers.set(id, timer);
     }
     return id;
   },
-  dismissToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
-  clear: () => set({ toasts: [] }),
+  dismissToast: (id) => {
+    const timer = toastTimers.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      toastTimers.delete(id);
+    }
+    set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }));
+  },
+  clear: () => {
+    for (const timer of toastTimers.values()) clearTimeout(timer);
+    toastTimers.clear();
+    set({ toasts: [] });
+  },
 }));

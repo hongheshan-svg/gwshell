@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentPolicySettings } from '../../../types/agent';
 
@@ -8,9 +8,22 @@ interface Props {
   onChange: (partial: Partial<AgentPolicySettings>) => void;
 }
 
+const parseKeywords = (raw: string) =>
+  raw
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
 export const PolicyAlerts: React.FC<Props> = ({ policy, busy, onChange }) => {
   const { t } = useTranslation();
   const keywordDisabled = busy || !policy.log_filter_enabled;
+  const [keywordsText, setKeywordsText] = useState(() => policy.log_interest_keywords.join(', '));
+
+  useEffect(() => {
+    const joined = policy.log_interest_keywords.join(', ');
+    setKeywordsText((prev) => (parseKeywords(prev).join(', ') === joined ? prev : joined));
+  }, [policy.log_interest_keywords]);
+
   return (
     <div className="policy-card">
       <div className="policy-card-title">{t('agent_policy_card_alerts')}</div>
@@ -38,15 +51,12 @@ export const PolicyAlerts: React.FC<Props> = ({ policy, busy, onChange }) => {
             className="settings-input"
             disabled={keywordDisabled}
             style={{ width: 280 }}
-            value={policy.log_interest_keywords.join(', ')}
-            onChange={(e) =>
-              onChange({
-                log_interest_keywords: e.target.value
-                  .split(',')
-                  .map((item) => item.trim())
-                  .filter(Boolean),
-              })
-            }
+            value={keywordsText}
+            onChange={(e) => {
+              const raw = e.target.value;
+              setKeywordsText(raw);
+              onChange({ log_interest_keywords: parseKeywords(raw) });
+            }}
           />
         </span>
       </div>
@@ -88,21 +98,6 @@ export const PolicyAlerts: React.FC<Props> = ({ policy, busy, onChange }) => {
           />
         </span>
       </div>
-      <label className="settings-row">
-        <span className="settings-row-left">
-          <span className="settings-label">{t('agent_policy_alert_auto_start')}</span>
-        </span>
-        <span className="settings-row-right">
-          <button
-            className={`settings-toggle ${policy.alert_auto_start_agent ? 'on' : ''}`}
-            disabled={busy}
-            onClick={() => onChange({ alert_auto_start_agent: !policy.alert_auto_start_agent })}
-            type="button"
-          >
-            <span className="settings-toggle-knob" />
-          </button>
-        </span>
-      </label>
     </div>
   );
 };
