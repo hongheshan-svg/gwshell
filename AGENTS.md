@@ -8,7 +8,7 @@ Tauri 2 desktop app: React 19 + TypeScript 5.8 + Vite 7 frontend, Rust backend. 
 
 ## Commands & verification order
 
-CI (`.github/workflows/ci.yml`) runs this exact sequence — match it locally before pushing:
+CI (`.github/workflows/ci.yml`) runs these steps plus the lint, format and test steps below; `npm run ci:check` reproduces the whole frontend job locally:
 
 1. `npm ci` — install. **Requires `.npmrc`**: `legacy-peer-deps=true` (xterm 6 + addon betas have mismatched peer deps) and a pinned `registry=https://registry.npmjs.org/`. Do not regenerate the lockfile with a personal mirror — a previous lockfile pinned a CN mirror and broke CI on US runners.
 2. `npm run build` — `tsc` strict typecheck + `vite build`, emits `../dist`. **`cargo check` will fail without this**, because tauri's `build.rs` requires `../dist` to exist.
@@ -30,7 +30,7 @@ before every commit:
 - `npm run lint` — ESLint on `src/`, `--max-warnings 0`.
 - `npm run format:check` — Prettier check (CI fails if unformatted).
 - `cd src-tauri && cargo fmt --check` — Rust formatting check.
-- `cd src-tauri && cargo clippy -- -D warnings` — Clippy strict.
+- `cd src-tauri && cargo clippy --all-targets -- -D warnings` — Clippy strict, test code included.
 
 Auto-fix locally with `npm run lint:fix`, `npm run format`, `cargo fmt`.
 
@@ -39,12 +39,7 @@ Enable locally: `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
 
 ## Tests
 
-There is no Vitest/Jest runner. Tests are standalone Node scripts run directly:
-
-- `node scripts/test-completion.mjs`
-- `node scripts/test-split-layout.mjs`
-
-Both transpile TS in-memory via the `typescript` package; no build step needed.
+There is no Vitest/Jest runner. Tests are standalone Node scripts in `scripts/`; `npm run test:node` runs all of them (its definition in `package.json` is the list). The `test-*.mjs` scripts transpile TS in-memory via the `typescript` package, so no build step is needed.
 
 Rust unit/integration tests: `cd src-tauri && cargo test`. Integration tests live in `src-tauri/tests/` (e.g. `tests/migrations.rs` exercises the refinery migration path).
 
@@ -61,7 +56,7 @@ To add a schema change:
 
 Never edit an existing migration file - always add a new one. refinery checksums each file at build time via `embed_migrations!`; editing an applied migration triggers a `DivergentVersion` error because the on-disk row's checksum no longer matches.
 
-The `Database::migrate_to_v001_baseline` helper in `database.rs` handles the one-time upgrade of pre-refinery (v0.5.5) databases: it detects databases that have a `sessions` table but no `refinery_schema_history`, inserts a V001 row with the exact checksum refinery would compute, and lets refinery skip V001 (treating it as already applied). Do not modify it - it is a one-shot bootstrap for the v0.5.5 -> v0.6.0 upgrade path and will never run on databases created after this change.
+The `Database::migrate_to_v001_baseline` helper in `database.rs` handles the one-time upgrade of pre-refinery (v0.5.5) databases: it detects databases that have a `sessions` table but no `refinery_schema_history`, inserts a V001 row with the exact checksum refinery would compute, and lets refinery skip V001 (treating it as already applied). Do not modify it - it is a one-shot bootstrap for the v0.5.5 -> v0.6.0 upgrade path and never runs on databases created by v0.6.0 or later.
 
 ## Architecture notes (not obvious from filenames)
 

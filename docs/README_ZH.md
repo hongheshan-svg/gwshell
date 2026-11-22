@@ -97,7 +97,7 @@
 ### 前置条件
 
 - [Node.js](https://nodejs.org/) 20+
-- [Rust](https://rustup.rs/) 1.80+
+- [Rust](https://rustup.rs/) 1.92+
 - 平台特定依赖（参考 [Tauri 前置条件](https://v2.tauri.app/start/prerequisites/)）
 
 ### 步骤

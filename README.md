@@ -97,7 +97,7 @@
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) 20+
-- [Rust](https://rustup.rs/) 1.80+
+- [Rust](https://rustup.rs/) 1.92+
 - Platform-specific dependencies (see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/))
 
 ### Steps
