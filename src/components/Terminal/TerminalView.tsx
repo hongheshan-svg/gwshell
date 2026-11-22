@@ -17,6 +17,12 @@ import { runLoginScript } from '../../lib/sendScript';
 import { applyGroupDefaults, loadGroupDefaults } from '../../lib/groupDefaults';
 import { buildCompletions, type Completion } from '../../lib/completion';
 import {
+  applyInput,
+  createLineTracker,
+  dropdownColumn,
+  readBufferRange,
+} from '../../lib/inputLineTracker';
+import {
   listenTypedEvent,
   type DockerPickPayload,
   type DockerCancelPayload,
@@ -35,8 +41,10 @@ import {
   cellSize,
 } from '../../lib/terminalPlatform';
 import {
-  inputBuffers,
+  lineTrackers,
   completionSetters,
+  HIDDEN_COMPLETIONS,
+  type CompletionView,
   completionAccept,
   tabCwd,
   remoteOsCache,
@@ -45,7 +53,6 @@ import {
   tabCompletionIdx,
   completionNav,
   tabInputSenders,
-  bracketedPaste,
   awaitingPassword,
   awaitingPasswordTimer,
   tabCommandTable,
@@ -95,6 +102,38 @@ import type { FingerprintInfo, TerminalContextMenuState } from './types';
 import i18n from '../../i18n';
 import '@xterm/xterm/css/xterm.css';
 
+/**
+ * Show `items` in a tab's completion dropdown (or hide it when empty). The
+ * dropdown is anchored to where the typed line starts rather than to the
+ * cursor, so it stays still while typing and its items line up under the line.
+ */
+function paintCompletions(
+  tabId: string,
+  items: Completion[],
+  index: number,
+  navigated: boolean,
+): void {
+  const setter = completionSetters.get(tabId);
+  if (!setter) return;
+  const term = terminalInstances.get(tabId)?.terminal;
+  if (items.length === 0 || !term) {
+    setter(HIDDEN_COMPLETIONS);
+    return;
+  }
+  const b = term.buffer.active;
+  const tracker = lineTrackers.get(tabId);
+  const x = dropdownColumn(tracker?.anchor ?? null, { row: b.baseY + b.cursorY, col: b.cursorX });
+  const above = b.cursorY > term.rows - estimateDropdownRows(items) - 1;
+  setter({ items, index, navigated, x, y: b.cursorY, above, typedLen: tracker?.buf.length ?? 0 });
+}
+
+function hideCompletions(tabId: string): void {
+  tabCompletions.set(tabId, []);
+  tabCompletionIdx.set(tabId, 0);
+  completionNav.set(tabId, false);
+  paintCompletions(tabId, [], 0, false);
+}
+
 interface TerminalViewProps {
   tab: TabInfo;
   isActive: boolean;
@@ -120,11 +159,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
   const selectionSnapshotRef = useRef('');
 
   useEffect(() => {
-    completionSetters.set(tab.id, (items, index, x, y, above) => {
-      setCompletionItems(items);
-      setCompletionIndex(index);
-      setCompletionPos({ x, y, above });
-    });
+    completionSetters.set(tab.id, setCompletionView);
     return () => {
       completionSetters.delete(tab.id);
     };
@@ -132,9 +167,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
 
   const [fingerprintInfo, setFingerprintInfo] = useState<FingerprintInfo | null>(null);
   const [contextMenu, setContextMenu] = useState<TerminalContextMenuState | null>(null);
-  const [completionItems, setCompletionItems] = useState<Completion[]>([]);
-  const [completionIndex, setCompletionIndex] = useState(0);
-  const [completionPos, setCompletionPos] = useState({ x: 0, y: 0, above: false });
+  const [completionView, setCompletionView] = useState<CompletionView>(HIDDEN_COMPLETIONS);
   const [pasteConfirm, setPasteConfirm] = useState<string | null>(null);
   const fingerprintResolveRef = useRef<(accepted: boolean) => void>(() => {});
 
@@ -503,21 +536,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
 
             if (items.length > 0) {
               const idx = tabCompletionIdx.get(tab.id) ?? 0;
-              const buf = inputBuffers.get(tab.id) ?? '';
+              const buf = lineTrackers.get(tab.id)?.buf ?? '';
 
               const accept = (i: number): false => {
                 e.preventDefault();
                 completionAccept.get(tab.id)?.(items[i].text.slice(buf.length));
                 return false;
-              };
-
-              const repaint = (i: number) => {
-                const inst = terminalInstances.get(tab.id);
-                const cx = inst?.terminal.buffer.active.cursorX ?? 0;
-                const cy = inst?.terminal.buffer.active.cursorY ?? 0;
-                const rows = inst?.terminal.rows ?? 24;
-                const above = cy > rows - estimateDropdownRows(items) - 1;
-                completionSetters.get(tab.id)?.(items, i, cx, cy, above);
               };
 
               // Accept with Tab / →
@@ -528,10 +552,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               // Dismiss with Esc
               if (e.key === 'Escape') {
                 e.preventDefault();
-                tabCompletions.set(tab.id, []);
-                tabCompletionIdx.set(tab.id, 0);
-                completionNav.set(tab.id, false);
-                completionSetters.get(tab.id)?.([], 0, 0, 0, false);
+                hideCompletions(tab.id);
                 return false;
               }
 
@@ -544,7 +565,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                 const ni = next ? (idx + 1) % n : (idx - 1 + n) % n;
                 tabCompletionIdx.set(tab.id, ni);
                 completionNav.set(tab.id, true);
-                repaint(ni);
+                paintCompletions(tab.id, items, ni, true);
                 return false;
               }
 
@@ -1115,62 +1136,30 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               const scope = st.cmdHintScopeByHost ? tabScope(tab.type, sess) : '';
               const cwd = st.cmdHintScopeByHost ? (tabCwd.get(tab.id) ?? '') : '';
               const sessionType = tab.type;
+              const table = tabCommandTable.get(tab.id) ?? syncTable(tab.type, sess);
 
-              let buf = inputBuffers.get(tab.id) ?? '';
-              const setter = completionSetters.get(tab.id);
-              const inst = terminalInstances.get(tab.id);
-              const cursorX = inst?.terminal.buffer.active.cursorX ?? 0;
-              const cursorY = inst?.terminal.buffer.active.cursorY ?? 0;
-              const rows = inst?.terminal.rows ?? 24;
-              const locale = i18n.language?.startsWith('zh') ? 'zh' : 'en';
+              let tracker = lineTrackers.get(tab.id);
+              if (!tracker) {
+                tracker = createLineTracker();
+                lineTrackers.set(tab.id, tracker);
+              }
+              const buffer = terminalInstances.get(tab.id)?.terminal.buffer.active;
+              const result = applyInput(tracker, data, {
+                cursor: () => ({
+                  row: (buffer?.baseY ?? 0) + (buffer?.cursorY ?? 0),
+                  col: buffer?.cursorX ?? 0,
+                }),
+                readLine: (from, to) => (buffer ? readBufferRange(buffer, from, to) : null),
+                caseInsensitive: table !== 'unix',
+                alternateScreen: buffer?.type === 'alternate',
+              });
 
-              const showCompletions = () => {
-                // No completions while hints are off (the dropdown isn't
-                // rendered, so a list here would only hijack Tab/↑/↓), nor
-                // while the terminal is awaiting a password — the buffer
-                // holds a secret, not a command.
-                if (!st.terminalCmdHint || awaitingPassword.get(tab.id)) {
-                  hideCompletions();
-                  return;
-                }
-                const table = tabCommandTable.get(tab.id) ?? syncTable(tab.type, sess);
-                const items = buildCompletions(buf, { scope, cwd, sessionType, table }, locale);
-                tabCompletions.set(tab.id, items);
-                tabCompletionIdx.set(tab.id, 0);
-                completionNav.set(tab.id, false);
-                const above = cursorY > rows - estimateDropdownRows(items) - 1;
-                setter?.(items, 0, cursorX, cursorY, above);
-              };
-              const hideCompletions = () => {
-                tabCompletions.set(tab.id, []);
-                tabCompletionIdx.set(tab.id, 0);
-                completionNav.set(tab.id, false);
-                setter?.([], 0, 0, 0, false);
-              };
-
-              // Bracketed paste: buffer the pasted content into the line, hide completions.
-              if (data.includes('\x1b[200~')) bracketedPaste.set(tab.id, true);
-              if (bracketedPaste.get(tab.id)) {
-                const end = data.indexOf('\x1b[201~');
-                // eslint-disable-next-line no-control-regex -- ANSI bracketed-paste markers, control chars intentional
-                const chunk = (end >= 0 ? data.slice(0, end) : data).replace(/\x1b\[200~/g, '');
-                buf += chunk;
-                if (end >= 0) {
-                  bracketedPaste.set(tab.id, false);
-                  // The pasted content (often multi-line) is not a reliable
-                  // command prefix — reset buf so the next keystroke starts a
-                  // fresh completion context instead of matching against the
-                  // whole paste blob.
-                  buf = '';
-                }
-                hideCompletions();
-              } else if (data === '\r' || data === '\n') {
-                const trimmed = buf.trim();
-                // Record command history on Enter (heuristic capture) — but NOT
-                // when the preceding output was a password prompt: the "command"
-                // here is actually a secret being typed into sudo/su/mysql/etc.
-                if (trimmed.length > 0 && !awaitingPassword.get(tab.id)) {
-                  commandHistory.record(trimmed, { scope, cwd, sessionType });
+              if (data === '\r' || data === '\n') {
+                // Record on Enter — but NOT when the preceding output was a
+                // password prompt: the "command" here is actually a secret
+                // being typed into sudo/su/mysql/etc.
+                if (result.submitted && !awaitingPassword.get(tab.id)) {
+                  commandHistory.record(result.submitted.trim(), { scope, cwd, sessionType });
                 }
                 const apT = awaitingPasswordTimer.get(tab.id);
                 if (apT) {
@@ -1178,52 +1167,26 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
                   awaitingPasswordTimer.delete(tab.id);
                 }
                 awaitingPassword.delete(tab.id);
-                buf = '';
-                hideCompletions();
-              } else if (data === '\x7f' || data === '\b') {
-                // Backspace — delete by code point so surrogate pairs (emoji,
-                // CJK outside the BMP) aren't split into half a character.
-                buf = Array.from(buf).slice(0, -1).join('');
-                if (buf.length > 0) showCompletions();
-                else hideCompletions();
-              } else if (data === '\x17') {
-                // Ctrl+W — delete the previous word
-                buf = buf.replace(/\s*\S+\s*$/, '');
-                if (buf.length > 0) showCompletions();
-                else hideCompletions();
-              } else if (data === '\x15' || data === '\x0b' || data === '\x0c') {
-                // Ctrl+U (kill line) / Ctrl+K (kill to EOL) / Ctrl+L (clear screen)
-                // all change the line in a way the tracked buf can't reflect, so
-                // reset it and disable completions until the next fresh line.
-                buf = '';
-                hideCompletions();
-              } else if (
-                data === '\x1b[A' ||
-                data === '\x1b[B' ||
-                data === '\x1b[C' ||
-                data === '\x1b[D' ||
-                data === '\x1b[H' ||
-                data === '\x1b[F' ||
-                data === '\x01' ||
-                data === '\x05'
-              ) {
-                // Arrows / Home / End / Ctrl-A / Ctrl-E — cursor moves: the tracked
-                // buf can no longer reflect the real line (insertion point moved),
-                // so reset it and disable completions until the next full line.
-                // Otherwise backspace would delete the wrong position and Enter
-                // would record a command that doesn't match what actually ran.
-                buf = '';
-                inputBuffers.set(tab.id, buf);
-                hideCompletions();
-              } else if (data.startsWith('\x1b')) {
-                // Other escape sequences — hide the dropdown.
-                hideCompletions();
-              } else if (data.length >= 1 && data.charCodeAt(0) >= 0x20) {
-                // Printable text (single char or multi-char without bracketed markers).
-                buf += data;
-                showCompletions();
               }
-              inputBuffers.set(tab.id, buf);
+
+              // Suggestions need the hint setting on, and never while the
+              // terminal is awaiting a password (the line holds a secret).
+              if (!st.terminalCmdHint || awaitingPassword.get(tab.id)) {
+                if ((tabCompletions.get(tab.id)?.length ?? 0) > 0) hideCompletions(tab.id);
+              } else if (result.effect === 'show') {
+                const locale = i18n.language?.startsWith('zh') ? 'zh' : 'en';
+                const items = buildCompletions(
+                  tracker.buf,
+                  { scope, cwd, sessionType, table },
+                  locale,
+                );
+                tabCompletions.set(tab.id, items);
+                tabCompletionIdx.set(tab.id, 0);
+                completionNav.set(tab.id, false);
+                paintCompletions(tab.id, items, 0, false);
+              } else if (result.effect === 'hide') {
+                hideCompletions(tab.id);
+              }
             }
           }
 
@@ -1264,12 +1227,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         if (isInteractiveTerminal(tab.type)) {
           completionAccept.set(tab.id, (suffix: string) => {
             if (writeDisposed) return;
-            const buf = (inputBuffers.get(tab.id) ?? '') + suffix;
-            inputBuffers.set(tab.id, buf);
-            tabCompletions.set(tab.id, []);
-            tabCompletionIdx.set(tab.id, 0);
-            completionNav.set(tab.id, false);
-            completionSetters.get(tab.id)?.([], 0, 0, 0, false);
+            // Completions are only offered on a tracked line, so the accepted
+            // text is exactly what the shell will now hold.
+            const tracker = lineTrackers.get(tab.id);
+            if (tracker) tracker.buf += suffix;
+            hideCompletions(tab.id);
             writeQueue += suffix;
             if (writeQueue.length >= WRITE_CHUNK_SIZE) {
               if (writeTimer) {
@@ -1428,7 +1390,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           tabCompletions.delete(tab.id);
           tabCompletionIdx.delete(tab.id);
           completionNav.delete(tab.id);
-          bracketedPaste.delete(tab.id);
+          const lineTracker = lineTrackers.get(tab.id);
+          if (lineTracker) {
+            lineTracker.inPaste = false;
+            lineTracker.pasteBuf = '';
+          }
           const apT = awaitingPasswordTimer.get(tab.id);
           if (apT) {
             clearTimeout(apT);
@@ -1558,8 +1524,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           tabCompletions.delete(tab.id);
           tabCompletionIdx.delete(tab.id);
           completionNav.delete(tab.id);
-          inputBuffers.set(tab.id, '');
-          bracketedPaste.delete(tab.id);
+          lineTrackers.delete(tab.id);
           const apTimer = awaitingPasswordTimer.get(tab.id);
           if (apTimer) {
             clearTimeout(apTimer);
@@ -2126,16 +2091,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       </div>
 
       {/* NOTE: in 2-pane split mode the completion dropdown anchors to the terminal-container, so when the active pane is the right column the hint can be offset. Known limitation (command hints are off by default); proper fix needs a per-pane positioned wrapper. */}
-      {completionItems.length > 0 &&
+      {completionView.items.length > 0 &&
         isActive &&
         terminalCmdHint &&
         isInteractiveTerminal(tab.type) && (
           <CompletionDropdown
-            items={completionItems}
-            selectedIndex={completionIndex}
-            x={completionPos.x}
-            y={completionPos.y}
-            placeAbove={completionPos.above}
+            view={completionView}
             fontFamily={terminalFont}
             fontSize={parseInt(terminalFontSize) || 13}
           />

@@ -1148,12 +1148,18 @@ button {
 }
 
 /* ---- Command completion dropdown ---- */
+/* Rows are exactly one terminal row tall and use the terminal font, so the
+   list reads as a continuation of the terminal. The dropdown is shifted left
+   by --completion-text-offset so item text starts under the typed line; it
+   must equal border (1) + padding-left (4) + row padding-left (8) + icon (13)
+   + gap (8). */
 .terminal-completion {
+  --completion-text-offset: 34px;
   position: absolute;
   z-index: 20;
   min-width: 240px;
   max-width: 460px;
-  max-height: calc(var(--cell-h) * 9); /* 8 items + partial scroll peek */
+  max-height: calc(var(--cell-h) * 8 + 10px);
   overflow-y: auto;
   padding: 4px;
   background: var(--bg-secondary);
@@ -1161,17 +1167,38 @@ button {
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
   user-select: none;
+  animation: terminal-completion-in 80ms ease-out;
+}
+
+@keyframes terminal-completion-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-completion {
+    animation: none;
+  }
 }
 
 .terminal-completion-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 8px;
-  border-radius: 5px;
+  height: var(--cell-h);
+  padding: 0 8px;
+  border-radius: 4px;
   white-space: nowrap;
 }
 
+/* First item before any navigation: Tab accepts it, Enter still runs the
+   typed line, so it is only lightly marked. */
+.terminal-completion-row.is-default {
+  background: color-mix(in srgb, var(--bg-hover) 55%, transparent);
+}
+
+/* Chosen with ↑/↓: Enter accepts it. */
 .terminal-completion-row.is-selected {
   background: var(--bg-hover);
 }
@@ -1182,8 +1209,17 @@ button {
 }
 
 .terminal-completion-cmd {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1;
   color: var(--text-primary);
+}
+
+/* The part already typed is muted so the part Tab would add stands out. */
+.terminal-completion-typed {
+  color: var(--text-muted);
 }
 
 .terminal-completion-desc {
@@ -1192,6 +1228,7 @@ button {
   text-align: right;
   color: var(--text-muted);
   font-size: 12px;
+  line-height: 1;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
