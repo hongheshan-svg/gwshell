@@ -492,7 +492,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
 
           // Completion dropdown: navigate (↑/↓/Ctrl-N/Ctrl-P), accept (Tab/→),
           // dismiss (Esc), smart Enter (accept only if the user navigated).
-          if (isInteractiveTerminal(tab.type)) {
+          // Only while hints are on: with the dropdown hidden these keys must
+          // reach the shell, never an invisible list.
+          if (
+            isInteractiveTerminal(tab.type) &&
+            useSettingsStore.getState().settings.terminalCmdHint
+          ) {
             const items = tabCompletions.get(tab.id) ?? [];
             const plainArrow = !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
 
@@ -1120,9 +1125,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
               const locale = i18n.language?.startsWith('zh') ? 'zh' : 'en';
 
               const showCompletions = () => {
-                // Suppress completions while the terminal is awaiting a password —
-                // the buffer holds a secret, not a command.
-                if (awaitingPassword.get(tab.id)) {
+                // No completions while hints are off (the dropdown isn't
+                // rendered, so a list here would only hijack Tab/↑/↓), nor
+                // while the terminal is awaiting a password — the buffer
+                // holds a secret, not a command.
+                if (!st.terminalCmdHint || awaitingPassword.get(tab.id)) {
                   hideCompletions();
                   return;
                 }
