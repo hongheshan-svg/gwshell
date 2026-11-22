@@ -24,6 +24,12 @@
   max-width: 600px;
 }
 
+.sftp-panel-drag-over {
+  outline: 2px dashed var(--accent-primary);
+  outline-offset: -4px;
+  background: color-mix(in srgb, var(--accent-primary) 6%, var(--bg-secondary));
+}
+
 .sftp-header {
   display: flex;
   align-items: center;

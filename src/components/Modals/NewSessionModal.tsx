@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Eye, EyeOff, FolderOpen } from 'lucide-react';
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
 import { useAppStore } from '../../stores/appStore';
 import { useEscapeClose } from '../../lib/useEscapeClose';
-import { GroupSelectField } from './GroupSelectField';
-import { ColorLabelPicker } from './ColorLabelPicker';
 import type { SessionConfig } from '../../types';
 import type { TranslationKeys } from '../../i18n';
+import { SessionModalShell } from './SessionModalShell';
+import { SshStandardTab } from './sshTabs/SshStandardTab';
+import { SshTunnelTab } from './sshTabs/SshTunnelTab';
+import { SshProxyTab } from './sshTabs/SshProxyTab';
+import { SshEnvTab } from './sshTabs/SshEnvTab';
+import { SshAdvancedTab } from './sshTabs/SshAdvancedTab';
 
 const configTabKeys: { id: string; labelKey: TranslationKeys }[] = [
   { id: 'standard', labelKey: 'ssh_tab_standard' },
@@ -20,15 +23,22 @@ const configTabKeys: { id: string; labelKey: TranslationKeys }[] = [
 type AuthType = 'password' | 'publickey' | 'keyboardinteractive' | 'agent' | 'none';
 type SecretField = 'password' | 'totp_code' | 'jump_password' | 'proxy_password';
 
-// All five methods on a single row (labels are kept short so they fit) —
-// the old two-row split read as ragged and implied a hierarchy that isn't there.
-const authMethods: { id: AuthType; labelKey: TranslationKeys }[] = [
-  { id: 'password', labelKey: 'ssh_auth_password' },
-  { id: 'publickey', labelKey: 'ssh_auth_publickey' },
-  { id: 'keyboardinteractive', labelKey: 'ssh_auth_mfa' },
-  { id: 'agent', labelKey: 'ssh_auth_agent' },
-  { id: 'none', labelKey: 'ssh_auth_none' },
-];
+const INITIAL_FORM: Partial<SessionConfig> = {
+  name: '',
+  session_type: 'ssh',
+  host: '',
+  port: 22,
+  username: 'root',
+  auth_method: 'password',
+  password: '',
+  private_key_path: '',
+  group: '',
+  remark: '',
+  color_label: '',
+  environment: '',
+  proxy_type: 'none',
+  tunnel_type: 'local',
+};
 
 export const NewSessionModal: React.FC = () => {
   const showNewSession = useAppStore((s) => s.showNewSession);
@@ -43,27 +53,8 @@ export const NewSessionModal: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showJumpPassword, setShowJumpPassword] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-  // Secret fields the user actually edited in this modal session. The store
-  // only holds REDACTED sessions, so when editing, an untouched empty secret
-  // must be sent as `undefined` ("keep the saved value" — the backend merges
-  // it), while a field the user deliberately cleared is sent as '' ("clear").
   const [dirtySecrets, setDirtySecrets] = useState<ReadonlySet<SecretField>>(new Set());
-  const [form, setForm] = useState<Partial<SessionConfig>>({
-    name: '',
-    session_type: 'ssh',
-    host: '',
-    port: 22,
-    username: 'root',
-    auth_method: 'password',
-    password: '',
-    private_key_path: '',
-    group: '',
-    remark: '',
-    color_label: '',
-    environment: '',
-    proxy_type: 'none',
-    tunnel_type: 'local',
-  });
+  const [form, setForm] = useState<Partial<SessionConfig>>(INITIAL_FORM);
 
   React.useEffect(() => {
     if (!showNewSession) return;
@@ -72,29 +63,9 @@ export const NewSessionModal: React.FC = () => {
     setActiveTab('standard');
     setShowPassword(false);
     setShowJumpPassword(false);
-    if (editingSession) {
-      setForm(editingSession);
-    } else {
-      setForm({
-        name: '',
-        session_type: 'ssh',
-        host: '',
-        port: 22,
-        username: 'root',
-        auth_method: 'password',
-        password: '',
-        private_key_path: '',
-        group: '',
-        remark: '',
-        color_label: '',
-        environment: '',
-        proxy_type: 'none',
-        tunnel_type: 'local',
-      });
-    }
+    setForm(editingSession ?? INITIAL_FORM);
   }, [editingSession, showNewSession]);
 
-  // Hooks must run unconditionally (before any early return) per rules-of-hooks.
   const handleClose = () => {
     setShowNewSession(false);
     setEditingSession(null);
@@ -112,7 +83,6 @@ export const NewSessionModal: React.FC = () => {
     setDirtySecrets((prev) => new Set(prev).add(field));
   };
 
-  /** Placeholder for a secret input: when editing, explain blank = unchanged. */
   const secretPlaceholder = (fallback = '') =>
     editingSession ? t('secret_keep_placeholder') : fallback;
 
@@ -122,14 +92,17 @@ export const NewSessionModal: React.FC = () => {
     return editingSession && dirtySecrets.has(field) ? '' : undefined;
   };
 
+  const handleChangeAuthMethod = (method: AuthType) => {
+    if (form.auth_method === method) return;
+    setForm({ ...form, auth_method: method, password: '' });
+    setDirtySecrets((prev) => new Set(prev).add('password'));
+  };
+
   const buildConfig = (sessionId: string): SessionConfig => {
     const now = new Date().toISOString().slice(0, 10);
     return {
       id: sessionId,
       name: form.name!,
-      // || correct here: empty string form fields must coerce to undefined /
-      // defaults so partial SessionConfig round-trips cleanly (0/"" are not
-      // valid values the user would intentionally save).
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       session_type: form.session_type || 'ssh',
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
@@ -151,7 +124,6 @@ export const NewSessionModal: React.FC = () => {
       color_label: form.color_label || undefined,
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       environment: form.environment || undefined,
-      // Jump host
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       jump_host: form.jump_host || undefined,
       jump_port: form.jump_port ?? undefined,
@@ -160,7 +132,6 @@ export const NewSessionModal: React.FC = () => {
       jump_password: secretValue('jump_password'),
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       jump_private_key_path: form.jump_private_key_path || undefined,
-      // Proxy
       proxy_type: form.proxy_type && form.proxy_type !== 'none' ? form.proxy_type : undefined,
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       proxy_host: form.proxy_host || undefined,
@@ -168,8 +139,6 @@ export const NewSessionModal: React.FC = () => {
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       proxy_username: form.proxy_username || undefined,
       proxy_password: secretValue('proxy_password'),
-      // Tunnel
-      // ?? preserves explicit false (user disabled the option); || would coerce it to undefined.
       tunnel_enabled: form.tunnel_enabled ?? undefined,
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       tunnel_type: form.tunnel_type || 'local',
@@ -177,18 +146,14 @@ export const NewSessionModal: React.FC = () => {
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       tunnel_remote_host: form.tunnel_remote_host || undefined,
       tunnel_remote_port: form.tunnel_remote_port ?? undefined,
-      // Advanced
       keepalive_interval: form.keepalive_interval ?? undefined,
       connection_timeout: form.connection_timeout ?? undefined,
       server_alive_count_max: form.server_alive_count_max ?? undefined,
       idle_disconnect_minutes: form.idle_disconnect_minutes ?? undefined,
-      // ?? preserves explicit false (user disabled the option); || would coerce it to undefined.
       compression: form.compression ?? undefined,
-      // ?? preserves explicit false (user disabled the option); || would coerce it to undefined.
       agent_forward: form.agent_forward ?? undefined,
       remote_shell:
         form.remote_shell && form.remote_shell !== 'auto' ? form.remote_shell : undefined,
-      // Env vars
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       env_vars: form.env_vars || undefined,
       created_at: editingSession?.created_at ?? now,
@@ -226,9 +191,6 @@ export const NewSessionModal: React.FC = () => {
     handleClose();
   };
 
-  const nameError = touched.name && !form.name;
-  const hostError = touched.host && !form.host;
-
   const pickKeyFile = async (field: 'private_key_path' | 'jump_private_key_path') => {
     try {
       const selected = await dialogOpen({ multiple: false, title: t('ssh_select_key_file') });
@@ -240,702 +202,22 @@ export const NewSessionModal: React.FC = () => {
     }
   };
 
+  const title = editingSession
+    ? t('ssh_config_title_edit', { name: editingSession.name })
+    : t('ssh_config_title_new');
+
+  const tabs = configTabKeys.map((tab) => ({ id: tab.id, label: t(tab.labelKey) }));
+
   return (
-    <div
-      className="modal-overlay"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) handleClose();
-      }}
-    >
-      <div className="ssh-modal" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="ssh-modal-header">
-          <h2>
-            {editingSession
-              ? t('ssh_config_title_edit', { name: editingSession.name })
-              : t('ssh_config_title_new')}
-          </h2>
-          <button className="modal-close" onClick={handleClose}>
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Config Tabs */}
-        <div className="ssh-modal-tabs">
-          {configTabKeys.map((tab) => (
-            <button
-              key={tab.id}
-              className={`ssh-tab ${activeTab === tab.id ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {t(tab.labelKey)}
-            </button>
-          ))}
-        </div>
-
-        {/* Body */}
-        <div className="ssh-modal-body">
-          {/* ══════════════ 标准 Tab ══════════════ */}
-          {activeTab === 'standard' && (
-            <>
-              {/* Name + Host — lead with the essential connection fields */}
-              <div className="ssh-form-row">
-                <div className="ssh-form-group">
-                  <label className={nameError ? 'label-error' : ''}>
-                    {t('ssh_name')} <span className="required-mark">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={form.name ?? ''}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    onBlur={() => handleBlur('name')}
-                    className={nameError ? 'input-error' : ''}
-                  />
-                  {nameError && <span className="field-error">{t('field_required')}</span>}
-                </div>
-                <div className="ssh-form-group">
-                  <label className={hostError ? 'label-error' : ''}>
-                    {t('ssh_host')} <span className="required-mark">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={form.host ?? ''}
-                    onChange={(e) => setForm({ ...form, host: e.target.value })}
-                    onBlur={() => handleBlur('host')}
-                    className={hostError ? 'input-error' : ''}
-                  />
-                  {hostError && <span className="field-error">{t('field_required')}</span>}
-                </div>
-              </div>
-
-              {/* User + Port */}
-              <div className="ssh-form-row">
-                <div className="ssh-form-group">
-                  <label>{t('ssh_user')}</label>
-                  <input
-                    type="text"
-                    value={form.username ?? ''}
-                    onChange={(e) => setForm({ ...form, username: e.target.value })}
-                  />
-                </div>
-                <div className="ssh-form-group">
-                  <label>{t('ssh_port')}</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={65535}
-                    value={form.port ?? 22}
-                    onChange={(e) => setForm({ ...form, port: parseInt(e.target.value) || 22 })}
-                  />
-                </div>
-              </div>
-
-              {/* Color label + Environment — optional/cosmetic, kept after the essential fields */}
-              <div className="ssh-form-row">
-                <ColorLabelPicker
-                  value={form.color_label ?? ''}
-                  onChange={(color_label) => setForm({ ...form, color_label })}
-                />
-                <div className="ssh-form-group">
-                  <label>{t('ssh_environment')}</label>
-                  <select
-                    value={form.environment ?? ''}
-                    onChange={(e) => setForm({ ...form, environment: e.target.value })}
-                  >
-                    <option value="">{t('ssh_env_none')}</option>
-                    <option value="dev">{t('ssh_env_dev')}</option>
-                    <option value="staging">{t('ssh_env_staging')}</option>
-                    <option value="production">{t('ssh_env_production')}</option>
-                  </select>
-                </div>
-              </div>
-
-              <GroupSelectField
-                value={form.group ?? ''}
-                onChange={(group) => setForm({ ...form, group })}
-              />
-
-              {/* Auth method */}
-              <div className="ssh-form-group">
-                <label>{t('ssh_auth_method')}</label>
-                <div className="ssh-auth-row">
-                  {authMethods.map((btn) => (
-                    <button
-                      key={btn.id}
-                      type="button"
-                      className={`ssh-auth-btn ${form.auth_method === btn.id ? 'active' : ''}`}
-                      onClick={() => {
-                        if (form.auth_method === btn.id) return;
-                        // A password and a key passphrase are different secrets:
-                        // switching method clears the stored one too.
-                        setForm({ ...form, auth_method: btn.id, password: '' });
-                        setDirtySecrets((prev) => new Set(prev).add('password'));
-                      }}
-                    >
-                      {t(btn.labelKey)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Password */}
-              {form.auth_method === 'password' && (
-                <div className="ssh-form-group">
-                  <label>{t('ssh_password')}</label>
-                  <div className="ssh-password-wrap">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      autoComplete="off"
-                      placeholder={secretPlaceholder()}
-                      value={form.password ?? ''}
-                      onChange={(e) => setSecret('password', e.target.value)}
-                    />
-                    <button
-                      className="ssh-password-toggle"
-                      onClick={() => setShowPassword(!showPassword)}
-                      type="button"
-                    >
-                      {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Private key */}
-              {form.auth_method === 'publickey' && (
-                <>
-                  <div className="ssh-form-group">
-                    <label>{t('ssh_private_key_path')}</label>
-                    <div className="ssh-password-wrap">
-                      <input
-                        type="text"
-                        placeholder="~/.ssh/id_rsa"
-                        value={form.private_key_path ?? ''}
-                        onChange={(e) => setForm({ ...form, private_key_path: e.target.value })}
-                      />
-                      <button
-                        type="button"
-                        className="ssh-password-toggle"
-                        title={t('ssh_select_key_file')}
-                        onClick={() => {
-                          void pickKeyFile('private_key_path');
-                        }}
-                      >
-                        <FolderOpen size={14} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="ssh-form-group">
-                    <label>{t('ssh_key_passphrase_label')}</label>
-                    <div className="ssh-password-wrap">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        autoComplete="off"
-                        placeholder={secretPlaceholder()}
-                        value={form.password ?? ''}
-                        onChange={(e) => setSecret('password', e.target.value)}
-                      />
-                      <button
-                        className="ssh-password-toggle"
-                        onClick={() => setShowPassword(!showPassword)}
-                        type="button"
-                      >
-                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                    </div>
-                    <div className="ssh-tab-desc" style={{ marginTop: 4 }}>
-                      {t('ssh_key_passphrase_hint')}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* MFA/2FA */}
-              {form.auth_method === 'keyboardinteractive' && (
-                <>
-                  <div className="ssh-form-group">
-                    <label>{t('ssh_mfa_password_hint')}</label>
-                    <div className="ssh-password-wrap">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        autoComplete="off"
-                        placeholder={secretPlaceholder(t('ssh_mfa_password_placeholder'))}
-                        value={form.password ?? ''}
-                        onChange={(e) => setSecret('password', e.target.value)}
-                      />
-                      <button
-                        className="ssh-password-toggle"
-                        onClick={() => setShowPassword(!showPassword)}
-                        type="button"
-                      >
-                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="ssh-form-group">
-                    <label>{t('ssh_mfa_totp_label')}</label>
-                    <input
-                      type="password"
-                      autoComplete="off"
-                      placeholder={secretPlaceholder(t('ssh_mfa_totp_placeholder'))}
-                      value={form.totp_code ?? ''}
-                      onChange={(e) => setSecret('totp_code', e.target.value)}
-                    />
-                  </div>
-                  <div className="ssh-tab-desc">{t('ssh_mfa_desc')}</div>
-                </>
-              )}
-
-              {/* SSH Agent info */}
-              {form.auth_method === 'agent' && (
-                <div className="ssh-tab-desc">{t('ssh_agent_desc')}</div>
-              )}
-
-              {/* No-auth info */}
-              {form.auth_method === 'none' && (
-                <div className="ssh-tab-desc">{t('ssh_noauth_desc')}</div>
-              )}
-
-              {/* Remark */}
-              <div className="ssh-form-group">
-                <label>{t('ssh_remark')}</label>
-                <textarea
-                  rows={2}
-                  value={form.remark ?? ''}
-                  onChange={(e) => setForm({ ...form, remark: e.target.value })}
-                />
-              </div>
-            </>
-          )}
-
-          {/* ══════════════ 隧道 Tab ══════════════ */}
-          {activeTab === 'tunnel' && (
-            <>
-              <div className="ssh-form-group">
-                <label>{t('ssh_tunnel_label')}</label>
-                <label className="ssh-toggle-label">
-                  <input
-                    type="checkbox"
-                    checked={form.tunnel_enabled ?? false}
-                    onChange={(e) => setForm({ ...form, tunnel_enabled: e.target.checked })}
-                  />
-                  <span>{t('ssh_tunnel_auto')}</span>
-                </label>
-              </div>
-
-              {form.tunnel_enabled && (
-                <>
-                  <div className="ssh-form-group">
-                    <label>{t('ssh_tunnel_type')}</label>
-                    <select
-                      value={form.tunnel_type ?? 'local'}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          tunnel_type: e.target.value as 'local' | 'remote' | 'dynamic', // eslint-disable-line no-restricted-syntax -- select value union; runtime-validated by onChange
-                        })
-                      }
-                    >
-                      <option value="local">{t('ssh_tunnel_local')}</option>
-                      <option value="remote">{t('ssh_tunnel_remote')}</option>
-                      <option value="dynamic">{t('ssh_tunnel_dynamic')}</option>
-                    </select>
-                  </div>
-
-                  <div className="ssh-form-row">
-                    <div className="ssh-form-group">
-                      <label>{t('ssh_tunnel_local_port')}</label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={65535}
-                        placeholder="e.g. 13306"
-                        value={form.tunnel_local_port ?? ''}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            tunnel_local_port: parseInt(e.target.value) || undefined,
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="ssh-form-group" />
-                  </div>
-
-                  {form.tunnel_type !== 'dynamic' && (
-                    <>
-                      <div className="ssh-form-row">
-                        <div className="ssh-form-group">
-                          <label>{t('ssh_tunnel_remote_host')}</label>
-                          <input
-                            type="text"
-                            placeholder="localhost"
-                            value={form.tunnel_remote_host ?? ''}
-                            onChange={(e) =>
-                              setForm({ ...form, tunnel_remote_host: e.target.value })
-                            }
-                          />
-                        </div>
-                        <div className="ssh-form-group">
-                          <label>{t('ssh_tunnel_remote_port')}</label>
-                          <input
-                            type="number"
-                            min={1}
-                            max={65535}
-                            placeholder="e.g. 3306"
-                            value={form.tunnel_remote_port ?? ''}
-                            onChange={(e) =>
-                              setForm({
-                                ...form,
-                                tunnel_remote_port: parseInt(e.target.value) || undefined,
-                              })
-                            }
-                          />
-                        </div>
-                      </div>
-
-                      {form.tunnel_local_port &&
-                        form.tunnel_remote_host &&
-                        form.tunnel_remote_port && (
-                          <div className="ssh-tab-desc">
-                            {t('ssh_tunnel_desc', {
-                              localPort: form.tunnel_local_port,
-                              remoteHost: form.tunnel_remote_host,
-                              remotePort: form.tunnel_remote_port,
-                            })}
-                          </div>
-                        )}
-                    </>
-                  )}
-                </>
-              )}
-
-              {!form.tunnel_enabled && (
-                <div className="ssh-tab-placeholder">
-                  <p>{t('ssh_tunnel_enable_hint')}</p>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* ══════════════ 代理 Tab ══════════════ */}
-          {activeTab === 'proxy' && (
-            <>
-              <div className="ssh-form-group">
-                <label>{t('ssh_proxy_type')}</label>
-                <select
-                  value={form.proxy_type ?? 'none'}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      // eslint-disable-next-line no-restricted-syntax
-                      proxy_type: e.target.value as SessionConfig['proxy_type'],
-                    })
-                  }
-                >
-                  <option value="none">{t('ssh_proxy_none')}</option>
-                  <option value="socks5">SOCKS5</option>
-                  <option value="http">HTTP CONNECT</option>
-                </select>
-              </div>
-
-              {form.proxy_type && form.proxy_type !== 'none' && (
-                <>
-                  <div className="ssh-form-row">
-                    <div className="ssh-form-group">
-                      <label>{t('ssh_proxy_server')}</label>
-                      <input
-                        type="text"
-                        placeholder="127.0.0.1"
-                        value={form.proxy_host ?? ''}
-                        onChange={(e) => setForm({ ...form, proxy_host: e.target.value })}
-                      />
-                    </div>
-                    <div className="ssh-form-group">
-                      <label>{t('ssh_proxy_port')}</label>
-                      <input
-                        type="number"
-                        placeholder={form.proxy_type === 'socks5' ? '1080' : '8080'}
-                        value={form.proxy_port ?? ''}
-                        onChange={(e) =>
-                          setForm({ ...form, proxy_port: parseInt(e.target.value) || undefined })
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="ssh-form-row">
-                    <div className="ssh-form-group">
-                      <label>{t('ssh_proxy_username')}</label>
-                      <input
-                        type="text"
-                        value={form.proxy_username ?? ''}
-                        onChange={(e) => setForm({ ...form, proxy_username: e.target.value })}
-                      />
-                    </div>
-                    <div className="ssh-form-group">
-                      <label>{t('ssh_proxy_password')}</label>
-                      <input
-                        type="password"
-                        autoComplete="off"
-                        placeholder={secretPlaceholder()}
-                        value={form.proxy_password ?? ''}
-                        onChange={(e) => setSecret('proxy_password', e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="ssh-tab-desc">
-                    {t('ssh_proxy_desc', {
-                      proxyType: form.proxy_type === 'socks5' ? 'SOCKS5' : 'HTTP CONNECT',
-                      proxyAddr: form.proxy_host
-                        ? ` ${form.proxy_host}:${form.proxy_port ?? (form.proxy_type === 'socks5' ? 1080 : 8080)}`
-                        : '',
-                    })}
-                  </div>
-                </>
-              )}
-
-              {(!form.proxy_type || form.proxy_type === 'none') && (
-                <div className="ssh-tab-placeholder">
-                  <p>{t('ssh_proxy_hint')}</p>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* ══════════════ 环境变量 Tab ══════════════ */}
-          {activeTab === 'env' && (
-            <>
-              <div className="ssh-form-group">
-                <label>{t('ssh_env_custom')}</label>
-                <textarea
-                  className="ssh-remark"
-                  rows={10}
-                  placeholder={'KEY=VALUE\nPATH=/custom/path\nLANG=en_US.UTF-8'}
-                  value={form.env_vars ?? ''}
-                  onChange={(e) => setForm({ ...form, env_vars: e.target.value })}
-                />
-              </div>
-              <div className="ssh-tab-desc">{t('ssh_env_desc')}</div>
-            </>
-          )}
-
-          {/* ══════════════ 高级 Tab ══════════════ */}
-          {activeTab === 'advanced' && (
-            <>
-              {/* Connection settings */}
-              <div className="ssh-form-row">
-                <div className="ssh-form-group">
-                  <label>{t('ssh_conn_timeout')}</label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="30"
-                    value={form.connection_timeout ?? ''}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        connection_timeout: parseInt(e.target.value) || undefined,
-                      })
-                    }
-                  />
-                </div>
-                <div className="ssh-form-group">
-                  <label>{t('ssh_keepalive')}</label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="60"
-                    value={form.keepalive_interval ?? ''}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        keepalive_interval: parseInt(e.target.value) || undefined,
-                      })
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="ssh-form-row">
-                <div className="ssh-form-group">
-                  <label>ServerAliveCountMax</label>
-                  <input
-                    type="number"
-                    min={1}
-                    placeholder="3"
-                    value={form.server_alive_count_max ?? ''}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        server_alive_count_max: parseInt(e.target.value) || undefined,
-                      })
-                    }
-                  />
-                </div>
-                <div className="ssh-form-group">
-                  <label>{t('ssh_idle_disconnect')}</label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="0"
-                    value={form.idle_disconnect_minutes ?? ''}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        idle_disconnect_minutes: parseInt(e.target.value) || undefined,
-                      })
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="ssh-form-row">
-                <div className="ssh-form-group">
-                  <label style={{ visibility: 'hidden' }}>{t('common_placeholder')}</label>
-                  <label className="ssh-toggle-label">
-                    <input
-                      type="checkbox"
-                      checked={form.agent_forward ?? false}
-                      onChange={(e) => setForm({ ...form, agent_forward: e.target.checked })}
-                    />
-                    <span>{t('ssh_agent_forward')}</span>
-                  </label>
-                  <label className="ssh-toggle-label" style={{ marginTop: 8 }}>
-                    <input
-                      type="checkbox"
-                      checked={form.compression ?? false}
-                      onChange={(e) => setForm({ ...form, compression: e.target.checked })}
-                    />
-                    <span>{t('ssh_compression')}</span>
-                  </label>
-                </div>
-                <div className="ssh-form-group">
-                  <label>{t('ssh_remote_shell')}</label>
-                  <select
-                    value={form.remote_shell ?? 'auto'}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        remote_shell: e.target.value as 'auto' | 'linux' | 'cmd' | 'powershell', // eslint-disable-line no-restricted-syntax -- select value union; runtime-validated by onChange
-                      })
-                    }
-                  >
-                    <option value="auto">{t('ssh_remote_shell_auto')}</option>
-                    <option value="linux">{t('ssh_remote_shell_linux')}</option>
-                    <option value="cmd">{t('ssh_remote_shell_cmd')}</option>
-                    <option value="powershell">{t('ssh_remote_shell_powershell')}</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Jump host section */}
-              <div className="ssh-section-divider">
-                <span>{t('ssh_jump_title')}</span>
-              </div>
-
-              <div className="ssh-form-row">
-                <div className="ssh-form-group">
-                  <label>{t('ssh_jump_host')}</label>
-                  <input
-                    type="text"
-                    placeholder="jump.example.com"
-                    value={form.jump_host ?? ''}
-                    onChange={(e) => setForm({ ...form, jump_host: e.target.value })}
-                  />
-                </div>
-                <div className="ssh-form-group">
-                  <label>{t('ssh_jump_port')}</label>
-                  <input
-                    type="number"
-                    placeholder="22"
-                    value={form.jump_port ?? ''}
-                    onChange={(e) =>
-                      setForm({ ...form, jump_port: parseInt(e.target.value) || undefined })
-                    }
-                  />
-                </div>
-              </div>
-
-              {form.jump_host && (
-                <>
-                  <div className="ssh-form-row">
-                    <div className="ssh-form-group">
-                      <label>{t('ssh_jump_username')}</label>
-                      <input
-                        type="text"
-                        placeholder="root"
-                        value={form.jump_username ?? ''}
-                        onChange={(e) => setForm({ ...form, jump_username: e.target.value })}
-                      />
-                    </div>
-                    <div className="ssh-form-group">
-                      <label>{t('ssh_jump_password')}</label>
-                      <div className="ssh-password-wrap">
-                        <input
-                          type={showJumpPassword ? 'text' : 'password'}
-                          autoComplete="off"
-                          placeholder={secretPlaceholder()}
-                          value={form.jump_password ?? ''}
-                          onChange={(e) => setSecret('jump_password', e.target.value)}
-                        />
-                        <button
-                          className="ssh-password-toggle"
-                          onClick={() => setShowJumpPassword(!showJumpPassword)}
-                          type="button"
-                        >
-                          {showJumpPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="ssh-form-group">
-                    <label>{t('ssh_jump_key_path')}</label>
-                    <div className="ssh-password-wrap">
-                      <input
-                        type="text"
-                        placeholder="~/.ssh/id_rsa"
-                        value={form.jump_private_key_path ?? ''}
-                        onChange={(e) =>
-                          setForm({ ...form, jump_private_key_path: e.target.value })
-                        }
-                      />
-                      <button
-                        type="button"
-                        className="ssh-password-toggle"
-                        title={t('ssh_select_key_file')}
-                        onClick={() => {
-                          void pickKeyFile('jump_private_key_path');
-                        }}
-                      >
-                        <FolderOpen size={14} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="ssh-tab-desc">
-                    {t('ssh_jump_desc', {
-                      jumpHost: form.jump_host,
-                      jumpPort: form.jump_port ?? 22,
-                      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-                      host: form.host || 'target',
-                      port: form.port ?? 22,
-                    })}
-                  </div>
-                </>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="ssh-modal-footer">
-          <button
-            className="ssh-footer-link"
-            onClick={() => {
-              void handleTestConnect();
-            }}
-          >
+    <SessionModalShell
+      title={title}
+      tabs={tabs}
+      activeTab={activeTab}
+      onSelectTab={setActiveTab}
+      onClose={handleClose}
+      footer={
+        <>
+          <button className="ssh-footer-link" onClick={handleTestConnect}>
             {t('ssh_test_connect')}
           </button>
           <div className="ssh-footer-actions">
@@ -946,8 +228,53 @@ export const NewSessionModal: React.FC = () => {
               {t('ssh_save')}
             </button>
           </div>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    >
+      {activeTab === 'standard' && (
+        <SshStandardTab
+          form={form}
+          setForm={setForm}
+          nameError={Boolean(touched.name && !form.name)}
+          hostError={Boolean(touched.host && !form.host)}
+          onBlur={handleBlur}
+          showPassword={showPassword}
+          onToggleShowPassword={() => setShowPassword((v) => !v)}
+          onChangeAuthMethod={handleChangeAuthMethod}
+          setSecret={setSecret}
+          secretPlaceholder={secretPlaceholder}
+          onPickKeyFile={() => {
+            void pickKeyFile('private_key_path');
+          }}
+        />
+      )}
+
+      {activeTab === 'tunnel' && <SshTunnelTab form={form} setForm={setForm} />}
+
+      {activeTab === 'proxy' && (
+        <SshProxyTab
+          form={form}
+          setForm={setForm}
+          setSecret={setSecret}
+          secretPlaceholder={secretPlaceholder}
+        />
+      )}
+
+      {activeTab === 'env' && <SshEnvTab form={form} setForm={setForm} />}
+
+      {activeTab === 'advanced' && (
+        <SshAdvancedTab
+          form={form}
+          setForm={setForm}
+          showJumpPassword={showJumpPassword}
+          onToggleShowJumpPassword={() => setShowJumpPassword((v) => !v)}
+          setSecret={setSecret}
+          secretPlaceholder={secretPlaceholder}
+          onPickJumpKeyFile={() => {
+            void pickKeyFile('jump_private_key_path');
+          }}
+        />
+      )}
+    </SessionModalShell>
   );
 };

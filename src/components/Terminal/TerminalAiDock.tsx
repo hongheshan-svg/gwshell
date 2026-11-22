@@ -1,6 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import React from 'react';
 import {
   AlertCircle,
   Bot,
@@ -15,409 +13,19 @@ import {
   X,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useAppStore } from '../../stores/appStore';
-import {
-  compatibleProviderLabels,
-  getAiModelDisplayName,
-  isAiProviderUsable,
-} from '../../lib/aiModels';
-import { getTerminalAiContext } from '../../lib/terminalContext';
-import { extractTerminalCommands } from '../../lib/terminalAiCommands';
-import type { AiProviderSettings, TerminalAiChatRequest } from '../../types/agent';
-import { sendInputToTab } from '../../lib/terminalLifecycle';
-
-interface TerminalAiEventPayload {
-  textDelta?: string;
-  text?: string;
-  message?: string;
-}
-
-interface TabDockDraft {
-  input: string;
-  answer: string;
-  error: string;
-  notice: string;
-}
-
-const EMPTY_DRAFT: TabDockDraft = { input: '', answer: '', error: '', notice: '' };
-
-const TERMINAL_AI_SETTINGS_TIMEOUT_MS = 5000;
-// The backend gives up after `request_timeout_secs` (at least
-// MIN_IDLE_TIMEOUT_SECS) without data from the provider; the dock waits a
-// little longer so the backend's clearer error normally arrives first.
-const MIN_IDLE_TIMEOUT_SECS = 120;
-const TERMINAL_AI_IDLE_GRACE_SECS = 15;
-
-const newRequestId = () =>
-  globalThis.crypto?.randomUUID?.() ??
-  `terminal-ai-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-/** Ask the backend to stop streaming a request the user no longer waits for. */
-const cancelTerminalAiRequest = (requestId: string) => {
-  invoke('cancel_terminal_ai_chat', { requestId }).catch(() => {});
-};
-
-const formatError = (err: unknown): string => {
-  if (typeof err === 'string') return err;
-  if (err instanceof Error) return err.message;
-  if (err && typeof err === 'object' && 'message' in err) return String(err.message);
-  return String(err);
-};
-
-const invokeWithTimeout = async <T,>(
-  command: string,
-  timeoutMs: number,
-  timeoutMessage: string,
-): Promise<T> => {
-  let timeoutHandle: ReturnType<typeof window.setTimeout> | null = null;
-  try {
-    return await Promise.race([
-      invoke<T>(command),
-      new Promise<never>((_, reject) => {
-        timeoutHandle = window.setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeoutHandle) window.clearTimeout(timeoutHandle);
-  }
-};
+import { useTerminalAiChat } from '../../hooks/useTerminalAiChat';
 
 export const TerminalAiDock: React.FC = () => {
   const { t } = useTranslation();
-  const tabs = useAppStore((s) => s.tabs);
-  const activeTabId = useAppStore((s) => s.activeTabId);
-  const openSettingsNav = useAppStore((s) => s.openSettingsNav);
-  const [open, setOpen] = useState(false);
-  const [draftsByTab, setDraftsByTab] = useState<Record<string, TabDockDraft>>({});
-  const [phase, setPhase] = useState('');
-  const [busyTabId, setBusyTabId] = useState<string | null>(null);
-  const [aiSettings, setAiSettings] = useState<AiProviderSettings | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [contextTick, setContextTick] = useState(0);
-  const unlistenersRef = useRef<(() => void)[]>([]);
-  const listenerRequestIdRef = useRef<string | null>(null);
-  const activeRequestIdRef = useRef<string | null>(null);
-  const mountedRef = useRef(true);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const chat = useTerminalAiChat();
 
-  const cleanupListeners = useCallback((requestId?: string) => {
-    if (requestId && listenerRequestIdRef.current !== requestId) return;
-    unlistenersRef.current.forEach((fn) => fn());
-    unlistenersRef.current = [];
-    listenerRequestIdRef.current = null;
-  }, []);
+  if (!chat.activeTab) return null;
 
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-      if (activeRequestIdRef.current) cancelTerminalAiRequest(activeRequestIdRef.current);
-      cleanupListeners();
-    };
-  }, [cleanupListeners]);
-
-  const tRef = useRef(t);
-  tRef.current = t;
-
-  const refreshAiSettings = useCallback(async (throwOnError = false) => {
-    try {
-      const loaded = await invokeWithTimeout<AiProviderSettings>(
-        'load_ai_provider_settings',
-        TERMINAL_AI_SETTINGS_TIMEOUT_MS,
-        tRef.current('terminal_ai_settings_timeout_error'),
-      );
-      if (mountedRef.current) setAiSettings(loaded);
-      return loaded;
-    } catch (err) {
-      if (mountedRef.current) setAiSettings(null);
-      if (throwOnError) throw err;
-      return null;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (open) {
-      void refreshAiSettings();
-      requestAnimationFrame(() => textareaRef.current?.focus());
-    }
-  }, [open, refreshAiSettings]);
-
-  useEffect(() => {
-    const handler = () => void refreshAiSettings();
-    window.addEventListener('gwshell-ai-settings-changed', handler);
-    return () => window.removeEventListener('gwshell-ai-settings-changed', handler);
-  }, [refreshAiSettings]);
-
-  // Refresh the context snapshot while the dock is open so the selection /
-  // recent-output chips reflect what the user just highlighted or scrolled to.
-  useEffect(() => {
-    if (!open) return;
-    const id = window.setInterval(() => setContextTick((n) => n + 1), 1000);
-    return () => window.clearInterval(id);
-  }, [open]);
-
-  const activeTab = useMemo(
-    () => tabs.find((tab) => tab.id === activeTabId && tab.type !== 'asset-list'),
-    [activeTabId, tabs],
-  );
-  const currentTabId = activeTab?.id ?? '';
-  const currentDraft = draftsByTab[currentTabId] ?? EMPTY_DRAFT;
-  const { input, answer, error, notice } = currentDraft;
-  const busy = busyTabId !== null && busyTabId === currentTabId;
-
-  const updateDraft = useCallback(
-    (tabId: string, updater: (prev: TabDockDraft) => TabDockDraft) => {
-      if (!tabId) return;
-      setDraftsByTab((prev) => ({
-        ...prev,
-        [tabId]: updater(prev[tabId] ?? EMPTY_DRAFT),
-      }));
-    },
-    [],
-  );
-
-  // Prune drafts for tabs that have been closed.
-  useEffect(() => {
-    const liveIds = new Set(tabs.map((tab) => tab.id));
-    setDraftsByTab((prev) => {
-      let changed = false;
-      const next: Record<string, TabDockDraft> = {};
-      for (const [id, draft] of Object.entries(prev)) {
-        if (liveIds.has(id)) {
-          next[id] = draft;
-        } else {
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [tabs]);
-
-  const context = useMemo(
-    () => (activeTab ? getTerminalAiContext(activeTab.id) : null),
-    // contextTick forces a re-read so selection/output chips stay fresh while open.
-    // activeTab?.id is sufficient; listing activeTab would over-trigger on tab object updates.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeTab?.id, contextTick],
-  );
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-  const promptChip = context?.prompt || activeTab?.title || t('terminal_ai_no_prompt');
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-  const cwdChip = context?.cwd || t('terminal_ai_unknown_cwd');
-  const selectionChars = context?.selectedText?.trim().length ?? 0;
-  const outputKb = context?.recentOutput
-    ? Math.max(1, Math.round(context.recentOutput.length / 1024))
-    : 0;
-  const modelReady = isAiProviderUsable(aiSettings);
-  const modelLabel = aiSettings ? getAiModelDisplayName(aiSettings) : t('terminal_ai_add_model');
-  const modelMeta = aiSettings
-    ? `${compatibleProviderLabels[aiSettings.provider]} / ${aiSettings.model} / ${aiSettings.base_url}`
-    : t('terminal_ai_add_model');
-  const commandSuggestions = useMemo(() => extractTerminalCommands(answer), [answer]);
-
-  const executeInput = () => {
-    if (!activeTab || !input.trim()) return;
-    const ok = sendInputToTab(activeTab.id, `${input.trimEnd()}\r`);
-    if (!ok) {
-      updateDraft(activeTab.id, (prev) => ({ ...prev, error: t('terminal_ai_execute_failed') }));
-      return;
-    }
-    updateDraft(activeTab.id, (prev) => ({ ...prev, input: '' }));
-  };
-
-  const stopWaiting = useCallback(
-    (showNotice = true) => {
-      const requestId = activeRequestIdRef.current;
-      activeRequestIdRef.current = null;
-      if (requestId) {
-        cancelTerminalAiRequest(requestId);
-        cleanupListeners(requestId);
-      }
-      const stoppedTab = busyTabId;
-      setBusyTabId(null);
-      setPhase('');
-      if (showNotice && stoppedTab) {
-        updateDraft(stoppedTab, (prev) => ({ ...prev, notice: t('terminal_ai_stopped_waiting') }));
-      }
-    },
-    [busyTabId, cleanupListeners, t, updateDraft],
-  );
-
-  const insertCommand = (command: string) => {
-    if (!activeTab) return;
-    const ok = sendInputToTab(activeTab.id, command);
-    if (!ok) {
-      updateDraft(activeTab.id, (prev) => ({ ...prev, error: t('terminal_ai_insert_failed') }));
-    }
-  };
-
-  const copyAnswer = async () => {
-    if (!answer) return;
-    await navigator.clipboard.writeText(answer).catch(() => {});
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
-  };
-
-  const askAgent = async () => {
-    if (!activeTab || !input.trim() || busyTabId !== null) return;
-    const targetTabId = activeTab.id;
-    const requestId = newRequestId();
-    activeRequestIdRef.current = requestId;
-    setBusyTabId(targetTabId);
-    setPhase(t('terminal_ai_phase_loading_model'));
-    updateDraft(targetTabId, (prev) => ({ ...prev, error: '', notice: '', answer: '' }));
-
-    const isCurrentRequest = () => mountedRef.current && activeRequestIdRef.current === requestId;
-
-    let latestSettings: AiProviderSettings | null = null;
-    try {
-      latestSettings = await refreshAiSettings(true);
-    } catch (err) {
-      if (isCurrentRequest()) {
-        activeRequestIdRef.current = null;
-        setBusyTabId(null);
-        setPhase('');
-        updateDraft(targetTabId, (prev) => ({ ...prev, answer: '', error: formatError(err) }));
-      }
-      return;
-    }
-    if (!isCurrentRequest()) return;
-    if (!latestSettings || !isAiProviderUsable(latestSettings)) {
-      activeRequestIdRef.current = null;
-      setBusyTabId(null);
-      setPhase('');
-      updateDraft(targetTabId, (prev) => ({
-        ...prev,
-        answer: '',
-        error: latestSettings?.enabled
-          ? t('terminal_ai_model_unavailable')
-          : t('terminal_ai_model_disabled'),
-      }));
-      return;
-    }
-    setAiSettings(latestSettings);
-    const currentContext = getTerminalAiContext(targetTabId);
-    const request: TerminalAiChatRequest = {
-      request_id: requestId,
-      tab_id: targetTabId,
-      target_session_id: activeTab.sessionId,
-      tab_title: activeTab.title,
-      question: input.trim(),
-      cwd: currentContext.cwd ?? null,
-      prompt: currentContext.prompt ?? activeTab.title,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-      selected_text: currentContext.selectedText?.trim() || null,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-      recent_output: currentContext.recentOutput?.trim() || null,
-    };
-
-    const deltaEvent = `terminal-ai-delta-${requestId}`;
-    const doneEvent = `terminal-ai-done-${requestId}`;
-    const errorEvent = `terminal-ai-error-${requestId}`;
-    // Idle timeout: restarted by every streamed chunk, so a long answer that
-    // keeps arriving is never cut off; only a silent provider times out.
-    const idleTimeoutMs =
-      (Math.max(MIN_IDLE_TIMEOUT_SECS, latestSettings.request_timeout_secs) +
-        TERMINAL_AI_IDLE_GRACE_SECS) *
-      1000;
-    let timeoutHandle: ReturnType<typeof window.setTimeout> | null = null;
-    let rejectIdle: ((err: Error) => void) | null = null;
-    const armIdleTimer = () => {
-      if (timeoutHandle) window.clearTimeout(timeoutHandle);
-      timeoutHandle = window.setTimeout(() => {
-        cancelTerminalAiRequest(requestId);
-        rejectIdle?.(
-          new Error(t('terminal_ai_timeout_error', { seconds: Math.ceil(idleTimeoutMs / 1000) })),
-        );
-      }, idleTimeoutMs);
-    };
-    let sawDelta = false;
-    try {
-      cleanupListeners();
-      const requestUnlisteners: (() => void)[] = [];
-      try {
-        const unlistenDelta = await listen<TerminalAiEventPayload>(deltaEvent, (event) => {
-          if (!isCurrentRequest() || !event.payload.textDelta) return;
-          sawDelta = true;
-          armIdleTimer();
-          setPhase(t('terminal_ai_phase_streaming'));
-          const delta = event.payload.textDelta;
-          updateDraft(targetTabId, (prev) => ({ ...prev, answer: prev.answer + delta }));
-        });
-        requestUnlisteners.push(unlistenDelta);
-        const unlistenDone = await listen<TerminalAiEventPayload>(doneEvent, (event) => {
-          if (!isCurrentRequest()) return;
-          if (!sawDelta && event.payload.text) {
-            const text = event.payload.text;
-            updateDraft(targetTabId, (prev) => ({ ...prev, answer: text }));
-          }
-          activeRequestIdRef.current = null;
-          setBusyTabId(null);
-          setPhase('');
-          cleanupListeners(requestId);
-        });
-        requestUnlisteners.push(unlistenDone);
-        const unlistenError = await listen<TerminalAiEventPayload>(errorEvent, (event) => {
-          if (!isCurrentRequest()) return;
-          activeRequestIdRef.current = null;
-          setBusyTabId(null);
-          setPhase('');
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-          const msg = event.payload.message || t('terminal_ai_error');
-          updateDraft(targetTabId, (prev) => ({ ...prev, error: msg }));
-          cleanupListeners(requestId);
-        });
-        requestUnlisteners.push(unlistenError);
-        if (!isCurrentRequest()) {
-          requestUnlisteners.forEach((fn) => fn());
-          return;
-        }
-        listenerRequestIdRef.current = requestId;
-        unlistenersRef.current = requestUnlisteners;
-      } catch (listenErr) {
-        requestUnlisteners.forEach((fn) => fn());
-        console.warn(
-          'Terminal AI event subscription failed; falling back to IPC result.',
-          listenErr,
-        );
-      }
-      if (!isCurrentRequest()) return;
-      setPhase(t('terminal_ai_phase_requesting'));
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        rejectIdle = reject;
-      });
-      armIdleTimer();
-      const fullText = await Promise.race([
-        invoke<string>('run_terminal_ai_chat', { request }),
-        timeoutPromise,
-      ]);
-      if (isCurrentRequest()) {
-        activeRequestIdRef.current = null;
-        if (!sawDelta) {
-          updateDraft(targetTabId, (prev) => ({ ...prev, answer: fullText }));
-        }
-        setBusyTabId(null);
-        setPhase('');
-      }
-    } catch (err) {
-      if (isCurrentRequest()) {
-        activeRequestIdRef.current = null;
-        setBusyTabId(null);
-        setPhase('');
-        updateDraft(targetTabId, (prev) => ({ ...prev, error: formatError(err) }));
-      }
-    } finally {
-      if (timeoutHandle) window.clearTimeout(timeoutHandle);
-      cleanupListeners(requestId);
-    }
-  };
-
-  if (!activeTab) return null;
-
-  if (!open) {
+  if (!chat.open) {
     return (
       <button
         className="terminal-ai-fab"
-        onClick={() => setOpen(true)}
+        onClick={() => chat.setOpen(true)}
         title={t('terminal_ai_open')}
         type="button"
       >
@@ -431,27 +39,28 @@ export const TerminalAiDock: React.FC = () => {
       <div className="terminal-ai-topbar">
         <div className="terminal-ai-context">
           <span className="terminal-ai-chip">
-            <Folder size={15} /> {cwdChip}
+            <Folder size={15} /> {chat.cwdChip}
           </span>
-          <span className="terminal-ai-chip">{promptChip}</span>
+          <span className="terminal-ai-chip">{chat.promptChip}</span>
           <span
-            className={`terminal-ai-chip terminal-ai-context-tag${selectionChars > 0 ? ' is-active' : ''}`}
-            title={t('terminal_ai_context_selection', { chars: selectionChars })}
+            className={`terminal-ai-chip terminal-ai-context-tag${chat.selectionChars > 0 ? ' is-active' : ''}`}
+            title={t('terminal_ai_context_selection', { chars: chat.selectionChars })}
           >
-            {t('terminal_ai_context_selection_label')} {selectionChars > 0 ? selectionChars : '—'}
+            {t('terminal_ai_context_selection_label')}{' '}
+            {chat.selectionChars > 0 ? chat.selectionChars : '—'}
           </span>
           <span
-            className={`terminal-ai-chip terminal-ai-context-tag${outputKb > 0 ? ' is-active' : ''}`}
-            title={t('terminal_ai_context_output', { kb: outputKb })}
+            className={`terminal-ai-chip terminal-ai-context-tag${chat.outputKb > 0 ? ' is-active' : ''}`}
+            title={t('terminal_ai_context_output', { kb: chat.outputKb })}
           >
-            {t('terminal_ai_context_output_label')} {outputKb > 0 ? `${outputKb}KB` : '—'}
+            {t('terminal_ai_context_output_label')} {chat.outputKb > 0 ? `${chat.outputKb}KB` : '—'}
           </span>
         </div>
         <button
           className="terminal-ai-icon-btn"
           onClick={() => {
-            if (busy) stopWaiting(false);
-            setOpen(false);
+            if (chat.busy) chat.stopWaiting(false);
+            chat.setOpen(false);
           }}
           title={t('terminal_ai_close')}
           type="button"
@@ -460,32 +69,32 @@ export const TerminalAiDock: React.FC = () => {
         </button>
       </div>
 
-      {(answer || error || busy || notice) && (
+      {(chat.answer || chat.error || chat.busy || chat.notice) && (
         <div className="terminal-ai-response">
-          {answer && (
+          {chat.answer && (
             <div className="terminal-ai-answer">
-              <pre>{answer}</pre>
+              <pre>{chat.answer}</pre>
               <button
                 className="terminal-ai-copy"
-                onClick={() => void copyAnswer()}
+                onClick={() => void chat.copyAnswer()}
                 title={t('terminal_ai_copy_answer')}
                 type="button"
               >
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-                <span>{copied ? t('terminal_ai_copied') : t('terminal_ai_copy')}</span>
+                {chat.copied ? <Check size={14} /> : <Copy size={14} />}
+                <span>{chat.copied ? t('terminal_ai_copied') : t('terminal_ai_copy')}</span>
               </button>
             </div>
           )}
-          {commandSuggestions.length > 0 && (
+          {chat.commandSuggestions.length > 0 && (
             <div className="terminal-ai-command-list">
               <div className="terminal-ai-command-title">
                 {t('terminal_ai_command_suggestions')}
               </div>
-              {commandSuggestions.map((command) => (
+              {chat.commandSuggestions.map((command) => (
                 <button
                   className="terminal-ai-command-chip"
                   key={command}
-                  onClick={() => insertCommand(command)}
+                  onClick={() => chat.insertCommand(command)}
                   title={command}
                   type="button"
                 >
@@ -496,74 +105,68 @@ export const TerminalAiDock: React.FC = () => {
               ))}
             </div>
           )}
-          {busy && (
+          {chat.busy && (
             <div className="terminal-ai-busy-row">
-              <span className="terminal-ai-muted">{phase || t('terminal_ai_thinking')}</span>
-              <button className="terminal-ai-stop" onClick={() => stopWaiting()} type="button">
+              <span className="terminal-ai-muted">{chat.phase || t('terminal_ai_thinking')}</span>
+              <button className="terminal-ai-stop" onClick={() => chat.stopWaiting()} type="button">
                 {t('terminal_ai_stop_waiting')}
               </button>
             </div>
           )}
-          {notice && !busy && <span className="terminal-ai-muted">{notice}</span>}
-          {error && (
+          {chat.notice && !chat.busy && <span className="terminal-ai-muted">{chat.notice}</span>}
+          {chat.error && (
             <div className="terminal-ai-error-box">
               <AlertCircle size={14} />
-              <span>{error}</span>
+              <span>{chat.error}</span>
             </div>
           )}
         </div>
       )}
 
       <textarea
-        ref={textareaRef}
+        ref={chat.textareaRef}
         className="terminal-ai-input"
-        disabled={busy}
-        onChange={(event) => {
-          const val = event.target.value;
-          updateDraft(currentTabId, (prev) => ({ ...prev, input: val }));
-        }}
+        disabled={chat.busy}
+        onChange={(event) => chat.setInput(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
-            void askAgent();
+            void chat.askAgent();
           }
         }}
         placeholder={t('terminal_ai_placeholder')}
-        value={input}
+        value={chat.input}
       />
 
       <div className="terminal-ai-toolbar">
         <button
           className="terminal-ai-primary"
-          disabled={!input.trim() || busy}
-          onClick={executeInput}
+          disabled={!chat.input.trim() || chat.busy}
+          onClick={chat.executeInput}
           type="button"
         >
           <TerminalSquare size={15} /> {t('terminal_ai_execute')}
         </button>
         <button
           className="terminal-ai-ghost"
-          disabled={!input.trim() || busyTabId !== null}
-          onClick={() => void askAgent()}
+          disabled={!chat.input.trim() || chat.busyTabId !== null}
+          onClick={() => void chat.askAgent()}
           type="button"
         >
           <Bot size={15} /> {t('terminal_ai_agent')}
         </button>
         <button
-          className={`terminal-ai-model${modelReady ? ' is-ready' : ' is-missing'}`}
-          onClick={() => openSettingsNav('agent-ai')}
-          title={modelMeta}
+          className={`terminal-ai-model${chat.modelReady ? ' is-ready' : ' is-missing'}`}
+          onClick={() => chat.openSettingsNav('agent-ai')}
+          title={chat.modelMeta}
           type="button"
         >
-          {modelReady ? <Bot size={15} /> : <Plus size={15} />}
-          <span>{modelReady ? modelLabel : t('terminal_ai_add_model')}</span>
+          {chat.modelReady ? <Bot size={15} /> : <Plus size={15} />}
+          <span>{chat.modelReady ? chat.modelLabel : t('terminal_ai_add_model')}</span>
         </button>
         <button
           className="terminal-ai-icon-btn"
-          onClick={() => {
-            if (busy) stopWaiting(false);
-            updateDraft(currentTabId, (prev) => ({ ...prev, answer: '', error: '', notice: '' }));
-          }}
+          onClick={chat.clearResponse}
           title={t('terminal_ai_clear')}
           type="button"
         >
@@ -572,11 +175,11 @@ export const TerminalAiDock: React.FC = () => {
         <span className="terminal-ai-safe">
           <ShieldCheck size={15} />
         </span>
-        <span className="terminal-ai-count">{input.length}</span>
+        <span className="terminal-ai-count">{chat.input.length}</span>
         <button
           className="terminal-ai-send"
-          disabled={!input.trim() || busyTabId !== null}
-          onClick={() => void askAgent()}
+          disabled={!chat.input.trim() || chat.busyTabId !== null}
+          onClick={() => void chat.askAgent()}
           type="button"
         >
           <SendHorizontal size={18} />

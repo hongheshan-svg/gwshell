@@ -162,6 +162,7 @@ const ALLOWED_EVENT_NAMES = [
   'agent-action-proposed',
   'agent-action-result',
   'agent-error',
+  'agent-alert-auto-started',
 ];
 
 function runGrep(pattern, dir) {

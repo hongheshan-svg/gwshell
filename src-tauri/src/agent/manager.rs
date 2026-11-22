@@ -47,6 +47,12 @@ impl AgentManager {
         sessions
     }
 
+    pub fn has_running_session_for_target(&self, target_session_id: &str) -> bool {
+        self.sessions.lock().values().any(|s| {
+            s.target_session_id == target_session_id && s.status == AgentSessionStatus::Running
+        })
+    }
+
     pub fn is_cancelled(&self, agent_session_id: &str) -> bool {
         self.sessions
             .lock()

@@ -12,8 +12,9 @@ pub async fn start_server_metrics(
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    let ssh = state.ssh_manager.clone();
-    state.metrics.start(session_id, ssh, app_handle);
+    state
+        .metrics
+        .start_with_state(session_id, state.inner().clone(), app_handle);
     Ok(())
 }
 

@@ -4,6 +4,8 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import { useAgentStore } from '../../stores/agentStore';
+import type { AgentSessionInfo } from '../../types/agent';
 import type { MetricsSnapshot, MetricsErrorPayload } from '../../types/serverMetrics';
 import { HostCard } from './HostCard';
 import { CpuCard } from './CpuCard';
@@ -74,6 +76,7 @@ export const ServerPanel: React.FC = () => {
 
     let dataUnlisten: UnlistenFn | null = null;
     let errUnlisten: UnlistenFn | null = null;
+    let alertAgentUnlisten: UnlistenFn | null = null;
     let cancelled = false;
 
     void (async () => {
@@ -109,11 +112,24 @@ export const ServerPanel: React.FC = () => {
           },
         );
 
+        alertAgentUnlisten = await listen<AgentSessionInfo>(
+          `agent-alert-auto-started-${sessionId}`,
+          (evt) => {
+            useAgentStore.getState().setActiveSession(evt.payload);
+            const appState = useAppStore.getState();
+            if (!appState.agentPanelOpen) {
+              appState.toggleAgentPanel();
+            }
+          },
+        );
+
         if (cancelled) {
           dataUnlisten();
           errUnlisten();
+          alertAgentUnlisten();
           dataUnlisten = null;
           errUnlisten = null;
+          alertAgentUnlisten = null;
           return;
         }
 
@@ -129,6 +145,7 @@ export const ServerPanel: React.FC = () => {
       cancelled = true;
       if (dataUnlisten) dataUnlisten();
       if (errUnlisten) errUnlisten();
+      if (alertAgentUnlisten) alertAgentUnlisten();
       invoke('stop_server_metrics', { sessionId }).catch(() => {});
     };
   }, [serverPanelOpen, sessionId]);

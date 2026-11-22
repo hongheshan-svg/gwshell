@@ -160,10 +160,81 @@ pub async fn mkdir(sftp: &SftpSession, path: &str) -> Result<(), String> {
         .map_err(|e| format!("SFTP mkdir failed: {}", e))
 }
 
+/// Delete a remote directory. Tries a single `remove_dir` first; if the
+/// directory is non-empty, walks it iteratively in post-order and removes
+/// files/symlinks (never following symlinks!) before removing subdirectories.
 pub async fn rmdir(sftp: &SftpSession, path: &str) -> Result<(), String> {
-    sftp.remove_dir(path)
-        .await
-        .map_err(|e| format!("SFTP rmdir failed: {}", e))
+    let trimmed = path.trim_end_matches('/');
+    if trimmed.is_empty() {
+        return Err("Refusing to delete the filesystem root".into());
+    }
+    if sftp.remove_dir(trimmed).await.is_ok() {
+        return Ok(());
+    }
+    rmdir_recursive(sftp, trimmed).await
+}
+
+async fn rmdir_recursive(sftp: &SftpSession, root: &str) -> Result<(), String> {
+    // Verify the root itself isn't a symlink — if it is, unlink it instead of
+    // recursing into whatever it points to.
+    if let Ok(meta) = sftp.symlink_metadata(root).await {
+        if meta.is_symlink() {
+            return sftp
+                .remove_file(root)
+                .await
+                .map_err(|e| format!("SFTP unlink {} failed: {}", root, e));
+        }
+    }
+
+    let mut stack: Vec<(String, bool)> = vec![(root.to_string(), false)];
+    let mut visited_dirs: usize = 0;
+    const MAX_DIRS: usize = 10_000;
+
+    while let Some((dir, expanded)) = stack.pop() {
+        if expanded {
+            sftp.remove_dir(&dir)
+                .await
+                .map_err(|e| format!("SFTP rmdir {} failed: {}", dir, e))?;
+            continue;
+        }
+        visited_dirs += 1;
+        if visited_dirs > MAX_DIRS {
+            return Err(format!(
+                "Aborted recursive delete after visiting {} directories",
+                MAX_DIRS
+            ));
+        }
+        stack.push((dir.clone(), true));
+
+        let entries = sftp
+            .read_dir(&dir)
+            .await
+            .map_err(|e| format!("SFTP readdir {} failed: {}", dir, e))?;
+        for entry in entries {
+            let name = entry.file_name();
+            match classify_entry_name(&name) {
+                EntryName::Skip => continue,
+                EntryName::Unsafe => {
+                    return Err(format!(
+                        "SFTP server returned an unsafe entry name {:?} in {} — aborting delete",
+                        name, dir
+                    ));
+                }
+                EntryName::Ok => {}
+            }
+            let child = format!("{}/{}", dir, name);
+            let meta = entry.metadata();
+            // Never traverse symlinks during recursive delete.
+            if meta.is_symlink() || !meta.is_dir() {
+                sftp.remove_file(&child)
+                    .await
+                    .map_err(|e| format!("SFTP delete {} failed: {}", child, e))?;
+            } else {
+                stack.push((child, false));
+            }
+        }
+    }
+    Ok(())
 }
 
 pub async fn delete_file(sftp: &SftpSession, path: &str) -> Result<(), String> {

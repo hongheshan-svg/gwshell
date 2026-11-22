@@ -1,44 +1,99 @@
 use crate::ssh::handler::Client;
 use crate::ssh::params::ConnectParams;
 use crate::ssh::transport::expand_tilde;
-use russh::client::Handle;
+use russh::client::{AuthResult, Handle};
+use russh::MethodKind;
 use std::sync::Arc;
 
-/// Authenticate `session` using the configured method, with graceful fallback.
-/// Mirrors the auth method handling of the old ssh.rs but driven by russh.
+/// Authenticate `session` using the configured method, supporting SSH
+/// `partial_success` multi-factor authentication chains (e.g. publickey/agent
+/// followed by keyboard-interactive or password) as well as automatic fallback
+/// from password to keyboard-interactive when a server (such as a PAM bastion)
+/// disables plain password auth.
 pub async fn authenticate(session: &mut Handle<Client>, p: &ConnectParams) -> Result<(), String> {
     let user = &p.username;
 
     // Reveal allowed methods (also required by some servers before any auth).
     let _ = session.authenticate_none(user.clone()).await;
 
-    let ok = match p.auth_method.as_str() {
+    let mut result = match p.auth_method.as_str() {
         "publickey" => try_pubkey(session, p).await?,
         "agent" => try_agent(session, user).await?,
         "keyboardinteractive" => try_keyboard_interactive(session, p).await?,
         "none" => session
             .authenticate_none(user.clone())
             .await
-            .map(|r| r.success())
-            .unwrap_or(false),
+            .map_err(|e| format!("None auth failed: {}", e))?,
         _ => {
             let pw = p.password.clone().unwrap_or_default();
-            session
+            let res = session
                 .authenticate_password(user.clone(), pw)
                 .await
-                .map(|r| r.success())
-                .map_err(|e| format!("Password auth failed: {}", e))?
+                .map_err(|e| format!("Password auth failed: {}", e))?;
+            // PAM-backed servers and bastions often disable the `password`
+            // method and require `keyboard-interactive` for the same password.
+            if let AuthResult::Failure {
+                ref remaining_methods,
+                partial_success: false,
+            } = res
+            {
+                if remaining_methods.contains(&MethodKind::KeyboardInteractive)
+                    && !remaining_methods.contains(&MethodKind::Password)
+                {
+                    try_keyboard_interactive(session, p).await?
+                } else {
+                    res
+                }
+            } else {
+                res
+            }
         }
     };
 
-    if ok {
+    // Continue multi-factor chains when the server accepts the first factor
+    // (`partial_success: true`) and requests an additional method.
+    for _ in 0..3 {
+        match result {
+            AuthResult::Success => return Ok(()),
+            AuthResult::Failure {
+                ref remaining_methods,
+                partial_success: true,
+            } => {
+                if remaining_methods.contains(&MethodKind::KeyboardInteractive)
+                    && (p.totp_code.as_deref().is_some_and(|s| !s.is_empty())
+                        || p.password.as_deref().is_some_and(|s| !s.is_empty()))
+                {
+                    result = try_keyboard_interactive(session, p).await?;
+                } else if remaining_methods.contains(&MethodKind::Password)
+                    && p.password.as_deref().is_some_and(|s| !s.is_empty())
+                {
+                    let pw = p.password.clone().unwrap_or_default();
+                    result = session
+                        .authenticate_password(user.clone(), pw)
+                        .await
+                        .map_err(|e| format!("Password MFA step failed: {}", e))?;
+                } else {
+                    return Err(
+                        "Additional authentication factor required by server (partial success)"
+                            .to_string(),
+                    );
+                }
+            }
+            AuthResult::Failure {
+                partial_success: false,
+                ..
+            } => break,
+        }
+    }
+
+    if result.success() {
         Ok(())
     } else {
         Err("Authentication failed".to_string())
     }
 }
 
-async fn try_pubkey(session: &mut Handle<Client>, p: &ConnectParams) -> Result<bool, String> {
+async fn try_pubkey(session: &mut Handle<Client>, p: &ConnectParams) -> Result<AuthResult, String> {
     let path = p
         .private_key_path
         .as_deref()
@@ -55,17 +110,16 @@ async fn try_pubkey(session: &mut Handle<Client>, p: &ConnectParams) -> Result<b
         .ok()
         .flatten()
         .flatten();
-    let res = session
+    session
         .authenticate_publickey(
             p.username.clone(),
             russh::keys::PrivateKeyWithHashAlg::new(Arc::new(key), hash),
         )
         .await
-        .map_err(|e| format!("Public key auth failed: {}", e))?;
-    Ok(res.success())
+        .map_err(|e| format!("Public key auth failed: {}", e))
 }
 
-async fn try_agent(session: &mut Handle<Client>, user: &str) -> Result<bool, String> {
+async fn try_agent(session: &mut Handle<Client>, user: &str) -> Result<AuthResult, String> {
     // Connecting to the agent is OS-specific: `connect_env` (via $SSH_AUTH_SOCK)
     // is `#[cfg(unix)]`-only in russh, while Windows exposes the OpenSSH agent's
     // named pipe and Pageant. Each yields a different transport type, so the
@@ -98,15 +152,13 @@ async fn try_agent(session: &mut Handle<Client>, user: &str) -> Result<bool, Str
     }
 }
 
-/// Try each identity offered by a connected agent until one authenticates.
-/// Generic over the agent transport so it serves the Unix socket, the Windows
-/// named pipe, and Pageant alike. The bound mirrors russh's
-/// `impl<R: AsyncRead + AsyncWrite + Unpin + Send + 'static> Signer for AgentClient<R>`.
+/// Try each identity offered by a connected agent until one authenticates or
+/// achieves partial success (for MFA chains).
 async fn auth_with_agent<S>(
     session: &mut Handle<Client>,
     user: &str,
     mut agent: russh::keys::agent::client::AgentClient<S>,
-) -> Result<bool, String>
+) -> Result<AuthResult, String>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
@@ -120,6 +172,7 @@ where
         .ok()
         .flatten()
         .flatten();
+    let mut last_failure = None;
     for id in identities {
         let public_key = id.public_key().into_owned();
         let hash_alg = if public_key.algorithm().is_rsa() {
@@ -131,18 +184,26 @@ where
             .authenticate_publickey_with(user.to_string(), public_key, hash_alg, &mut agent)
             .await
         {
-            if res.success() {
-                return Ok(true);
+            match res {
+                AuthResult::Success => return Ok(AuthResult::Success),
+                AuthResult::Failure {
+                    partial_success: true,
+                    ..
+                } => return Ok(res),
+                other => last_failure = Some(other),
             }
         }
     }
-    Ok(false)
+    Ok(last_failure.unwrap_or_else(|| AuthResult::Failure {
+        remaining_methods: russh::MethodSet::empty(),
+        partial_success: false,
+    }))
 }
 
 async fn try_keyboard_interactive(
     session: &mut Handle<Client>,
     p: &ConnectParams,
-) -> Result<bool, String> {
+) -> Result<AuthResult, String> {
     use russh::client::KeyboardInteractiveAuthResponse as R;
     let mut resp = session
         .authenticate_keyboard_interactive_start(p.username.clone(), None)
@@ -154,8 +215,16 @@ async fn try_keyboard_interactive(
     let mut rounds = 0u32;
     loop {
         match resp {
-            R::Success => return Ok(true),
-            R::Failure { .. } => return Ok(false),
+            R::Success => return Ok(AuthResult::Success),
+            R::Failure {
+                remaining_methods,
+                partial_success,
+            } => {
+                return Ok(AuthResult::Failure {
+                    remaining_methods,
+                    partial_success,
+                });
+            }
             R::InfoRequest { prompts, .. } => {
                 rounds += 1;
                 if rounds > 10 {

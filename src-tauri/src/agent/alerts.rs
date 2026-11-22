@@ -1,4 +1,5 @@
 use super::types::{AgentEvidence, AgentPolicySettings};
+use crate::metrics::MetricsSnapshot;
 
 pub fn detect_alerts(evidence: &[AgentEvidence], policy: &AgentPolicySettings) -> Vec<String> {
     let mut alerts = Vec::new();
@@ -11,6 +12,43 @@ pub fn detect_alerts(evidence: &[AgentEvidence], policy: &AgentPolicySettings) -
     }
     alerts.sort();
     alerts.dedup();
+    alerts
+}
+
+/// Evaluate live `MetricsSnapshot` values against configured alert thresholds.
+pub fn detect_metrics_alerts(
+    snapshot: &MetricsSnapshot,
+    policy: &AgentPolicySettings,
+) -> Vec<String> {
+    let mut alerts = Vec::new();
+    if let Some(ref disk) = snapshot.disk {
+        if let Some(used_pct) = disk
+            .used_bytes
+            .saturating_mul(100)
+            .checked_div(disk.total_bytes)
+        {
+            if used_pct >= policy.disk_alert_percent as u64 {
+                alerts.push(format!(
+                    "disk usage threshold crossed on {}: {}% >= {}%",
+                    disk.mount, used_pct, policy.disk_alert_percent
+                ));
+            }
+        }
+    }
+    if let Some(ref mem) = snapshot.mem {
+        if let Some(used_pct) = mem
+            .mem_used_bytes
+            .saturating_mul(100)
+            .checked_div(mem.mem_total_bytes)
+        {
+            if used_pct >= policy.memory_alert_percent as u64 {
+                alerts.push(format!(
+                    "memory usage threshold crossed: {}% >= {}%",
+                    used_pct, policy.memory_alert_percent
+                ));
+            }
+        }
+    }
     alerts
 }
 
@@ -119,5 +157,27 @@ mod tests {
 
         let alerts = detect_alerts(&evidence, &AgentPolicySettings::default());
         assert!(alerts.is_empty(), "unexpected false alerts: {:?}", alerts);
+    }
+
+    #[test]
+    fn detects_alerts_from_live_metrics_snapshot() {
+        let snap = MetricsSnapshot {
+            disk: Some(crate::metrics::DiskStats {
+                total_bytes: 1000,
+                used_bytes: 920,
+                mount: "/".into(),
+            }),
+            mem: Some(crate::metrics::MemStats {
+                mem_total_bytes: 1000,
+                mem_used_bytes: 950,
+                swap_total_bytes: 0,
+                swap_used_bytes: 0,
+            }),
+            ..Default::default()
+        };
+        let alerts = detect_metrics_alerts(&snap, &AgentPolicySettings::default());
+        assert_eq!(alerts.len(), 2);
+        assert!(alerts[0].contains("disk usage"));
+        assert!(alerts[1].contains("memory usage"));
     }
 }

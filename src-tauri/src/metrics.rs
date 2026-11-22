@@ -396,6 +396,26 @@ impl MetricsManager {
     /// regardless of the current count — the count is kept as-is because the
     /// callers are still logically subscribed and will eventually call `stop`.
     pub fn start(&self, session_id: String, ssh: Arc<SshManager>, app: AppHandle) {
+        self.start_inner(session_id, ssh, None, app);
+    }
+
+    pub fn start_with_state(
+        &self,
+        session_id: String,
+        state: Arc<crate::state::AppState>,
+        app: AppHandle,
+    ) {
+        let ssh = state.ssh_manager.clone();
+        self.start_inner(session_id, ssh, Some(state), app);
+    }
+
+    fn start_inner(
+        &self,
+        session_id: String,
+        ssh: Arc<SshManager>,
+        app_state: Option<Arc<crate::state::AppState>>,
+        app: AppHandle,
+    ) {
         // --- 1. Increment the reference count (always). ---
         // Lock refs briefly, then drop before touching tasks.
         {
@@ -475,6 +495,9 @@ echo '---HOSTEND---'
             }
 
             let mut consecutive_timeouts: u32 = 0;
+            let mut last_policy_check: Option<Instant> = None;
+            let mut cached_policy = crate::agent::types::AgentPolicySettings::default();
+            let mut last_alert_auto_start: Option<Instant> = None;
             loop {
                 let probe = r#"
 echo '---STAT---';   cat /proc/stat
@@ -517,6 +540,55 @@ echo '---END---'
 
                 let snapshot = build_snapshot(&out, &sid, &last, &static_host);
                 let _ = app.emit(&format!("server-metrics-{}", sid), &snapshot);
+
+                if let Some(ref state) = app_state {
+                    let now = Instant::now();
+                    if last_policy_check
+                        .map_or(true, |t| now.duration_since(t) >= Duration::from_secs(10))
+                    {
+                        last_policy_check = Some(now);
+                        let st = state.clone();
+                        if let Ok(Ok(policy)) = tokio::task::spawn_blocking(move || {
+                            crate::agent::policy::load_settings(&st.db)
+                        })
+                        .await
+                        {
+                            cached_policy = policy;
+                        }
+                    }
+
+                    let cooldown_elapsed = last_alert_auto_start
+                        .map_or(true, |t| now.duration_since(t) >= Duration::from_secs(600));
+                    if cached_policy.alert_auto_start_agent
+                        && cooldown_elapsed
+                        && !state.agent_manager.has_running_session_for_target(&sid)
+                    {
+                        let alerts =
+                            crate::agent::alerts::detect_metrics_alerts(&snapshot, &cached_policy);
+                        if !alerts.is_empty() {
+                            last_alert_auto_start = Some(now);
+                            let info = state.agent_manager.start_session(
+                                crate::agent::types::AgentSessionStart {
+                                    target_session_id: sid.clone(),
+                                    objective: format!(
+                                        "Automatic alert triage: {}",
+                                        alerts.join("; ")
+                                    ),
+                                    autonomy: crate::agent::types::AgentAutonomyLevel::Recommend,
+                                },
+                            );
+                            let _ = app.emit(
+                                &crate::agent::manager::event_name("alert-auto-started", &sid),
+                                info.clone(),
+                            );
+                            crate::agent::runtime::spawn_agent_session_run(
+                                state.clone(),
+                                app.clone(),
+                                info,
+                            );
+                        }
+                    }
+                }
 
                 sleep(Duration::from_secs(2)).await;
             }
