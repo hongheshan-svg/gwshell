@@ -368,36 +368,6 @@ impl Database {
 
     // ---- Storage Operations ----
 
-    pub fn export_sessions_json(&self) -> Result<String, String> {
-        let mut sessions = self.get_sessions()?;
-        // Never write plaintext secrets to a user-chosen export file. Passwords
-        // and TOTP secrets are stripped; re-enter them after importing.
-        for s in &mut sessions {
-            s.password = None;
-            s.jump_password = None;
-            s.proxy_password = None;
-            s.totp_code = None;
-        }
-        serde_json::to_string_pretty(&sessions).map_err(|e| e.to_string())
-    }
-
-    /// Import sessions from an export file. Secret fields absent from the file
-    /// (exports strip them) keep the values of `existing` sessions with the
-    /// same id instead of being wiped.
-    pub fn import_sessions_json(
-        &self,
-        json: &str,
-        existing: &[SessionConfig],
-    ) -> Result<usize, String> {
-        let sessions: Vec<SessionConfig> = serde_json::from_str(json).map_err(|e| e.to_string())?;
-        let count = sessions.len();
-        for mut session in sessions {
-            session.merge_secrets_from(existing.iter().find(|s| s.id == session.id));
-            self.save_session(&session)?;
-        }
-        Ok(count)
-    }
-
     pub fn clear_all_sessions(&self) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         conn.execute("DELETE FROM sessions", [])

@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
-import { Server, Zap, FileInput, Search, ArrowRight } from 'lucide-react';
+import { Server, Zap, FileInput, Search, ArrowRight, Upload } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { parseQuickConnect } from '../../lib/quickConnect';
 import type { SessionConfig } from '../../types';
@@ -333,6 +334,27 @@ export const EmptyStateCtas: React.FC = () => {
     }
   };
 
+  const handleImportBackupFile = async () => {
+    setImportMsg(null);
+    try {
+      const path = await dialogOpen({
+        title: t('asset_io_import_file'),
+        multiple: false,
+        filters: [
+          { name: 'GWShell Assets (JSON / CSV)', extensions: ['json', 'csv'] },
+          { name: 'JSON', extensions: ['json'] },
+          { name: 'CSV', extensions: ['csv'] },
+        ],
+      });
+      if (typeof path !== 'string' || !path) return;
+      const count = await invoke<number>('import_sessions_data', { path });
+      setSessions(await invoke<SessionConfig[]>('get_sessions'));
+      setImportMsg(t('settings_storage_imported', { count }));
+    } catch (e) {
+      setImportMsg(t('settings_storage_failed', { msg: String(e) }));
+    }
+  };
+
   return (
     <div className="asset-dash-empty">
       <div className="asset-empty-content">
@@ -395,6 +417,16 @@ export const EmptyStateCtas: React.FC = () => {
             <span className="empty-cta-desc">{t('empty_cta_import_desc')}</span>
           </button>
         </div>
+        <button
+          type="button"
+          className="empty-restore-link"
+          onClick={() => {
+            void handleImportBackupFile();
+          }}
+        >
+          <Upload size={12} />
+          <span>{t('asset_io_empty_restore')}</span>
+        </button>
         {importMsg && <p className="empty-cta-msg">{importMsg}</p>}
       </div>
     </div>

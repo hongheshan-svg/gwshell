@@ -126,6 +126,197 @@
   transform: translateY(-0.5px);
 }
 
+/* ---- Asset Import / Export Dropdown Controls ---- */
+
+.asset-io-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.asset-io-anchor {
+  position: relative;
+}
+
+.asset-io-btn {
+  height: 32px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.asset-io-btn:hover:not(:disabled),
+.asset-io-btn.is-open {
+  background: var(--bg-hover);
+  border-color: var(--border-light);
+  color: var(--text-primary);
+}
+
+.asset-io-btn.has-selection {
+  border-color: rgba(var(--accent-primary-rgb), 0.45);
+  background: rgba(var(--accent-primary-rgb), 0.1);
+  color: var(--accent-primary);
+}
+
+.asset-io-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.asset-io-caret {
+  opacity: 0.65;
+  transition: transform 140ms ease;
+}
+
+.asset-io-btn.is-open .asset-io-caret {
+  transform: rotate(180deg);
+}
+
+.asset-io-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 272px;
+  padding: 6px;
+  z-index: 400;
+  background: var(--chrome-bg);
+  backdrop-filter: blur(var(--surface-blur));
+  -webkit-backdrop-filter: blur(var(--surface-blur));
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.asset-io-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-sm);
+  background: rgba(var(--success-rgb), 0.1);
+  color: var(--success);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.asset-io-note svg {
+  flex-shrink: 0;
+}
+
+.asset-io-item {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+
+.asset-io-item:hover {
+  background: var(--bg-hover);
+}
+
+.asset-io-item__icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.asset-io-item__icon.is-accent {
+  background: rgba(var(--accent-primary-rgb), 0.14);
+  color: var(--accent-primary);
+}
+
+.asset-io-item__icon.is-ssh {
+  background: rgba(var(--proto-ssh-rgb), 0.14);
+  color: var(--proto-ssh);
+}
+
+.asset-io-item__icon.is-csv {
+  background: rgba(var(--success-rgb), 0.14);
+  color: var(--success);
+}
+
+.asset-io-item__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.asset-io-item__body strong {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.asset-io-item__body span {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.asset-io-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 4px 6px;
+}
+
+.empty-restore-link {
+  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px dashed var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease,
+    background 120ms ease;
+}
+
+.empty-restore-link:hover {
+  color: var(--accent-primary);
+  border-color: rgba(var(--accent-primary-rgb), 0.45);
+  background: rgba(var(--accent-primary-rgb), 0.08);
+}
+
 /* ---- Unified Filter & Controls Strip ---- */
 
 .asset-controls-bar {

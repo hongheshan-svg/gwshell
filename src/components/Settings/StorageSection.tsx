@@ -48,7 +48,11 @@ export const StorageSection: React.FC = () => {
       const path = await dialogOpen({
         title: t('settings_storage_import'),
         multiple: false,
-        filters: [{ name: 'JSON', extensions: ['json'] }],
+        filters: [
+          { name: 'GWShell Assets (JSON / CSV)', extensions: ['json', 'csv'] },
+          { name: 'JSON', extensions: ['json'] },
+          { name: 'CSV', extensions: ['csv'] },
+        ],
       });
       if (typeof path !== 'string' || !path) return;
       setBusy(true);

@@ -22,6 +22,7 @@ import { openNewAssetModal } from '../../lib/newAssetAction';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
 import { ProtocolIcon } from '../Icons/BrandIcons';
 import { AssetDashboard, EmptyStateCtas } from '../AssetDashboard/AssetDashboard';
+import { AssetImportExportMenu } from './AssetImportExportMenu';
 
 type SessionType = SessionConfig['session_type'];
 type TypeFilter = 'all' | SessionType;
@@ -194,6 +195,14 @@ export const AssetTable: React.FC = () => {
           </div>
         </div>
         <div className="asset-home-actions">
+          <AssetImportExportMenu
+            totalCount={realSessions.length}
+            selectedIds={selectedSessionIds}
+            onAfterImport={() => {
+              setSelectedSessionIds([]);
+              window.setTimeout(() => doPingRef.current(), 120);
+            }}
+          />
           <button
             type="button"
             className="asset-quick-btn"

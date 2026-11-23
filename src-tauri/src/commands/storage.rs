@@ -1,7 +1,11 @@
+#[path = "asset_io.rs"]
+mod asset_io;
+
 use crate::crypto;
 use crate::session::{self, SessionConfig};
 use crate::ssh_config;
 use crate::state::{redacted_sessions_for_frontend, AppState};
+use std::collections::HashSet;
 use std::sync::Arc;
 use tauri::State;
 
@@ -131,12 +135,37 @@ pub async fn delete_snippet(id: String, state: State<'_, Arc<AppState>>) -> Resu
 #[tauri::command]
 pub async fn export_sessions_data(
     path: String,
+    session_ids: Option<Vec<String>>,
+    format: Option<String>,
     state: State<'_, Arc<AppState>>,
-) -> Result<(), String> {
+) -> Result<usize, String> {
     let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || -> Result<(), String> {
-        let json = state.db.export_sessions_json()?;
-        std::fs::write(&path, json).map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || -> Result<usize, String> {
+        let mut sessions = state.db.get_sessions()?;
+        if let Some(ids) = session_ids {
+            let allow: HashSet<String> = ids.into_iter().collect();
+            sessions.retain(|s| allow.contains(&s.id));
+        }
+        let is_csv = format
+            .as_deref()
+            .map(|f| f.eq_ignore_ascii_case("csv"))
+            .unwrap_or_else(|| path.to_ascii_lowercase().ends_with(".csv"));
+        let content = if is_csv {
+            asset_io::export_sessions_to_csv(&sessions)
+        } else {
+            asset_io::export_sessions_to_json(&sessions)?
+        };
+        std::fs::write(&path, content).map_err(|e| e.to_string())?;
+        Ok(sessions.len())
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))?
+}
+
+#[tauri::command]
+pub async fn export_assets_csv_template(path: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        std::fs::write(&path, asset_io::csv_template()).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| format!("task join: {}", e))?
@@ -149,11 +178,38 @@ pub async fn import_sessions_data(
 ) -> Result<usize, String> {
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || -> Result<usize, String> {
-        let json = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let raw = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let trimmed = raw.strip_prefix('\u{FEFF}').unwrap_or(&raw).trim_start();
+        let is_csv = path.to_ascii_lowercase().ends_with(".csv")
+            || (!trimmed.starts_with('[') && !trimmed.starts_with('{'));
+        let imported = if is_csv {
+            asset_io::parse_sessions_from_csv(&raw, &chrono_date_today())?
+        } else {
+            asset_io::parse_sessions_from_json(&raw)?
+        };
+
         let mut sessions = state.sessions.lock();
-        // Exports never contain secrets, so re-importing a backup over existing
-        // sessions must keep their stored credentials (see merge_secrets_from).
-        let count = state.db.import_sessions_json(&json, &sessions)?;
+        let count = imported.len();
+        for mut session in imported {
+            // Exports never contain secrets, so re-importing a backup over existing
+            // sessions must preserve stored credentials. For CSV rows (which carry
+            // no id), match by (name, host, port) so repeated CSV imports update
+            // in-place instead of duplicating entries or losing saved passwords.
+            let matched = sessions.iter().find(|s| s.id == session.id).or_else(|| {
+                if is_csv {
+                    sessions.iter().find(|s| {
+                        s.name == session.name && s.host == session.host && s.port == session.port
+                    })
+                } else {
+                    None
+                }
+            });
+            if let Some(prev) = matched {
+                session.id = prev.id.clone();
+                session.merge_secrets_from(Some(prev));
+            }
+            state.db.save_session(&session)?;
+        }
         // Reload sessions into memory
         *sessions = state.db.get_sessions()?;
         Ok(count)

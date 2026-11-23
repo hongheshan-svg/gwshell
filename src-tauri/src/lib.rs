@@ -136,6 +136,7 @@ pub fn run() {
             agent::commands::execute_agent_action,
             agent::commands::save_agent_audit,
             commands::storage::export_sessions_data,
+            commands::storage::export_assets_csv_template,
             commands::storage::import_sessions_data,
             commands::storage::import_ssh_config,
             commands::storage::clear_local_data,
