@@ -17,7 +17,7 @@ import { useAppStore } from '../../stores/appStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useConfirm } from '../../hooks/useConfirm';
 import { openNewAssetModal } from '../../lib/newAssetAction';
-import { destroyTerminal } from '../../lib/terminalLifecycle';
+import { destroyTerminal, focusTerminalTab } from '../../lib/terminalLifecycle';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
 import { ProtocolIcon, type ProtocolIconType } from '../Icons/BrandIcons';
 import type { TabInfo } from '../../types';
@@ -244,7 +244,10 @@ export const TabBar: React.FC = () => {
                 key={tab.id}
                 tab={tab}
                 active={tab.id === activeTabId}
-                onSelect={() => setActiveTab(tab.id)}
+                onSelect={() => {
+                  setActiveTab(tab.id);
+                  focusTerminalTab(tab.id);
+                }}
                 onMiddleClick={(e) => handleMiddleClick(e, tab.id)}
                 onContextMenu={(e) => openTabContextMenu(e, tab)}
                 onClose={() => handleCloseTab(tab.id)}

@@ -217,7 +217,11 @@ pub fn run() {
 
             #[cfg(not(target_os = "macos"))]
             {
-                builder = builder.decorations(false).transparent(true);
+                // Keep the window opaque on Windows and Linux: `.app-root` fills
+                // the entire viewport with a solid `--bg-shell` background, and
+                // `.transparent(true)` forces alpha-composited DirectComposition /
+                // WebKitGTK swapchains that can stall WebGL and input delivery.
+                builder = builder.decorations(false);
             }
 
             let main_window = builder.build()?;

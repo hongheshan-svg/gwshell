@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../stores/appStore';
+import { focusTerminalTab } from '../lib/terminalLifecycle';
 import { useConfirm } from './useConfirm';
 import type { SessionConfig } from '../types';
 
@@ -50,9 +51,13 @@ export function useAssetData() {
     : realSessions;
 
   const handleConnect = (session: SessionConfig) => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     const existingTab = tabs.find((t) => t.sessionId === session.id);
     if (existingTab) {
       setActiveTab(existingTab.id);
+      focusTerminalTab(existingTab.id);
       return;
     }
     const tabId = crypto.randomUUID();

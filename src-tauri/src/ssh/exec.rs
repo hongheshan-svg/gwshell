@@ -20,16 +20,15 @@ pub struct ExecOutput {
 /// Run a command on a fresh channel of an existing connection, returning
 /// stdout, stderr, and the remote exit status.
 pub async fn exec_with_status(conn: &Handle<Client>, command: &str) -> Result<ExecOutput, String> {
-    let channel = conn
-        .channel_open_session()
-        .await
-        .map_err(|e| format!("Exec channel failed: {}", e))?;
-    channel
-        .exec(true, command.as_bytes())
-        .await
-        .map_err(|e| format!("Exec failed: {}", e))?;
-    let collect = async move {
-        let mut channel = channel;
+    let work = async {
+        let mut channel = conn
+            .channel_open_session()
+            .await
+            .map_err(|e| format!("Exec channel failed: {}", e))?;
+        channel
+            .exec(true, command.as_bytes())
+            .await
+            .map_err(|e| format!("Exec failed: {}", e))?;
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
         let mut exit_code: Option<u32> = None;
@@ -42,15 +41,15 @@ pub async fn exec_with_status(conn: &Handle<Client>, command: &str) -> Result<Ex
                 _ => {}
             }
         }
-        ExecOutput {
+        Ok::<ExecOutput, String>(ExecOutput {
             stdout: String::from_utf8_lossy(&stdout).trim().to_string(),
             stderr: String::from_utf8_lossy(&stderr).trim().to_string(),
             exit_code,
-        }
+        })
     };
-    tokio::time::timeout(EXEC_TIMEOUT, collect)
+    tokio::time::timeout(EXEC_TIMEOUT, work)
         .await
-        .map_err(|_| "Exec timed out".to_string())
+        .map_err(|_| "Exec timed out".to_string())?
 }
 
 /// Run a command on a fresh channel of an existing connection; return stdout.

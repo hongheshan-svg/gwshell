@@ -1,22 +1,28 @@
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import type { TabInfo, ThemeMode } from '../types';
 import { useAppStore } from '../stores/appStore';
+import { useConfirmStore } from '../stores/confirmStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { terminalInstances } from '../components/Terminal/terminalRegistry';
 import { resolveTerminalTheme } from '../lib/terminalThemes';
 import { cellSize, webglDebugEnabled } from '../lib/terminalPlatform';
 import {
   fitFrameIds,
+  focusTerminalTab,
   forceTerminalRedraw,
   scheduleTerminalFit,
   scheduleTerminalResizeSettle,
   settleTimerIds,
 } from '../lib/terminalLifecycle';
 
-function canAutoFocusTerminal(tabId: string): boolean {
+const LOCAL_OVERLAY_SELECTOR =
+  '.fingerprint-overlay, .paste-confirm-overlay, .update-modal-overlay, .sftp-editor-overlay, .sftp-chmod-overlay';
+const TERMINAL_COMPANION_INPUT_SCOPE =
+  '.sftp-panel, .agent-panel, .terminal-ai-dock, .terminal-search-bar';
+
+function hasBlockingAppModal(): boolean {
   const st = useAppStore.getState();
-  if (st.activeTabId !== tabId || st.mainView === 'asset-list') return false;
-  if (
+  return (
     st.vaultLocked ||
     st.showNewSession ||
     st.showQuickConnect ||
@@ -24,18 +30,31 @@ function canAutoFocusTerminal(tabId: string): boolean {
     st.showLocalTerminalModal ||
     st.showSerialModal ||
     st.showSettings ||
+    st.showAppMenu ||
     st.showCommandPalette ||
-    st.showTerminalSearch
-  ) {
-    return false;
-  }
+    st.showTerminalSearch ||
+    st.groupDefaultsTarget !== null ||
+    st.dockerPicker !== null ||
+    useConfirmStore.getState().open ||
+    Boolean(document.querySelector(LOCAL_OVERLAY_SELECTOR))
+  );
+}
+
+function canAutoFocusTerminal(tabId: string, preserveAnyInput = false): boolean {
+  const st = useAppStore.getState();
+  if (st.activeTabId !== tabId || st.mainView === 'asset-list') return false;
+  if (hasBlockingAppModal()) return false;
   const active = document.activeElement;
   if (
     active instanceof Element &&
     !active.classList.contains('xterm-helper-textarea') &&
     active.closest('input, textarea, [contenteditable="true"]')
   ) {
-    return false;
+    if (preserveAnyInput) return false;
+    // On explicit tab activation/connect/modal-close, only yield to companion
+    // inputs inside the terminal workspace (SFTP rename/path, AI panel, search).
+    // Never let a stale sidebar search box block a newly opened terminal.
+    if (active.closest(TERMINAL_COMPANION_INPUT_SCOPE)) return false;
   }
   return true;
 }
@@ -82,9 +101,43 @@ export function useTerminalViewport({
     });
   }, [theme, tab.id]);
 
+  const hasAppModal = useAppStore(
+    (s) =>
+      s.vaultLocked ||
+      s.showNewSession ||
+      s.showQuickConnect ||
+      s.showDockerModal ||
+      s.showLocalTerminalModal ||
+      s.showSerialModal ||
+      s.showSettings ||
+      s.showAppMenu ||
+      s.showCommandPalette ||
+      s.showTerminalSearch ||
+      s.groupDefaultsTarget !== null ||
+      s.dockerPicker !== null,
+  );
+  const confirmOpen = useConfirmStore((s) => s.open);
+  const modalBlocking = hasAppModal || confirmOpen;
+  const prevModalBlockingRef = useRef(modalBlocking);
+
+  // Restore focus to the active terminal when any blocking modal/dialog closes
+  // (e.g. Esc on CommandPalette / Settings / ConfirmDialog / UnlockScreen).
+  useEffect(() => {
+    const wasBlocking = prevModalBlockingRef.current;
+    prevModalBlockingRef.current = modalBlocking;
+    if (wasBlocking && !modalBlocking && isActive && terminalReady) {
+      const raf = requestAnimationFrame(() => {
+        if (canAutoFocusTerminal(tab.id)) {
+          focusTerminalTab(tab.id);
+        }
+      });
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [modalBlocking, isActive, terminalReady, tab.id]);
+
   // Focus/blur and force redraw when a tab becomes active, finishes mounting,
   // or completes connecting. Also re-focus when the OS window regains focus
-  // (helps Windows WebView2 recover keyboard focus after Alt+Tab / restore).
+  // (helps WebView2/WKWebView/WebKitGTK recover keyboard focus after Alt+Tab / restore).
   useEffect(() => {
     const inst = terminalInstances.get(tab.id);
     if (!inst) return;
@@ -96,17 +149,13 @@ export function useTerminalViewport({
         raf2 = requestAnimationFrame(() => {
           forceTerminalRedraw(tab.id, tab.sessionId, tab.type, isSshBacked());
           if (canAutoFocusTerminal(tab.id)) {
-            try {
-              inst.terminal.focus();
-            } catch {}
+            focusTerminalTab(tab.id);
           }
         });
       });
       const handleWindowFocus = () => {
-        if (canAutoFocusTerminal(tab.id)) {
-          try {
-            inst.terminal.focus();
-          } catch {}
+        if (canAutoFocusTerminal(tab.id, true)) {
+          focusTerminalTab(tab.id);
         }
       };
       window.addEventListener('focus', handleWindowFocus);

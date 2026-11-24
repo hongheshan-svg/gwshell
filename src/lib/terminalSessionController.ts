@@ -112,8 +112,28 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
   let cancelDockerPick: (() => void) | null = null;
   const initScriptTimers: ReturnType<typeof setTimeout>[] = [];
   const initScriptCancels: (() => void)[] = [];
+  const mountDisposes: { dispose(): void }[] = [];
+  let disposeBell: (() => void) | null = null;
+  let disposeWheel: (() => void) | null = null;
 
-  const usesLocalConpty = (): boolean => {
+  const disposeMountHooks = () => {
+    while (mountDisposes.length > 0) {
+      const d = mountDisposes.pop();
+      try {
+        d?.dispose();
+      } catch {}
+    }
+    try {
+      disposeBell?.();
+    } catch {}
+    disposeBell = null;
+    try {
+      disposeWheel?.();
+    } catch {}
+    disposeWheel = null;
+  };
+
+  const usesLocalPty = (): boolean => {
     if (tab.type === 'localshell') return true;
     if (tab.type === 'docker') {
       const dsess = sessionsRef.current.find((s) => s.id === tab.sessionId);
@@ -122,33 +142,66 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
     return false;
   };
 
+  const closeBackendSession = () => {
+    const isSshDocker =
+      tab.type === 'docker' &&
+      (
+        sessionsRef.current.find((s) => s.id === tab.sessionId)?.docker_connect_method ?? ''
+      ).toLowerCase() === 'ssh';
+    const closeCmd =
+      tab.type === 'ssh' || isSshDocker
+        ? 'close_ssh'
+        : tab.type === 'serial'
+          ? 'close_serial'
+          : 'close_pty';
+    invoke(closeCmd, { sessionId: tab.sessionId }).catch(() => {});
+  };
+
+  const extractPrimaryFontFamily = (rawFont: string): string | null => {
+    const first = rawFont
+      .split(',')[0]
+      ?.trim()
+      .replace(/^["']+|["']+$/g, '');
+    if (!first) return null;
+    const lower = first.toLowerCase();
+    if (
+      lower === 'monospace' ||
+      lower === 'sans-serif' ||
+      lower === 'serif' ||
+      lower === 'system-ui' ||
+      lower === 'ui-monospace'
+    ) {
+      return null;
+    }
+    return first;
+  };
+
   const initTerminal = async () => {
     const existingInstance = terminalInstances.get(tab.id);
     let instance: TerminalInstance | undefined = existingInstance;
-    const pendingDisposes: { dispose(): void }[] = [];
+    const osInfo = await getOsInfo();
+    if (cancelled) return;
+    const isWindowsConpty = osInfo.os === 'windows' && usesLocalPty();
 
     if (!instance) {
-      const osInfo = await getOsInfo();
-      if (cancelled) return;
-
       const s = useSettingsStore.getState().settings;
       const termOpts = buildVscodeTerminalOptions(
         s,
         resolveTerminalTheme(s.terminalColorScheme, useAppStore.getState().theme),
       );
-      const windowsPty = getXtermWindowsPty(osInfo, usesLocalConpty());
+      const windowsPty = getXtermWindowsPty(osInfo, usesLocalPty());
       if (windowsPty) termOpts.windowsPty = windowsPty;
       termOpts.vtExtensions = {
-        win32InputMode: usesLocalConpty(),
+        win32InputMode: isWindowsConpty,
         kittyKeyboard: false,
       };
 
       try {
-        if (typeof document !== 'undefined' && document.fonts?.load) {
+        const primaryFont = extractPrimaryFontFamily(s.terminalFont || '');
+        if (primaryFont && typeof document !== 'undefined' && document.fonts?.load) {
           const fs = parseInt(s.terminalFontSize) || 13;
-          const family = (s.terminalFont || 'monospace').trim();
           await Promise.race([
-            document.fonts.load(`${fs}px "${family}"`),
+            document.fonts.load(`${fs}px "${primaryFont.replace(/"/g, '')}"`),
             new Promise<void>((resolve) => setTimeout(resolve, 600)),
           ]);
         }
@@ -193,7 +246,7 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
 
     attachWebglRenderer(instance, tab, wasFreshlyOpened, isSshBacked);
 
-    if (usesLocalConpty()) {
+    if (isWindowsConpty) {
       try {
         const da1Dispose = instance.terminal.parser.registerCsiHandler({ final: 'c' }, (params) => {
           if (params.length === 0 || (params.length === 1 && params[0] === 0)) {
@@ -202,7 +255,7 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
           }
           return false;
         });
-        pendingDisposes.push(da1Dispose);
+        mountDisposes.push(da1Dispose);
       } catch {}
     }
 
@@ -222,11 +275,9 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
+        if (cancelled) return;
         if (wasReparented) {
           forceTerminalRedraw(tab.id, tab.sessionId, tab.type, isSshBacked());
-          if (usesLocalConpty()) {
-            sendInputToTab(tab.id, '\x1b[?1049h\x1b[?1049l');
-          }
         } else {
           scheduleTerminalFit(tab.id);
           scheduleTerminalResizeSettle(tab.id, tab.sessionId, tab.type, 80, isSshBacked());
@@ -234,8 +285,8 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
       });
     });
 
-    const disposeBell = attachBellAudio(instance.terminal);
-    const disposeWheel = attachWheelZoom(tab.id, instance.terminal.element);
+    disposeBell = attachBellAudio(instance.terminal);
+    disposeWheel = attachWheelZoom(tab.id, instance.terminal.element);
 
     // ── Listener setup ─────────────────────────────────────
     cleanupTabListeners(tab.id);
@@ -354,11 +405,13 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
       let writeTimer: ReturnType<typeof setTimeout> | null = null;
       let writesInFlight = 0;
       let writeDisposed = false;
+      let consecutiveWriteRetries = 0;
       const WRITE_FLUSH_MS = 8;
       const WRITE_RETRY_MS = 24;
       const WRITE_CHUNK_SIZE = 16 * 1024;
       const WRITE_INVOKE_TIMEOUT_MS = 1500;
       const WRITE_MAX_IN_FLIGHT = 1;
+      const WRITE_MAX_RETRIES = 4;
       const scheduleWriteFlush = (delayMs = WRITE_FLUSH_MS) => {
         if (writeTimer || writeDisposed) return;
         writeTimer = setTimeout(flushWrites, delayMs);
@@ -385,14 +438,20 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
           writeQueue = writeQueue.slice(payload.length);
           writesInFlight += 1;
           invokeWrite(payload)
+            .then(() => {
+              consecutiveWriteRetries = 0;
+            })
             .catch((err) => {
-              if (
+              const errText = String(err);
+              const isRetryable =
                 isInteractiveTerminal(tab.type) &&
-                (String(err).includes('buffer full') || String(err).includes('timeout'))
-              ) {
+                (errText.includes('buffer full') || errText.includes('timeout'));
+              if (isRetryable && consecutiveWriteRetries < WRITE_MAX_RETRIES) {
+                consecutiveWriteRetries += 1;
                 writeQueue = payload + writeQueue;
-                scheduleWriteFlush(WRITE_RETRY_MS);
+                scheduleWriteFlush(WRITE_RETRY_MS * consecutiveWriteRetries);
               } else {
+                consecutiveWriteRetries = 0;
                 console.error(`[terminal] ${writeCmd} failed:`, err);
               }
             })
@@ -622,11 +681,7 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
           pendingBackendResize.delete(tab.id);
         }
         sentFirstResize.delete(tab.id);
-        for (const d of pendingDisposes) {
-          try {
-            d.dispose();
-          } catch {}
-        }
+        disposeMountHooks();
         try {
           dataDispose.dispose();
         } catch {}
@@ -636,8 +691,6 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
         try {
           osc7Dispose.dispose();
         } catch {}
-        disposeBell();
-        disposeWheel();
         completionAccept.delete(tab.id);
         tabInputSenders.delete(tab.id);
         tabCompletions.delete(tab.id);
@@ -893,9 +946,17 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
         });
 
       const alreadyConnected = connectedTabs.has(tab.id);
-      if (!alreadyConnected) {
-        connectedTabs.add(tab.id);
-      }
+      const handleCancelledPostConnect = (): boolean => {
+        if (!cancelled) return false;
+        const stillExists = useAppStore.getState().tabs.some((t2) => t2.id === tab.id);
+        if (!stillExists) {
+          connectedTabs.delete(tab.id);
+          closeBackendSession();
+        } else {
+          useAppStore.getState().updateTabConnected(tab.id, true);
+        }
+        return true;
+      };
 
       try {
         let connectionReady = alreadyConnected;
@@ -903,6 +964,7 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
           if (tab.type === 'localshell') {
             await waitForLayoutFit();
             if (cancelled) return;
+            connectedTabs.add(tab.id);
             instance?.terminal.write(`\r\n\x1b[90m${t('term_starting_shell')}\x1b[0m\r\n`);
             await invoke('create_local_shell', {
               sessionId: tab.sessionId,
@@ -913,6 +975,7 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
               charset: session?.charset ?? null,
               envVars: session?.env_vars ?? null,
             });
+            if (handleCancelledPostConnect()) return;
             connectionReady = true;
             if (session?.init_command) {
               scheduleInitCommand('write_to_pty', session.init_command);
@@ -923,6 +986,7 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
             } else {
               await waitForLayoutFit();
               if (cancelled) return;
+              connectedTabs.add(tab.id);
               instance?.terminal.write(
                 `\r\n\x1b[90m${t('term_connecting', {
                   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
@@ -935,6 +999,7 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
                   `...\x1b[0m\r\n`,
               );
               await doSshConnect(session);
+              if (handleCancelledPostConnect()) return;
               connectionReady = true;
               if (session.init_command) {
                 scheduleInitCommand('write_to_ssh', session.init_command);
@@ -946,6 +1011,7 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
             if (!session?.serial_port) {
               instance?.terminal.write(`\r\n\x1b[31m${t('term_serial_not_configured')}\x1b[0m\r\n`);
             } else {
+              connectedTabs.add(tab.id);
               instance?.terminal.write(
                 // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                 `\r\n\x1b[90m${t('term_opening_serial', { port: session.serial_port, baud: session.serial_baud_rate || '115200' })}\x1b[0m\r\n`,
@@ -965,6 +1031,7 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
                 // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
                 serialEncoding: session.serial_encoding || null,
               });
+              if (handleCancelledPostConnect()) return;
               connectionReady = true;
               if (session.serial_init_commands) {
                 scheduleInitCommand('write_to_serial', session.serial_init_commands);
@@ -1032,6 +1099,7 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
               useAppStore.getState().removeTab(tab.id);
               return;
             }
+            connectedTabs.add(tab.id);
             instance?.terminal.write(`\r\n\x1b[90m${t('docker_connecting_container')}\x1b[0m\r\n`);
             await invoke('docker_exec', {
               sessionId: tab.sessionId,
@@ -1042,15 +1110,18 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
               tunnelSessionId: tunnelId,
               dockerHost,
             });
+            if (handleCancelledPostConnect()) return;
             connectionReady = true;
           }
         }
+        if (cancelled) return;
         if (!connectionReady && !alreadyConnected) {
           connectedTabs.delete(tab.id);
         }
         useAppStore.getState().updateTabConnected(tab.id, connectionReady);
       } catch (err) {
         connectedTabs.delete(tab.id);
+        if (cancelled) return;
         useAppStore.getState().updateTabConnected(tab.id, false);
         const isHostKeyAbort = err instanceof Error && err.message === 'HOST_KEY_ABORTED';
         if (!isHostKeyAbort) {
@@ -1080,24 +1151,14 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
     useAppStore.getState().setDockerPicker(null);
     fingerprintResolveRef.current(false);
     cleanupTabListeners(tab.id);
+    disposeMountHooks();
     cleanupTerminalInteractions(tab.id);
     const store = useAppStore.getState();
     const tabStillExists = store.tabs.some((t2) => t2.id === tab.id);
     if (!tabStillExists) {
       connectedTabs.delete(tab.id);
       useAppStore.getState().updateTabConnected(tab.id, false);
-      const isSshDocker =
-        tab.type === 'docker' &&
-        (
-          sessionsRef.current.find((s) => s.id === tab.sessionId)?.docker_connect_method ?? ''
-        ).toLowerCase() === 'ssh';
-      const closeCmd =
-        tab.type === 'ssh' || isSshDocker
-          ? 'close_ssh'
-          : tab.type === 'serial'
-            ? 'close_serial'
-            : 'close_pty';
-      invoke(closeCmd, { sessionId: tab.sessionId }).catch(() => {});
+      closeBackendSession();
     }
   };
 }

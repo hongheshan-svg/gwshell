@@ -93,22 +93,25 @@ pub struct SftpEntry {
 
 /// Open a fresh SFTP subsystem channel on an existing connection.
 ///
-/// russh 0.61: `channel_open_session()` -> `Channel`; `request_subsystem(want_reply, name)`
-/// is by `&self`; `into_stream()` consumes the channel into an `AsyncRead + AsyncWrite`
-/// stream that `russh_sftp::client::SftpSession::new` accepts (it requires
-/// `'static`, which `ChannelStream` satisfies).
+/// Bounded by a 15-second timeout so a host with a stalled or unsupported
+/// SFTP subsystem cannot wedge the cached SFTP mutex forever.
 pub async fn open_sftp(conn: &Handle<Client>) -> Result<SftpSession, String> {
-    let channel = conn
-        .channel_open_session()
+    let work = async {
+        let channel = conn
+            .channel_open_session()
+            .await
+            .map_err(|e| format!("SFTP channel failed: {}", e))?;
+        channel
+            .request_subsystem(true, "sftp")
+            .await
+            .map_err(|e| format!("SFTP subsystem failed: {}", e))?;
+        SftpSession::new(channel.into_stream())
+            .await
+            .map_err(|e| format!("SFTP init failed: {}", e))
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(15), work)
         .await
-        .map_err(|e| format!("SFTP channel failed: {}", e))?;
-    channel
-        .request_subsystem(true, "sftp")
-        .await
-        .map_err(|e| format!("SFTP subsystem failed: {}", e))?;
-    SftpSession::new(channel.into_stream())
-        .await
-        .map_err(|e| format!("SFTP init failed: {}", e))
+        .map_err(|_| "SFTP initialization timed out".to_string())?
 }
 
 pub async fn list_dir(sftp: &SftpSession, path: &str) -> Result<Vec<SftpEntry>, String> {

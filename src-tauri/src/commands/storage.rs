@@ -310,8 +310,9 @@ pub async fn clear_local_data(state: State<'_, Arc<AppState>>) -> Result<(), Str
 
 // ---- Session Management Commands ----
 //
-// `get_sessions` reads only the in-memory cache (instant, no need to dispatch).
-// The mutating ones touch SQLite, so they go through `spawn_blocking`.
+// All commands go through `spawn_blocking` so none can stall the WebView main
+// UI thread while `save_session` or `import_*` holds `state.sessions` across
+// SQLite / OS-keyring I/O.
 
 #[tauri::command]
 pub async fn save_session(
@@ -338,11 +339,17 @@ pub async fn save_session(
 }
 
 #[tauri::command]
-pub fn get_sessions(state: State<'_, Arc<AppState>>) -> Vec<SessionConfig> {
-    // Pure in-memory clone — keep sync to avoid spawn_blocking overhead.
-    // Secrets stay in the Rust process; the WebView receives only metadata.
-    let sessions = state.sessions.lock();
-    redacted_sessions_for_frontend(&sessions)
+pub async fn get_sessions(state: State<'_, Arc<AppState>>) -> Result<Vec<SessionConfig>, String> {
+    // Offload lock acquisition off the main UI thread so a concurrent
+    // save_session / import_* (which holds `sessions` across SQLite + keyring
+    // I/O) can never stall the WebView event loop.
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let sessions = state.sessions.lock();
+        redacted_sessions_for_frontend(&sessions)
+    })
+    .await
+    .map_err(|e| format!("task join: {}", e))
 }
 
 #[tauri::command]

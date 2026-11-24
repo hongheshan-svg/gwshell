@@ -88,6 +88,28 @@ export function sendInputToTab(tabId: string, data: string): boolean {
   return true;
 }
 
+/**
+ * Focus a terminal's hidden helper textarea immediately and re-verify on the
+ * next macrotask. On Chromium/WebView2 and WebKit, a mousedown on a
+ * non-focusable element (e.g. terminal canvas while TUI mouse reporting disables
+ * SelectionService's preventDefault, or pane padding) clears focus back to
+ * `document.body` AFTER mousedown listeners and microtasks finish; the
+ * macrotask pass ensures focus reliably sticks.
+ */
+export function focusTerminalTab(tabId: string): void {
+  const tryFocus = () => {
+    const inst = terminalInstances.get(tabId);
+    if (!inst) return;
+    if (document.activeElement !== inst.terminal.textarea) {
+      try {
+        inst.terminal.focus();
+      } catch {}
+    }
+  };
+  tryFocus();
+  setTimeout(tryFocus, 0);
+}
+
 // --- Full teardown ---
 
 /** Destroy a terminal instance associated with a tab (called when the tab closes). */

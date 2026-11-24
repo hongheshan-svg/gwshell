@@ -19,6 +19,7 @@ import {
   writeClipboardText,
 } from '../../lib/terminalClipboard';
 import { attachTerminalDragDrop } from '../../lib/terminalInteractions';
+import { focusTerminalTab } from '../../lib/terminalLifecycle';
 import { mountTerminalSession } from '../../lib/terminalSessionController';
 import { CompletionDropdown } from './CompletionDropdown';
 import { StickyScrollOverlay } from './StickyScrollOverlay';
@@ -81,10 +82,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       if (e.key === 'Escape') {
         e.preventDefault();
         setPasteConfirm(null);
+        focusTerminalTab(tab.id);
       } else if (e.key === 'Enter') {
         e.preventDefault();
         terminalInstances.get(tab.id)?.terminal.paste(pasteConfirm);
         setPasteConfirm(null);
+        focusTerminalTab(tab.id);
       }
     };
     window.addEventListener('keydown', onKey, true);
@@ -185,14 +188,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           if (st.activeTabId !== tab.id || st.mainView !== 'terminal') {
             st.setActiveTab(tab.id);
           }
-          const inst = terminalInstances.get(tab.id);
-          if (inst && document.activeElement !== inst.terminal.textarea) {
-            queueMicrotask(() => {
-              try {
-                inst.terminal.focus();
-              } catch {}
-            });
-          }
+          focusTerminalTab(tab.id);
         }}
       >
         <StickyScrollOverlay
@@ -238,10 +234,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
           onAccept={() => {
             fingerprintResolveRef.current?.(true);
             setFingerprintInfo(null);
+            focusTerminalTab(tab.id);
           }}
           onReject={() => {
             fingerprintResolveRef.current?.(false);
             setFingerprintInfo(null);
+            focusTerminalTab(tab.id);
           }}
         />
       )}
@@ -249,11 +247,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
       {pasteConfirm !== null && isActive && (
         <PasteConfirmDialog
           text={pasteConfirm}
-          onCancel={() => setPasteConfirm(null)}
+          onCancel={() => {
+            setPasteConfirm(null);
+            focusTerminalTab(tab.id);
+          }}
           onPaste={() => {
             const terminal = terminalInstances.get(tab.id)?.terminal;
             if (terminal) terminal.paste(pasteConfirm);
             setPasteConfirm(null);
+            focusTerminalTab(tab.id);
           }}
         />
       )}

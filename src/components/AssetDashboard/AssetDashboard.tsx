@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Server, Zap, FileInput, Search, ArrowRight, Upload } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { parseQuickConnect } from '../../lib/quickConnect';
+import { focusTerminalTab } from '../../lib/terminalLifecycle';
 import type { SessionConfig } from '../../types';
 import type { MetricsSnapshot } from '../../types/serverMetrics';
 import { ProtocolIcon } from '../Icons/BrandIcons';
@@ -225,7 +226,10 @@ export const AssetDashboard: React.FC<Props> = ({
 
   const onFocus = (s: SessionConfig) => {
     const tab = tabs.find((tt) => tt.sessionId === s.id);
-    if (tab) setActiveTab(tab.id);
+    if (tab) {
+      setActiveTab(tab.id);
+      focusTerminalTab(tab.id);
+    }
   };
 
   // Empty state: distinguish "search yielded nothing" from true first-run empty.

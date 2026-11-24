@@ -39,6 +39,7 @@ export function attachWebglRenderer(
     const webgl = new WebglAddon({ customGlyphs: true });
     webgl.onContextLoss(() => {
       instance.rendererLost = true;
+      instance.rendererAddon = undefined;
       instance.textureAtlasCanvases = undefined;
       try {
         webgl.dispose();

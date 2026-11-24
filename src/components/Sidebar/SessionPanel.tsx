@@ -18,6 +18,7 @@ import {
 import { useAppStore } from '../../stores/appStore';
 import { useConfirm } from '../../hooks/useConfirm';
 import { openNewAssetModal } from '../../lib/newAssetAction';
+import { focusTerminalTab } from '../../lib/terminalLifecycle';
 import { NewAssetMenu } from './NewAssetMenu';
 import { EmptyIllustration, GroupFolderIcon, ProtocolIcon } from '../Icons/BrandIcons';
 import type { SessionConfig } from '../../types';
@@ -68,9 +69,16 @@ export const SessionPanel: React.FC = () => {
   };
 
   const handleConnect = useCallback((session: SessionConfig) => {
+    // Release focus from sidebar controls (item or search input) so keyboard
+    // input goes straight to the terminal — especially on double-click where
+    // the second mousedown would otherwise trap focus on `.session-item`.
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     const existingTab = useAppStore.getState().tabs.find((t) => t.sessionId === session.id);
     if (existingTab) {
       useAppStore.getState().setActiveTab(existingTab.id);
+      focusTerminalTab(existingTab.id);
       return;
     }
     const tabId = crypto.randomUUID();

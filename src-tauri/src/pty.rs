@@ -621,7 +621,11 @@ impl PtyManager {
             }
         }
 
-        if let Some(ref dir) = working_dir {
+        if let Some(dir) = working_dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|d| !d.is_empty())
+        {
             cmd.cwd(std::path::Path::new(dir));
         } else if let Some(home) = dirs::home_dir() {
             cmd.cwd(home);
