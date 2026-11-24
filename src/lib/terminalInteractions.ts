@@ -190,6 +190,15 @@ export function attachTerminalInteractions({
       selectionSnapshotRef.current = '';
       setTerminalSelection(tab.id, '');
       setContextMenu(null);
+      // Guarantee xterm's helper textarea acquires focus on left-click even if
+      // WebView2/TSF focus state drifted (e.g. after window reactivation).
+      queueMicrotask(() => {
+        if (document.activeElement !== termRef.textarea) {
+          try {
+            termRef.focus();
+          } catch {}
+        }
+      });
       return;
     }
     if (e.button === 2 && (termRef.hasSelection() || selectionSnapshotRef.current)) {

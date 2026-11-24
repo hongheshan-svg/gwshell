@@ -392,6 +392,8 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
               ) {
                 writeQueue = payload + writeQueue;
                 scheduleWriteFlush(WRITE_RETRY_MS);
+              } else {
+                console.error(`[terminal] ${writeCmd} failed:`, err);
               }
             })
             .finally(() => {
@@ -464,60 +466,65 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
         }
 
         const wasAwaitingPassword = !!awaitingPassword.get(tab.id);
-        const st = useSettingsStore.getState().settings;
-        const trackingOn =
-          (st.sshHistoryCmd || st.terminalCmdHint) &&
-          isInteractiveTerminal(tab.type) &&
-          (tab.type === 'ssh' || st.cmdHintAllSessions);
-        if (trackingOn) {
-          const sess = sessionsRef.current.find((s) => s.id === tab.sessionId);
-          const scope = st.cmdHintScopeByHost ? tabScope(tab.type, sess) : '';
-          const cwd = st.cmdHintScopeByHost ? (tabCwd.get(tab.id) ?? '') : '';
-          const sessionType = tab.type;
-          const table = tabCommandTable.get(tab.id) ?? syncTable(tab.type, sess);
+        try {
+          const st = useSettingsStore.getState().settings;
+          const trackingOn =
+            (st.sshHistoryCmd || st.terminalCmdHint) &&
+            isInteractiveTerminal(tab.type) &&
+            (tab.type === 'ssh' || st.cmdHintAllSessions);
+          if (trackingOn) {
+            const sess = sessionsRef.current.find((s) => s.id === tab.sessionId);
+            const scope = st.cmdHintScopeByHost ? tabScope(tab.type, sess) : '';
+            const cwd = st.cmdHintScopeByHost ? (tabCwd.get(tab.id) ?? '') : '';
+            const sessionType = tab.type;
+            const table = tabCommandTable.get(tab.id) ?? syncTable(tab.type, sess);
 
-          let tracker = lineTrackers.get(tab.id);
-          if (!tracker) {
-            tracker = createLineTracker();
-            lineTrackers.set(tab.id, tracker);
-          }
-          const buffer = terminalInstances.get(tab.id)?.terminal.buffer.active;
-          const result = applyInput(tracker, data, {
-            cursor: () => ({
-              row: (buffer?.baseY ?? 0) + (buffer?.cursorY ?? 0),
-              col: buffer?.cursorX ?? 0,
-            }),
-            readLine: (from, to) => (buffer ? readBufferRange(buffer, from, to) : null),
-            caseInsensitive: table !== 'unix',
-            alternateScreen: buffer?.type === 'alternate',
-          });
-
-          if (data === '\r' || data === '\n') {
-            if (st.sshHistoryCmd && result.submitted && !wasAwaitingPassword) {
-              commandHistory.record(result.submitted.trim(), { scope, cwd, sessionType });
+            let tracker = lineTrackers.get(tab.id);
+            if (!tracker) {
+              tracker = createLineTracker();
+              lineTrackers.set(tab.id, tracker);
             }
+            const buffer = terminalInstances.get(tab.id)?.terminal.buffer.active;
+            const result = applyInput(tracker, data, {
+              cursor: () => ({
+                row: (buffer?.baseY ?? 0) + (buffer?.cursorY ?? 0),
+                col: buffer?.cursorX ?? 0,
+              }),
+              readLine: (from, to) => (buffer ? readBufferRange(buffer, from, to) : null),
+              caseInsensitive: table !== 'unix',
+              alternateScreen: buffer?.type === 'alternate',
+            });
+
+            if (data === '\r' || data === '\n') {
+              if (st.sshHistoryCmd && result.submitted && !wasAwaitingPassword) {
+                commandHistory.record(result.submitted.trim(), { scope, cwd, sessionType });
+              }
+              clearPasswordFlag();
+            }
+
+            if (!st.terminalCmdHint || awaitingPassword.get(tab.id)) {
+              if ((tabCompletions.get(tab.id)?.length ?? 0) > 0) hideCompletions(tab.id);
+            } else if (result.effect === 'show') {
+              const locale = i18n.language?.startsWith('zh') ? 'zh' : 'en';
+              const availableCommands = tabAvailableCommands.get(tab.id);
+              const items = buildCompletions(
+                tracker.buf,
+                { scope, cwd, sessionType, table, availableCommands },
+                locale,
+              );
+              tabCompletions.set(tab.id, items);
+              tabCompletionIdx.set(tab.id, 0);
+              completionNav.set(tab.id, false);
+              paintCompletions(tab.id, items, 0, false);
+            } else if (result.effect === 'hide') {
+              hideCompletions(tab.id);
+            }
+          } else if (data === '\r' || data === '\n') {
             clearPasswordFlag();
           }
-
-          if (!st.terminalCmdHint || awaitingPassword.get(tab.id)) {
-            if ((tabCompletions.get(tab.id)?.length ?? 0) > 0) hideCompletions(tab.id);
-          } else if (result.effect === 'show') {
-            const locale = i18n.language?.startsWith('zh') ? 'zh' : 'en';
-            const availableCommands = tabAvailableCommands.get(tab.id);
-            const items = buildCompletions(
-              tracker.buf,
-              { scope, cwd, sessionType, table, availableCommands },
-              locale,
-            );
-            tabCompletions.set(tab.id, items);
-            tabCompletionIdx.set(tab.id, 0);
-            completionNav.set(tab.id, false);
-            paintCompletions(tab.id, items, 0, false);
-          } else if (result.effect === 'hide') {
-            hideCompletions(tab.id);
-          }
-        } else if (data === '\r' || data === '\n') {
-          clearPasswordFlag();
+        } catch (err) {
+          // Never let history/completion tracking break raw terminal input.
+          console.error('[terminal] input tracking error:', err);
         }
 
         broadcastPayload(data, wasAwaitingPassword);

@@ -40,8 +40,13 @@ pub fn compute_os_info() -> serde_json::Value {
 }
 
 #[tauri::command]
-pub fn get_os_info() -> serde_json::Value {
-    OS_INFO.get_or_init(compute_os_info).clone()
+pub async fn get_os_info() -> serde_json::Value {
+    if let Some(cached) = OS_INFO.get() {
+        return cached.clone();
+    }
+    tokio::task::spawn_blocking(|| OS_INFO.get_or_init(compute_os_info).clone())
+        .await
+        .unwrap_or_else(|_| serde_json::json!({ "os": std::env::consts::OS }))
 }
 
 /// Called by the frontend once React has mounted and painted.

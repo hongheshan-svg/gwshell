@@ -4,7 +4,6 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../stores/appStore';
 import { TerminalView } from './TerminalView';
 import { TerminalAiDock } from './TerminalAiDock';
-import { AssetTable } from '../AssetTable/AssetTable';
 import { EmptyIllustration } from '../Icons/BrandIcons';
 
 export const TerminalContainer: React.FC = () => {
@@ -20,24 +19,17 @@ export const TerminalContainer: React.FC = () => {
     })),
   );
 
-  if (activeTabId === 'asset-list' || mainView === 'asset-list') {
-    return (
-      <div className="terminal-container">
-        <AssetTable />
-      </div>
-    );
-  }
-
   const terminalTabs = tabs.filter((t) => t.type !== 'asset-list');
 
   if (terminalTabs.length === 0) {
-    return (
-      <div className="terminal-container">
-        <AssetTable />
-      </div>
-    );
+    return null;
   }
 
+  // App.tsx keeps TerminalContainer mounted (hidden via display: none) while the
+  // Asset List is shown so live SSH/PTY/Serial tabs never unmount and tear down
+  // their data/exit/input listeners. Mark all panes inactive while hidden so they
+  // don't steal focus from Asset List controls.
+  const viewingAssetList = activeTabId === 'asset-list' || mainView === 'asset-list';
   const splitActive = splitCount > 1;
   const slotIds = splitActive ? new Set(splitPanes.filter((id): id is string => id != null)) : null;
   const offGrid = slotIds ? terminalTabs.filter((t) => !slotIds.has(t.id)) : [];
@@ -70,7 +62,7 @@ export const TerminalContainer: React.FC = () => {
                 </div>
               );
             }
-            const isActive = tab.id === activeTabId;
+            const isActive = !viewingAssetList && tab.id === activeTabId;
             return (
               <div
                 key={tab.id}
@@ -79,7 +71,7 @@ export const TerminalContainer: React.FC = () => {
                   if (!isActive) setActiveTab(tab.id);
                 }}
               >
-                <TerminalView tab={tab} isActive={isActive} visible />
+                <TerminalView tab={tab} isActive={isActive} visible={!viewingAssetList} />
               </div>
             );
           })}
@@ -93,7 +85,11 @@ export const TerminalContainer: React.FC = () => {
         </>
       ) : (
         terminalTabs.map((tab) => (
-          <TerminalView key={tab.id} tab={tab} isActive={tab.id === activeTabId} />
+          <TerminalView
+            key={tab.id}
+            tab={tab}
+            isActive={!viewingAssetList && tab.id === activeTabId}
+          />
         ))
       )}
       <TerminalAiDock />

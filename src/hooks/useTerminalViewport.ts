@@ -33,8 +33,7 @@ function canAutoFocusTerminal(tabId: string): boolean {
   if (
     active instanceof Element &&
     !active.classList.contains('xterm-helper-textarea') &&
-    active.closest('input, textarea, [contenteditable="true"]') &&
-    active.closest('.sftp-panel, .agent-panel, .terminal-ai-dock, .terminal-search-bar')
+    active.closest('input, textarea, [contenteditable="true"]')
   ) {
     return false;
   }
@@ -83,7 +82,9 @@ export function useTerminalViewport({
     });
   }, [theme, tab.id]);
 
-  // Focus/blur and force redraw when a tab becomes active or finishes mounting
+  // Focus/blur and force redraw when a tab becomes active, finishes mounting,
+  // or completes connecting. Also re-focus when the OS window regains focus
+  // (helps Windows WebView2 recover keyboard focus after Alt+Tab / restore).
   useEffect(() => {
     const inst = terminalInstances.get(tab.id);
     if (!inst) return;
@@ -101,16 +102,25 @@ export function useTerminalViewport({
           }
         });
       });
+      const handleWindowFocus = () => {
+        if (canAutoFocusTerminal(tab.id)) {
+          try {
+            inst.terminal.focus();
+          } catch {}
+        }
+      };
+      window.addEventListener('focus', handleWindowFocus);
       return () => {
         cancelAnimationFrame(raf1);
         cancelAnimationFrame(raf2);
+        window.removeEventListener('focus', handleWindowFocus);
       };
     } else {
       try {
         inst.terminal.blur();
       } catch {}
     }
-  }, [isActive, terminalReady, isSshBacked, tab.id, tab.sessionId, tab.type]);
+  }, [isActive, terminalReady, tab.connected, isSshBacked, tab.id, tab.sessionId, tab.type]);
 
   // ResizeObserver + cell-size CSS vars + devicePixelRatio zoom listener
   useEffect(() => {

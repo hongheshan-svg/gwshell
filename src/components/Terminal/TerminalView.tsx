@@ -168,7 +168,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
     const container = containerRef.current;
     if (!container) return;
     return attachTerminalDragDrop(tab, container, isVisibleRef, setDragOver);
-  }, [tab]);
+    // Re-bind only when tab identity changes, not when tab.connected toggles.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab.id, tab.sessionId, tab.type]);
 
   useTerminalViewport({ containerRef, tab, theme, isActive, terminalReady, isSshBacked });
 
@@ -178,7 +180,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ tab, isActive, visib
         ref={containerRef}
         className={`terminal-pane${broadcastInput ? ' broadcasting' : ''}${dragOver ? ' terminal-pane-drag-over' : ''}`}
         style={{ display: (visible ?? isActive) ? 'block' : 'none' }}
-        onMouseDown={() => useAppStore.getState().setActiveTab(tab.id)}
+        onMouseDown={() => {
+          const st = useAppStore.getState();
+          if (st.activeTabId !== tab.id || st.mainView !== 'terminal') {
+            st.setActiveTab(tab.id);
+          }
+          const inst = terminalInstances.get(tab.id);
+          if (inst && document.activeElement !== inst.terminal.textarea) {
+            queueMicrotask(() => {
+              try {
+                inst.terminal.focus();
+              } catch {}
+            });
+          }
+        }}
       >
         <StickyScrollOverlay
           tabId={tab.id}

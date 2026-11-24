@@ -366,6 +366,8 @@ pub async fn delete_session(
 /// frontend warns the user that saved passwords/TOTP secrets are stored
 /// unencrypted (no OS keyring backend is available).
 #[tauri::command]
-pub fn secret_storage_available() -> bool {
-    crypto::secret_storage_available()
+pub async fn secret_storage_available() -> bool {
+    tokio::task::spawn_blocking(crypto::secret_storage_available)
+        .await
+        .unwrap_or(false)
 }

@@ -42,10 +42,10 @@
 /* Soft, consistent focus ring on standalone inputs */
 input:focus,
 select:focus,
-textarea:focus,
+textarea:not(.xterm-helper-textarea):focus,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
+textarea:not(.xterm-helper-textarea):focus-visible {
   outline: none;
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px var(--accent-bg);
@@ -72,7 +72,7 @@ input[type='checkbox']:focus-visible {
 button,
 input,
 select,
-textarea,
+textarea:not(.xterm-helper-textarea),
 .tab-item,
 .session-item,
 .session-group-header,
