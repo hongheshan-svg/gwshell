@@ -8,6 +8,22 @@
 
 ## [未发布]
 
+## v0.7.3 - 2026-11-24
+
+### 🐛 修复
+
+- **全平台终端焦点与输入恢复加固（Windows / macOS / Linux）**：
+  - 统一通过 `focusTerminalTab` 做点击与切换后的双重聚焦（立即聚焦 + 宏任务兜底），修复 Chromium/WebView2 与 WebKit 在 `mousedown` 默认阶段重置焦点、导致打开资产或点击分屏/TUI 鼠标模式时键盘无响应的问题。
+  - 修复侧边栏双击资产、资产仪表盘打开已有标签页、点击当前已激活标签页以及指纹确认 / 粘贴确认 / 应用菜单 / 确认弹窗关闭后焦点被困在外部控件的问题；打开资产时主动脱离搜索框等外部输入焦点，同时保留 SFTP / AI / 终端内搜索等侧边输入焦点。
+- **终端生命周期与跨平台 PTY / WebGL 稳定性**：
+  - 严格限定 `win32InputMode` 与 ConPTY DA1 应答仅在 Windows 本地 PTY 会话生效，避免影响 SSH、串口以及 macOS / Linux 会话；移除分屏重挂载时误向远端注入的备用屏转义序列。
+  - 修复标签页在异步连接阶段被快速关闭时导致的 `connectedTabs` 状态残留、后台会话未关闭以及事件监听器泄漏，并为写队列重试增加上限；修复字体加载族名解析异常与 WebGL 上下文丢失后渲染器引用未清空的问题。
+  - 空白 `working_dir` 不再直接传入 PTY `cwd`，改为自动回退至用户主目录。
+- **窗口合成、异步会话读取与 SSH 通道超时保护**：
+  - Windows 与 Linux 移除非 macOS 窗口透明合成（保留无边框样式），避免 WebView2 DirectComposition 与 WebKitGTK 下的 WebGL/输入卡死。
+  - `get_sessions` 改为 `spawn_blocking` 异步执行，避免数据库锁竞争阻塞主线程 IPC。
+  - 为 SSH 认证后的通道/PTY/Shell 建立、`exec_with_status` 完整流程以及 SFTP 子系统打开补充显式超时与断开清理，防止网络半开或服务端无响应时会话永久卡死。
+
 ## v0.7.1 - 2026-11-23
 
 ### ✨ 新增
