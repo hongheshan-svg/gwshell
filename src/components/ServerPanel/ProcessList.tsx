@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { ListTree, Search, X } from 'lucide-react';
+import { useToastStore } from '../../stores/toastStore';
 import type { ProcInfo } from '../../types/serverMetrics';
 import { fmtKb, usageLevel } from './format';
 
@@ -56,10 +57,20 @@ export const ProcessList: React.FC<Props> = ({ sessionId, procs }) => {
     }
     setArmedPid(null);
     setPending((prev) => new Set(prev).add(p.pid));
+    const vars = { pid: p.pid, name: p.comm };
     try {
       await invoke('kill_remote_process', { sessionId, pid: p.pid });
+      useToastStore.getState().pushToast({
+        kind: 'success',
+        title: t('serverPanel_proc_kill_done', vars),
+      });
     } catch (e) {
-      console.warn('kill_remote_process failed', e);
+      // e.g. "Operation not permitted" when the SSH user doesn't own the process.
+      useToastStore.getState().pushToast({
+        kind: 'error',
+        title: t('serverPanel_proc_kill_failed', vars),
+        message: String(e),
+      });
     } finally {
       setPending((prev) => {
         const next = new Set(prev);

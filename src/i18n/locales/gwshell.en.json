@@ -647,6 +647,8 @@
   "serverPanel_proc_kill_confirm_body": "Kill process {{pid}} ({{name}})?",
   "serverPanel_proc_kill_confirm_ok": "Kill",
   "serverPanel_proc_kill_confirm_cancel": "Cancel",
+  "serverPanel_proc_kill_done": "Killed process {{pid}} ({{name}})",
+  "serverPanel_proc_kill_failed": "Failed to kill process {{pid}} ({{name}})",
   "serverPanel_nic_title": "Network Interfaces",
   "serverPanel_nic_name": "Name",
   "serverPanel_nic_ipv4": "IPv4",

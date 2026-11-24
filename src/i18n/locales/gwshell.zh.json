@@ -647,6 +647,8 @@
   "serverPanel_proc_kill_confirm_body": "确定要结束进程 {{pid}} ({{name}}) 吗?",
   "serverPanel_proc_kill_confirm_ok": "结束",
   "serverPanel_proc_kill_confirm_cancel": "取消",
+  "serverPanel_proc_kill_done": "已结束进程 {{pid}} ({{name}})",
+  "serverPanel_proc_kill_failed": "结束进程 {{pid}} ({{name}}) 失败",
   "serverPanel_nic_title": "网卡信息",
   "serverPanel_nic_name": "名称",
   "serverPanel_nic_ipv4": "IPv4",
