@@ -9,6 +9,7 @@ import {
   FileDown,
   FileJson,
   FileSpreadsheet,
+  KeyRound,
   ShieldCheck,
   Terminal,
   Upload,
@@ -68,7 +69,7 @@ export const AssetImportExportMenu: React.FC<Props> = ({
         title: t('asset_io_import_file'),
         multiple: false,
         filters: [
-          { name: 'GWShell Assets (JSON / CSV)', extensions: ['json', 'csv'] },
+          { name: 'GWShell Assets / Full Backup (JSON / CSV)', extensions: ['json', 'csv'] },
           { name: 'JSON', extensions: ['json'] },
           { name: 'CSV', extensions: ['csv'] },
         ],
@@ -143,14 +144,20 @@ export const AssetImportExportMenu: React.FC<Props> = ({
     }
   };
 
-  const handleExport = async (format: 'json' | 'csv') => {
+  const handleExport = async (format: 'json' | 'csv' | 'full') => {
     setOpenMenu(null);
     try {
       const dateStr = new Date().toISOString().slice(0, 10);
       const ext = format === 'csv' ? 'csv' : 'json';
+      const titles = {
+        json: t('asset_io_export_json'),
+        csv: t('asset_io_export_csv'),
+        full: t('asset_io_export_full'),
+      };
+      const baseName = format === 'full' ? 'gwshell-full-backup' : 'gwshell-assets';
       const path = await dialogSave({
-        title: format === 'csv' ? t('asset_io_export_csv') : t('asset_io_export_json'),
-        defaultPath: `gwshell-assets-${dateStr}.${ext}`,
+        title: titles[format],
+        defaultPath: `${baseName}-${dateStr}.${ext}`,
         filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
       });
       if (!path) return;
@@ -162,7 +169,10 @@ export const AssetImportExportMenu: React.FC<Props> = ({
       });
       toast.success({
         title: t('asset_io_export_ok_title'),
-        message: t('asset_io_export_ok_msg', { count }),
+        message:
+          format === 'full'
+            ? t('asset_io_export_full_ok_msg', { count })
+            : t('asset_io_export_ok_msg', { count }),
       });
     } catch (e) {
       toast.error({ title: t('asset_io_failed_title'), message: String(e) });
@@ -325,6 +335,25 @@ export const AssetImportExportMenu: React.FC<Props> = ({
               <span className="asset-io-item__body">
                 <strong>{t('asset_io_export_csv')}</strong>
                 <span>{t('asset_io_export_csv_desc')}</span>
+              </span>
+            </button>
+
+            <div className="asset-io-divider" />
+
+            <button
+              type="button"
+              role="menuitem"
+              className="asset-io-item"
+              onClick={() => {
+                void handleExport('full');
+              }}
+            >
+              <span className="asset-io-item__icon">
+                <KeyRound size={14} />
+              </span>
+              <span className="asset-io-item__body">
+                <strong>{t('asset_io_export_full')}</strong>
+                <span>{t('asset_io_export_full_desc')}</span>
               </span>
             </button>
           </div>

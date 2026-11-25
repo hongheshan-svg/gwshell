@@ -1,5 +1,7 @@
 #[path = "asset_io.rs"]
 mod asset_io;
+#[path = "full_backup.rs"]
+mod full_backup;
 
 use crate::crypto;
 use crate::session::{self, SessionConfig};
@@ -158,6 +160,16 @@ pub async fn export_sessions_data(
             let allow: HashSet<String> = ids.into_iter().collect();
             sessions.retain(|s| allow.contains(&s.id));
         }
+        if format
+            .as_deref()
+            .is_some_and(|f| f.eq_ignore_ascii_case("full"))
+        {
+            // Sessions from the DB are already decrypted; bundle them with
+            // their secrets and key files into a sealed full backup.
+            let content = full_backup::build(&sessions, full_backup::read_key_file)?;
+            write_owner_only(&path, &content)?;
+            return Ok(sessions.len());
+        }
         let is_csv = format
             .as_deref()
             .map(|f| f.eq_ignore_ascii_case("csv"))
@@ -191,6 +203,25 @@ pub async fn import_sessions_data(
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || -> Result<usize, String> {
         let raw = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+
+        if let Some(mut backup) = full_backup::parse(&raw)? {
+            let keys_dir = dirs::data_local_dir()
+                .ok_or("Cannot determine data directory")?
+                .join("gwshell")
+                .join("keys");
+            full_backup::restore_key_files(&mut backup.sessions, &backup.keys, &keys_dir, |p| {
+                std::path::PathBuf::from(ssh_config::expand_tilde(p))
+            })?;
+            let existing = state.sessions.lock().clone();
+            let mut merged = backup.sessions;
+            for session in &mut merged {
+                // Secrets in the backup win; fields it left unset keep what
+                // this machine already stores for the same session.
+                session.merge_secrets_from(existing.iter().find(|s| s.id == session.id));
+            }
+            return persist_imported(&state, merged);
+        }
+
         let trimmed = raw.strip_prefix('\u{FEFF}').unwrap_or(&raw).trim_start();
         let is_csv = path.to_ascii_lowercase().ends_with(".csv")
             || (!trimmed.starts_with('[') && !trimmed.starts_with('{'));
@@ -200,8 +231,9 @@ pub async fn import_sessions_data(
             asset_io::parse_sessions_from_json(&raw)?
         };
 
-        let mut sessions = state.sessions.lock();
-        let count = imported.len();
+        let existing = state.sessions.lock().clone();
+        let sessions = &existing;
+        let mut merged = Vec::with_capacity(imported.len());
         for mut session in imported {
             // Exports never contain secrets, so re-importing a backup over existing
             // sessions must preserve stored credentials. For CSV rows (which carry
@@ -220,11 +252,9 @@ pub async fn import_sessions_data(
                 session.id = prev.id.clone();
                 session.merge_secrets_from(Some(prev));
             }
-            state.db.save_session(&session)?;
+            merged.push(session);
         }
-        // Reload sessions into memory
-        *sessions = state.db.get_sessions()?;
-        Ok(count)
+        persist_imported(&state, merged)
     })
     .await
     .map_err(|e| format!("task join: {}", e))?
@@ -286,6 +316,46 @@ pub async fn import_ssh_config(
     })
     .await
     .map_err(|e| format!("task join: {}", e))?
+}
+
+/// Save imported sessions, then refresh the in-memory cache from the DB.
+///
+/// The per-session SQLite + OS-keyring writes run WITHOUT holding
+/// `state.sessions`: a large import (or a slow keychain) would otherwise stall
+/// every connect / list call queued behind that lock until the import ends.
+/// The cache is reloaded even when a save fails, so it never drifts from what
+/// actually reached the DB.
+fn persist_imported(state: &Arc<AppState>, imported: Vec<SessionConfig>) -> Result<usize, String> {
+    let count = imported.len();
+    let saved = imported
+        .iter()
+        .try_for_each(|session| state.db.save_session(session));
+    let reloaded = state
+        .db
+        .get_sessions()
+        .map(|fresh| *state.sessions.lock() = fresh);
+    saved?;
+    reloaded?;
+    Ok(count)
+}
+
+/// Write a file readable only by the owner on Unix (full backups hold secrets).
+fn write_owner_only(path: &str, content: &str) -> Result<(), String> {
+    use std::io::Write;
+    let mut opts = std::fs::OpenOptions::new();
+    opts.create(true).write(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let mut f = opts.open(path).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = f.set_permissions(std::fs::Permissions::from_mode(0o600));
+    }
+    f.write_all(content.as_bytes()).map_err(|e| e.to_string())
 }
 
 /// Today's date as `YYYY-MM-DD` without pulling in a date crate: civil-date
