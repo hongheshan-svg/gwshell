@@ -17,6 +17,61 @@ const PTY_WRITE_CHUNK_SIZE: usize = 16 * 1024;
 const PTY_WRITE_BUDGET_TIME: Duration = Duration::from_millis(8);
 const PTY_CMD_DRAIN_LIMIT: usize = 256;
 
+/// Output arriving within this window after an emit is batched into the next
+/// one. macOS PTYs return at most 1 KiB per read (~140 B on average under
+/// `cat`), so emitting per read floods the WebView with tens of thousands of
+/// events per second and freezes the UI. Mirrors the SSH path (`ssh/session.rs`).
+const OUTPUT_COALESCE: Duration = Duration::from_millis(8);
+/// Emit early once a batch reaches this size.
+const OUTPUT_COALESCE_MAX: usize = 64 * 1024;
+/// Read chunks buffered between the PTY reader and the emitter.
+const OUTPUT_QUEUE_CHUNKS: usize = 256;
+
+/// Drain `rx` until the sender hangs up, handing `emit` batched bytes. The first
+/// chunk after a quiet period is emitted at once (keystroke echo stays
+/// instant); chunks that follow within `OUTPUT_COALESCE` of the last emit are
+/// merged, capped at `OUTPUT_COALESCE_MAX`. Byte order is preserved.
+fn coalesce_output(rx: mpsc::Receiver<Vec<u8>>, mut emit: impl FnMut(Vec<u8>)) {
+    let mut last_emit = Instant::now() - OUTPUT_COALESCE;
+    let mut pending: Vec<u8> = Vec::new();
+    let mut open = true;
+    while open {
+        match rx.recv() {
+            Ok(chunk) => pending.extend_from_slice(&chunk),
+            Err(_) => break,
+        }
+        // Take whatever is already queued without waiting.
+        while pending.len() < OUTPUT_COALESCE_MAX {
+            match rx.try_recv() {
+                Ok(chunk) => pending.extend_from_slice(&chunk),
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    open = false;
+                    break;
+                }
+            }
+        }
+        // Inside the window: keep collecting until it closes or the cap hits.
+        let deadline = last_emit + OUTPUT_COALESCE;
+        while open && pending.len() < OUTPUT_COALESCE_MAX {
+            let now = Instant::now();
+            if now >= deadline {
+                break;
+            }
+            match rx.recv_timeout(deadline - now) {
+                Ok(chunk) => pending.extend_from_slice(&chunk),
+                Err(mpsc::RecvTimeoutError::Timeout) => break,
+                Err(mpsc::RecvTimeoutError::Disconnected) => open = false,
+            }
+        }
+        emit(std::mem::take(&mut pending));
+        last_emit = Instant::now();
+    }
+    if !pending.is_empty() {
+        emit(pending);
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ShellEntry {
     pub id: String,
@@ -435,26 +490,31 @@ impl PtyManager {
             let data_ev = format!("pty-data-{}", sid);
             let exit_ev = format!("pty-exit-{}", sid);
 
-            let mut buf = [0u8; 16384];
-            loop {
-                match reader.read(&mut buf) {
-                    Ok(0) => {
-                        let _ = app_handle.emit(&exit_ev, ());
-                        break;
-                    }
-                    Ok(n) => {
-                        let mut out = String::with_capacity(n + 16);
-                        let _ = decoder.decode_to_string(&buf[..n], &mut out, false);
-                        if !out.is_empty() {
-                            let _ = app_handle.emit(&data_ev, out);
+            // The reader only moves bytes into a bounded queue (backpressure
+            // reaches the child when the UI falls behind); this thread batches
+            // them into one event per OUTPUT_COALESCE window.
+            let (chunk_tx, chunk_rx) = mpsc::sync_channel::<Vec<u8>>(OUTPUT_QUEUE_CHUNKS);
+            std::thread::spawn(move || {
+                let mut buf = [0u8; 16384];
+                loop {
+                    match reader.read(&mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => {
+                            if chunk_tx.send(buf[..n].to_vec()).is_err() {
+                                break;
+                            }
                         }
                     }
-                    Err(_) => {
-                        let _ = app_handle.emit(&exit_ev, ());
-                        break;
-                    }
                 }
-            }
+            });
+            coalesce_output(chunk_rx, |bytes| {
+                let mut out = String::with_capacity(bytes.len() + 16);
+                let _ = decoder.decode_to_string(&bytes, &mut out, false);
+                if !out.is_empty() {
+                    let _ = app_handle.emit(&data_ev, out);
+                }
+            });
+            let _ = app_handle.emit(&exit_ev, ());
         });
 
         let writer_join_handle = std::thread::spawn(move || {
@@ -893,5 +953,52 @@ mod tests {
             "expected -l login flag in macOS zsh argv, got: {:?}",
             args
         );
+    }
+}
+
+#[cfg(test)]
+mod coalesce_tests {
+    use super::*;
+
+    #[test]
+    fn floods_of_small_reads_are_batched_without_losing_or_reordering_bytes() {
+        let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(OUTPUT_QUEUE_CHUNKS);
+        let producer = std::thread::spawn(move || {
+            for i in 0..20_000u32 {
+                tx.send((i % 251).to_le_bytes()[..1].to_vec()).unwrap();
+            }
+        });
+        let mut batches = Vec::new();
+        coalesce_output(rx, |b| batches.push(b));
+        producer.join().unwrap();
+
+        let all: Vec<u8> = batches.concat();
+        let expected: Vec<u8> = (0..20_000u32).map(|i| (i % 251) as u8).collect();
+        assert_eq!(all, expected);
+        assert!(
+            batches.len() < 2_000,
+            "20k reads should collapse into far fewer events, got {}",
+            batches.len()
+        );
+        assert!(batches.iter().all(|b| !b.is_empty()));
+    }
+
+    #[test]
+    fn lone_chunk_is_delivered_while_the_reader_is_still_open() {
+        let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(4);
+        let (seen_tx, seen_rx) = mpsc::channel::<Instant>();
+        let consumer = std::thread::spawn(move || {
+            coalesce_output(rx, |_| {
+                let _ = seen_tx.send(Instant::now());
+            })
+        });
+        std::thread::sleep(Duration::from_millis(30));
+        let sent = Instant::now();
+        tx.send(b"x".to_vec()).unwrap();
+        // Keystroke echo must not wait for more output or for the PTY to close.
+        let emitted = seen_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(emitted >= sent);
+        drop(tx);
+        consumer.join().unwrap();
     }
 }

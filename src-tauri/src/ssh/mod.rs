@@ -398,10 +398,15 @@ impl SshManager {
         // (avoids GatewayPorts exposure when the server has it disabled or
         // unset). Use "0.0.0.0" explicitly only when external exposure is
         // intentional.
-        let bound = conn
-            .tcpip_forward("127.0.0.1", remote_port as u32)
-            .await
-            .map_err(|e| format!("Remote forward request failed: {}", e))?;
+        // Bounded: on a stalled connection the server never answers the global
+        // request, which would leave the tunnel-start call pending forever.
+        let bound = tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            conn.tcpip_forward("127.0.0.1", remote_port as u32),
+        )
+        .await
+        .map_err(|_| "Remote forward request timed out after 15s".to_string())?
+        .map_err(|e| format!("Remote forward request failed: {}", e))?;
         // russh returns the chosen port when remote_port == 0, else 0.
         let actual = if remote_port == 0 {
             bound as u16
