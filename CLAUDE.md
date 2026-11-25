@@ -2,7 +2,7 @@
 
 ## Commands
 
-Testing: the Rust backend has 170+ tests (`cargo test`); the frontend has no
+Testing: the Rust backend tests run with `cargo test`; the frontend has no
 component-test framework but ships targeted node scripts (`npm run test:node`)
 plus the static smoke check. Run `npm run ci:check` before committing to mirror
 what CI enforces. The backend CI job runs `cargo fmt --check`,
