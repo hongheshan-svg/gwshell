@@ -111,10 +111,7 @@ pub async fn docker_list_containers(
         let tunnel_id = tunnel_session_id
             .ok_or_else(|| "No SSH session selected for this Docker host".to_string())?;
 
-        let sess = {
-            let guard = state.sessions.lock();
-            guard.iter().find(|s| s.id == tunnel_id).cloned()
-        };
+        let sess = crate::state::find_session(state.inner(), &tunnel_id).await;
         let sess = sess.ok_or_else(|| "Referenced SSH session not found".to_string())?;
 
         let params = connect_params_from_session(&sess);
@@ -209,11 +206,9 @@ pub async fn docker_exec(
     if connect_method.eq_ignore_ascii_case("ssh") {
         let tunnel_id = tunnel_session_id.ok_or_else(|| "No SSH session selected".to_string())?;
 
-        let sess = {
-            let guard = state.sessions.lock();
-            guard.iter().find(|s| s.id == tunnel_id).cloned()
-        }
-        .ok_or_else(|| "Referenced SSH session not found".to_string())?;
+        let sess = crate::state::find_session(state.inner(), &tunnel_id)
+            .await
+            .ok_or_else(|| "Referenced SSH session not found".to_string())?;
 
         let params = connect_params_from_session(&sess);
         let host_flag = docker_host

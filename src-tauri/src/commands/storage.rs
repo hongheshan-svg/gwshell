@@ -53,11 +53,23 @@ pub async fn append_session_log(session_name: String, data: String) -> Result<()
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         let path = dir.join(format!("{}-{}.log", name, chrono_date_today()));
         use std::io::Write;
-        let mut f = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .map_err(|e| e.to_string())?;
+        let mut opts = std::fs::OpenOptions::new();
+        opts.create(true).append(true);
+        // Logs hold everything the remote echoed (tokens, secrets printed by
+        // commands): keep them owner-only on Unix.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+            let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+            opts.mode(0o600);
+        }
+        let mut f = opts.open(&path).map_err(|e| e.to_string())?;
+        // `mode` only applies on create; tighten logs written by older builds.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = f.set_permissions(std::fs::Permissions::from_mode(0o600));
+        }
         f.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
         Ok(())
     })

@@ -5,6 +5,7 @@ import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
 import { Server, Zap, FileInput, Search, ArrowRight, Upload } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
+import { useLatencyStore } from '../../stores/latencyStore';
 import { parseQuickConnect } from '../../lib/quickConnect';
 import { focusTerminalTab } from '../../lib/terminalLifecycle';
 import type { SessionConfig } from '../../types';
@@ -37,6 +38,7 @@ export const AssetDashboard: React.FC<Props> = ({
   const { t } = useTranslation('gwshell');
   const tabs = useAppStore((s) => s.tabs);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const latencyById = useLatencyStore((s) => s.latency);
 
   // Build a set of connected sessionIds (ssh tabs that are connected)
   const connectedMap = useMemo(() => {
@@ -274,7 +276,7 @@ export const AssetDashboard: React.FC<Props> = ({
                   connected={isConn}
                   snapshot={isConn ? (snapshotsRef.current[s.id] ?? null) : null}
                   cpuHistory={cpuHistRef.current[s.id]}
-                  latency={s.latency}
+                  latency={latencyById[s.id]}
                   onConnect={onConnect}
                   onEdit={onEdit}
                   onFocus={onFocus}

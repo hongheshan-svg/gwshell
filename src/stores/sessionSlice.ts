@@ -1,3 +1,4 @@
+import { useLatencyStore } from './latencyStore';
 import { invoke } from '@tauri-apps/api/core';
 import type { StateCreator } from 'zustand';
 import type { SessionConfig } from '../types';
@@ -94,18 +95,12 @@ export const createSessionSlice: StateCreator<SessionSlice, [], [], SessionSlice
       });
     });
   },
+  // Latency lives in its own store so ping rounds don't replace `sessions`.
   updateSessionLatency: (id, latency) => {
-    set((state) => ({
-      sessions: state.sessions.map((s) => (s.id === id ? { ...s, latency } : s)),
-    }));
+    useLatencyStore.getState().setMany(new Map([[id, latency]]));
   },
   batchUpdateLatency: (updates) => {
-    set((state) => ({
-      sessions: state.sessions.map((s) => {
-        const val = updates.get(s.id);
-        return val !== undefined ? { ...s, latency: val } : s;
-      }),
-    }));
+    useLatencyStore.getState().setMany(updates);
   },
   selectedSessionIds: [],
   setSelectedSessionIds: (ids) => set({ selectedSessionIds: ids }),

@@ -90,76 +90,7 @@ pub async fn spawn(
         }
     };
 
-    let (tx, mut rx) = mpsc::channel::<ShellCmd>(256);
-    let data_ev = format!("ssh-data-{}", session_id);
-    let exit_ev = format!("ssh-exit-{}", session_id);
-
-    // Split the channel so reads and writes run on independent tasks. This is
-    // the crux of avoiding the freeze: a `channel.data().await` write can park
-    // when the SSH send window is exhausted, waiting for the server's
-    // CHANNEL_WINDOW_ADJUST. That adjust is only processed while inbound channel
-    // messages are being drained (`read_half.wait()`). If a single task did both
-    // in a `select!`, a parked write would stop draining inbound, russh's event
-    // loop would block once its channel buffer filled, the window would never be
-    // adjusted, and writer+reader would deadlock with no `ssh-exit` emitted —
-    // exactly the silent freeze this rewrite exists to remove. Keeping the
-    // (blockable) write on its own task lets the reader drain inbound forever.
-    let (mut read_half, write_half) = channel.split();
-
-    // Writer task: owns the write half and the input/control queue.
-    let writer_session = session.clone();
-    let writer = tokio::spawn(async move {
-        while let Some(cmd) = rx.recv().await {
-            match cmd {
-                ShellCmd::Data(bytes) => {
-                    if write_half.data(&bytes[..]).await.is_err() {
-                        break;
-                    }
-                }
-                ShellCmd::Resize { cols, rows } => {
-                    let _ = write_half.window_change(cols, rows, 0, 0).await;
-                }
-                ShellCmd::Close => break,
-            }
-        }
-        // On Close / queue-closed / write error, tear the connection down so the
-        // reader unblocks and emits the single ssh-exit.
-        let _ = writer_session
-            .disconnect(russh::Disconnect::ByApplication, "", "English")
-            .await;
-    });
-
-    // Reader task: sole owner of inbound messages and the exit signal.
-    let reader_session = session.clone();
-    tokio::spawn(async move {
-        let mut decoder = encoding_rs::UTF_8.new_decoder();
-        loop {
-            match read_half.wait().await {
-                Some(ChannelMsg::Data { data }) => {
-                    emit_decoded(&mut decoder, &data, &app, &data_ev, false)
-                }
-                Some(ChannelMsg::ExtendedData { data, .. }) => {
-                    emit_decoded(&mut decoder, &data, &app, &data_ev, false)
-                }
-                // Eof/Close end the session; Failure surfaces a rejected shell
-                // request as session-ended rather than a silent dead terminal.
-                Some(ChannelMsg::Eof)
-                | Some(ChannelMsg::Close)
-                | Some(ChannelMsg::Failure)
-                | None => break,
-                _ => {}
-            }
-        }
-        // Flush any trailing decoder state and surface the disconnect exactly once.
-        emit_decoded(&mut decoder, &[], &app, &data_ev, true);
-        let _ = app.emit(&exit_ev, ());
-        // Stop the input pump if it is still parked on the queue, then disconnect.
-        writer.abort();
-        let _ = reader_session
-            .disconnect(russh::Disconnect::ByApplication, "", "English")
-            .await;
-    });
-
+    let tx = start_io(channel, session.clone(), &session_id, app);
     Ok((tx, session, forwarded))
 }
 
@@ -221,12 +152,47 @@ pub async fn spawn_exec(
         }
     };
 
+    let tx = start_io(channel, session.clone(), &session_id, app);
+    Ok((tx, session, forwarded))
+}
+
+/// Coalescing window for shell output. The first chunk after an idle period is
+/// emitted immediately (no added keystroke-echo latency); chunks arriving
+/// within the window after that are batched, so a flood of output (`cat` of a
+/// large log, `yes`, build output) becomes ~125 IPC events/s instead of one per
+/// SSH packet, which would otherwise saturate the WebView main thread and make
+/// input appear frozen.
+const OUTPUT_COALESCE: Duration = Duration::from_millis(8);
+/// Flush early once this much output is pending.
+const OUTPUT_COALESCE_MAX: usize = 64 * 1024;
+
+/// Split the channel and start the writer + reader tasks for an interactive
+/// session. Returns the input/control queue. Emits `ssh-data-{id}` /
+/// `ssh-exit-{id}`.
+fn start_io(
+    channel: russh::Channel<russh::client::Msg>,
+    session: Arc<Handle<Client>>,
+    session_id: &str,
+    app: AppHandle,
+) -> mpsc::Sender<ShellCmd> {
     let (tx, mut rx) = mpsc::channel::<ShellCmd>(256);
     let data_ev = format!("ssh-data-{}", session_id);
     let exit_ev = format!("ssh-exit-{}", session_id);
 
+    // Split the channel so reads and writes run on independent tasks. This is
+    // the crux of avoiding the freeze: a `channel.data().await` write can park
+    // when the SSH send window is exhausted, waiting for the server's
+    // CHANNEL_WINDOW_ADJUST. That adjust is only processed while inbound channel
+    // messages are being drained (`read_half.wait()`). If a single task did both
+    // in a `select!`, a parked write would stop draining inbound, russh's event
+    // loop would block once its channel buffer filled, the window would never be
+    // adjusted, and writer+reader would deadlock with no `ssh-exit` emitted.
+    // Keeping the (blockable) write on its own task lets the reader drain
+    // inbound forever. Callers must never block on this queue either — see
+    // `SshManager::write_to_ssh` (try_send) and `teardown_session`.
     let (mut read_half, write_half) = channel.split();
 
+    // Writer task: owns the write half and the input/control queue.
     let writer_session = session.clone();
     let writer = tokio::spawn(async move {
         while let Some(cmd) = rx.recv().await {
@@ -242,22 +208,53 @@ pub async fn spawn_exec(
                 ShellCmd::Close => break,
             }
         }
+        // On Close / queue-closed / write error, tear the connection down so the
+        // reader unblocks and emits the single ssh-exit.
         let _ = writer_session
             .disconnect(russh::Disconnect::ByApplication, "", "English")
             .await;
     });
 
-    let reader_session = session.clone();
+    // Reader task: sole owner of inbound messages and the exit signal.
     tokio::spawn(async move {
         let mut decoder = encoding_rs::UTF_8.new_decoder();
+        let mut pending: Vec<u8> = Vec::new();
+        // Start "idle" so the very first chunk is emitted immediately.
+        let mut last_emit = tokio::time::Instant::now() - OUTPUT_COALESCE;
         loop {
-            match read_half.wait().await {
-                Some(ChannelMsg::Data { data }) => {
-                    emit_decoded(&mut decoder, &data, &app, &data_ev, false)
+            let msg = if pending.is_empty() {
+                read_half.wait().await
+            } else {
+                // `wait()` is a plain mpsc `recv`, so dropping it on timeout
+                // loses nothing.
+                match tokio::time::timeout_at(last_emit + OUTPUT_COALESCE, read_half.wait()).await {
+                    Ok(m) => m,
+                    Err(_) => {
+                        emit_decoded(&mut decoder, &pending, &app, &data_ev, false);
+                        pending.clear();
+                        last_emit = tokio::time::Instant::now();
+                        continue;
+                    }
                 }
-                Some(ChannelMsg::ExtendedData { data, .. }) => {
-                    emit_decoded(&mut decoder, &data, &app, &data_ev, false)
+            };
+            match msg {
+                Some(ChannelMsg::Data { data }) | Some(ChannelMsg::ExtendedData { data, .. }) => {
+                    let now = tokio::time::Instant::now();
+                    if pending.is_empty() && now.duration_since(last_emit) >= OUTPUT_COALESCE {
+                        // Leading edge: interactive echo goes out with no delay.
+                        emit_decoded(&mut decoder, &data, &app, &data_ev, false);
+                        last_emit = now;
+                    } else {
+                        pending.extend_from_slice(&data);
+                        if pending.len() >= OUTPUT_COALESCE_MAX {
+                            emit_decoded(&mut decoder, &pending, &app, &data_ev, false);
+                            pending.clear();
+                            last_emit = now;
+                        }
+                    }
                 }
+                // Eof/Close end the session; Failure surfaces a rejected shell
+                // request as session-ended rather than a silent dead terminal.
                 Some(ChannelMsg::Eof)
                 | Some(ChannelMsg::Close)
                 | Some(ChannelMsg::Failure)
@@ -265,15 +262,18 @@ pub async fn spawn_exec(
                 _ => {}
             }
         }
-        emit_decoded(&mut decoder, &[], &app, &data_ev, true);
+        // Flush pending output + trailing decoder state, then surface the
+        // disconnect exactly once.
+        emit_decoded(&mut decoder, &pending, &app, &data_ev, true);
         let _ = app.emit(&exit_ev, ());
+        // Stop the input pump if it is still parked on the queue, then disconnect.
         writer.abort();
-        let _ = reader_session
+        let _ = session
             .disconnect(russh::Disconnect::ByApplication, "", "English")
             .await;
     });
 
-    Ok((tx, session, forwarded))
+    tx
 }
 
 /// Decode bytes through a streaming UTF-8 decoder and emit a batched event.

@@ -108,3 +108,61 @@ pub fn toggle_quake_window(app: &AppHandle) {
     let _ = window.show();
     let _ = window.set_focus();
 }
+
+/// Whether `raw` is an absolute http(s) URL safe to hand to the OS browser.
+/// Anything else (`file:`, `javascript:`, custom app schemes, credentials in
+/// the authority, control characters) is refused so terminal output can never
+/// launch local files or other protocol handlers.
+fn is_safe_external_url(raw: &str) -> bool {
+    if raw.len() > 4096 || raw.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return false;
+    }
+    match tauri::Url::parse(raw) {
+        Ok(url) => {
+            matches!(url.scheme(), "http" | "https")
+                && url.host_str().is_some_and(|h| !h.is_empty())
+                && url.username().is_empty()
+                && url.password().is_none()
+        }
+        Err(_) => false,
+    }
+}
+
+/// Open a link clicked in terminal output in the system browser. The WebView
+/// never navigates or spawns popups itself; the frontend confirms with the
+/// user before calling this.
+#[tauri::command]
+pub async fn open_external_url(url: String, app_handle: AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    if !is_safe_external_url(&url) {
+        return Err("Only http(s) links can be opened".to_string());
+    }
+    app_handle
+        .opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| format!("Open link failed: {}", e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_safe_external_url;
+
+    #[test]
+    fn external_url_allows_only_plain_http_and_https() {
+        assert!(is_safe_external_url("https://example.com/a?b=c#d"));
+        assert!(is_safe_external_url("http://10.0.0.1:8080/"));
+        for bad in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "vscode://file/x",
+            "ms-msdt:/id",
+            "https://user:pw@example.com/",
+            "https://exa mple.com/",
+            "https://example.com/\nx",
+            "https://",
+            "not a url",
+        ] {
+            assert!(!is_safe_external_url(bad), "{bad}");
+        }
+    }
+}

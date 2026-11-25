@@ -73,6 +73,7 @@ pub fn run() {
             window::app_ready,
             window::quit_app,
             window::get_os_info,
+            window::open_external_url,
             commands::pty::create_local_shell,
             commands::pty::list_shells,
             commands::pty::write_to_pty,
