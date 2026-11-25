@@ -70,6 +70,18 @@ impl Drop for TerminalAiRequestGuard {
     }
 }
 
+/// Look up a saved session (with decrypted secrets) without parking an async
+/// runtime worker: `sessions` is a sync lock that `save_session` holds across
+/// SQLite + OS-keyring I/O, which can wait on a keychain prompt.
+pub async fn find_session(state: &Arc<AppState>, id: &str) -> Option<SessionConfig> {
+    let state = state.clone();
+    let id = id.to_string();
+    tokio::task::spawn_blocking(move || state.sessions.lock().iter().find(|s| s.id == id).cloned())
+        .await
+        .ok()
+        .flatten()
+}
+
 /// Best-effort cleanup on shutdown: stop metric pollers and kill local-shell
 /// child processes so they are not orphaned. SSH/serial sockets are reclaimed by
 /// the OS on process exit, but we still tell live SSH sessions to close so their

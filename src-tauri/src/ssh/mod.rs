@@ -26,6 +26,33 @@ use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::{mpsc, Mutex, Notify};
 
+/// Upper bound for the background teardown of a replaced/closed session.
+const SHELL_TEARDOWN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Tear a removed session down without ever blocking the caller.
+///
+/// The shell writer task can be parked on `write_half.data()` when the remote
+/// window is exhausted (stalled/half-dead link), leaving its bounded input
+/// queue full. A blocking `send(Close).await` would then park forever — and if
+/// the caller still held the `sessions` lock, every other SSH tab's input,
+/// resize and connect would freeze with it. So: best-effort `try_send(Close)`,
+/// then force the transport down from a detached task with a timeout. Dropping
+/// `handle` also closes the input queue.
+fn teardown_session(handle: SessionHandle) {
+    let SessionHandle { shell, conn, .. } = handle;
+    let _ = shell.try_send(ShellCmd::Close);
+    drop(shell);
+    // `tauri::async_runtime::spawn` works with or without an ambient Tokio
+    // context (e.g. during app shutdown).
+    tauri::async_runtime::spawn(async move {
+        let _ = tokio::time::timeout(
+            SHELL_TEARDOWN_TIMEOUT,
+            conn.disconnect(russh::Disconnect::ByApplication, "", "English"),
+        )
+        .await;
+    });
+}
+
 /// One live SSH connection plus the channel that drives its interactive shell.
 /// `conn` is shared (`Arc`) so exec/metrics/sftp/forward can open their own
 /// channels on the same connection — russh 0.61's `Handle` is not `Clone`, but
@@ -115,50 +142,51 @@ impl SshManager {
     /// Also tears down any local/SOCKS forwards tied to this session so
     /// reconnects never leak listening sockets.
     async fn close_existing(&self, session_id: &str) {
-        self.close_local_forward(session_id).await;
-        self.close_socks_forward(session_id).await;
-        if let Some(old) = self.sessions.lock().await.remove(session_id) {
-            let _ = old.shell.send(ShellCmd::Close).await;
-        }
+        self.close_ssh(session_id).await;
     }
 
+    async fn shell_sender(&self, session_id: &str) -> Option<mpsc::Sender<ShellCmd>> {
+        // Scoped so the map lock is released before any send.
+        let sessions = self.sessions.lock().await;
+        sessions.get(session_id).map(|s| s.shell.clone())
+    }
+
+    /// Enqueue terminal input. Never waits on the network: a full queue (stalled
+    /// remote window) returns a retryable "buffer full" error instead of parking
+    /// the IPC call, mirroring `PtyManager::write_to_pty`.
     pub async fn write_to_ssh(&self, session_id: &str, data: &[u8]) -> Result<(), String> {
         let tx = self
-            .sessions
-            .lock()
+            .shell_sender(session_id)
             .await
-            .get(session_id)
-            .map(|s| s.shell.clone());
-        match tx {
-            Some(tx) => tx
-                .send(ShellCmd::Data(data.to_vec()))
-                .await
-                .map_err(|_| "Session closed".into()),
-            None => Err("Session not found".into()),
-        }
+            .ok_or("Session not found")?;
+        tx.try_send(ShellCmd::Data(data.to_vec()))
+            .map_err(|e| match e {
+                mpsc::error::TrySendError::Full(_) => "SSH input buffer full".to_string(),
+                mpsc::error::TrySendError::Closed(_) => "Session closed".to_string(),
+            })
     }
 
+    /// Resize is idempotent and superseded by the next one, so a full queue just
+    /// drops it rather than blocking.
     pub async fn resize_ssh(&self, session_id: &str, cols: u32, rows: u32) -> Result<(), String> {
         let tx = self
-            .sessions
-            .lock()
+            .shell_sender(session_id)
             .await
-            .get(session_id)
-            .map(|s| s.shell.clone());
-        match tx {
-            Some(tx) => tx
-                .send(ShellCmd::Resize { cols, rows })
-                .await
-                .map_err(|_| "Session closed".into()),
-            None => Err("Session not found".into()),
+            .ok_or("Session not found")?;
+        match tx.try_send(ShellCmd::Resize { cols, rows }) {
+            Ok(()) | Err(mpsc::error::TrySendError::Full(_)) => Ok(()),
+            Err(mpsc::error::TrySendError::Closed(_)) => Err("Session closed".into()),
         }
     }
 
     pub async fn close_ssh(&self, session_id: &str) {
         self.close_local_forward(session_id).await;
         self.close_socks_forward(session_id).await;
-        if let Some(s) = self.sessions.lock().await.remove(session_id) {
-            let _ = s.shell.send(ShellCmd::Close).await;
+        // Bind first so the map guard drops before teardown (Rust 2021 keeps
+        // `if let` scrutinee temporaries alive for the whole block).
+        let removed = self.sessions.lock().await.remove(session_id);
+        if let Some(s) = removed {
+            teardown_session(s);
         }
     }
 
@@ -170,7 +198,7 @@ impl SshManager {
         }
         let sessions: Vec<_> = self.sessions.lock().await.drain().map(|(_, v)| v).collect();
         for s in sessions {
-            let _ = s.shell.send(ShellCmd::Close).await;
+            teardown_session(s);
         }
     }
 
@@ -386,7 +414,9 @@ impl SshManager {
         // so the forwarded-tcpip callback can always find the target even when
         // the server reports a different connected port.
         let target = (local_host.to_string(), local_port);
-        let mut map = forwarded.lock().unwrap();
+        let mut map = forwarded
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         map.insert(actual as u32, target.clone());
         map.insert(0, target);
         Ok(actual)

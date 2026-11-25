@@ -287,13 +287,17 @@ impl SerialManager {
     }
 
     pub fn close_serial(&self, session_id: &str) {
-        if let Some(handle) = self.sessions.lock().remove(session_id) {
+        let removed = self.sessions.lock().remove(session_id);
+        if let Some(handle) = removed {
             let _ = handle.tx.try_send(SerialCmd::Close);
         }
     }
 
     fn close_serial_wait(&self, session_id: &str) {
-        if let Some(handle) = self.sessions.lock().remove(session_id) {
+        // Bind first: an `if let` scrutinee temporary would keep the map lock
+        // held across the (up to 2s) join below, stalling every serial write.
+        let removed = self.sessions.lock().remove(session_id);
+        if let Some(handle) = removed {
             // Drop `handle` before joining so `tx` closes and delivers
             // `Disconnected` even when the bounded queue was full. Wrap join in
             // a 2s timeout so a wedged serial driver can never deadlock callers.

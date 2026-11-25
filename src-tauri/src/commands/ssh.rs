@@ -172,14 +172,12 @@ pub async fn ssh_connect_saved(
     state: State<'_, Arc<AppState>>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    let mut config = {
-        let sessions = state.sessions.lock();
-        sessions
-            .iter()
-            .find(|session| session.id == session_id)
-            .cloned()
-            .ok_or_else(|| "Session not found".to_string())?
-    };
+    // `state.sessions` is a sync lock that `save_session` holds across SQLite +
+    // OS-keyring I/O (which can wait on a keychain prompt). Take it on the
+    // blocking pool so a concurrent save never parks an async runtime worker.
+    let mut config = crate::state::find_session(state.inner(), &session_id)
+        .await
+        .ok_or_else(|| "Session not found".to_string())?;
     if let Some(defaults) = group_defaults.as_ref() {
         apply_group_defaults_json(&mut config, defaults);
     }
@@ -197,17 +195,23 @@ pub async fn ssh_connect_saved(
         .await;
     // Only consume a one-time MFA code AFTER connect succeeds so a first-contact
     // host-key trust retry still has the code available.
+    // (One-time codes are never persisted — `Database::save_session` drops
+    // them — so clearing the in-memory copy is sufficient.)
     if result.is_ok() && has_one_time_totp {
-        let mut sessions = state.sessions.lock();
-        if let Some(session) = sessions.iter_mut().find(|s| s.id == session_id) {
-            if session
-                .totp_code
-                .as_deref()
-                .is_some_and(totp::is_one_time_code)
-            {
-                session.totp_code = None;
+        let state = state.inner().clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            let mut sessions = state.sessions.lock();
+            if let Some(session) = sessions.iter_mut().find(|s| s.id == session_id) {
+                if session
+                    .totp_code
+                    .as_deref()
+                    .is_some_and(totp::is_one_time_code)
+                {
+                    session.totp_code = None;
+                }
             }
-        }
+        })
+        .await;
     }
     result
 }
@@ -243,10 +247,10 @@ pub async fn ssh_test_connection(
 
     // When testing an existing saved session whose secret inputs were left
     // untouched (`None`), reuse the decrypted saved secrets from AppState.
-    let saved = session_id.and_then(|id| {
-        let sessions = state.sessions.lock();
-        sessions.iter().find(|s| s.id == id).cloned()
-    });
+    let saved = match session_id {
+        Some(id) => crate::state::find_session(state.inner(), &id).await,
+        None => None,
+    };
     let resolve_secret = |incoming: Option<String>, fallback: Option<String>| -> Option<String> {
         match incoming {
             Some(s) if s.is_empty() => None,

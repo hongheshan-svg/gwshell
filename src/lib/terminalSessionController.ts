@@ -60,6 +60,7 @@ import {
 } from './terminalLifecycle';
 import { buildVscodeTerminalOptions } from './terminalVscodeOptions';
 import { attachShellIntegration } from './shellIntegration';
+import { handleTerminalLinkActivate } from './terminalLinks';
 import { parseHostKeyError } from './hostKeyError';
 import {
   attachBellAudio,
@@ -215,7 +216,7 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
       terminal.loadAddon(fitAddon);
       const searchAddon = new SearchAddon();
       terminal.loadAddon(searchAddon);
-      terminal.loadAddon(new WebLinksAddon());
+      terminal.loadAddon(new WebLinksAddon(handleTerminalLinkActivate));
       attachShellIntegration(tab.id, terminal);
 
       instance = { terminal, fitAddon, searchAddon };
@@ -408,25 +409,22 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
       let consecutiveWriteRetries = 0;
       const WRITE_FLUSH_MS = 8;
       const WRITE_RETRY_MS = 24;
+      const WRITE_RETRY_MAX_DELAY_MS = 250;
       const WRITE_CHUNK_SIZE = 16 * 1024;
+      // Watchdog only: if an invoke has not settled by then, stop waiting on it
+      // so later input is not blocked behind it. The payload is NOT resent —
+      // the original call may still deliver it, and resending would duplicate
+      // keystrokes once the backend catches up.
       const WRITE_INVOKE_TIMEOUT_MS = 1500;
       const WRITE_MAX_IN_FLIGHT = 1;
-      const WRITE_MAX_RETRIES = 4;
+      // Backends return "buffer full" without enqueuing when their input queue
+      // is saturated (slow link / stalled remote window); only that is safe to
+      // retry. ~12s of backoff before giving up on the chunk.
+      const WRITE_MAX_RETRIES = 50;
       const scheduleWriteFlush = (delayMs = WRITE_FLUSH_MS) => {
         if (writeTimer || writeDisposed) return;
         writeTimer = setTimeout(flushWrites, delayMs);
       };
-      const invokeWrite = (payload: string) =>
-        new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(
-            () => reject(new Error('terminal write timeout')),
-            WRITE_INVOKE_TIMEOUT_MS,
-          );
-          invoke(writeCmd, { sessionId: tab.sessionId, data: payload })
-            .then(() => resolve())
-            .catch(reject)
-            .finally(() => clearTimeout(timeout));
-        });
       const flushWrites = () => {
         writeTimer = null;
         if (!writeQueue || writeDisposed) return;
@@ -437,30 +435,49 @@ export function mountTerminalSession(opts: MountTerminalSessionOptions): () => v
               : writeQueue;
           writeQueue = writeQueue.slice(payload.length);
           writesInFlight += 1;
-          invokeWrite(payload)
+          let released = false;
+          const release = () => {
+            if (released) return;
+            released = true;
+            clearTimeout(watchdog);
+            writesInFlight -= 1;
+            if (writeQueue) scheduleWriteFlush(0);
+          };
+          const watchdog = setTimeout(() => {
+            console.warn(`[terminal] ${writeCmd} slow; continuing without resend`);
+            release();
+          }, WRITE_INVOKE_TIMEOUT_MS);
+          invoke(writeCmd, { sessionId: tab.sessionId, data: payload })
             .then(() => {
               consecutiveWriteRetries = 0;
             })
-            .catch((err) => {
+            .catch((err: unknown) => {
               const errText = String(err);
               const isRetryable =
-                isInteractiveTerminal(tab.type) &&
-                (errText.includes('buffer full') || errText.includes('timeout'));
+                !released && isInteractiveTerminal(tab.type) && errText.includes('buffer full');
               if (isRetryable && consecutiveWriteRetries < WRITE_MAX_RETRIES) {
                 consecutiveWriteRetries += 1;
                 writeQueue = payload + writeQueue;
-                scheduleWriteFlush(WRITE_RETRY_MS * consecutiveWriteRetries);
+                const delay = Math.min(
+                  WRITE_RETRY_MS * consecutiveWriteRetries,
+                  WRITE_RETRY_MAX_DELAY_MS,
+                );
+                // Release the slot without the immediate re-flush so the
+                // backoff below is honored.
+                if (!released) {
+                  released = true;
+                  clearTimeout(watchdog);
+                  writesInFlight -= 1;
+                }
+                scheduleWriteFlush(delay);
               } else {
                 consecutiveWriteRetries = 0;
                 console.error(`[terminal] ${writeCmd} failed:`, err);
               }
             })
-            .finally(() => {
-              writesInFlight -= 1;
-              if (writeQueue) scheduleWriteFlush(0);
-            });
+            .finally(release);
         }
-        if (writeQueue) scheduleWriteFlush(WRITE_RETRY_MS);
+        if (writeQueue && writesInFlight >= WRITE_MAX_IN_FLIGHT) scheduleWriteFlush(WRITE_RETRY_MS);
       };
 
       const enqueueWritePayload = (payload: string) => {

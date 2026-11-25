@@ -113,20 +113,28 @@ impl client::Handler for Client {
                 fingerprint,
                 key_type,
             } => {
-                *self.rejection.lock().unwrap() = Some(HostKeyError::Unknown {
-                    fingerprint,
-                    key_type,
-                });
+                *self
+                    .rejection
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                    Some(HostKeyError::Unknown {
+                        fingerprint,
+                        key_type,
+                    });
                 Ok(false)
             }
             HostKeyVerdict::Mismatch {
                 fingerprint,
                 key_type,
             } => {
-                *self.rejection.lock().unwrap() = Some(HostKeyError::Mismatch {
-                    fingerprint,
-                    key_type,
-                });
+                *self
+                    .rejection
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                    Some(HostKeyError::Mismatch {
+                        fingerprint,
+                        key_type,
+                    });
                 Ok(false)
             }
             HostKeyVerdict::KeyTypeChanged {
@@ -134,11 +142,15 @@ impl client::Handler for Client {
                 key_type,
                 known_key_type,
             } => {
-                *self.rejection.lock().unwrap() = Some(HostKeyError::KeyTypeChanged {
-                    fingerprint,
-                    key_type,
-                    known_key_type,
-                });
+                *self
+                    .rejection
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                    Some(HostKeyError::KeyTypeChanged {
+                        fingerprint,
+                        key_type,
+                        known_key_type,
+                    });
                 Ok(false)
             }
         }
@@ -167,7 +179,10 @@ impl client::Handler for Client {
         // port first, then fall back to a 0-keyed wildcard (server chose the
         // port). If unknown, drop the channel (returns, channel closes on drop).
         let target = {
-            let map = self.forwarded.lock().unwrap();
+            let map = self
+                .forwarded
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             map.get(&connected_port).or_else(|| map.get(&0)).cloned()
         };
         let Some((local_host, local_port)) = target else {

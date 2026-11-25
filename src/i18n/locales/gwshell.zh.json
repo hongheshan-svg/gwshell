@@ -901,5 +901,7 @@
   "asset_io_template_ok_title": "模板已保存",
   "asset_io_template_ok_msg": "CSV 模板已保存到 {{path}}",
   "asset_io_failed_title": "导入 / 导出失败",
-  "asset_io_empty_restore": "或从 JSON / CSV 文件导入资产"
+  "asset_io_empty_restore": "或从 JSON / CSV 文件导入资产",
+  "term_open_link_title": "在浏览器中打开链接？",
+  "term_open_link_confirm": "打开"
 }

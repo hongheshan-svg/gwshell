@@ -901,5 +901,7 @@
   "asset_io_template_ok_title": "Template saved",
   "asset_io_template_ok_msg": "CSV template saved to {{path}}",
   "asset_io_failed_title": "Import / Export failed",
-  "asset_io_empty_restore": "Or restore from a JSON / CSV backup file"
+  "asset_io_empty_restore": "Or restore from a JSON / CSV backup file",
+  "term_open_link_title": "Open link in browser?",
+  "term_open_link_confirm": "Open"
 }

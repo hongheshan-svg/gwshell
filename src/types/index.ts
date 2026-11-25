@@ -10,7 +10,6 @@ export interface SessionConfig {
   password?: string;
   private_key_path?: string;
   totp_code?: string;
-  latency?: number | null;
   created_at?: string;
   expired_at?: string;
   remark?: string;

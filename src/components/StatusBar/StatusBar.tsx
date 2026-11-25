@@ -5,9 +5,7 @@ import { useAppStore } from '../../stores/appStore';
 import { useUpdaterStore } from '../../stores/updaterStore';
 
 export const StatusBar: React.FC = () => {
-  // Fine-grained selectors: avoid re-rendering on every ping latency update
-  // (batchUpdateLatency replaces the `sessions` array reference each round,
-  // ~once/minute). Only subscribe to the slices actually rendered here.
+  // Fine-grained selectors: only subscribe to the slices actually rendered here.
   const activeTab = useAppStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
   const connectedCount = useAppStore(
     (s) => s.tabs.filter((t) => t.connected && t.type !== 'asset-list').length,

@@ -18,6 +18,7 @@ import { useAssetData } from '../../hooks/useAssetData';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAppStore } from '../../stores/appStore';
+import { useLatencyStore } from '../../stores/latencyStore';
 import { openNewAssetModal } from '../../lib/newAssetAction';
 import { NewAssetMenu } from '../Sidebar/NewAssetMenu';
 import { ProtocolIcon } from '../Icons/BrandIcons';
@@ -48,6 +49,7 @@ export const AssetTable: React.FC = () => {
     (s) => s.tabs.filter((tab) => tab.connected && tab.type !== 'asset-list').length,
   );
   const { t } = useTranslation();
+  const latencyById = useLatencyStore((s) => s.latency);
   const confirm = useConfirm();
   const homeView = useSettingsStore((s) => s.settings.homeView);
   const saveSettings = useSettingsStore((s) => s.save);
@@ -407,7 +409,7 @@ export const AssetTable: React.FC = () => {
                               <span className="table-name-text">{session.name}</span>
                             </div>
                           </td>
-                          <td className="col-latency">{formatLatency(session.latency)}</td>
+                          <td className="col-latency">{formatLatency(latencyById[session.id])}</td>
                           <td className="col-host">{hostInfo(session)}</td>
                           {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing */}
                           <td className="col-user">{session.username || '-'}</td>

@@ -209,7 +209,11 @@ async fn connect_over(
             // Host-key rejection surfaces as the frontend-parsed
             // `FINGERPRINT_*:{json}` string, tagged with THIS hop's host:port
             // (the jump host's when the jump hop is the one rejected).
-            if let Some(rej) = rejection.lock().unwrap().take() {
+            if let Some(rej) = rejection
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take()
+            {
                 return Err(rej.to_error_string(&p.host, p.port));
             }
             return Err(format!("Handshake failed: {}", e));
