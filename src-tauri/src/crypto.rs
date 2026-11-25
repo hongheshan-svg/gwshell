@@ -37,19 +37,40 @@ fn random_bytes<const N: usize>() -> Option<[u8; N]> {
     Some(b)
 }
 
+/// After a failed keyring read, how long to report "unavailable" before asking
+/// the keyring again. Without it every save (one per session during an import)
+/// re-hits the keyring — slow, and on macOS it can re-raise the access prompt
+/// each time.
+const KEY_RETRY_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(30);
+
+enum KeyCache {
+    Empty,
+    Loaded([u8; 32]),
+    Failed(std::time::Instant),
+}
+
+/// Whether a failure recorded at `failed_at` should still suppress a retry.
+fn in_cooldown(failed_at: std::time::Instant, now: std::time::Instant) -> bool {
+    now.saturating_duration_since(failed_at) < KEY_RETRY_COOLDOWN
+}
+
 /// The process-wide master key, loaded from (or created in) the OS keyring.
-/// Cached once retrieved; if an earlier read failed (e.g. locked keychain),
-/// subsequent calls retry so unlocking the OS keychain recovers automatically.
+/// Cached once retrieved; if a read failed (e.g. locked keychain), later calls
+/// retry after `KEY_RETRY_COOLDOWN` so unlocking the OS keychain still
+/// recovers automatically.
 fn master_key() -> Option<[u8; 32]> {
-    static KEY: Mutex<Option<[u8; 32]>> = Mutex::new(None);
+    static KEY: Mutex<KeyCache> = Mutex::new(KeyCache::Empty);
     let mut guard = KEY.lock();
-    if let Some(key) = *guard {
-        return Some(key);
+    match *guard {
+        KeyCache::Loaded(key) => return Some(key),
+        KeyCache::Failed(at) if in_cooldown(at, std::time::Instant::now()) => return None,
+        _ => {}
     }
     let loaded = load_or_create_key();
-    if let Some(key) = loaded {
-        *guard = Some(key);
-    }
+    *guard = match loaded {
+        Some(key) => KeyCache::Loaded(key),
+        None => KeyCache::Failed(std::time::Instant::now()),
+    };
     loaded
 }
 
@@ -231,6 +252,14 @@ pub fn decrypt_session_secrets(config: &mut SessionConfig) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keyring_failure_cooldown_expires() {
+        let t0 = std::time::Instant::now();
+        assert!(in_cooldown(t0, t0));
+        assert!(in_cooldown(t0, t0 + KEY_RETRY_COOLDOWN / 2));
+        assert!(!in_cooldown(t0, t0 + KEY_RETRY_COOLDOWN));
+    }
 
     #[test]
     fn plaintext_passthrough_when_no_prefix() {
